@@ -1,0 +1,162 @@
+/* PWA 优化样式 */
+
+/* 确保应用在所有设备上都能正常显示 */
+.App {
+  text-align: center;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .ant-layout-header {
+    padding: 0 16px;
+  }
+  
+  .ant-layout-content {
+    padding: 16px !important;
+  }
+  
+  .ant-menu-horizontal {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+  }
+  
+  .ant-menu-horizontal .ant-menu-item {
+    display: inline-block;
+    vertical-align: top;
+  }
+}
+
+/* 安装横幅样式 */
+.pwa-install-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #001529;
+  color: white;
+  padding: 12px 16px;
+  z-index: 1000;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* 网络状态指示器 */
+.network-indicator {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.network-indicator.offline {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 确保在移动设备上有适当的触摸目标大小 */
+.ant-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* 优化滚动性能 */
+.ant-layout-content {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 防止在移动设备上的缩放 */
+input, 
+select, 
+textarea {
+  font-size: 16px;
+}
+
+/* 加载状态样式 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+/* 离线提示样式 */
+.offline-notice {
+  background: #fff2e8;
+  border: 1px solid #ffb37a;
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #d4730b;
+}
+
+/* 确保在Safari中PWA的状态栏样式正确 */
+@supports (-webkit-touch-callout: none) {
+  .ant-layout-header {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .ant-layout-content {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

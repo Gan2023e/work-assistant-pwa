@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>离线模式 - 工作助手PWA</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        .offline-container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        .offline-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #001529;
+        }
+        h1 {
+            color: #001529;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }
+        p {
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+        .retry-button {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .retry-button:hover {
+            background: #40a9ff;
+        }
+        .features {
+            margin-top: 30px;
+            text-align: left;
+        }
+        .features h3 {
+            color: #001529;
+            margin-bottom: 12px;
+        }
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+        .features li {
+            padding: 4px 0;
+            color: #666;
+        }
+        .features li:before {
+            content: "✓ ";
+            color: #52c41a;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">📱</div>
+        <h1>您正在离线使用工作助手</h1>
+        <p>网络连接似乎出现了问题，但您仍然可以使用应用的基本功能。</p>
+        
+        <button class="retry-button" onclick="window.location.reload()">
+            重新连接
+        </button>
+        
+        <div class="features">
+            <h3>离线可用功能：</h3>
+            <ul>
+                <li>查看已缓存的数据</li>
+                <li>浏览页面导航</li>
+                <li>使用基本计算功能</li>
+                <li>查看历史记录</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 定期检查网络连接
+        setInterval(() => {
+            if (navigator.onLine) {
+                window.location.reload();
+            }
+        }, 5000);
+
+        // 监听网络状态变化
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,34 @@
+{
+  "short_name": "工作助手",
+  "name": "工作助手PWA - 业务管理工具",
+  "description": "一个集成产品管理、物流、备货、工资结算等功能的工作助手应用",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#001529",
+  "background_color": "#ffffff",
+  "categories": ["business", "productivity", "utilities"],
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}

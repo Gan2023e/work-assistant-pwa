@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#001529" />
+    <meta name="description" content="工作助手PWA - 集成产品管理、物流、备货、工资结算等功能的业务管理工具" />
+    
+    <!-- PWA 相关 meta 标签 -->
+    <meta name="application-name" content="工作助手PWA" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="工作助手" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="msapplication-TileColor" content="#001529" />
+    <meta name="msapplication-config" content="%PUBLIC_URL%/browserconfig.xml" />
+    
+    <!-- iOS Safari 相关 -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="%PUBLIC_URL%/logo192.png" />
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <title>工作助手PWA</title>
+  </head>
+  <body>
+    <noscript>您需要启用JavaScript才能运行此应用程序。</noscript>
+    <div id="root"></div>
+    
+    <!-- PWA 安装提示 -->
+    <div id="pwa-install-banner" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #001529; color: white; text-align: center; padding: 10px; z-index: 1000;">
+      <p style="margin: 0; margin-bottom: 10px;">将工作助手添加到主屏幕以获得更好的体验</p>
+      <button id="pwa-install-button" style="background: #1890ff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">安装应用</button>
+      <button id="pwa-dismiss-button" style="background: transparent; color: white; border: 1px solid white; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px;">稍后</button>
+    </div>
+
+    <script>
+      // PWA 安装提示逻辑
+      let deferredPrompt;
+      const installBanner = document.getElementById('pwa-install-banner');
+      const installButton = document.getElementById('pwa-install-button');
+      const dismissButton = document.getElementById('pwa-dismiss-button');
+
+      // 监听 beforeinstallprompt 事件
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('PWA: beforeinstallprompt event fired');
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // 显示安装横幅
+        if (installBanner) {
+          installBanner.style.display = 'block';
+        }
+      });
+
+      // 处理安装按钮点击
+      if (installButton) {
+        installButton.addEventListener('click', async () => {
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`PWA: User response to the install prompt: ${outcome}`);
+            deferredPrompt = null;
+            installBanner.style.display = 'none';
+          }
+        });
+      }
+
+      // 处理稍后按钮点击
+      if (dismissButton) {
+        dismissButton.addEventListener('click', () => {
+          installBanner.style.display = 'none';
+          // 24小时后再次显示
+          setTimeout(() => {
+            if (deferredPrompt) {
+              installBanner.style.display = 'block';
+            }
+          }, 24 * 60 * 60 * 1000);
+        });
+      }
+
+      // 监听 appinstalled 事件
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('PWA: App was installed');
+        if (installBanner) {
+          installBanner.style.display = 'none';
+        }
+      });
+    </script>
+  </body>
+</html>
