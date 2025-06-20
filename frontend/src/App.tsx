@@ -8,6 +8,7 @@ import zhCN from 'antd/es/locale/zh_CN';
 import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
+import ApiTest from './pages/Products/ApiTest';
 import ShippingPage from './pages/Shipping/ShippingPage';
 import LogisticsPage from './pages/Logistics/LogisticsPage';
 import SkuMapping from './pages/Season/SkuMapping';
@@ -34,7 +35,7 @@ const App: React.FC = () => {
   // 处理主菜单和子菜单的选中状态
   const getSelectedKeys = () => {
     const path = location.pathname;
-    if (["/products/purchase", "/products/listings"].includes(path)) return [path];
+    if (["/products/purchase", "/products/listings", "/products/api-test"].includes(path)) return [path];
     if (["/season/sku-mapping", "/season/summary", "/season/supplier"].includes(path)) return [path];
     return [path];
   };
@@ -48,6 +49,7 @@ const App: React.FC = () => {
       children: [
         { label: <Link to="/products/purchase">采购链接管理</Link>, key: '/products/purchase' },
         { label: <Link to="/products/listings">在线Listings管理</Link>, key: '/products/listings' },
+        { label: <Link to="/products/api-test">API连接测试</Link>, key: '/products/api-test' },
       ],
     },
     { label: <Link to="/shipping">发货需求管理</Link>, key: '/shipping' },
@@ -88,6 +90,7 @@ const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/products/purchase" element={<Purchase />} />
             <Route path="/products/listings" element={<Listings />} />
+            <Route path="/products/api-test" element={<ApiTest />} />
             <Route path="/shipping" element={<ShippingPage />} />
             <Route path="/logistics" element={<LogisticsPage />} />
             <Route path="/season/sku-mapping" element={<SkuMapping />} />

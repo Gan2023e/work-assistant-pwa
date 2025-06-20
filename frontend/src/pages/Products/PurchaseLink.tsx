@@ -65,46 +65,49 @@ const Purchase: React.FC = () => {
     setError(null);
     
     try {
-      // 目前后端只有测试端点，先调用测试API
+      // 调试信息
       console.log('搜索关键词:', keywords);
+      console.log('环境:', process.env.NODE_ENV);
+      console.log('API Base URL:', (apiClient as any).baseURL || 'Unknown');
       
-      // 尝试调用产品API
-      const result = await apiClient.post('/api/product_weblink/search', { keywords });
-      setData(result.data || []);
-      message.success(`找到 ${result.data?.length || 0} 条记录`);
+      // 先测试Railway后端健康检查
+      const healthUrl = 'https://work-assistant-pwa-production.up.railway.app/health';
+      console.log('测试健康检查:', healthUrl);
+      
+      const healthResponse = await fetch(healthUrl);
+      const healthData = await healthResponse.json();
+      console.log('健康检查响应:', healthData);
+      
+      // 由于产品API不存在，直接生成模拟数据
+      setError('产品API暂未实现，显示模拟数据进行测试。后端健康检查正常。');
+      
+      // 生成模拟数据
+      const mockData = keywords.map((keyword, index) => ({
+        parent_sku: keyword,
+        weblink: `https://example.com/product/${keyword}`,
+        update_time: new Date().toISOString(),
+        check_time: new Date().toISOString(),
+        status: '正常',
+        notice: `模拟数据 ${index + 1}`,
+        cpc_recommend: '推荐',
+        cpc_status: '测试中',
+        cpc_submit: '已提交',
+        model_number: `MODEL-${keyword}`,
+        recommend_age: '3-8岁',
+        ads_add: '已创建',
+        list_parent_sku: keyword,
+        no_inventory_rate: '5%',
+        sales_30days: Math.floor(Math.random() * 100),
+        seller_name: '示例供应商'
+      }));
+      
+      setData(mockData);
+      message.success(`生成 ${mockData.length} 条模拟数据。后端连接正常，等待产品API开发。`);
+      
     } catch (e: any) {
-      console.error('API调用失败:', e);
-      
-      // 如果产品API不存在，生成模拟数据用于测试
-      if (e.message.includes('404') || e.message.includes('Not Found')) {
-        setError('产品API暂未实现，显示模拟数据进行测试');
-        
-        // 生成模拟数据
-        const mockData = keywords.map((keyword, index) => ({
-          parent_sku: keyword,
-          weblink: `https://example.com/product/${keyword}`,
-          update_time: new Date().toISOString(),
-          check_time: new Date().toISOString(),
-          status: '正常',
-          notice: `模拟数据 ${index + 1}`,
-          cpc_recommend: '推荐',
-          cpc_status: '测试中',
-          cpc_submit: '已提交',
-          model_number: `MODEL-${keyword}`,
-          recommend_age: '3-8岁',
-          ads_add: '已创建',
-          list_parent_sku: keyword,
-          no_inventory_rate: '5%',
-          sales_30days: Math.floor(Math.random() * 100),
-          seller_name: '示例供应商'
-        }));
-        
-        setData(mockData);
-        message.info('显示模拟数据，后端API开发完成后将显示真实数据');
-      } else {
-        setError(`查询失败: ${e.message}`);
-        message.error('查询失败，请检查网络连接');
-      }
+      console.error('操作失败:', e);
+      setError(`操作失败: ${e.message}`);
+      message.error('操作失败，请检查网络连接或查看控制台');
     }
     setLoading(false);
   };
