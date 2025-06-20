@@ -4,9 +4,9 @@ const API_CONFIG = {
   development: {
     baseURL: 'http://localhost:3001',
   },
-  // 生产环境 - 替换为您的实际Railway URL
+  // 生产环境 - Railway后端URL
   production: {
-    baseURL: 'https://work-assistant-pwa-production.up.railway.app', // 🔄 替换为您的实际Railway URL
+    baseURL: 'https://work-assistant-pwa-production.up.railway.app',
   }
 };
 
