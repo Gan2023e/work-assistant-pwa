@@ -12,18 +12,30 @@ const ApiTest: React.FC = () => {
     setLoading(true);
     const results: any[] = [];
 
-    // 测试1: 直接访问Railway后端健康检查
     try {
+      // 测试1: 直接访问Railway后端健康检查
+      console.log('开始测试Railway健康检查...');
       const healthUrl = 'https://work-assistant-pwa-production.up.railway.app/health';
       const response = await fetch(healthUrl);
-      const data = await response.json();
-      results.push({
-        name: 'Railway健康检查',
-        url: healthUrl,
-        status: 'success',
-        data: data
-      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        results.push({
+          name: 'Railway健康检查',
+          url: healthUrl,
+          status: 'success',
+          data: data
+        });
+      } else {
+        results.push({
+          name: 'Railway健康检查',
+          url: healthUrl,
+          status: 'error',
+          error: `HTTP ${response.status}: ${response.statusText}`
+        });
+      }
     } catch (error: any) {
+      console.error('健康检查失败:', error);
       results.push({
         name: 'Railway健康检查',
         url: 'https://work-assistant-pwa-production.up.railway.app/health',
@@ -32,18 +44,30 @@ const ApiTest: React.FC = () => {
       });
     }
 
-    // 测试2: 访问Railway根路径
     try {
+      // 测试2: 访问Railway根路径
+      console.log('开始测试Railway根路径...');
       const rootUrl = 'https://work-assistant-pwa-production.up.railway.app/';
       const response = await fetch(rootUrl);
-      const data = await response.json();
-      results.push({
-        name: 'Railway根路径',
-        url: rootUrl,
-        status: 'success',
-        data: data
-      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        results.push({
+          name: 'Railway根路径',
+          url: rootUrl,
+          status: 'success',
+          data: data
+        });
+      } else {
+        results.push({
+          name: 'Railway根路径',
+          url: rootUrl,
+          status: 'error',
+          error: `HTTP ${response.status}: ${response.statusText}`
+        });
+      }
     } catch (error: any) {
+      console.error('根路径测试失败:', error);
       results.push({
         name: 'Railway根路径',
         url: 'https://work-assistant-pwa-production.up.railway.app/',
@@ -52,18 +76,30 @@ const ApiTest: React.FC = () => {
       });
     }
 
-    // 测试3: 访问Railway测试API
     try {
+      // 测试3: 访问Railway测试API
+      console.log('开始测试Railway API...');
       const testUrl = 'https://work-assistant-pwa-production.up.railway.app/api/test';
       const response = await fetch(testUrl);
-      const data = await response.json();
-      results.push({
-        name: 'Railway测试API',
-        url: testUrl,
-        status: 'success',
-        data: data
-      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        results.push({
+          name: 'Railway测试API',
+          url: testUrl,
+          status: 'success',
+          data: data
+        });
+      } else {
+        results.push({
+          name: 'Railway测试API',
+          url: testUrl,
+          status: 'error',
+          error: `HTTP ${response.status}: ${response.statusText}`
+        });
+      }
     } catch (error: any) {
+      console.error('API测试失败:', error);
       results.push({
         name: 'Railway测试API',
         url: 'https://work-assistant-pwa-production.up.railway.app/api/test',
@@ -80,10 +116,11 @@ const ApiTest: React.FC = () => {
         NODE_ENV: process.env.NODE_ENV,
         NODE_ENV_type: typeof process.env.NODE_ENV,
         window_location: window.location.href,
-        user_agent: navigator.userAgent
+        user_agent: navigator.userAgent.substring(0, 100) + '...'
       }
     });
 
+    console.log('所有测试完成，结果:', results);
     setTestResults(results);
     setLoading(false);
   };
@@ -95,22 +132,34 @@ const ApiTest: React.FC = () => {
           <ApiOutlined /> API连接测试
         </Title>
         <Paragraph>
-          此页面用于测试前端与Railway后端的连接状态
+          此页面用于测试前端与Railway后端的连接状态。如果页面显示正常，说明路由工作正常。
         </Paragraph>
         
-        <Button 
-          type="primary" 
-          onClick={runTests} 
-          loading={loading}
-          icon={<ApiOutlined />}
-          size="large"
-        >
-          运行所有测试
-        </Button>
+        <Space>
+          <Button 
+            type="primary" 
+            onClick={runTests} 
+            loading={loading}
+            icon={<ApiOutlined />}
+            size="large"
+          >
+            运行所有测试
+          </Button>
+          
+          <Button 
+            onClick={() => {
+              console.log('当前环境:', process.env.NODE_ENV);
+              console.log('当前URL:', window.location.href);
+              alert('检查控制台输出！');
+            }}
+          >
+            调试信息
+          </Button>
+        </Space>
 
         <Divider />
 
-        {testResults.length > 0 && (
+        {testResults.length > 0 ? (
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             {testResults.map((result, index) => (
               <Card key={index} size="small">
@@ -140,7 +189,7 @@ const ApiTest: React.FC = () => {
                   <Alert
                     message="请求成功"
                     description={
-                      <pre style={{ margin: 0, fontSize: 12 }}>
+                      <pre style={{ margin: 0, fontSize: 12, maxHeight: 200, overflow: 'auto' }}>
                         {JSON.stringify(result.data, null, 2)}
                       </pre>
                     }
@@ -162,7 +211,7 @@ const ApiTest: React.FC = () => {
                   <Alert
                     message="系统信息"
                     description={
-                      <pre style={{ margin: 0, fontSize: 12 }}>
+                      <pre style={{ margin: 0, fontSize: 12, maxHeight: 200, overflow: 'auto' }}>
                         {JSON.stringify(result.data, null, 2)}
                       </pre>
                     }
@@ -173,6 +222,13 @@ const ApiTest: React.FC = () => {
               </Card>
             ))}
           </Space>
+        ) : (
+          <Alert
+            message="等待测试"
+            description="点击上方按钮开始测试API连接状态"
+            type="info"
+            showIcon
+          />
         )}
       </Card>
     </div>
