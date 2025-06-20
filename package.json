@@ -1,18 +1,16 @@
 {
-  "dependencies": {
-    "express": "^5.1.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "mysql2": "^3.14.1",
-    "sequelize": "^6.37.7"
-  },
   "name": "work-assistant-pwa",
   "version": "1.0.0",
+  "main": "app-simple.js",
   "scripts": {
-    "start": "cd backend && npm start",
+    "start": "node app-simple.js",
     "dev": "cd backend && npm run dev",
     "install-backend": "cd backend && npm install",
     "postinstall": "cd backend && npm install"
   },
-  "description": "工作助手PWA全栈应用"
+  "description": "工作助手PWA全栈应用",
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
