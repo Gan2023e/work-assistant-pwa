@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Card, Statistic, Row, Col, Button, Radio, DatePicker, Space, message, Select, Input, ConfigProvider, Modal } from 'antd';
+import { Table, Card, Row, Col, Button, Radio, DatePicker, Space, message, Select, Input, ConfigProvider } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { TableRowSelection } from 'antd/es/table/interface';
 import dayjs, { Dayjs } from 'dayjs';
@@ -24,7 +24,6 @@ type DateType = 'today' | '7days' | '30days' | 'custom';
 
 const SalaryPage: React.FC = () => {
   const [data, setData] = useState<SalaryRecord[]>([]);
-  const [stat, setStat] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [dateType, setDateType] = useState<DateType>('today');
   const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
@@ -80,7 +79,6 @@ const SalaryPage: React.FC = () => {
       });
       const result = await res.json();
       setData(result.data || []);
-      setStat(result.stat || {});
       setQueried(true);
     } catch (e) {
       message.error('数据加载失败');
