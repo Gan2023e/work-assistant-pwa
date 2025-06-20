@@ -3,5 +3,13 @@
     "express": "^5.1.0",
     "mysql2": "^3.14.1",
     "sequelize": "^6.37.7"
-  }
+  },
+  "name": "work-assistant-pwa",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "install-backend": "cd backend && npm install"
+  },
+  "description": "工作助手PWA全栈应用"
 }
