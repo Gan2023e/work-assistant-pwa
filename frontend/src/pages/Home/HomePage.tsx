@@ -5,7 +5,7 @@ import {
   TruckOutlined, 
   DollarOutlined, 
   BarChartOutlined,
-  PackageOutlined,
+  InboxOutlined,
   SettingOutlined 
 } from '@ant-design/icons';
 
@@ -62,7 +62,7 @@ const HomePage: React.FC = () => {
         <Col xs={24} sm={12} lg={8}>
           <Card hoverable>
             <div style={{ textAlign: 'center' }}>
-              <PackageOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
+              <InboxOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
               <Title level={4}>备货管理</Title>
               <Paragraph>
                 • SKU映射管理<br/>
