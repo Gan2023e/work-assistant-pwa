@@ -1,0 +1,30 @@
+[build]
+  command = "cd frontend && npm ci && npm run build-pwa"
+  publish = "frontend/build"
+
+[build.environment]
+  NODE_VERSION = "16"
+
+# SPA路由重定向
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Service Worker缓存控制
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Manifest文件类型
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+
+# PWA相关文件缓存
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable" 
