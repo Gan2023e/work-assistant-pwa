@@ -1,5 +1,5 @@
 [build]
-  command = "cd frontend && npm install && npm run build && cp frontend/public/sw.js frontend/build/sw.js"
+  command = "cd frontend && npm install && npm run build && cp public/sw.js build/sw.js"
   publish = "frontend/build"
 
 [build.environment]
