@@ -1,10 +1,9 @@
 [build]
-  command = "cd frontend && npm install && npm run build-pwa"
+  command = "cd frontend && npm install && npm run build && cp frontend/public/sw.js frontend/build/sw.js"
   publish = "frontend/build"
 
 [build.environment]
   NODE_VERSION = "18"
-  NPM_VERSION = "9"
 
 # SPA路由重定向
 [[redirects]]
