@@ -1,17 +1,50 @@
-import React from 'react';
-import { Card, Row, Col, Typography, Space, Divider } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Typography, Space, Divider, Button, Alert, Tag } from 'antd';
 import { 
   ShoppingCartOutlined, 
   TruckOutlined, 
   DollarOutlined, 
   BarChartOutlined,
   InboxOutlined,
-  SettingOutlined 
+  SettingOutlined,
+  ApiOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined
 } from '@ant-design/icons';
+import { apiClient, API_ENDPOINTS } from '../../config/api';
 
 const { Title, Paragraph } = Typography;
 
 const HomePage: React.FC = () => {
+  const [apiStatus, setApiStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [backendInfo, setBackendInfo] = useState<any>(null);
+
+  // 测试API连接
+  const testApiConnection = async () => {
+    setApiStatus('loading');
+    try {
+      // 测试健康检查
+      const healthResponse = await apiClient.get(API_ENDPOINTS.health);
+      console.log('Health check:', healthResponse);
+      
+      // 测试根路径
+      const rootResponse = await apiClient.get('/');
+      console.log('Root response:', rootResponse);
+      
+      setBackendInfo(rootResponse);
+      setApiStatus('success');
+    } catch (error) {
+      console.error('API连接失败:', error);
+      setApiStatus('error');
+    }
+  };
+
+  // 页面加载时自动测试API
+  useEffect(() => {
+    testApiConnection();
+  }, []);
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px' }}>
       {/* 欢迎区域 */}
@@ -25,7 +58,55 @@ const HomePage: React.FC = () => {
         <Paragraph style={{ color: '#1890ff' }}>
           📱 已安装为PWA应用，支持离线使用，体验更流畅！
         </Paragraph>
+
+        {/* API连接状态 */}
+        <div style={{ marginTop: 20, padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <ApiOutlined style={{ fontSize: 16 }} />
+              <span style={{ fontWeight: 500 }}>后端API连接状态：</span>
+              {apiStatus === 'loading' && (
+                <Tag icon={<LoadingOutlined />} color="blue">连接中...</Tag>
+              )}
+              {apiStatus === 'success' && (
+                <Tag icon={<CheckCircleOutlined />} color="success">连接成功</Tag>
+              )}
+              {apiStatus === 'error' && (
+                <Tag icon={<CloseCircleOutlined />} color="error">连接失败</Tag>
+              )}
+            </div>
+            
+            {backendInfo && (
+              <div style={{ textAlign: 'left', background: 'white', padding: 12, borderRadius: 4 }}>
+                <strong>后端信息：</strong>
+                <pre style={{ margin: '8px 0 0 0', fontSize: '12px' }}>
+                  {JSON.stringify(backendInfo, null, 2)}
+                </pre>
+              </div>
+            )}
+            
+            <Button 
+              type="primary" 
+              onClick={testApiConnection}
+              loading={apiStatus === 'loading'}
+              icon={<ApiOutlined />}
+            >
+              重新测试连接
+            </Button>
+          </Space>
+        </div>
       </Card>
+
+      {/* API连接提示 */}
+      {apiStatus === 'error' && (
+        <Alert
+          message="后端API连接失败"
+          description="请检查网络连接或联系管理员。某些功能可能无法使用。"
+          type="warning"
+          showIcon
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       <Divider orientation="left">功能模块</Divider>
 
