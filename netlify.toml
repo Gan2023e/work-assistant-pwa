@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  NODE_ENV = "production"
 
 # SPA路由重定向
 [[redirects]]
