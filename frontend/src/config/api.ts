@@ -1,26 +1,17 @@
-// API基础URL配置 - 统一使用生产环境Railway后端
+// API基础URL配置 - 强制使用生产环境Railway后端
 const PRODUCTION_API_URL = 'https://work-assistant-pwa-production.up.railway.app';
 
-// 获取API基础URL
-const getApiBaseUrl = () => {
-  // 优先使用环境变量（Netlify构建时设置）
-  if (process.env.REACT_APP_API_BASE_URL) {
-    console.log('🔧 使用环境变量 REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
-    return process.env.REACT_APP_API_BASE_URL;
-  }
-  
-  // 默认使用生产环境Railway后端
-  console.log('🔧 使用默认生产环境API:', PRODUCTION_API_URL);
-  console.log('🔧 当前环境信息:', {
-    NODE_ENV: process.env.NODE_ENV,
-    hostname: window.location.hostname,
-    timestamp: new Date().toISOString()
-  });
-  
-  return PRODUCTION_API_URL;
-};
+// 强制使用Railway后端，不再依赖环境变量
+export const API_BASE_URL = PRODUCTION_API_URL;
 
-export const API_BASE_URL = getApiBaseUrl();
+// 调试信息
+console.log('🔧 API配置信息:', {
+  API_BASE_URL: API_BASE_URL,
+  环境变量REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL,
+  NODE_ENV: process.env.NODE_ENV,
+  hostname: window.location.hostname,
+  timestamp: new Date().toLocaleString('zh-CN')
+});
 
 // API端点
 export const API_ENDPOINTS = {
