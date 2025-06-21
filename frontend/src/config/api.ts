@@ -26,6 +26,12 @@ export const API_ENDPOINTS = {
     login: '/api/auth/login',
     register: '/api/auth/register',
     verify: '/api/auth/verify',
+    profile: '/api/auth/profile',
+    changePassword: '/api/auth/change-password',
+    users: '/api/auth/users',
+    updateUser: (userId: number) => `/api/auth/users/${userId}`,
+    resetPassword: (userId: number) => `/api/auth/reset-password/${userId}`,
+    deleteUser: (userId: number) => `/api/auth/users/${userId}`,
   },
   // 产品链接
   productWeblink: {

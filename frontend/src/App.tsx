@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Layout, Menu, ConfigProvider, Button, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
 import 'antd/dist/reset.css';
 import zhCN from 'antd/es/locale/zh_CN';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -18,6 +18,8 @@ import Summary from './pages/Season/Summary';
 import Supplier from './pages/Season/Supplier';
 import SalaryPage from './pages/Salary/SalaryPage';
 import ProfitPage from './pages/Profit/ProfitPage';
+import UserManagePage from './pages/User/UserManagePage';
+import ProfilePage from './pages/User/ProfilePage';
 import PWAManager from './components/PWAManager';
 
 const { Header, Content } = Layout;
@@ -60,7 +62,15 @@ const AppContent: React.FC = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: `${user?.username} (${user?.role})`,
+      label: <Link to="/profile">个人资料</Link>,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'user-info',
+      icon: <UserOutlined />,
+      label: `${user?.username} (${user?.role === 'admin' ? '管理员' : '普通用户'})`,
       disabled: true,
     },
     {
@@ -79,6 +89,7 @@ const AppContent: React.FC = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings"].includes(path)) return [path];
     if (["/season/sku-mapping", "/season/summary", "/season/supplier"].includes(path)) return [path];
+    if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
   };
 
@@ -106,6 +117,11 @@ const AppContent: React.FC = () => {
     },
     { label: <Link to="/salary">临工工资结算</Link>, key: '/salary' },
     { label: <Link to="/profit">直发小包利润分析</Link>, key: '/profit' },
+    ...(user?.role === 'admin' ? [{
+      label: <Link to="/user-manage">用户管理</Link>, 
+      key: '/user-manage',
+      icon: <TeamOutlined />
+    }] : []),
   ];
 
   // 控制下拉菜单展开收起
@@ -191,6 +207,16 @@ const AppContent: React.FC = () => {
           <Route path="/profit" element={
             <ProtectedRoute>
               <ProfitPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/user-manage" element={
+            <ProtectedRoute>
+              <UserManagePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           } />
         </Routes>
