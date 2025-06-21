@@ -6,6 +6,7 @@ const productWeblinkRouter = require('./routes/productWeblink');
 const logisticsRouter = require('./routes/logistics');
 const salaryRouter = require('./routes/salary');
 
+// 触发Railway重新部署 - 2024-06-21
 const app = express();
 const PORT = process.env.PORT || 3001;
 
