@@ -25,9 +25,10 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build && npm run copy-sw",
+    "build": "npm run sync-version && react-scripts build && npm run copy-sw",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "sync-version": "node scripts/sync-version.js",
     "copy-sw": "cp public/sw.js build/sw.js",
     "build-pwa": "npm run build && npm run copy-sw",
     "serve": "npx serve -s build -l 3000"
