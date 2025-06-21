@@ -8,6 +8,7 @@ import {
   InboxOutlined,
   SettingOutlined 
 } from '@ant-design/icons';
+import { VERSION_INFO } from '../../config/version';
 
 const { Title, Paragraph } = Typography;
 
@@ -145,6 +146,9 @@ const HomePage: React.FC = () => {
       <div style={{ textAlign: 'center', marginTop: 40, padding: 20, color: '#999' }}>
         <Paragraph>
           © 2024 工作助手PWA | 让业务管理更简单高效
+        </Paragraph>
+        <Paragraph style={{ fontSize: 12, color: '#ccc', marginTop: 8 }}>
+          版本 v{VERSION_INFO.version} | 构建日期: {VERSION_INFO.buildDate}
         </Paragraph>
       </div>
     </div>
