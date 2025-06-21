@@ -1,11 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Input, Space, Button, message } from 'antd';
+import { Table, Input, Space, Button, message, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined, FilterOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
 
 const { TextArea } = Input;
+
+// 调试信息组件
+const DebugInfo: React.FC = () => {
+  const [debugInfo, setDebugInfo] = useState<any>({});
+  
+  useEffect(() => {
+    setDebugInfo({
+      NODE_ENV: process.env.NODE_ENV,
+      hostname: window.location.hostname,
+      API_BASE_URL: API_BASE_URL,
+      token: localStorage.getItem('token') ? '已设置' : '未设置',
+      timestamp: new Date().toISOString()
+    });
+  }, []);
+  
+  return (
+    <Alert
+      message="调试信息"
+      description={
+        <pre style={{ fontSize: '12px', margin: 0 }}>
+          {JSON.stringify(debugInfo, null, 2)}
+        </pre>
+      }
+      type="info"
+      showIcon
+      style={{ marginBottom: 16 }}
+    />
+  );
+};
 
 interface LogisticsRecord {
   shippingId: string;
@@ -78,26 +107,54 @@ const LogisticsPage: React.FC = () => {
   // 页面加载时自动请求全部非完成状态数据
   useEffect(() => {
     const fetchDefaultData = async () => {
+      console.log('🚀 开始加载默认数据...');
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('环境信息:', {
+        NODE_ENV: process.env.NODE_ENV,
+        hostname: window.location.hostname,
+        userAgent: navigator.userAgent
+      });
+      
       setLoading(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
+        const url = `${API_BASE_URL}/api/logistics/search`;
+        const requestBody = { filters: { status: 'not_completed' } };
+        
+        console.log('📡 发送请求:', {
+          url,
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: token ? 'Bearer [TOKEN]' : '无'
+          },
+          body: requestBody
+        });
+        
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {})
           },
-          body: JSON.stringify({
-            filters: { status: 'not_completed' }
-          }),
+          body: JSON.stringify(requestBody),
+        });
+        
+        console.log('📥 响应状态:', {
+          status: res.status,
+          statusText: res.statusText,
+          ok: res.ok,
+          headers: Object.fromEntries(res.headers.entries())
         });
         
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          const errorText = await res.text();
+          console.error('❌ 响应错误内容:', errorText);
+          throw new Error(`HTTP ${res.status}: ${res.statusText} - ${errorText}`);
         }
         
         const result = await res.json();
-        console.log('默认数据加载结果:', result); // 添加调试信息
+        console.log('✅ 默认数据加载结果:', result);
         const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
           const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
           const t2 = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
@@ -111,7 +168,7 @@ const LogisticsPage: React.FC = () => {
           message.info('当前没有未完成的物流记录');
         }
       } catch (e) {
-        console.error('默认数据加载失败:', e);
+        console.error('❌ 默认数据加载失败:', e);
         message.error(`加载数据失败: ${e instanceof Error ? e.message : '未知错误'}`);
       }
       setLoading(false);
@@ -348,6 +405,8 @@ const LogisticsPage: React.FC = () => {
       .map(i => i.trim())
       .filter(Boolean);
       
+    console.log('🔍 开始搜索...', { shippingIds, customFilters, filters });
+      
     setLoading(true);
     try {
       const body: any = { filters: customFilters || filters };
@@ -356,7 +415,19 @@ const LogisticsPage: React.FC = () => {
       }
       
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
+      const url = `${API_BASE_URL}/api/logistics/search`;
+      
+      console.log('📡 发送搜索请求:', {
+        url,
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: token ? 'Bearer [TOKEN]' : '无'
+        },
+        body: body
+      });
+      
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -365,12 +436,20 @@ const LogisticsPage: React.FC = () => {
         body: JSON.stringify(body),
       });
       
+      console.log('📥 搜索响应状态:', {
+        status: res.status,
+        statusText: res.statusText,
+        ok: res.ok
+      });
+      
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const errorText = await res.text();
+        console.error('❌ 搜索响应错误内容:', errorText);
+        throw new Error(`HTTP ${res.status}: ${res.statusText} - ${errorText}`);
       }
       
       const result = await res.json();
-      console.log('搜索结果:', result); // 添加调试信息
+      console.log('✅ 搜索结果:', result);
       const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
         const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
         const t2 = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
@@ -386,7 +465,7 @@ const LogisticsPage: React.FC = () => {
         }
       }
     } catch (e) {
-      console.error('查询失败:', e);
+      console.error('❌ 查询失败:', e);
       message.error(`查询失败: ${e instanceof Error ? e.message : '未知错误'}`);
     }
     setLoading(false);
@@ -402,6 +481,7 @@ const LogisticsPage: React.FC = () => {
   return (
     <div style={{ padding: '24px' }}>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <DebugInfo />
         <Space>
           <TextArea
             rows={4}
