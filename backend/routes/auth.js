@@ -6,6 +6,23 @@ const User = require('../models/User');
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 const JWT_EXPIRES_IN = '24h';
 
+// 中间件：验证token
+const authenticateToken = (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ message: '未提供认证token' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Token无效或已过期' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // 登录
 router.post('/login', async (req, res) => {
   try {
@@ -344,22 +361,5 @@ router.delete('/users/:userId', authenticateToken, async (req, res) => {
     res.status(500).json({ message: '服务器错误' });
   }
 });
-
-// 中间件：验证token
-const authenticateToken = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ message: '未提供认证token' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: 'Token无效或已过期' });
-    }
-    req.user = user;
-    next();
-  });
-};
 
 module.exports = { router, authenticateToken }; 
