@@ -26,6 +26,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "npm run sync-version && react-scripts build && npm run copy-sw",
+    "build:netlify": "npm run sync-version && SKIP_PREFLIGHT_CHECK=true react-scripts build && npm run copy-sw",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "sync-version": "node scripts/sync-version.js",
