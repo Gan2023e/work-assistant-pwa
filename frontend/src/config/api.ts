@@ -10,14 +10,33 @@ const API_CONFIG = {
   }
 };
 
-// 环境判断
-const isProduction = process.env.NODE_ENV === 'production' || 
-                    window.location.hostname !== 'localhost';
+// 环境判断和API基础URL配置
+const getApiBaseUrl = () => {
+  // 优先使用环境变量（Netlify构建时设置）
+  if (process.env.REACT_APP_API_BASE_URL) {
+    console.log('🔧 使用环境变量 REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
+    return process.env.REACT_APP_API_BASE_URL;
+  }
+  
+  // 回退到自动检测
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                      window.location.hostname !== 'localhost';
+  
+  const environment = isProduction ? 'production' : 'development';
+  const config = API_CONFIG[environment];
+  
+  console.log('🔧 环境检测结果:', {
+    NODE_ENV: process.env.NODE_ENV,
+    hostname: window.location.hostname,
+    isProduction,
+    environment,
+    baseURL: config.baseURL
+  });
+  
+  return config.baseURL;
+};
 
-const environment = isProduction ? 'production' : 'development';
-const config = API_CONFIG[environment];
-
-export const API_BASE_URL = config.baseURL;
+export const API_BASE_URL = getApiBaseUrl();
 
 // API端点
 export const API_ENDPOINTS = {
