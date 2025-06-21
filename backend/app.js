@@ -85,17 +85,28 @@ console.log('🔗 Attempting to connect to database...');
 sequelize.authenticate().then(() => {
   console.log('✅ 数据库连接成功');
   
-  // 同步数据库模型
-  console.log('🔄 Syncing database models...');
-  return sequelize.sync({ alter: true });
-}).then(() => {
-  console.log('✅ 数据库同步完成');
-  
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ 后端服务已启动，端口 ${PORT}`);
-    console.log(`健康检查: http://localhost:${PORT}/health`);
-    console.log(`API文档: http://localhost:${PORT}/`);
-  });
+  // 检查生产环境，避免自动同步数据库结构
+  if (process.env.NODE_ENV === 'production') {
+    console.log('🔒 生产环境：跳过数据库结构同步，使用现有表结构');
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+      console.log(`健康检查: http://localhost:${PORT}/health`);
+      console.log(`API文档: http://localhost:${PORT}/`);
+    });
+  } else {
+    // 开发环境才进行数据库同步
+    console.log('🔄 开发环境：同步数据库模型...');
+    return sequelize.sync({ alter: false }).then(() => {
+      console.log('✅ 数据库同步完成');
+      
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+        console.log(`健康检查: http://localhost:${PORT}/health`);
+        console.log(`API文档: http://localhost:${PORT}/`);
+      });
+    });
+  }
 }).catch(err => {
   console.error('❌ 数据库连接失败:', err.message);
   console.error('Error details:', {
