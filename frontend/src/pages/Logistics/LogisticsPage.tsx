@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Input, Space, Button } from 'antd';
+import { Table, Input, Space, Button, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined, FilterOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { API_BASE_URL } from '../../config/api';
 
 const { TextArea } = Input;
 
@@ -51,11 +52,12 @@ const LogisticsPage: React.FC = () => {
   useEffect(() => {
     const fetchFilters = async () => {
       try {
-        const res = await fetch('/api/logistics/filters');
+        const res = await fetch(`${API_BASE_URL}/api/logistics/filters`);
         const result = await res.json();
         console.log('filterOptions', result.data); // 调试输出
         setFilterOptions(result.data || {});
       } catch (e) {
+        console.error('获取筛选项失败:', e);
         setFilterOptions({});
       }
     };
@@ -67,13 +69,18 @@ const LogisticsPage: React.FC = () => {
     const fetchDefaultData = async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/logistics/search', {
+        const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             filters: { status: 'not_completed' }
           }),
         });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
         const result = await res.json();
         const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
           const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
@@ -83,6 +90,7 @@ const LogisticsPage: React.FC = () => {
         setData(sorted);
       } catch (e) {
         console.error('默认数据加载失败:', e);
+        message.error('加载数据失败，请检查网络连接');
       }
       setLoading(false);
     };
@@ -317,17 +325,24 @@ const LogisticsPage: React.FC = () => {
       .split('\n')
       .map(i => i.trim())
       .filter(Boolean);
+      
     setLoading(true);
     try {
       const body: any = { filters: customFilters || filters };
       if (shippingIds.length > 0) {
         body.shippingIds = shippingIds;
       }
-      const res = await fetch('/api/logistics/search', {
+      
+      const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const result = await res.json();
       const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
         const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
@@ -335,8 +350,17 @@ const LogisticsPage: React.FC = () => {
         return t1 - t2;
       });
       setData(sorted);
+      
+      if (shippingIds.length > 0) {
+        if (!result.data || result.data.length === 0) {
+          message.info('未找到匹配的物流信息');
+        } else {
+          message.success(`找到 ${result.data.length} 条物流信息`);
+        }
+      }
     } catch (e) {
       console.error('查询失败:', e);
+      message.error(`查询失败: ${e instanceof Error ? e.message : '未知错误'}`);
     }
     setLoading(false);
   };
