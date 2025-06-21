@@ -1,5 +1,11 @@
 const { Sequelize } = require('sequelize');
-require('dotenv').config();
+
+// 在Railway中，环境变量是直接注入的，但仍然尝试加载.env文件（如果存在）
+try {
+  require('dotenv').config();
+} catch (e) {
+  console.log('📝 No .env file found, using system environment variables');
+}
 
 console.log('🔗 Initializing database connection...');
 
