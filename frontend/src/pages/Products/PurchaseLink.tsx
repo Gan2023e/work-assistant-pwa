@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Input, Table, message } from 'antd';
 import dayjs from 'dayjs';
 import { ColumnsType } from 'antd/es/table';
+import { API_BASE_URL } from '../../config/api';
 
 const { TextArea } = Input;
 
@@ -40,15 +41,36 @@ const Purchase: React.FC = () => {
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/product_weblink/search', {
+      console.log('🔍 搜索请求:', { keywords });
+      console.log('📡 API URL:', `${API_BASE_URL}/api/product_weblink/search`);
+      
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ keywords }),
       });
+      
+      console.log('📡 响应状态:', res.status);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const result = await res.json();
+      console.log('📊 搜索结果:', result);
+      
       setData(result.data || []);
+      
+      if (!result.data || result.data.length === 0) {
+        message.info('未找到匹配的产品信息');
+      } else {
+        message.success(`找到 ${result.data.length} 条产品信息`);
+      }
     } catch (e) {
-      message.error('查询失败');
+      console.error('❌ 搜索失败:', e);
+      message.error(`查询失败: ${e instanceof Error ? e.message : '未知错误'}`);
     }
     setLoading(false);
   };
@@ -62,6 +84,9 @@ const Purchase: React.FC = () => {
 
   return (
     <div>
+      <div style={{ marginBottom: 16 }}>
+        <p>当前API地址: <code>{API_BASE_URL}</code></p>
+      </div>
       <TextArea
         rows={6}
         value={input}
