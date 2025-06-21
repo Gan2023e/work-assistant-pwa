@@ -109,11 +109,6 @@ const LogisticsPage: React.FC = () => {
       }
 
       const result = await response.json();
-      
-      if (result.code !== 0) {
-        throw new Error(result.message || 'API返回错误');
-      }
-
       const sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
         const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
         const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
@@ -139,14 +134,9 @@ const LogisticsPage: React.FC = () => {
   // 获取筛选选项
   const fetchFilterOptions = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/logistics/filters`, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setFilterOptions(result.data || {});
-      }
+      const response = await fetch(`${API_BASE_URL}/api/logistics/filters`);
+      const result = await response.json();
+      setFilterOptions(result.data || {});
     } catch (error) {
       console.error('获取筛选选项失败:', error);
     }
