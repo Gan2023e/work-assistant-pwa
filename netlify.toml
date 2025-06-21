@@ -9,7 +9,13 @@
   GENERATE_SOURCEMAP = "false"
   # 强制使用生产环境后端，不再支持开发环境
 
-# SPA路由重定向
+# SPA路由重定向 - 排除API路径
+[[redirects]]
+  from = "/api/*"
+  to = "https://work-assistant-pwa-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
