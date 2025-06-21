@@ -7,6 +7,7 @@
   NODE_ENV = "production"
   REACT_APP_API_BASE_URL = "https://work-assistant-pwa-production.up.railway.app"
   GENERATE_SOURCEMAP = "false"
+  # 强制使用生产环境后端，不再支持开发环境
 
 # SPA路由重定向
 [[redirects]]

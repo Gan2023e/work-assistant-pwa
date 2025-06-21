@@ -1,16 +1,7 @@
-// API配置
-const API_CONFIG = {
-  // 开发环境
-  development: {
-    baseURL: 'http://localhost:3001',
-  },
-  // 生产环境 - Railway后端URL
-  production: {
-    baseURL: 'https://work-assistant-pwa-production.up.railway.app',
-  }
-};
+// API基础URL配置 - 统一使用生产环境Railway后端
+const PRODUCTION_API_URL = 'https://work-assistant-pwa-production.up.railway.app';
 
-// 环境判断和API基础URL配置
+// 获取API基础URL
 const getApiBaseUrl = () => {
   // 优先使用环境变量（Netlify构建时设置）
   if (process.env.REACT_APP_API_BASE_URL) {
@@ -18,22 +9,15 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
-  // 回退到自动检测
-  const isProduction = process.env.NODE_ENV === 'production' || 
-                      window.location.hostname !== 'localhost';
-  
-  const environment = isProduction ? 'production' : 'development';
-  const config = API_CONFIG[environment];
-  
-  console.log('🔧 环境检测结果:', {
+  // 默认使用生产环境Railway后端
+  console.log('🔧 使用默认生产环境API:', PRODUCTION_API_URL);
+  console.log('🔧 当前环境信息:', {
     NODE_ENV: process.env.NODE_ENV,
     hostname: window.location.hostname,
-    isProduction,
-    environment,
-    baseURL: config.baseURL
+    timestamp: new Date().toISOString()
   });
   
-  return config.baseURL;
+  return PRODUCTION_API_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();

@@ -13,17 +13,17 @@ const DebugInfo: React.FC = () => {
   
   useEffect(() => {
     setDebugInfo({
-      NODE_ENV: process.env.NODE_ENV,
-      hostname: window.location.hostname,
       API_BASE_URL: API_BASE_URL,
-      token: localStorage.getItem('token') ? '已设置' : '未设置',
-      timestamp: new Date().toISOString()
+      环境: 'Production Only',
+      后端服务: 'Railway',
+      token状态: localStorage.getItem('token') ? '已设置' : '未设置',
+      时间戳: new Date().toLocaleString('zh-CN')
     });
   }, []);
   
   return (
     <Alert
-      message="调试信息"
+      message="系统配置信息"
       description={
         <pre style={{ fontSize: '12px', margin: 0 }}>
           {JSON.stringify(debugInfo, null, 2)}
@@ -107,13 +107,8 @@ const LogisticsPage: React.FC = () => {
   // 页面加载时自动请求全部非完成状态数据
   useEffect(() => {
     const fetchDefaultData = async () => {
-      console.log('🚀 开始加载默认数据...');
-      console.log('API_BASE_URL:', API_BASE_URL);
-      console.log('环境信息:', {
-        NODE_ENV: process.env.NODE_ENV,
-        hostname: window.location.hostname,
-        userAgent: navigator.userAgent
-      });
+      console.log('🚀 开始加载物流数据...');
+      console.log('🔗 API地址:', API_BASE_URL);
       
       setLoading(true);
       try {
