@@ -1,9 +1,25 @@
-name: Deploy PWA to GitHub Pages
+name: Deploy PWA to GitHub Pages (Disabled - Using Netlify)
+
+# 禁用此工作流，因为现在使用Netlify进行部署
+# 如果需要重新启用GitHub Pages部署，请取消注释下面的触发器
+
+# on:
+#   push:
+#     branches: [ main ]
+#   workflow_dispatch:
 
 on:
-  push:
-    branches: [ main ]
+  # 只在手动触发时运行
   workflow_dispatch:
+    inputs:
+      deploy_to_github_pages:
+        description: '是否部署到GitHub Pages'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
 
 permissions:
   contents: read
@@ -17,6 +33,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 只有在明确选择部署到GitHub Pages时才运行
+    if: github.event.inputs.deploy_to_github_pages == 'true'
     
     steps:
     - name: Checkout
@@ -25,7 +43,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '16'
+        node-version: '18'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
         
@@ -37,13 +55,13 @@ jobs:
     - name: Build PWA
       run: |
         cd frontend
-        npm run build-pwa
+        npm run build
         
     - name: Setup Pages
-      uses: actions/configure-pages@v3
+      uses: actions/configure-pages@v4
       
     - name: Upload artifact
-      uses: actions/upload-pages-artifact@v2
+      uses: actions/upload-pages-artifact@v3
       with:
         path: './frontend/build'
 
@@ -53,7 +71,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    if: github.event.inputs.deploy_to_github_pages == 'true'
     steps:
     - name: Deploy to GitHub Pages
       id: deployment
-      uses: actions/deploy-pages@v2 
+      uses: actions/deploy-pages@v4 
