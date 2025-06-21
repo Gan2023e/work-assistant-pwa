@@ -1,11 +1,60 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// 优先使用Railway提供的DATABASE_URL或MYSQL_URL
+console.log('🔗 Initializing database connection...');
+
+// 优先使用单独的环境变量（Railway配置）
 let sequelize;
 
-if (process.env.MYSQL_URL) {
-  // Railway MySQL URL格式
+if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_DATABASE) {
+  // 使用单独的环境变量（推荐方式）
+  console.log('📊 Using individual database environment variables');
+  console.log('- Host:', process.env.DB_HOST);
+  console.log('- Database:', process.env.DB_DATABASE);
+  console.log('- User:', process.env.DB_USER);
+  console.log('- Port:', process.env.DB_PORT || '3306');
+  
+  sequelize = new Sequelize(
+    process.env.DB_DATABASE,
+    process.env.DB_USER,
+    process.env.DB_PASSWORD,
+    {
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT) || 3306,
+      dialect: 'mysql',
+      timezone: '+08:00',
+      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      pool: {
+        max: 5,
+        min: 0,
+        acquire: 30000,
+        idle: 10000
+      },
+      retry: {
+        match: [
+          /ETIMEDOUT/,
+          /EHOSTUNREACH/,
+          /ECONNRESET/,
+          /ECONNREFUSED/,
+          /ETIMEDOUT/,
+          /ESOCKETTIMEDOUT/,
+          /EHOSTUNREACH/,
+          /EPIPE/,
+          /EAI_AGAIN/,
+          /SequelizeConnectionError/,
+          /SequelizeConnectionRefusedError/,
+          /SequelizeHostNotFoundError/,
+          /SequelizeHostNotReachableError/,
+          /SequelizeInvalidConnectionError/,
+          /SequelizeConnectionTimedOutError/
+        ],
+        max: 3
+      }
+    }
+  );
+} else if (process.env.MYSQL_URL) {
+  // Railway MySQL URL格式（备选）
+  console.log('📊 Using MYSQL_URL');
   sequelize = new Sequelize(process.env.MYSQL_URL, {
     dialect: 'mysql',
     timezone: '+08:00',
@@ -18,7 +67,8 @@ if (process.env.MYSQL_URL) {
     }
   });
 } else if (process.env.DATABASE_URL) {
-  // 通用DATABASE_URL格式
+  // 通用DATABASE_URL格式（备选）
+  console.log('📊 Using DATABASE_URL');
   sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'mysql',
     timezone: '+08:00',
@@ -31,14 +81,15 @@ if (process.env.MYSQL_URL) {
     }
   });
 } else {
-  // 传统分别配置方式（本地开发或手动配置）
+  // 兜底配置
+  console.log('⚠️ No database configuration found, using defaults');
   sequelize = new Sequelize(
-    process.env.MYSQL_DATABASE || process.env.DB_NAME || 'work_assistant',
-    process.env.MYSQL_USER || process.env.DB_USER || 'root',
-    process.env.MYSQL_PASSWORD || process.env.DB_PASSWORD || '',
+    'work_assistant',
+    'root',
+    '',
     {
-      host: process.env.MYSQL_HOST || process.env.DB_HOST || 'localhost',
-      port: process.env.MYSQL_PORT || process.env.DB_PORT || 3306,
+      host: 'localhost',
+      port: 3306,
       dialect: 'mysql',
       timezone: '+08:00',
       logging: process.env.NODE_ENV === 'development' ? console.log : false,

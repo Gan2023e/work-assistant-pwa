@@ -1,9 +1,9 @@
 {
   "name": "work-assistant-pwa",
   "version": "1.0.0",
-  "main": "app-simple.js",
+  "main": "backend/app.js",
   "scripts": {
-    "start": "node app-simple.js",
+    "start": "cd backend && npm start",
     "dev": "cd backend && npm run dev",
     "install-backend": "cd backend && npm install",
     "postinstall": "cd backend && npm install"

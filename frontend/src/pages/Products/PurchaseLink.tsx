@@ -1,32 +1,11 @@
 import React, { useState } from 'react';
-import { Button, Input, Table, message, Alert } from 'antd';
+import { Button, Input, Table, message } from 'antd';
 import dayjs from 'dayjs';
 import { ColumnsType } from 'antd/es/table';
-import { apiClient } from '../../config/api';
 
 const { TextArea } = Input;
 
-// 定义产品数据类型
-interface ProductData {
-  parent_sku: string;
-  weblink?: string;
-  update_time?: string;
-  check_time?: string;
-  status?: string;
-  notice?: string;
-  cpc_recommend?: string;
-  cpc_status?: string;
-  cpc_submit?: string;
-  model_number?: string;
-  recommend_age?: string;
-  ads_add?: string;
-  list_parent_sku?: string;
-  no_inventory_rate?: string;
-  sales_30days?: number;
-  seller_name?: string;
-}
-
-const columns: ColumnsType<ProductData> = [
+const columns: ColumnsType<any> = [
   { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku', align: 'center' },
   { title: '产品链接', dataIndex: 'weblink', key: 'weblink', align: 'center', render: (text: string) => text ? <a href={text} target="_blank" rel="noopener noreferrer">{text}</a> : '' },
   { title: '上传时间', dataIndex: 'update_time', key: 'update_time', render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '', align: 'center' },
@@ -48,8 +27,7 @@ const columns: ColumnsType<ProductData> = [
 const Purchase: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<ProductData[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState([]);
 
   const handleSearch = async () => {
     const keywords = input
@@ -60,54 +38,17 @@ const Purchase: React.FC = () => {
       message.warning('请输入parent_sku或weblink');
       return;
     }
-    
     setLoading(true);
-    setError(null);
-    
     try {
-      // 调试信息
-      console.log('搜索关键词:', keywords);
-      console.log('环境:', process.env.NODE_ENV);
-      console.log('API Base URL:', (apiClient as any).baseURL || 'Unknown');
-      
-      // 先测试Railway后端健康检查
-      const healthUrl = 'https://work-assistant-pwa-production.up.railway.app/health';
-      console.log('测试健康检查:', healthUrl);
-      
-      const healthResponse = await fetch(healthUrl);
-      const healthData = await healthResponse.json();
-      console.log('健康检查响应:', healthData);
-      
-      // 由于产品API不存在，直接生成模拟数据
-      setError('产品API暂未实现，显示模拟数据进行测试。后端健康检查正常。');
-      
-      // 生成模拟数据
-      const mockData = keywords.map((keyword, index) => ({
-        parent_sku: keyword,
-        weblink: `https://example.com/product/${keyword}`,
-        update_time: new Date().toISOString(),
-        check_time: new Date().toISOString(),
-        status: '正常',
-        notice: `模拟数据 ${index + 1}`,
-        cpc_recommend: '推荐',
-        cpc_status: '测试中',
-        cpc_submit: '已提交',
-        model_number: `MODEL-${keyword}`,
-        recommend_age: '3-8岁',
-        ads_add: '已创建',
-        list_parent_sku: keyword,
-        no_inventory_rate: '5%',
-        sales_30days: Math.floor(Math.random() * 100),
-        seller_name: '示例供应商'
-      }));
-      
-      setData(mockData);
-      message.success(`生成 ${mockData.length} 条模拟数据。后端连接正常，等待产品API开发。`);
-      
-    } catch (e: any) {
-      console.error('操作失败:', e);
-      setError(`操作失败: ${e.message}`);
-      message.error('操作失败，请检查网络连接或查看控制台');
+      const res = await fetch('/api/product_weblink/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords }),
+      });
+      const result = await res.json();
+      setData(result.data || []);
+    } catch (e) {
+      message.error('查询失败');
     }
     setLoading(false);
   };
@@ -120,36 +61,18 @@ const Purchase: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: 16 }}>
-        <h2>采购链接管理</h2>
-        <p>输入SKU进行搜索，目前显示模拟数据用于测试前后端连接</p>
-      </div>
-      
-      {error && (
-        <Alert
-          message="提示"
-          description={error}
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-      )}
-      
-      <div style={{ marginBottom: 16 }}>
-        <TextArea
-          rows={6}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="请输入parent_sku或weblink（每行一个，支持部分内容模糊查询）"
-          style={{ width: 400, marginRight: 8 }}
-        />
-        <Button type="primary" onClick={handleSearch} loading={loading}>
-          搜索
-        </Button>
-      </div>
-      
+    <div>
+      <TextArea
+        rows={6}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="请输入parent_sku或weblink（每行一个，支持部分内容模糊查询）"
+        style={{ width: 400, marginBottom: 16 }}
+      />
+      <Button type="primary" onClick={handleSearch} loading={loading} style={{ marginLeft: 8 }}>
+        搜索
+      </Button>
       <Table
         columns={columns}
         dataSource={data}
@@ -158,11 +81,6 @@ const Purchase: React.FC = () => {
         style={{ marginTop: 24 }}
         scroll={{ x: 'max-content' }}
         bordered
-        pagination={{
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条记录`,
-        }}
       />
     </div>
   );

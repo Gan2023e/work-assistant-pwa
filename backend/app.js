@@ -9,6 +9,19 @@ const salaryRouter = require('./routes/salary');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log('🚀 Starting backend server...');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', PORT);
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+
+// 检查数据库环境变量
+console.log('📊 Database environment variables:');
+console.log('- DB_HOST:', process.env.DB_HOST ? '✓ configured' : '❌ missing');
+console.log('- DB_USER:', process.env.DB_USER ? '✓ configured' : '❌ missing');
+console.log('- DB_PASSWORD:', process.env.DB_PASSWORD ? '✓ configured' : '❌ missing');
+console.log('- DB_DATABASE:', process.env.DB_DATABASE ? '✓ configured' : '❌ missing');
+console.log('- DB_PORT:', process.env.DB_PORT || '3306 (default)');
+
 // CORS配置，允许前端域名访问
 app.use(cors({
   origin: [
@@ -22,9 +35,33 @@ app.use(cors({
 
 app.use(express.json());
 
-// 健康检查端点
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+// 健康检查端点 - 增强版本
+app.get('/health', async (req, res) => {
+  try {
+    // 测试数据库连接
+    await sequelize.authenticate();
+    console.log('✅ Health check: Database connection OK');
+    
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        DB_HOST: process.env.DB_HOST ? 'configured' : 'missing',
+        DB_DATABASE: process.env.DB_DATABASE ? 'configured' : 'missing',
+        FRONTEND_URL: process.env.FRONTEND_URL
+      }
+    });
+  } catch (error) {
+    console.error('❌ Health check: Database connection failed:', error.message);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message
+    });
+  }
 });
 
 // API路由
@@ -37,24 +74,33 @@ app.get('/', (req, res) => {
   res.json({ 
     message: '工作助手PWA后端服务',
     version: '1.0.0',
-    status: 'running'
+    status: 'running',
+    endpoints: ['/health', '/api/product_weblink', '/api/logistics', '/api/salary']
   });
 });
 
 // 数据库连接和服务启动
+console.log('🔗 Attempting to connect to database...');
 sequelize.authenticate().then(() => {
-  console.log('数据库连接成功');
+  console.log('✅ 数据库连接成功');
   
   // 同步数据库模型
+  console.log('🔄 Syncing database models...');
   return sequelize.sync({ alter: true });
 }).then(() => {
-  console.log('数据库同步完成');
+  console.log('✅ 数据库同步完成');
   
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`后端服务已启动，端口 ${PORT}`);
+    console.log(`✅ 后端服务已启动，端口 ${PORT}`);
     console.log(`健康检查: http://localhost:${PORT}/health`);
+    console.log(`API文档: http://localhost:${PORT}/`);
   });
 }).catch(err => {
-  console.error('数据库连接失败:', err);
+  console.error('❌ 数据库连接失败:', err.message);
+  console.error('Error details:', {
+    code: err.original?.code,
+    errno: err.original?.errno,
+    sqlMessage: err.original?.sqlMessage
+  });
   process.exit(1);
 }); 
