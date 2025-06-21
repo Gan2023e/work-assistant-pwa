@@ -122,11 +122,11 @@ const AppContent: React.FC = () => {
     },
     { label: <Link to="/salary">临工工资结算</Link>, key: '/salary' },
     { label: <Link to="/profit">直发小包利润分析</Link>, key: '/profit' },
-    ...(user?.role === 'admin' ? [{
+    {
       label: <Link to="/user-manage">用户管理</Link>, 
       key: '/user-manage',
       icon: <TeamOutlined />
-    }] : []),
+    },
   ];
 
   // 控制下拉菜单展开收起

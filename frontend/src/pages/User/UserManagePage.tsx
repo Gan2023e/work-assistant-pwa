@@ -61,19 +61,24 @@ const UserManagePage: React.FC = () => {
       if (response.ok) {
         setUsers(result.users);
       } else {
-        message.error(result.message || '获取用户列表失败');
+        if (currentUser?.role === 'admin') {
+          message.error(result.message || '获取用户列表失败');
+        } else {
+          // 非管理员用户没有权限时显示空列表但不报错
+          setUsers([]);
+        }
       }
     } catch (error) {
       console.error('获取用户列表失败:', error);
-      message.error('网络错误');
+      if (currentUser?.role === 'admin') {
+        message.error('网络错误');
+      }
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    if (currentUser?.role === 'admin') {
-      fetchUsers();
-    }
+    fetchUsers();
   }, [currentUser]);
 
   // 创建用户
@@ -269,6 +274,8 @@ const UserManagePage: React.FC = () => {
             size="small"
             icon={<EditOutlined />}
             onClick={() => openEditModal(record)}
+            disabled={currentUser?.role !== 'admin'}
+            style={{ color: currentUser?.role !== 'admin' ? '#d9d9d9' : undefined }}
           >
             编辑
           </Button>
@@ -277,6 +284,8 @@ const UserManagePage: React.FC = () => {
             size="small"
             icon={<KeyOutlined />}
             onClick={() => openResetPasswordModal(record.id)}
+            disabled={currentUser?.role !== 'admin'}
+            style={{ color: currentUser?.role !== 'admin' ? '#d9d9d9' : undefined }}
           >
             重置密码
           </Button>
@@ -287,12 +296,15 @@ const UserManagePage: React.FC = () => {
               onConfirm={() => handleDeleteUser(record.id)}
               okText="确定"
               cancelText="取消"
+              disabled={currentUser?.role !== 'admin'}
             >
               <Button
                 type="link"
                 size="small"
                 danger
                 icon={<DeleteOutlined />}
+                disabled={currentUser?.role !== 'admin'}
+                style={{ color: currentUser?.role !== 'admin' ? '#d9d9d9' : undefined }}
               >
                 删除
               </Button>
@@ -303,19 +315,19 @@ const UserManagePage: React.FC = () => {
     },
   ];
 
-  if (currentUser?.role !== 'admin') {
-    return (
-      <div style={{ textAlign: 'center', marginTop: 50 }}>
-        <h3>权限不足</h3>
-        <p>只有管理员可以访问用户管理页面</p>
-      </div>
-    );
-  }
+  const isAdmin = currentUser?.role === 'admin';
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h2>用户管理</h2>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>用户管理</h2>
+          {!isAdmin && (
+            <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: '14px' }}>
+              📖 只读模式 - 仅管理员可编辑
+            </p>
+          )}
+        </div>
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -324,10 +336,25 @@ const UserManagePage: React.FC = () => {
             form.resetFields();
             setModalVisible(true);
           }}
+          disabled={!isAdmin}
+          style={{ opacity: isAdmin ? 1 : 0.5 }}
         >
           创建用户
         </Button>
       </div>
+
+      {!isAdmin && (
+        <div style={{ 
+          background: '#f6f6f6', 
+          border: '1px solid #d9d9d9', 
+          borderRadius: '6px', 
+          padding: '12px 16px', 
+          marginBottom: '16px',
+          color: '#666'
+        }}>
+          <strong>💡 提示：</strong> 您当前以普通用户身份查看用户管理页面。所有编辑功能已禁用，仅可查看用户信息。如需编辑用户信息，请联系管理员。
+        </div>
+      )}
 
       <Table
         columns={columns}
@@ -341,18 +368,19 @@ const UserManagePage: React.FC = () => {
         }}
       />
 
-      {/* 创建/编辑用户模态框 */}
-      <Modal
-        title={editingUser ? '编辑用户' : '创建用户'}
-        open={modalVisible}
-        onOk={() => form.submit()}
-        onCancel={() => {
-          setModalVisible(false);
-          setEditingUser(null);
-          form.resetFields();
-        }}
-        width={500}
-      >
+      {/* 创建/编辑用户模态框 - 仅管理员可用 */}
+      {isAdmin && (
+        <Modal
+          title={editingUser ? '编辑用户' : '创建用户'}
+          open={modalVisible}
+          onOk={() => form.submit()}
+          onCancel={() => {
+            setModalVisible(false);
+            setEditingUser(null);
+            form.resetFields();
+          }}
+          width={500}
+        >
         <Form
           form={form}
           layout="vertical"
@@ -413,10 +441,12 @@ const UserManagePage: React.FC = () => {
             <Switch checkedChildren="激活" unCheckedChildren="禁用" />
           </Form.Item>
         </Form>
-      </Modal>
+        </Modal>
+      )}
 
-      {/* 重置密码模态框 */}
-      <Modal
+      {/* 重置密码模态框 - 仅管理员可用 */}
+      {isAdmin && (
+        <Modal
         title="重置密码"
         open={resetPasswordModalVisible}
         onOk={() => resetPasswordForm.submit()}
@@ -462,7 +492,8 @@ const UserManagePage: React.FC = () => {
             <Input.Password placeholder="请确认密码" />
           </Form.Item>
         </Form>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 };
