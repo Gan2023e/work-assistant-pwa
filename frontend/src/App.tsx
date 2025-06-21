@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Layout, Menu, ConfigProvider, Button, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
@@ -35,7 +35,12 @@ const getMenuLabel = (label: string, open: boolean) => (
 const AppContent: React.FC = () => {
   const location = useLocation();
   const { user, logout, isAuthenticated } = useAuth();
-  const [openKeys, setOpenKeys] = React.useState<string[]>([]);
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
+
+  // 添加调试信息
+  console.log('Current user:', user);
+  console.log('User role:', user?.role);
+  console.log('Is admin:', user?.role === 'admin');
 
   // 如果未登录且不在登录页面，重定向到登录页
   if (!isAuthenticated && location.pathname !== '/login') {
