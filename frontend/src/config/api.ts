@@ -1,13 +1,10 @@
-// API基础URL配置 - 强制使用生产环境Railway后端
-const PRODUCTION_API_URL = 'https://work-assistant-pwa-production.up.railway.app';
 
-// 强制使用Railway后端，不再依赖环境变量
-export const API_BASE_URL = PRODUCTION_API_URL;
+export const API_BASE_URL = 'https://work-assistant-pwa-production.up.railway.app';
 
 // 调试信息
 console.log('🔧 API配置信息:', {
   API_BASE_URL: API_BASE_URL,
-  环境变量REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL,
+  配置方式: '强制使用Railway生产环境',
   NODE_ENV: process.env.NODE_ENV,
   hostname: window.location.hostname,
   timestamp: new Date().toLocaleString('zh-CN')
