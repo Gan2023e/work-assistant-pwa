@@ -2,6 +2,11 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./index');
 
 const ProductWeblink = sequelize.define('ProductWeblink', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   parent_sku: DataTypes.STRING,
   weblink: DataTypes.STRING,
   update_time: DataTypes.DATE,
