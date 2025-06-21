@@ -52,7 +52,18 @@ const LogisticsPage: React.FC = () => {
   useEffect(() => {
     const fetchFilters = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/logistics/filters`);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/api/logistics/filters`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
         const result = await res.json();
         console.log('filterOptions', result.data); // 调试输出
         setFilterOptions(result.data || {});
@@ -69,9 +80,13 @@ const LogisticsPage: React.FC = () => {
     const fetchDefaultData = async () => {
       setLoading(true);
       try {
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({
             filters: { status: 'not_completed' }
           }),
@@ -82,15 +97,22 @@ const LogisticsPage: React.FC = () => {
         }
         
         const result = await res.json();
+        console.log('默认数据加载结果:', result); // 添加调试信息
         const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
           const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
           const t2 = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
           return t1 - t2;
         });
         setData(sorted);
+        
+        if (sorted.length > 0) {
+          message.success(`加载了 ${sorted.length} 条物流记录`);
+        } else {
+          message.info('当前没有未完成的物流记录');
+        }
       } catch (e) {
         console.error('默认数据加载失败:', e);
-        message.error('加载数据失败，请检查网络连接');
+        message.error(`加载数据失败: ${e instanceof Error ? e.message : '未知错误'}`);
       }
       setLoading(false);
     };
@@ -333,9 +355,13 @@ const LogisticsPage: React.FC = () => {
         body.shippingIds = shippingIds;
       }
       
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/logistics/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(body),
       });
       
@@ -344,6 +370,7 @@ const LogisticsPage: React.FC = () => {
       }
       
       const result = await res.json();
+      console.log('搜索结果:', result); // 添加调试信息
       const sorted = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
         const t1 = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
         const t2 = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
