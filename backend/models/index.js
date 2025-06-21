@@ -3,6 +3,16 @@ require('dotenv').config();
 
 console.log('🔗 Initializing database connection...');
 
+// 详细的环境变量调试输出
+console.log('🔍 Environment Variables Debug:');
+console.log('- DB_HOST:', process.env.DB_HOST || 'NOT SET');
+console.log('- DB_USER:', process.env.DB_USER || 'NOT SET');
+console.log('- DB_PASSWORD:', process.env.DB_PASSWORD ? '***HIDDEN***' : 'NOT SET');
+console.log('- DB_DATABASE:', process.env.DB_DATABASE || 'NOT SET');
+console.log('- DB_PORT:', process.env.DB_PORT || 'NOT SET');
+console.log('- MYSQL_URL:', process.env.MYSQL_URL ? '***HIDDEN***' : 'NOT SET');
+console.log('- DATABASE_URL:', process.env.DATABASE_URL ? '***HIDDEN***' : 'NOT SET');
+
 // 优先使用单独的环境变量（Railway配置）
 let sequelize;
 
