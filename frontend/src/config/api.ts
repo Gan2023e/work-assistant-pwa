@@ -10,20 +10,12 @@ const API_CONFIG = {
   }
 };
 
-// 更明确的环境判断
+// 环境判断
 const isProduction = process.env.NODE_ENV === 'production' || 
                     window.location.hostname !== 'localhost';
 
 const environment = isProduction ? 'production' : 'development';
 const config = API_CONFIG[environment];
-
-// 调试输出
-console.log('🌍 Environment Detection:');
-console.log('- NODE_ENV:', process.env.NODE_ENV);
-console.log('- hostname:', window.location.hostname);
-console.log('- isProduction:', isProduction);
-console.log('- selected environment:', environment);
-console.log('- API_BASE_URL:', config.baseURL);
 
 export const API_BASE_URL = config.baseURL;
 
