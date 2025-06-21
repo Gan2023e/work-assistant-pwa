@@ -1,4 +1,5 @@
-const CACHE_NAME = 'work-assistant-pwa-v1';
+const CACHE_NAME = 'work-assistant-pwa-v2.0.1';
+const APP_VERSION = '2.0.1';
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',
@@ -10,74 +11,126 @@ const urlsToCache = [
   '/offline.html'
 ];
 
-// 安装事件 - 缓存资源
+// 安装事件 - 缓存资源并立即激活
 self.addEventListener('install', (event) => {
+  console.log('PWA Service Worker: 安装新版本', APP_VERSION);
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('PWA Service Worker: 缓存已打开');
         return cache.addAll(urlsToCache);
       })
+      .then(() => {
+        // 强制跳过等待，立即激活新版本
+        return self.skipWaiting();
+      })
   );
 });
 
-// 激活事件 - 清理旧缓存
+// 激活事件 - 清理旧缓存并通知客户端更新
 self.addEventListener('activate', (event) => {
+  console.log('PWA Service Worker: 激活新版本', APP_VERSION);
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('PWA Service Worker: 删除旧缓存', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
+    Promise.all([
+      // 清理所有旧缓存
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              console.log('PWA Service Worker: 删除旧缓存', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      // 立即控制所有客户端
+      self.clients.claim()
+    ]).then(() => {
+      // 通知所有客户端有更新可用
+      return self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SW_UPDATE_AVAILABLE',
+            version: APP_VERSION
+          });
+        });
+      });
     })
   );
 });
 
-// 拦截网络请求
+// 拦截网络请求 - 使用网络优先策略确保获取最新内容
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // 如果缓存中有响应，则返回缓存的版本
-        if (response) {
-          return response;
-        }
-
-        // 复制请求，因为请求是一个流，只能使用一次
-        const fetchRequest = event.request.clone();
-
-        return fetch(fetchRequest).then((response) => {
-          // 检查响应是否有效
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
+  // 对于导航请求和API请求，使用网络优先策略
+  if (event.request.mode === 'navigate' || event.request.url.includes('/api/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // 如果网络请求成功，更新缓存
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                if (event.request.method === 'GET') {
+                  cache.put(event.request, responseToCache);
+                }
+              });
           }
-
-          // 复制响应，因为响应也是一个流
-          const responseToCache = response.clone();
-
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              // 只缓存GET请求
-              if (event.request.method === 'GET') {
-                cache.put(event.request, responseToCache);
+          return response;
+        })
+        .catch(() => {
+          // 网络失败时返回缓存
+          return caches.match(event.request)
+            .then((cachedResponse) => {
+              if (cachedResponse) {
+                return cachedResponse;
               }
+              // 如果是导航请求，返回离线页面
+              if (event.request.mode === 'navigate') {
+                return caches.match('/offline.html');
+              }
+              return caches.match('/');
             });
+        })
+    );
+  } else {
+    // 对于静态资源，先检查缓存，但定期更新
+    event.respondWith(
+      caches.match(event.request)
+        .then((cachedResponse) => {
+          // 总是尝试从网络获取最新版本
+          const fetchPromise = fetch(event.request)
+            .then((response) => {
+              if (response && response.status === 200) {
+                const responseToCache = response.clone();
+                caches.open(CACHE_NAME)
+                  .then((cache) => {
+                    cache.put(event.request, responseToCache);
+                  });
+              }
+              return response;
+            })
+            .catch(() => cachedResponse);
 
-          return response;
-        }).catch(() => {
-          // 网络请求失败时，如果是导航请求，返回离线页面
-          if (event.request.mode === 'navigate') {
-            return caches.match('/offline.html');
-          }
-          // 对于其他请求，尝试返回缓存的主页面
-          return caches.match('/');
-        });
-      })
-  );
+          // 如果有缓存，立即返回，同时在后台更新
+          return cachedResponse || fetchPromise;
+        })
+    );
+  }
+});
+
+// 监听来自客户端的消息
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  } else if (event.data && event.data.type === 'CHECK_UPDATE') {
+    // 检查更新
+    event.ports[0].postMessage({
+      type: 'UPDATE_CHECK_RESULT',
+      hasUpdate: true,
+      version: APP_VERSION
+    });
+  }
 });
 
 // 后台同步

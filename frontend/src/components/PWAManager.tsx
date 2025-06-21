@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { notification, Button, Card, Space } from 'antd';
+import { notification, Button, Card, Space, Modal, Progress } from 'antd';
 import { 
   WifiOutlined, 
   DownloadOutlined, 
   SyncOutlined,
   CloudServerOutlined,
-  MobileOutlined 
+  MobileOutlined,
+  ExclamationCircleOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -18,6 +20,11 @@ const PWAManager: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     // 检查是否已经是独立模式（已安装）
@@ -28,10 +35,12 @@ const PWAManager: React.FC = () => {
       setIsOnline(true);
       notification.success({
         message: '网络已连接',
-        description: '您现在可以同步最新数据了',
+        description: '正在检查应用更新...',
         icon: <WifiOutlined style={{ color: '#52c41a' }} />,
         duration: 3,
       });
+      // 网络恢复时立即检查更新
+      setTimeout(checkForUpdates, 1000);
     };
 
     const handleOffline = () => {
@@ -70,25 +79,44 @@ const PWAManager: React.FC = () => {
     };
 
     // 监听Service Worker更新
-    const handleSWUpdate = () => {
-      notification.info({
-        message: '发现新版本',
-        description: (
-          <div>
-            <p>应用有更新可用</p>
+    const handleSWUpdate = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'SW_UPDATE_AVAILABLE') {
+        setUpdateAvailable(true);
+        setAppVersion(event.data.version || '');
+        
+        // 显示强制更新模态框
+        setShowUpdateModal(true);
+        
+        // 同时显示通知
+        notification.warning({
+          message: '发现新版本！',
+          description: `应用版本 ${event.data.version} 已发布，包含重要更新`,
+          icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
+          duration: 0,
+          key: 'update-available',
+          btn: (
             <Button 
               type="primary" 
               size="small" 
-              icon={<SyncOutlined />}
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                notification.destroy('update-available');
+                setShowUpdateModal(true);
+              }}
             >
               立即更新
             </Button>
-          </div>
-        ),
-        duration: 0, // 不自动关闭
-        key: 'sw-update',
-      });
+          ),
+        });
+      }
+    };
+
+    // 定期检查更新
+    const checkForUpdates = () => {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'CHECK_UPDATE'
+        });
+      }
     };
 
     window.addEventListener('online', handleOnline);
@@ -98,11 +126,17 @@ const PWAManager: React.FC = () => {
 
     // 检查Service Worker更新
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'SW_UPDATE_AVAILABLE') {
-          handleSWUpdate();
-        }
-      });
+      navigator.serviceWorker.addEventListener('message', handleSWUpdate);
+      
+      // 页面加载时检查更新
+      setTimeout(checkForUpdates, 2000);
+      
+      // 定期检查更新（每5分钟）
+      const updateCheckInterval = setInterval(checkForUpdates, 5 * 60 * 1000);
+      
+      return () => {
+        clearInterval(updateCheckInterval);
+      };
     }
 
     return () => {
@@ -110,8 +144,71 @@ const PWAManager: React.FC = () => {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWUpdate);
+      }
     };
   }, [isStandalone]);
+
+  const handleForceUpdate = async () => {
+    setIsUpdating(true);
+    setUpdateProgress(0);
+    
+    try {
+      // 模拟更新进度
+      const progressInterval = setInterval(() => {
+        setUpdateProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      // 清除所有缓存
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+      }
+
+      // 清除LocalStorage中的缓存数据（保留用户登录信息）
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && !key.startsWith('user') && !key.startsWith('token')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+
+      // 告诉Service Worker跳过等待
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SKIP_WAITING'
+        });
+      }
+
+      setUpdateProgress(100);
+      
+      // 强制刷新页面
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (error) {
+      console.error('更新失败:', error);
+      notification.error({
+        message: '更新失败',
+        description: '请检查网络连接后重试',
+        duration: 5,
+      });
+      setIsUpdating(false);
+      setUpdateProgress(0);
+    }
+  };
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -161,6 +258,69 @@ const PWAManager: React.FC = () => {
           }} 
         />
       </div>
+
+      {/* 强制更新模态框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <ExclamationCircleOutlined style={{ color: '#faad14', marginRight: 8 }} />
+            应用更新可用
+          </div>
+        }
+        open={showUpdateModal}
+        closable={false}
+        maskClosable={false}
+        footer={null}
+        centered
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          {!isUpdating ? (
+            <>
+              <p style={{ fontSize: 16, marginBottom: 16 }}>
+                检测到新版本 <strong>{appVersion}</strong>
+              </p>
+              <p style={{ color: '#666', marginBottom: 24 }}>
+                此更新包含重要的功能改进和安全修复。
+                <br />
+                为了获得最佳体验，建议立即更新。
+              </p>
+              <Space>
+                <Button 
+                  type="primary" 
+                  size="large"
+                  icon={<ReloadOutlined />}
+                  onClick={handleForceUpdate}
+                >
+                  立即更新
+                </Button>
+                <Button 
+                  size="large"
+                  onClick={() => setShowUpdateModal(false)}
+                >
+                  稍后提醒
+                </Button>
+              </Space>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 16, marginBottom: 16 }}>
+                正在更新应用...
+              </p>
+              <Progress 
+                percent={updateProgress} 
+                status="active"
+                strokeColor={{
+                  '0%': '#108ee9',
+                  '100%': '#87d068',
+                }}
+              />
+              <p style={{ color: '#666', marginTop: 16 }}>
+                请勿关闭页面，更新完成后将自动刷新
+              </p>
+            </>
+          )}
+        </div>
+      </Modal>
 
       {/* 安装提示卡片 */}
       {showInstallPrompt && !isStandalone && (
