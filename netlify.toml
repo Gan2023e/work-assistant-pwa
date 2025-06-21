@@ -1,14 +1,16 @@
 [build]
   base = "frontend"
   publish = "frontend/build"
-  command = "CI=false npm run build"
+  command = "npm run build"
 
 [build.environment]
   NODE_ENV = "production"
   REACT_APP_API_BASE_URL = "https://work-assistant-pwa-production.up.railway.app"
   GENERATE_SOURCEMAP = "false"
+  CI = "false"
   # 强制使用生产环境后端，不再支持开发环境
   # 强制清除缓存 - 2025-06-22
+  # CI=false 跳过测试步骤
 
 # API代理到Railway后端
 [[redirects]]
