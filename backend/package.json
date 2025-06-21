@@ -10,7 +10,9 @@
     "start": "node app.js",
     "dev": "ts-node src/index.ts",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "create-admin": "node scripts/createAdmin.js",
+    "create-user": "node scripts/createAdmin.js user"
   },
   "keywords": ["pwa", "assistant", "business"],
   "author": "",
@@ -24,9 +26,12 @@
     "mysql2": "^3.14.1",
     "sequelize": "^6.37.7",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19"
+    "@types/cors": "^2.8.19",
+    "nodemon": "^3.0.1"
   }
 }

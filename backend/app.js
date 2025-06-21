@@ -5,6 +5,7 @@ const { sequelize } = require('./models');
 const productWeblinkRouter = require('./routes/productWeblink');
 const logisticsRouter = require('./routes/logistics');
 const salaryRouter = require('./routes/salary');
+const { router: authRouter } = require('./routes/auth');
 
 // 触发Railway重新部署 - 2024-06-21
 const app = express();
@@ -66,6 +67,7 @@ app.get('/health', async (req, res) => {
 });
 
 // API路由
+app.use('/api/auth', authRouter);
 app.use('/api/product_weblink', productWeblinkRouter);
 app.use('/api/logistics', logisticsRouter);
 app.use('/api/salary', salaryRouter);
@@ -76,7 +78,7 @@ app.get('/', (req, res) => {
     message: '工作助手PWA后端服务',
     version: '1.0.0',
     status: 'running',
-    endpoints: ['/health', '/api/product_weblink', '/api/logistics', '/api/salary']
+    endpoints: ['/health', '/api/auth', '/api/product_weblink', '/api/logistics', '/api/salary']
   });
 });
 

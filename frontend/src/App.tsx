@@ -1,10 +1,13 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Layout, Menu, ConfigProvider } from 'antd';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { Layout, Menu, ConfigProvider, Button, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownOutlined, RightOutlined } from '@ant-design/icons';
+import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import 'antd/dist/reset.css';
 import zhCN from 'antd/es/locale/zh_CN';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import LoginPage from './pages/Auth/LoginPage';
 import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
@@ -27,9 +30,49 @@ const getMenuLabel = (label: string, open: boolean) => (
   </span>
 );
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const location = useLocation();
+  const { user, logout, isAuthenticated } = useAuth();
   const [openKeys, setOpenKeys] = React.useState<string[]>([]);
+
+  // 如果未登录且不在登录页面，重定向到登录页
+  if (!isAuthenticated && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 如果已登录且在登录页面，重定向到主页
+  if (isAuthenticated && location.pathname === '/login') {
+    return <Navigate to="/" replace />;
+  }
+
+  // 登录页面不显示导航
+  if (location.pathname === '/login') {
+    return <LoginPage />;
+  }
+
+  const handleLogout = () => {
+    logout();
+    message.success('已退出登录');
+  };
+
+  // 用户菜单
+  const userMenuItems: MenuProps['items'] = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: `${user?.username} (${user?.role})`,
+      disabled: true,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+      onClick: handleLogout,
+    },
+  ];
 
   // 处理主菜单和子菜单的选中状态
   const getSelectedKeys = () => {
@@ -71,44 +114,102 @@ const App: React.FC = () => {
   };
 
   return (
-    <ConfigProvider locale={zhCN}>
-      <Layout>
-        <Header>
-          <Menu
-            theme="dark"
-            mode="horizontal"
-            selectedKeys={getSelectedKeys()}
-            openKeys={openKeys}
-            onOpenChange={onOpenChange}
-            items={menuItems}
-          />
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/products/purchase" element={<Purchase />} />
-            <Route path="/products/listings" element={<Listings />} />
-            <Route path="/shipping" element={<ShippingPage />} />
-            <Route path="/logistics" element={<LogisticsPage />} />
-            <Route path="/season/sku-mapping" element={<SkuMapping />} />
-            <Route path="/season/summary" element={<Summary />} />
-            <Route path="/season/supplier" element={<Supplier />} />
-            <Route path="/salary" element={<SalaryPage />} />
-            <Route path="/profit" element={<ProfitPage />} />
-          </Routes>
-        </Content>
+    <Layout>
+      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Menu
+          theme="dark"
+          mode="horizontal"
+          selectedKeys={getSelectedKeys()}
+          openKeys={openKeys}
+          onOpenChange={onOpenChange}
+          items={menuItems}
+          style={{ flex: 1, border: 'none' }}
+        />
         
-        {/* PWA 管理组件 */}
-        <PWAManager />
-      </Layout>
-    </ConfigProvider>
+        <Dropdown 
+          menu={{ items: userMenuItems }} 
+          placement="bottomRight"
+          trigger={['click']}
+        >
+          <Button 
+            type="text" 
+            style={{ color: 'white' }}
+            icon={<UserOutlined />}
+          >
+            {user?.username}
+          </Button>
+        </Dropdown>
+      </Header>
+      
+      <Content style={{ padding: 24 }}>
+        <Routes>
+          <Route path="/" element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/products/purchase" element={
+            <ProtectedRoute>
+              <Purchase />
+            </ProtectedRoute>
+          } />
+          <Route path="/products/listings" element={
+            <ProtectedRoute>
+              <Listings />
+            </ProtectedRoute>
+          } />
+          <Route path="/shipping" element={
+            <ProtectedRoute>
+              <ShippingPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/logistics" element={
+            <ProtectedRoute>
+              <LogisticsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/season/sku-mapping" element={
+            <ProtectedRoute>
+              <SkuMapping />
+            </ProtectedRoute>
+          } />
+          <Route path="/season/summary" element={
+            <ProtectedRoute>
+              <Summary />
+            </ProtectedRoute>
+          } />
+          <Route path="/season/supplier" element={
+            <ProtectedRoute>
+              <Supplier />
+            </ProtectedRoute>
+          } />
+          <Route path="/salary" element={
+            <ProtectedRoute>
+              <SalaryPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/profit" element={
+            <ProtectedRoute>
+              <ProfitPage />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </Content>
+      
+      {/* PWA 管理组件 */}
+      <PWAManager />
+    </Layout>
   );
 };
 
-const AppWrapper: React.FC = () => (
-  <Router>
-    <App />
-  </Router>
+const App: React.FC = () => (
+  <ConfigProvider locale={zhCN}>
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
+  </ConfigProvider>
 );
 
-export default AppWrapper;
+export default App;
