@@ -304,7 +304,8 @@ const LogisticsPage: React.FC = () => {
             '单价': 'price',
             '计费重量': 'billingWeight',
             '箱数': 'packageCount',
-            '产品数': 'productCount'
+            '产品数': 'productCount',
+            '跟踪号': 'trackingNumber'
           };
           
           const fieldName = fieldMap[key];
@@ -630,20 +631,20 @@ const LogisticsPage: React.FC = () => {
       filterSearch: true,
     },
     {
-      title: '转单号',
-      dataIndex: 'transferNumber',
-      key: 'transferNumber',
+      title: '跟踪号',
+      dataIndex: 'trackingNumber',
+      key: 'trackingNumber',
       width: 120,
       align: 'center',
       render: (text, record) => {
-        const isEditing = editingKey === record.shippingId && editingField === 'transferNumber';
+        const isEditing = editingKey === record.shippingId && editingField === 'trackingNumber';
         if (isEditing) {
-          return renderEditableCell(text, record, 'transferNumber');
+          return renderEditableCell(text, record, 'trackingNumber');
         }
         return text ? (
           <div
             onClick={() => window.open(`https://t.17track.net/zh-cn#nums=${text}`, '_blank')}
-            onDoubleClick={() => handleStartEdit(record.shippingId, 'transferNumber', text)}
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'trackingNumber', text)}
             style={{ 
               cursor: 'pointer', 
               textAlign: 'center',
@@ -656,7 +657,7 @@ const LogisticsPage: React.FC = () => {
           </div>
         ) : (
           <div
-            onDoubleClick={() => handleStartEdit(record.shippingId, 'transferNumber', text)}
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'trackingNumber', text)}
             style={{ cursor: 'pointer', textAlign: 'center' }}
             title="双击编辑"
           >
@@ -1352,9 +1353,11 @@ const LogisticsPage: React.FC = () => {
 {`Shipping ID：FBA18YCL0JBL
 渠道：普船卡派
 物流节点：周一起航
+跟踪号：1234567890
 Shipping ID：FBA18YCL0JBL2
 渠道：快船
-状态：在途`}
+状态：在途
+跟踪号：0987654321`}
           </pre>
           <TextArea
             rows={10}
