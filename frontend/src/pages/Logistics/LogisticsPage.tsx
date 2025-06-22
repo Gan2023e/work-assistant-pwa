@@ -741,7 +741,7 @@ const LogisticsPage: React.FC = () => {
       align: 'center',
     },
     {
-      title: '开船日期',
+      title: '开航日',
       dataIndex: 'sailingDate',
       key: 'sailingDate',
       width: 80,
@@ -784,7 +784,7 @@ const LogisticsPage: React.FC = () => {
       align: 'center',
     },
     {
-      title: '预计到港',
+      title: '预计到港日',
       dataIndex: 'estimatedArrivalDate',
       key: 'estimatedArrivalDate',
       width: 80,
@@ -827,7 +827,7 @@ const LogisticsPage: React.FC = () => {
       align: 'center',
     },
     {
-      title: '预计入库',
+      title: '预计到仓日',
       dataIndex: 'estimatedWarehouseDate',
       key: 'estimatedWarehouseDate',
       width: 80,
