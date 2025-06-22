@@ -167,7 +167,7 @@ const LogisticsPage: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/logistics/filters`);
       const result = await response.json();
-      setFilterOptions(result.data || {});
+        setFilterOptions(result.data || {});
     } catch (error) {
       console.error('获取筛选选项失败:', error);
     }
@@ -220,7 +220,7 @@ const LogisticsPage: React.FC = () => {
   const handleSaveEdit = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/logistics/update`, {
-        method: 'POST',
+          method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shippingId: editingKey,
@@ -390,7 +390,7 @@ const LogisticsPage: React.FC = () => {
         setBatchStatusValue(undefined);
         // 刷新数据
         fetchData({ filters });
-      } else {
+        } else {
         throw new Error(result.message || '批量更新失败');
       }
     } catch (error) {
@@ -1220,11 +1220,11 @@ const LogisticsPage: React.FC = () => {
         <Space direction="vertical" style={{ width: '100%' }}>
           <Row gutter={16}>
             <Col span={12}>
-              <TextArea
-                rows={4}
+          <TextArea
+            rows={4}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="请输入Shipping ID（每行一个）"
+            placeholder="请输入Shipping ID（每行一个）"
                 onPressEnter={(e) => {
                   if (!e.shiftKey) {
                     e.preventDefault();
@@ -1236,14 +1236,14 @@ const LogisticsPage: React.FC = () => {
             <Col span={12}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space wrap>
-                  <Button
+          <Button 
                     type="primary"
                     icon={<SearchOutlined />}
-                    onClick={handleSearch}
-                    loading={loading}
-                  >
-                    搜索
-                  </Button>
+            onClick={handleSearch} 
+            loading={loading}
+          >
+            搜索
+          </Button>
                   <Button
                     icon={<ReloadOutlined />}
                     onClick={handleReset}
@@ -1264,7 +1264,7 @@ const LogisticsPage: React.FC = () => {
                   >
                     批量更新货件详情
                   </Button>
-                </Space>
+        </Space>
                 <Text type="secondary">
                   当前显示: {data.length} 条记录
                   {selectedRowKeys.length > 0 && ` | 已选择: ${selectedRowKeys.length} 条`}
@@ -1410,7 +1410,7 @@ Shipping ID：FBA18YCL0JBL2
               >
                 确认更新 ({parsedBatchData.length} 条记录)
               </Button>
-            </Space>
+      </Space>
           </div>
         </div>
       </Modal>
