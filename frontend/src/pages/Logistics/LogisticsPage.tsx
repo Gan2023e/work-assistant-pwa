@@ -97,6 +97,7 @@ const LogisticsPage: React.FC = () => {
   const [filters, setFilters] = useState<SearchParams['filters']>({});
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [batchStatusValue, setBatchStatusValue] = useState<string | undefined>(undefined);
 
   // API调用函数
   const fetchData = async (params: SearchParams) => {
@@ -153,43 +154,50 @@ const LogisticsPage: React.FC = () => {
       return;
     }
 
-    Modal.confirm({
-      title: '确认批量修改状态',
-      content: `确定要将选中的 ${selectedRowKeys.length} 条记录的状态修改为"${newStatus}"吗？`,
-      onOk: async () => {
-        setBatchLoading(true);
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              shippingIds: selectedRowKeys,
-              status: newStatus
-            }),
-          });
+    setBatchLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingIds: selectedRowKeys,
+          status: newStatus
+        }),
+      });
 
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-
-          const result = await response.json();
-          
-          if (result.code === 0) {
-            message.success(`成功修改 ${selectedRowKeys.length} 条记录的状态`);
-            setSelectedRowKeys([]);
-            // 刷新数据
-            fetchData({ filters });
-          } else {
-            throw new Error(result.message || '批量更新失败');
-          }
-        } catch (error) {
-          console.error('批量更新失败:', error);
-          message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
-        } finally {
-          setBatchLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-    });
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success(`成功将 ${selectedRowKeys.length} 条记录的状态修改为"${newStatus}"`);
+        setSelectedRowKeys([]);
+        setBatchStatusValue(undefined);
+        // 刷新数据
+        fetchData({ filters });
+      } else {
+        throw new Error(result.message || '批量更新失败');
+      }
+    } catch (error) {
+      console.error('批量更新失败:', error);
+      message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // 处理批量状态选择
+  const handleBatchStatusChange = (value: string) => {
+    setBatchStatusValue(value);
+    handleBatchStatusUpdate(value);
+  };
+
+  // 取消选择
+  const handleCancelSelection = () => {
+    setSelectedRowKeys([]);
+    setBatchStatusValue(undefined);
   };
 
   // 初始化数据
@@ -219,6 +227,7 @@ const LogisticsPage: React.FC = () => {
     setSearchInput('');
     setFilters({});
     setSelectedRowKeys([]);
+    setBatchStatusValue(undefined);
     fetchData({ filters: { status: 'not_completed' } });
   };
 
@@ -226,6 +235,7 @@ const LogisticsPage: React.FC = () => {
   const handleSearchAll = () => {
     setFilters({});
     setSelectedRowKeys([]);
+    setBatchStatusValue(undefined);
     fetchData({ filters: {} });
   };
 
@@ -437,6 +447,7 @@ const LogisticsPage: React.FC = () => {
     
     setFilters(newFilters);
     setSelectedRowKeys([]);
+    setBatchStatusValue(undefined);
     fetchData({ filters: newFilters });
   };
 
@@ -555,13 +566,21 @@ const LogisticsPage: React.FC = () => {
             <Select
               placeholder="选择状态"
               style={{ width: 120 }}
-              onChange={handleBatchStatusUpdate}
+              value={batchStatusValue}
+              onChange={handleBatchStatusChange}
               loading={batchLoading}
             >
               <Option value="在途">在途</Option>
               <Option value="入库中">入库中</Option>
               <Option value="完成">完成</Option>
             </Select>
+            <Button 
+              size="small" 
+              onClick={handleCancelSelection}
+              disabled={batchLoading}
+            >
+              取消选择
+            </Button>
             <Text type="secondary">
               已选择 {selectedRowKeys.length} 条记录
             </Text>
