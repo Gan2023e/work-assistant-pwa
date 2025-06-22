@@ -22,7 +22,7 @@ router.post('/search', async (req, res) => {
     if (filters) {
       // 处理特殊查询
       if (filters.specialQuery === 'pendingWarehouse') {
-        // 查询10天内即将到仓的记录，排除完成状态
+        // 查询10天内即将到仓的记录，只统计状态为"在途"的记录
         const tenDaysFromNow = new Date();
         tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
         
@@ -37,9 +37,19 @@ router.post('/search', async (req, res) => {
             }
           },
           {
-            status: { [Op.ne]: '完成' }
+            status: '在途'
           }
         ];
+      } else if (filters.specialQuery === 'yearlyShipments') {
+        // 查询今年发货的记录（发出日期为今年）
+        const currentYear = new Date().getFullYear();
+        where.departureDate = {
+          [Op.and]: [
+            { [Op.ne]: null },
+            { [Op.gte]: `${currentYear}-01-01` },
+            { [Op.lte]: `${currentYear}-12-31` }
+          ]
+        };
       } else {
         // 处理状态筛选
         if (filters.status) {
@@ -377,38 +387,16 @@ router.get('/statistics', async (req, res) => {
   try {
     const currentYear = new Date().getFullYear();
     
-    // 1. 今年发货票数
+    // 1. 今年发货票数（只统计发出日期为今年的记录）
     const yearlyCount = await Logistics.count({
       where: {
-        [Op.or]: [
-          {
-            departureDate: {
-              [Op.and]: [
-                { [Op.ne]: null },
-                { [Op.gte]: `${currentYear}-01-01` },
-                { [Op.lte]: `${currentYear}-12-31` }
-              ]
-            }
-          },
-          {
-            sailingDate: {
-              [Op.and]: [
-                { [Op.ne]: null },
-                { [Op.gte]: `${currentYear}-01-01` },
-                { [Op.lte]: `${currentYear}-12-31` }
-              ]
-            }
-          },
-          {
-            estimatedArrivalDate: {
-              [Op.and]: [
-                { [Op.ne]: null },
-                { [Op.gte]: `${currentYear}-01-01` },
-                { [Op.lte]: `${currentYear}-12-31` }
-              ]
-            }
-          }
-        ]
+        departureDate: {
+          [Op.and]: [
+            { [Op.ne]: null },
+            { [Op.gte]: `${currentYear}-01-01` },
+            { [Op.lte]: `${currentYear}-12-31` }
+          ]
+        }
       }
     });
 
@@ -440,7 +428,7 @@ router.get('/statistics', async (req, res) => {
       return sum + (price * weight);
     }, 0);
 
-    // 5. 待调整到仓日货件数（10天内，排除完成状态）
+    // 5. 待调整到仓日货件数（10天内，只统计状态为"在途"的记录）
     const tenDaysFromNow = new Date();
     tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
     
@@ -457,7 +445,7 @@ router.get('/statistics', async (req, res) => {
             }
           },
           {
-            status: { [Op.ne]: '完成' }
+            status: '在途'
           }
         ]
       }

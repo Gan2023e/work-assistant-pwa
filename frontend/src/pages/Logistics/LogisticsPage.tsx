@@ -191,8 +191,8 @@ const LogisticsPage: React.FC = () => {
     
     switch (type) {
       case 'yearly':
-        // 查询今年的所有记录
-        params.filters = {};
+        // 查询今年发货的记录（发出日期为今年）
+        params.filters = { specialQuery: 'yearlyShipments' };
         break;
       case 'transit':
         // 查询在途状态的记录
@@ -207,7 +207,7 @@ const LogisticsPage: React.FC = () => {
         params.filters = { paymentStatus: ['未付'] };
         break;
       case 'pendingWarehouse':
-        // 查询即将到仓的记录（通过后端特殊处理）
+        // 查询即将到仓的记录（只统计状态为"在途"的记录）
         params.filters = { specialQuery: 'pendingWarehouse' };
         break;
     }
@@ -278,8 +278,11 @@ const LogisticsPage: React.FC = () => {
 
     for (const line of lines) {
       const trimmedLine = line.trim();
-      if (trimmedLine.includes('：')) {
-        const [key, value] = trimmedLine.split('：').map(s => s.trim());
+      // 支持中文冒号和英文冒号
+      if (trimmedLine.includes('：') || trimmedLine.includes(':')) {
+        // 优先使用中文冒号分割，如果没有则使用英文冒号
+        const separator = trimmedLine.includes('：') ? '：' : ':';
+        const [key, value] = trimmedLine.split(separator).map(s => s.trim());
         
         if (key === 'Shipping ID') {
           // 如果遇到新的Shipping ID，先保存之前的数据
@@ -304,12 +307,39 @@ const LogisticsPage: React.FC = () => {
             '计费重量': 'billingWeight',
             '箱数': 'packageCount',
             '产品数': 'productCount',
-            '跟踪号': 'trackingNumber'
+            '跟踪号': 'trackingNumber',
+            '转单号': 'trackingNumber',
+            '件数': 'packageCount',
+            '发出日期': 'departureDate',
+            '开航日': 'sailingDate',
+            '预计到港日': 'estimatedArrivalDate',
+            '预计到仓日': 'estimatedWarehouseDate',
+            'MRN': 'mrn',
+            '关税': 'customsDuty',
+            '税金状态': 'taxPaymentStatus',
+            '报税状态': 'taxDeclarationStatus',
+            '尺寸': 'dimensions',
+            '付款状态': 'paymentStatus'
           };
           
           const fieldName = fieldMap[key];
           if (fieldName) {
-            currentUpdates[fieldName] = value;
+            // 对日期字段进行格式化处理
+            if (['departureDate', 'sailingDate', 'estimatedArrivalDate', 'estimatedWarehouseDate'].includes(fieldName)) {
+              // 将 2025/5/25 格式转换为 2025-05-25 格式
+              const formattedDate = value.replace(/\//g, '-');
+              const dateParts = formattedDate.split('-');
+              if (dateParts.length === 3) {
+                const year = dateParts[0];
+                const month = dateParts[1].padStart(2, '0');
+                const day = dateParts[2].padStart(2, '0');
+                currentUpdates[fieldName] = `${year}-${month}-${day}`;
+              } else {
+                currentUpdates[fieldName] = value;
+              }
+            } else {
+              currentUpdates[fieldName] = value;
+            }
           }
         }
       }
@@ -1347,17 +1377,6 @@ const LogisticsPage: React.FC = () => {
         footer={null}
       >
         <div>
-          <Text strong>请按以下格式输入数据：</Text>
-          <pre style={{ backgroundColor: '#f5f5f5', padding: '8px', marginTop: '8px' }}>
-{`Shipping ID：FBA18YCL0JBL
-渠道：普船卡派
-物流节点：周一起航
-跟踪号：1234567890
-Shipping ID：FBA18YCL0JBL2
-渠道：快船
-状态：在途
-跟踪号：0987654321`}
-          </pre>
           <TextArea
             rows={10}
             value={batchUpdateText}
@@ -1365,8 +1384,7 @@ Shipping ID：FBA18YCL0JBL2
               setBatchUpdateText(e.target.value);
               setParsedBatchData(parseBatchUpdateText(e.target.value));
             }}
-            placeholder="请输入要更新的数据..."
-            style={{ marginTop: '16px' }}
+            placeholder="支持格式：Shipping ID:货件号 或 字段名:值（支持中英文冒号）"
           />
           
           {parsedBatchData.length > 0 && (
