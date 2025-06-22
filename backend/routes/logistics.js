@@ -59,10 +59,10 @@ router.post('/search', async (req, res) => {
               where.status = { [Op.in]: filters.status };
             }
           } else if (filters.status === 'not_completed') {
-            where.status = { [Op.ne]: '完成' };
+        where.status = { [Op.ne]: '完成' };
           } else {
-            where.status = filters.status;
-          }
+        where.status = filters.status;
+      }
         }
 
         // 处理其他筛选条件（支持数组和单值）
