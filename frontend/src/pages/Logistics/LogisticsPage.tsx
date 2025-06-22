@@ -492,8 +492,9 @@ const LogisticsPage: React.FC = () => {
   };
 
   // 日期格式化
-  const formatDate = (dateString: string) => {
-    return dateString ? dayjs(dateString).format('MM-DD') : '-';
+  const formatDate = (dateString: string, showYear: boolean = false) => {
+    if (!dateString) return '-';
+    return showYear ? dayjs(dateString).format('YYYY-MM-DD') : dayjs(dateString).format('MM-DD');
   };
 
   // 可编辑单元格渲染
@@ -634,7 +635,35 @@ const LogisticsPage: React.FC = () => {
       key: 'transferNumber',
       width: 120,
       align: 'center',
-      render: (text, record) => renderEditableCell(text, record, 'transferNumber'),
+      render: (text, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'transferNumber';
+        if (isEditing) {
+          return renderEditableCell(text, record, 'transferNumber');
+        }
+        return text ? (
+          <div
+            onClick={() => window.open(`https://t.17track.net/zh-cn#nums=${text}`, '_blank')}
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'transferNumber', text)}
+            style={{ 
+              cursor: 'pointer', 
+              textAlign: 'center',
+              color: '#1890ff',
+              textDecoration: 'underline'
+            }}
+            title="单击查看物流，双击编辑"
+          >
+            {text}
+          </div>
+        ) : (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'transferNumber', text)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            -
+          </div>
+        );
+      },
     },
     {
       title: '状态',
@@ -687,6 +716,7 @@ const LogisticsPage: React.FC = () => {
       key: 'packageCount',
       width: 80,
       align: 'right',
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => (Number(a.packageCount) || 0) - (Number(b.packageCount) || 0),
       render: (text, record) => renderEditableCell(text, record, 'packageCount'),
     },
     {
@@ -695,6 +725,7 @@ const LogisticsPage: React.FC = () => {
       key: 'productCount',
       width: 80,
       align: 'right',
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => (Number(a.productCount) || 0) - (Number(b.productCount) || 0),
       render: (text, record) => renderEditableCell(text, record, 'productCount'),
     },
     {
@@ -702,6 +733,11 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'departureDate',
       key: 'departureDate',
       width: 80,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const dateA = a.departureDate ? new Date(a.departureDate).getTime() : 0;
+        const dateB = b.departureDate ? new Date(b.departureDate).getTime() : 0;
+        return dateA - dateB;
+      },
       render: (date, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'departureDate';
         if (isEditing) {
@@ -734,7 +770,7 @@ const LogisticsPage: React.FC = () => {
             style={{ cursor: 'pointer', textAlign: 'center' }}
             title="双击编辑"
           >
-            {formatDate(date)}
+            {formatDate(date, true)}
           </div>
         );
       },
@@ -745,6 +781,11 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'sailingDate',
       key: 'sailingDate',
       width: 80,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const dateA = a.sailingDate ? new Date(a.sailingDate).getTime() : 0;
+        const dateB = b.sailingDate ? new Date(b.sailingDate).getTime() : 0;
+        return dateA - dateB;
+      },
       render: (date, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'sailingDate';
         if (isEditing) {
@@ -788,6 +829,12 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'estimatedArrivalDate',
       key: 'estimatedArrivalDate',
       width: 80,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
+        const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
+        return dateA - dateB;
+      },
+      defaultSortOrder: 'descend',
       render: (date, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'estimatedArrivalDate';
         if (isEditing) {
@@ -831,6 +878,11 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'estimatedWarehouseDate',
       key: 'estimatedWarehouseDate',
       width: 80,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const dateA = a.estimatedWarehouseDate ? new Date(a.estimatedWarehouseDate).getTime() : 0;
+        const dateB = b.estimatedWarehouseDate ? new Date(b.estimatedWarehouseDate).getTime() : 0;
+        return dateA - dateB;
+      },
       render: (date, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'estimatedWarehouseDate';
         if (isEditing) {
@@ -894,12 +946,21 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'price',
       key: 'price',
       width: 80,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => (Number(a.price) || 0) - (Number(b.price) || 0),
       render: (price, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'price';
         if (isEditing) {
           return renderEditableCell(price, record, 'price');
         }
-        return price ? `¥${Number(price).toFixed(2)}` : '-';
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'price', price)}
+            style={{ cursor: 'pointer', textAlign: 'right' }}
+            title="双击编辑"
+          >
+            {price ? `¥${Number(price).toFixed(2)}` : '-'}
+          </div>
+        );
       },
       align: 'right',
     },
@@ -908,12 +969,21 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'billingWeight',
       key: 'billingWeight',
       width: 90,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => (Number(a.billingWeight) || 0) - (Number(b.billingWeight) || 0),
       render: (weight, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'billingWeight';
         if (isEditing) {
           return renderEditableCell(weight, record, 'billingWeight');
         }
-        return weight ? `${Number(weight).toFixed(1)}kg` : '-';
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'billingWeight', weight)}
+            style={{ cursor: 'pointer', textAlign: 'right' }}
+            title="双击编辑"
+          >
+            {weight ? `${Number(weight).toFixed(1)}kg` : '-'}
+          </div>
+        );
       },
       align: 'right',
     },
@@ -921,6 +991,11 @@ const LogisticsPage: React.FC = () => {
       title: '平均计费箱重',
       key: 'avgBoxWeight',
       width: 110,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const avgA = (Number(a.packageCount) || 0) > 0 ? (Number(a.billingWeight) || 0) / (Number(a.packageCount) || 0) : 0;
+        const avgB = (Number(b.packageCount) || 0) > 0 ? (Number(b.billingWeight) || 0) / (Number(b.packageCount) || 0) : 0;
+        return avgA - avgB;
+      },
       render: (_, record) => {
         const weight = Number(record.billingWeight) || 0;
         const boxes = Number(record.packageCount) || 0;
@@ -933,6 +1008,11 @@ const LogisticsPage: React.FC = () => {
       title: '运费',
       key: 'totalFee',
       width: 90,
+      sorter: (a: LogisticsRecord, b: LogisticsRecord) => {
+        const feeA = (Number(a.price) || 0) * (Number(a.billingWeight) || 0);
+        const feeB = (Number(b.price) || 0) * (Number(b.billingWeight) || 0);
+        return feeA - feeB;
+      },
       render: (_, record) => {
         const price = Number(record.price) || 0;
         const weight = Number(record.billingWeight) || 0;
@@ -1081,7 +1161,7 @@ const LogisticsPage: React.FC = () => {
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={4}>
+        <Col span={5}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('yearly')}>
             <Statistic
               title="今年发货票数"
@@ -1091,7 +1171,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={5}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transit')}>
             <Statistic
               title="在途产品数"
@@ -1101,7 +1181,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={5}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transitPackage')}>
             <Statistic
               title="在途箱数"
@@ -1111,7 +1191,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={5}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unpaid')}>
             <Statistic
               title="未付总运费"
@@ -1132,18 +1212,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
-          <Card>
-            <div style={{ textAlign: 'center', color: '#666', fontSize: '12px', marginBottom: '8px' }}>
-              当前显示数据统计
-            </div>
-            <div style={{ fontSize: '14px', color: '#333' }}>
-              <div>箱数: {currentDataStats.totalPackages}</div>
-              <div>产品数: {currentDataStats.totalProducts}</div>
-              <div>运费: ¥{currentDataStats.totalFee.toFixed(2)}</div>
-            </div>
-          </Card>
-        </Col>
+
       </Row>
 
       {/* 搜索区域 */}

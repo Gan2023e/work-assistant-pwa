@@ -22,17 +22,24 @@ router.post('/search', async (req, res) => {
     if (filters) {
       // 处理特殊查询
       if (filters.specialQuery === 'pendingWarehouse') {
-        // 查询10天内即将到仓的记录
+        // 查询10天内即将到仓的记录，排除完成状态
         const tenDaysFromNow = new Date();
         tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
         
-        where.estimatedWarehouseDate = {
-          [Op.and]: [
-            { [Op.ne]: null },
-            { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
-            { [Op.gte]: new Date().toISOString().split('T')[0] }
-          ]
-        };
+        where[Op.and] = [
+          {
+            estimatedWarehouseDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
+                { [Op.gte]: new Date().toISOString().split('T')[0] }
+              ]
+            }
+          },
+          {
+            status: { [Op.ne]: '完成' }
+          }
+        ];
       } else {
         // 处理状态筛选
         if (filters.status) {
@@ -373,13 +380,35 @@ router.get('/statistics', async (req, res) => {
     // 1. 今年发货票数
     const yearlyCount = await Logistics.count({
       where: {
-        departureDate: {
-          [Op.and]: [
-            { [Op.ne]: null },
-            { [Op.gte]: `${currentYear}-01-01` },
-            { [Op.lte]: `${currentYear}-12-31` }
-          ]
-        }
+        [Op.or]: [
+          {
+            departureDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.gte]: `${currentYear}-01-01` },
+                { [Op.lte]: `${currentYear}-12-31` }
+              ]
+            }
+          },
+          {
+            sailingDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.gte]: `${currentYear}-01-01` },
+                { [Op.lte]: `${currentYear}-12-31` }
+              ]
+            }
+          },
+          {
+            estimatedArrivalDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.gte]: `${currentYear}-01-01` },
+                { [Op.lte]: `${currentYear}-12-31` }
+              ]
+            }
+          }
+        ]
       }
     });
 
@@ -411,19 +440,26 @@ router.get('/statistics', async (req, res) => {
       return sum + (price * weight);
     }, 0);
 
-    // 5. 待调整到仓日货件数（10天内）
+    // 5. 待调整到仓日货件数（10天内，排除完成状态）
     const tenDaysFromNow = new Date();
     tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
     
     const pendingWarehouseCount = await Logistics.count({
       where: {
-        estimatedWarehouseDate: {
-          [Op.and]: [
-            { [Op.ne]: null },
-            { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
-            { [Op.gte]: new Date().toISOString().split('T')[0] }
-          ]
-        }
+        [Op.and]: [
+          {
+            estimatedWarehouseDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
+                { [Op.gte]: new Date().toISOString().split('T')[0] }
+              ]
+            }
+          },
+          {
+            status: { [Op.ne]: '完成' }
+          }
+        ]
       }
     });
 
