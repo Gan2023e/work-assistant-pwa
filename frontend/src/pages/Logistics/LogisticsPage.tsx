@@ -14,7 +14,8 @@ import {
   DatePicker,
   Divider,
   Typography,
-  Tooltip
+  Tooltip,
+  Modal
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -25,7 +26,8 @@ import {
   TruckOutlined,
   BoxPlotOutlined,
   ClockCircleOutlined,
-  DollarOutlined
+  DollarOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
@@ -93,6 +95,8 @@ const LogisticsPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({});
   const [filters, setFilters] = useState<SearchParams['filters']>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   // API调用函数
   const fetchData = async (params: SearchParams) => {
@@ -142,6 +146,52 @@ const LogisticsPage: React.FC = () => {
     }
   };
 
+  // 批量修改状态
+  const handleBatchStatusUpdate = async (newStatus: string) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要修改的记录');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认批量修改状态',
+      content: `确定要将选中的 ${selectedRowKeys.length} 条记录的状态修改为"${newStatus}"吗？`,
+      onOk: async () => {
+        setBatchLoading(true);
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shippingIds: selectedRowKeys,
+              status: newStatus
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+          
+          if (result.code === 0) {
+            message.success(`成功修改 ${selectedRowKeys.length} 条记录的状态`);
+            setSelectedRowKeys([]);
+            // 刷新数据
+            fetchData({ filters });
+          } else {
+            throw new Error(result.message || '批量更新失败');
+          }
+        } catch (error) {
+          console.error('批量更新失败:', error);
+          message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
+  };
+
   // 初始化数据
   useEffect(() => {
     fetchFilterOptions();
@@ -168,12 +218,14 @@ const LogisticsPage: React.FC = () => {
   const handleReset = () => {
     setSearchInput('');
     setFilters({});
+    setSelectedRowKeys([]);
     fetchData({ filters: { status: 'not_completed' } });
   };
 
   // 查询所有数据
   const handleSearchAll = () => {
     setFilters({});
+    setSelectedRowKeys([]);
     fetchData({ filters: {} });
   };
 
@@ -216,6 +268,18 @@ const LogisticsPage: React.FC = () => {
   // 日期格式化
   const formatDate = (dateString: string) => {
     return dateString ? dayjs(dateString).format('MM-DD') : '-';
+  };
+
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+    },
+    getCheckboxProps: (record: LogisticsRecord) => ({
+      disabled: false,
+      name: record.shippingId,
+    }),
   };
 
   // 表格列配置
@@ -372,6 +436,7 @@ const LogisticsPage: React.FC = () => {
     };
     
     setFilters(newFilters);
+    setSelectedRowKeys([]);
     fetchData({ filters: newFilters });
   };
 
@@ -473,6 +538,7 @@ const LogisticsPage: React.FC = () => {
                 </Space>
                 <Text type="secondary">
                   当前显示: {data.length} 条记录
+                  {selectedRowKeys.length > 0 && ` | 已选择: ${selectedRowKeys.length} 条`}
                 </Text>
               </Space>
             </Col>
@@ -480,9 +546,43 @@ const LogisticsPage: React.FC = () => {
         </Space>
       </Card>
 
+      {/* 批量操作区域 */}
+      {selectedRowKeys.length > 0 && (
+        <Card style={{ marginBottom: 24 }}>
+          <Space>
+            <Text strong>批量操作：</Text>
+            <Select
+              placeholder="选择操作"
+              style={{ width: 120 }}
+              onChange={(value) => {
+                if (value === 'status') {
+                  // 显示状态选择
+                }
+              }}
+            >
+              <Option value="status">修改状态</Option>
+            </Select>
+            <Select
+              placeholder="选择状态"
+              style={{ width: 120 }}
+              onChange={handleBatchStatusUpdate}
+              loading={batchLoading}
+            >
+              <Option value="在途">在途</Option>
+              <Option value="入库中">入库中</Option>
+              <Option value="完成">完成</Option>
+            </Select>
+            <Text type="secondary">
+              已选择 {selectedRowKeys.length} 条记录
+            </Text>
+          </Space>
+        </Card>
+      )}
+
       {/* 数据表格 */}
       <Card>
         <Table
+          rowSelection={rowSelection}
           columns={columns}
           dataSource={data}
           rowKey="shippingId"

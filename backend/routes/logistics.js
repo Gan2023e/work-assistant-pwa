@@ -70,6 +70,63 @@ router.post('/search', async (req, res) => {
   }
 });
 
+// 批量更新状态
+router.post('/batch-update-status', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到批量更新状态请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shippingIds, status } = req.body;
+    
+    // 验证参数
+    if (!Array.isArray(shippingIds) || shippingIds.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'shippingIds 必须是非空数组'
+      });
+    }
+    
+    if (!status || !['在途', '入库中', '完成'].includes(status)) {
+      return res.status(400).json({
+        code: 400,
+        message: '状态必须是：在途、入库中、完成 中的一种'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', `批量更新 ${shippingIds.length} 条记录状态为: ${status}`);
+
+    // 执行批量更新
+    const [affectedCount] = await Logistics.update(
+      { status: status },
+      {
+        where: {
+          shippingId: {
+            [Op.in]: shippingIds
+          }
+        }
+      }
+    );
+
+    console.log('\x1b[32m%s\x1b[0m', '成功更新记录数:', affectedCount);
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        affectedCount,
+        updatedStatus: status,
+        shippingIds
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '批量更新状态失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
 // 获取所有可筛选字段的唯一值
 router.get('/filters', async (req, res) => {
   try {
