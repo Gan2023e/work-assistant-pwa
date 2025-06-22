@@ -551,17 +551,7 @@ const LogisticsPage: React.FC = () => {
         <Card style={{ marginBottom: 24 }}>
           <Space>
             <Text strong>批量操作：</Text>
-            <Select
-              placeholder="选择操作"
-              style={{ width: 120 }}
-              onChange={(value) => {
-                if (value === 'status') {
-                  // 显示状态选择
-                }
-              }}
-            >
-              <Option value="status">修改状态</Option>
-            </Select>
+            <Text>修改状态为：</Text>
             <Select
               placeholder="选择状态"
               style={{ width: 120 }}
