@@ -20,49 +20,64 @@ router.post('/search', async (req, res) => {
 
     // 添加筛选条件
     if (filters) {
-      // 处理状态筛选
-      if (filters.status) {
-        if (Array.isArray(filters.status)) {
-          if (filters.status.includes('not_completed')) {
-            // 如果包含 not_completed，则查询非完成状态
-            const otherStatuses = filters.status.filter(s => s !== 'not_completed');
-            if (otherStatuses.length > 0) {
-              where[Op.or] = [
-                { status: { [Op.ne]: '完成' } },
-                { status: { [Op.in]: otherStatuses } }
-              ];
+      // 处理特殊查询
+      if (filters.specialQuery === 'pendingWarehouse') {
+        // 查询10天内即将到仓的记录
+        const tenDaysFromNow = new Date();
+        tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
+        
+        where.estimatedWarehouseDate = {
+          [Op.and]: [
+            { [Op.ne]: null },
+            { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
+            { [Op.gte]: new Date().toISOString().split('T')[0] }
+          ]
+        };
+      } else {
+        // 处理状态筛选
+        if (filters.status) {
+          if (Array.isArray(filters.status)) {
+            if (filters.status.includes('not_completed')) {
+              // 如果包含 not_completed，则查询非完成状态
+              const otherStatuses = filters.status.filter(s => s !== 'not_completed');
+              if (otherStatuses.length > 0) {
+                where[Op.or] = [
+                  { status: { [Op.ne]: '完成' } },
+                  { status: { [Op.in]: otherStatuses } }
+                ];
+              } else {
+                where.status = { [Op.ne]: '完成' };
+              }
             } else {
-              where.status = { [Op.ne]: '完成' };
+              where.status = { [Op.in]: filters.status };
             }
+          } else if (filters.status === 'not_completed') {
+            where.status = { [Op.ne]: '完成' };
           } else {
-            where.status = { [Op.in]: filters.status };
+            where.status = filters.status;
           }
-        } else if (filters.status === 'not_completed') {
-          where.status = { [Op.ne]: '完成' };
-        } else {
-          where.status = filters.status;
         }
+
+        // 处理其他筛选条件（支持数组和单值）
+        const filterFields = [
+          'logisticsProvider',
+          'channel', 
+          'destinationCountry',
+          'taxPaymentStatus',
+          'taxDeclarationStatus',
+          'paymentStatus'
+        ];
+
+        filterFields.forEach(field => {
+          if (filters[field]) {
+            if (Array.isArray(filters[field]) && filters[field].length > 0) {
+              where[field] = { [Op.in]: filters[field] };
+            } else if (!Array.isArray(filters[field])) {
+              where[field] = filters[field];
+            }
+          }
+        });
       }
-
-      // 处理其他筛选条件（支持数组和单值）
-      const filterFields = [
-        'logisticsProvider',
-        'channel', 
-        'destinationCountry',
-        'taxPaymentStatus',
-        'taxDeclarationStatus',
-        'paymentStatus'
-      ];
-
-      filterFields.forEach(field => {
-        if (filters[field]) {
-          if (Array.isArray(filters[field]) && filters[field].length > 0) {
-            where[field] = { [Op.in]: filters[field] };
-          } else if (!Array.isArray(filters[field])) {
-            where[field] = filters[field];
-          }
-        }
-      });
     }
 
     console.log('\x1b[35m%s\x1b[0m', '查询条件:', JSON.stringify(where, null, 2));
@@ -345,6 +360,95 @@ router.get('/filters', async (req, res) => {
     res.json({ code: 0, data: result });
   } catch (e) {
     res.status(500).json({ code: 500, message: '获取筛选项失败', error: e.message });
+  }
+});
+
+// 获取统计数据
+router.get('/statistics', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到统计数据请求');
+  
+  try {
+    const currentYear = new Date().getFullYear();
+    
+    // 1. 今年发货票数
+    const yearlyCount = await Logistics.count({
+      where: {
+        departureDate: {
+          [Op.and]: [
+            { [Op.ne]: null },
+            { [Op.gte]: `${currentYear}-01-01` },
+            { [Op.lte]: `${currentYear}-12-31` }
+          ]
+        }
+      }
+    });
+
+    // 2. 在途产品数
+    const transitRecords = await Logistics.findAll({
+      where: { status: '在途' },
+      attributes: ['productCount'],
+      raw: true
+    });
+    const transitProductCount = transitRecords.reduce((sum, record) => sum + (Number(record.productCount) || 0), 0);
+
+    // 3. 在途箱数
+    const transitPackageRecords = await Logistics.findAll({
+      where: { status: '在途' },
+      attributes: ['packageCount'],
+      raw: true
+    });
+    const transitPackageCount = transitPackageRecords.reduce((sum, record) => sum + (Number(record.packageCount) || 0), 0);
+
+    // 4. 未付总运费
+    const unpaidRecords = await Logistics.findAll({
+      where: { paymentStatus: '未付' },
+      attributes: ['price', 'billingWeight'],
+      raw: true
+    });
+    const unpaidTotalFee = unpaidRecords.reduce((sum, record) => {
+      const price = Number(record.price) || 0;
+      const weight = Number(record.billingWeight) || 0;
+      return sum + (price * weight);
+    }, 0);
+
+    // 5. 待调整到仓日货件数（10天内）
+    const tenDaysFromNow = new Date();
+    tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
+    
+    const pendingWarehouseCount = await Logistics.count({
+      where: {
+        estimatedWarehouseDate: {
+          [Op.and]: [
+            { [Op.ne]: null },
+            { [Op.lte]: tenDaysFromNow.toISOString().split('T')[0] },
+            { [Op.gte]: new Date().toISOString().split('T')[0] }
+          ]
+        }
+      }
+    });
+
+    const result = {
+      yearlyCount,
+      transitProductCount,
+      transitPackageCount,
+      unpaidTotalFee: Math.round(unpaidTotalFee * 100) / 100, // 保留两位小数
+      pendingWarehouseCount
+    };
+
+    console.log('\x1b[32m%s\x1b[0m', '统计数据:', result);
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: result
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '获取统计数据失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
   }
 });
 

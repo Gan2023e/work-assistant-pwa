@@ -90,6 +90,7 @@ interface SearchParams {
     taxPaymentStatus?: string[];
     taxDeclarationStatus?: string[];
     paymentStatus?: string[];
+    specialQuery?: string;
   };
 }
 
@@ -116,6 +117,13 @@ const LogisticsPage: React.FC = () => {
   const [batchUpdateText, setBatchUpdateText] = useState('');
   const [parsedBatchData, setParsedBatchData] = useState<BatchUpdateData[]>([]);
   const [form] = Form.useForm();
+  const [statisticsData, setStatisticsData] = useState({
+    yearlyCount: 0,
+    transitProductCount: 0,
+    transitPackageCount: 0,
+    unpaidTotalFee: 0,
+    pendingWarehouseCount: 0
+  });
 
   // API调用函数
   const fetchData = async (params: SearchParams) => {
@@ -163,6 +171,49 @@ const LogisticsPage: React.FC = () => {
     } catch (error) {
       console.error('获取筛选选项失败:', error);
     }
+  };
+
+  // 获取统计数据
+  const fetchStatistics = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/statistics`);
+      const result = await response.json();
+      if (result.code === 0) {
+        setStatisticsData(result.data);
+      }
+    } catch (error) {
+      console.error('获取统计数据失败:', error);
+    }
+  };
+
+  // 点击统计卡片时查询对应数据
+  const handleStatisticClick = (type: string) => {
+    let params: SearchParams = { filters: {} };
+    
+    switch (type) {
+      case 'yearly':
+        // 查询今年的所有记录
+        params.filters = {};
+        break;
+      case 'transit':
+        // 查询在途状态的记录
+        params.filters = { status: ['在途'] };
+        break;
+      case 'transitPackage':
+        // 查询在途状态的记录（显示箱数）
+        params.filters = { status: ['在途'] };
+        break;
+      case 'unpaid':
+        // 查询未付款的记录
+        params.filters = { paymentStatus: ['未付'] };
+        break;
+      case 'pendingWarehouse':
+        // 查询即将到仓的记录（通过后端特殊处理）
+        params.filters = { specialQuery: 'pendingWarehouse' };
+        break;
+    }
+    
+    fetchData(params);
   };
 
   // 单元格编辑保存
@@ -365,6 +416,7 @@ const LogisticsPage: React.FC = () => {
   // 初始化数据
   useEffect(() => {
     fetchFilterOptions();
+    fetchStatistics();
     // 默认加载未完成的物流记录
     fetchData({ filters: { status: ['not_completed'] } });
   }, []);
@@ -401,15 +453,17 @@ const LogisticsPage: React.FC = () => {
     fetchData({ filters: {} });
   };
 
-  // 统计数据
-  const statistics = useMemo(() => {
-    const total = data.length;
-    const completed = data.filter(item => item.status === '完成').length;
-    const inTransit = data.filter(item => item.status === '在途').length;
+  // 当前显示数据的统计
+  const currentDataStats = useMemo(() => {
     const totalPackages = data.reduce((sum, item) => sum + (item.packageCount || 0), 0);
-    const totalValue = data.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    const totalProducts = data.reduce((sum, item) => sum + (item.productCount || 0), 0);
+    const totalFee = data.reduce((sum, item) => {
+      const price = Number(item.price) || 0;
+      const weight = Number(item.billingWeight) || 0;
+      return sum + (price * weight);
+    }, 0);
 
-    return { total, completed, inTransit, totalPackages, totalValue };
+    return { totalPackages, totalProducts, totalFee };
   }, [data]);
 
   // 状态标签渲染
@@ -457,6 +511,11 @@ const LogisticsPage: React.FC = () => {
       }
     };
 
+    // 判断是否为日期字段
+    const isDateField = (field: string) => {
+      return ['departureDate', 'sailingDate', 'estimatedArrivalDate', 'estimatedWarehouseDate'].includes(field);
+    };
+
     const alignment = getAlignment(field);
     
     if (isEditing) {
@@ -467,7 +526,14 @@ const LogisticsPage: React.FC = () => {
           gap: 4,
           justifyContent: alignment === 'right' ? 'flex-end' : alignment === 'left' ? 'flex-start' : 'center'
         }}>
-          {typeof text === 'number' ? (
+          {isDateField(field) ? (
+            <DatePicker
+              value={editingValue ? dayjs(editingValue) : null}
+              onChange={(date) => setEditingValue(date ? date.format('YYYY-MM-DD') : null)}
+              size="small"
+              format="YYYY-MM-DD"
+            />
+          ) : typeof text === 'number' ? (
             <InputNumber
               value={editingValue}
               onChange={(value) => setEditingValue(value)}
@@ -563,6 +629,14 @@ const LogisticsPage: React.FC = () => {
       filterSearch: true,
     },
     {
+      title: '转单号',
+      dataIndex: 'transferNumber',
+      key: 'transferNumber',
+      width: 120,
+      align: 'center',
+      render: (text, record) => renderEditableCell(text, record, 'transferNumber'),
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
@@ -624,11 +698,46 @@ const LogisticsPage: React.FC = () => {
       render: (text, record) => renderEditableCell(text, record, 'productCount'),
     },
     {
-      title: '起运日期',
+      title: '发出日期',
       dataIndex: 'departureDate',
       key: 'departureDate',
       width: 80,
-      render: formatDate,
+      render: (date, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'departureDate';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <DatePicker
+                value={editingValue ? dayjs(editingValue) : null}
+                onChange={(date) => setEditingValue(date ? date.format('YYYY-MM-DD') : null)}
+                size="small"
+                format="YYYY-MM-DD"
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSaveEdit}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'departureDate', date)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {formatDate(date)}
+          </div>
+        );
+      },
       align: 'center',
     },
     {
@@ -636,7 +745,42 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'sailingDate',
       key: 'sailingDate',
       width: 80,
-      render: formatDate,
+      render: (date, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'sailingDate';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <DatePicker
+                value={editingValue ? dayjs(editingValue) : null}
+                onChange={(date) => setEditingValue(date ? date.format('YYYY-MM-DD') : null)}
+                size="small"
+                format="YYYY-MM-DD"
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSaveEdit}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'sailingDate', date)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {formatDate(date)}
+          </div>
+        );
+      },
       align: 'center',
     },
     {
@@ -644,7 +788,42 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'estimatedArrivalDate',
       key: 'estimatedArrivalDate',
       width: 80,
-      render: formatDate,
+      render: (date, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'estimatedArrivalDate';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <DatePicker
+                value={editingValue ? dayjs(editingValue) : null}
+                onChange={(date) => setEditingValue(date ? date.format('YYYY-MM-DD') : null)}
+                size="small"
+                format="YYYY-MM-DD"
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSaveEdit}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'estimatedArrivalDate', date)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {formatDate(date)}
+          </div>
+        );
+      },
       align: 'center',
     },
     {
@@ -652,7 +831,42 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'estimatedWarehouseDate',
       key: 'estimatedWarehouseDate',
       width: 80,
-      render: formatDate,
+      render: (date, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'estimatedWarehouseDate';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <DatePicker
+                value={editingValue ? dayjs(editingValue) : null}
+                onChange={(date) => setEditingValue(date ? date.format('YYYY-MM-DD') : null)}
+                size="small"
+                format="YYYY-MM-DD"
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSaveEdit}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'estimatedWarehouseDate', date)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {formatDate(date)}
+          </div>
+        );
+      },
       align: 'center',
     },
     {
@@ -700,6 +914,18 @@ const LogisticsPage: React.FC = () => {
           return renderEditableCell(weight, record, 'billingWeight');
         }
         return weight ? `${Number(weight).toFixed(1)}kg` : '-';
+      },
+      align: 'right',
+    },
+    {
+      title: '平均计费箱重',
+      key: 'avgBoxWeight',
+      width: 110,
+      render: (_, record) => {
+        const weight = Number(record.billingWeight) || 0;
+        const boxes = Number(record.packageCount) || 0;
+        const avgWeight = boxes > 0 ? weight / boxes : 0;
+        return avgWeight > 0 ? `${avgWeight.toFixed(1)}kg/箱` : '-';
       },
       align: 'right',
     },
@@ -855,45 +1081,67 @@ const LogisticsPage: React.FC = () => {
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('yearly')}>
             <Statistic
-              title="总记录数"
-              value={statistics.total}
+              title="今年发货票数"
+              value={statisticsData.yearlyCount}
               prefix={<BoxPlotOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transit')}>
             <Statistic
-              title="在途货物"
-              value={statistics.inTransit}
+              title="在途产品数"
+              value={statisticsData.transitProductCount}
               prefix={<TruckOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transitPackage')}>
             <Statistic
-              title="总包裹数"
-              value={statistics.totalPackages}
+              title="在途箱数"
+              value={statisticsData.transitPackageCount}
               prefix={<BoxPlotOutlined />}
               valueStyle={{ color: '#722ed1' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unpaid')}>
             <Statistic
-              title="总运费"
-              value={statistics.totalValue}
+              title="未付总运费"
+              value={statisticsData.unpaidTotalFee}
               prefix={<DollarOutlined />}
               precision={2}
               valueStyle={{ color: '#eb2f96' }}
             />
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('pendingWarehouse')}>
+            <Statistic
+              title="待调整到仓日货件数"
+              value={statisticsData.pendingWarehouseCount}
+              prefix={<ClockCircleOutlined />}
+              valueStyle={{ color: '#fa8c16' }}
+            />
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card>
+            <div style={{ textAlign: 'center', color: '#666', fontSize: '12px', marginBottom: '8px' }}>
+              当前显示数据统计
+            </div>
+            <div style={{ fontSize: '14px', color: '#333' }}>
+              <div>箱数: {currentDataStats.totalPackages}</div>
+              <div>产品数: {currentDataStats.totalProducts}</div>
+              <div>运费: ¥{currentDataStats.totalFee.toFixed(2)}</div>
+            </div>
           </Card>
         </Col>
       </Row>
