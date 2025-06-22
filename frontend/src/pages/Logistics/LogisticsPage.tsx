@@ -15,7 +15,9 @@ import {
   Divider,
   Typography,
   Tooltip,
-  Modal
+  Modal,
+  Form,
+  InputNumber
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -27,7 +29,10 @@ import {
   BoxPlotOutlined,
   ClockCircleOutlined,
   DollarOutlined,
-  EditOutlined
+  EditOutlined,
+  SaveOutlined,
+  CloseOutlined,
+  DatabaseOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
@@ -78,14 +83,20 @@ interface FilterOptions {
 interface SearchParams {
   shippingIds?: string[];
   filters: {
-    logisticsProvider?: string;
-    channel?: string;
-    status?: string;
-    destinationCountry?: string;
-    taxPaymentStatus?: string;
-    taxDeclarationStatus?: string;
-    paymentStatus?: string;
+    logisticsProvider?: string[];
+    channel?: string[];
+    status?: string[];
+    destinationCountry?: string[];
+    taxPaymentStatus?: string[];
+    taxDeclarationStatus?: string[];
+    paymentStatus?: string[];
   };
+}
+
+// 批量更新数据接口
+interface BatchUpdateData {
+  shippingId: string;
+  updates: { [key: string]: any };
 }
 
 const LogisticsPage: React.FC = () => {
@@ -98,6 +109,13 @@ const LogisticsPage: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchStatusValue, setBatchStatusValue] = useState<string | undefined>(undefined);
+  const [editingKey, setEditingKey] = useState('');
+  const [editingField, setEditingField] = useState('');
+  const [editingValue, setEditingValue] = useState<any>('');
+  const [batchUpdateModalVisible, setBatchUpdateModalVisible] = useState(false);
+  const [batchUpdateText, setBatchUpdateText] = useState('');
+  const [parsedBatchData, setParsedBatchData] = useState<BatchUpdateData[]>([]);
+  const [form] = Form.useForm();
 
   // API调用函数
   const fetchData = async (params: SearchParams) => {
@@ -144,6 +162,150 @@ const LogisticsPage: React.FC = () => {
       setFilterOptions(result.data || {});
     } catch (error) {
       console.error('获取筛选选项失败:', error);
+    }
+  };
+
+  // 单元格编辑保存
+  const handleSaveEdit = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingId: editingKey,
+          [editingField]: editingValue
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('更新成功');
+        // 更新本地数据
+        setData(prevData =>
+          prevData.map(item =>
+            item.shippingId === editingKey
+              ? { ...item, [editingField]: editingValue }
+              : item
+          )
+        );
+        setEditingKey('');
+        setEditingField('');
+        setEditingValue('');
+      } else {
+        throw new Error(result.message || '更新失败');
+      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error(`更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
+  // 取消编辑
+  const handleCancelEdit = () => {
+    setEditingKey('');
+    setEditingField('');
+    setEditingValue('');
+  };
+
+  // 开始编辑
+  const handleStartEdit = (shippingId: string, field: string, value: any) => {
+    setEditingKey(shippingId);
+    setEditingField(field);
+    setEditingValue(value);
+  };
+
+  // 解析批量更新文本
+  const parseBatchUpdateText = (text: string): BatchUpdateData[] => {
+    const lines = text.split('\n').filter(line => line.trim());
+    const result: BatchUpdateData[] = [];
+    let currentShippingId = '';
+    let currentUpdates: { [key: string]: any } = {};
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.includes('：')) {
+        const [key, value] = trimmedLine.split('：').map(s => s.trim());
+        
+        if (key === 'Shipping ID') {
+          // 如果遇到新的Shipping ID，先保存之前的数据
+          if (currentShippingId && Object.keys(currentUpdates).length > 0) {
+            result.push({
+              shippingId: currentShippingId,
+              updates: { ...currentUpdates }
+            });
+          }
+          currentShippingId = value;
+          currentUpdates = {};
+        } else {
+          // 映射字段名
+          const fieldMap: { [key: string]: string } = {
+            '渠道': 'channel',
+            '物流节点': 'logisticsNode',
+            '物流商': 'logisticsProvider',
+            '状态': 'status',
+            '目的国': 'destinationCountry',
+            '目的仓库': 'destinationWarehouse',
+            '单价': 'price',
+            '计费重量': 'billingWeight',
+            '箱数': 'packageCount',
+            '产品数': 'productCount'
+          };
+          
+          const fieldName = fieldMap[key];
+          if (fieldName) {
+            currentUpdates[fieldName] = value;
+          }
+        }
+      }
+    }
+
+    // 保存最后一个Shipping ID的数据
+    if (currentShippingId && Object.keys(currentUpdates).length > 0) {
+      result.push({
+        shippingId: currentShippingId,
+        updates: { ...currentUpdates }
+      });
+    }
+
+    return result;
+  };
+
+  // 处理批量更新确认
+  const handleBatchUpdateConfirm = async () => {
+    try {
+      setBatchLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: parsedBatchData }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success(`成功更新 ${parsedBatchData.length} 条记录`);
+        setBatchUpdateModalVisible(false);
+        setBatchUpdateText('');
+        setParsedBatchData([]);
+        // 刷新数据
+        fetchData({ filters });
+      } else {
+        throw new Error(result.message || '批量更新失败');
+      }
+    } catch (error) {
+      console.error('批量更新失败:', error);
+      message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setBatchLoading(false);
     }
   };
 
@@ -204,7 +366,7 @@ const LogisticsPage: React.FC = () => {
   useEffect(() => {
     fetchFilterOptions();
     // 默认加载未完成的物流记录
-    fetchData({ filters: { status: 'not_completed' } });
+    fetchData({ filters: { status: ['not_completed'] } });
   }, []);
 
   // 搜索处理
@@ -228,7 +390,7 @@ const LogisticsPage: React.FC = () => {
     setFilters({});
     setSelectedRowKeys([]);
     setBatchStatusValue(undefined);
-    fetchData({ filters: { status: 'not_completed' } });
+    fetchData({ filters: { status: ['not_completed'] } });
   };
 
   // 查询所有数据
@@ -280,6 +442,79 @@ const LogisticsPage: React.FC = () => {
     return dateString ? dayjs(dateString).format('MM-DD') : '-';
   };
 
+  // 可编辑单元格渲染
+  const renderEditableCell = (text: any, record: LogisticsRecord, field: string) => {
+    const isEditing = editingKey === record.shippingId && editingField === field;
+    
+    // 根据字段类型确定对齐方式
+    const getAlignment = (field: string) => {
+      if (['packageCount', 'productCount', 'price', 'billingWeight'].includes(field)) {
+        return 'right';
+      } else if (field === 'logisticsNode') {
+        return 'left';
+      } else {
+        return 'center';
+      }
+    };
+
+    const alignment = getAlignment(field);
+    
+    if (isEditing) {
+      return (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 4,
+          justifyContent: alignment === 'right' ? 'flex-end' : alignment === 'left' ? 'flex-start' : 'center'
+        }}>
+          {typeof text === 'number' ? (
+            <InputNumber
+              value={editingValue}
+              onChange={(value) => setEditingValue(value)}
+              size="small"
+              style={{ width: 80 }}
+              onPressEnter={handleSaveEdit}
+            />
+          ) : (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              size="small"
+              style={{ width: field === 'logisticsNode' ? 160 : 120 }}
+              onPressEnter={handleSaveEdit}
+            />
+          )}
+          <Button
+            type="text"
+            size="small"
+            icon={<SaveOutlined />}
+            onClick={handleSaveEdit}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={handleCancelEdit}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        onDoubleClick={() => handleStartEdit(record.shippingId, field, text)}
+        style={{ 
+          cursor: 'pointer', 
+          minHeight: 22,
+          textAlign: alignment
+        }}
+        title="双击编辑"
+      >
+        {text || '-'}
+      </div>
+    );
+  };
+
   // 行选择配置
   const rowSelection = {
     selectedRowKeys,
@@ -300,6 +535,7 @@ const LogisticsPage: React.FC = () => {
       key: 'shippingId',
       fixed: 'left',
       width: 140,
+      align: 'center',
       render: (text) => <Text strong>{text}</Text>,
     },
     {
@@ -307,39 +543,85 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'logisticsProvider',
       key: 'logisticsProvider',
       width: 100,
+      align: 'center',
+      render: (text, record) => renderEditableCell(text, record, 'logisticsProvider'),
       filters: filterOptions.logisticsProvider?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.logisticsProvider ? [filters.logisticsProvider] : null,
+      filteredValue: filters.logisticsProvider || null,
+      filterMode: 'tree',
+      filterSearch: true,
     },
     {
       title: '渠道',
       dataIndex: 'channel',
       key: 'channel',
       width: 120,
+      align: 'center',
+      render: (text, record) => renderEditableCell(text, record, 'channel'),
       filters: filterOptions.channel?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.channel ? [filters.channel] : null,
+      filteredValue: filters.channel || null,
+      filterMode: 'tree',
+      filterSearch: true,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: renderStatusTag,
+      align: 'center',
+      render: (status, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'status';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <Select
+                value={editingValue}
+                onChange={(value) => setEditingValue(value)}
+                size="small"
+                style={{ width: 100 }}
+                onSelect={handleSaveEdit}
+              >
+                <Option value="在途">在途</Option>
+                <Option value="入库中">入库中</Option>
+                <Option value="完成">完成</Option>
+              </Select>
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'status', status)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {renderStatusTag(status)}
+          </div>
+        );
+      },
       filters: filterOptions.status?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.status ? [filters.status] : null,
+      filteredValue: filters.status || null,
+      filterMode: 'tree',
     },
     {
-      title: '包裹数',
+      title: '箱数',
       dataIndex: 'packageCount',
       key: 'packageCount',
       width: 80,
-      align: 'center',
+      align: 'right',
+      render: (text, record) => renderEditableCell(text, record, 'packageCount'),
     },
     {
       title: '产品数',
       dataIndex: 'productCount',
       key: 'productCount',
       width: 80,
-      align: 'center',
+      align: 'right',
+      render: (text, record) => renderEditableCell(text, record, 'productCount'),
     },
     {
       title: '起运日期',
@@ -378,21 +660,33 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'destinationCountry',
       key: 'destinationCountry',
       width: 80,
+      align: 'center',
+      render: (text, record) => renderEditableCell(text, record, 'destinationCountry'),
       filters: filterOptions.destinationCountry?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.destinationCountry ? [filters.destinationCountry] : null,
+      filteredValue: filters.destinationCountry || null,
+      filterMode: 'tree',
+      filterSearch: true,
     },
     {
       title: '目的仓库',
       dataIndex: 'destinationWarehouse',
       key: 'destinationWarehouse',
       width: 100,
+      align: 'center',
+      render: (text, record) => renderEditableCell(text, record, 'destinationWarehouse'),
     },
     {
-      title: '运费',
+      title: '单价',
       dataIndex: 'price',
       key: 'price',
       width: 80,
-      render: (price) => price ? `$${Number(price).toFixed(2)}` : '-',
+      render: (price, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'price';
+        if (isEditing) {
+          return renderEditableCell(price, record, 'price');
+        }
+        return price ? `¥${Number(price).toFixed(2)}` : '-';
+      },
       align: 'right',
     },
     {
@@ -400,7 +694,25 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'billingWeight',
       key: 'billingWeight',
       width: 90,
-      render: (weight) => weight ? `${Number(weight).toFixed(1)}kg` : '-',
+      render: (weight, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'billingWeight';
+        if (isEditing) {
+          return renderEditableCell(weight, record, 'billingWeight');
+        }
+        return weight ? `${Number(weight).toFixed(1)}kg` : '-';
+      },
+      align: 'right',
+    },
+    {
+      title: '运费',
+      key: 'totalFee',
+      width: 90,
+      render: (_, record) => {
+        const price = Number(record.price) || 0;
+        const weight = Number(record.billingWeight) || 0;
+        const totalFee = price * weight;
+        return totalFee > 0 ? `¥${totalFee.toFixed(2)}` : '-';
+      },
       align: 'right',
     },
     {
@@ -408,41 +720,124 @@ const LogisticsPage: React.FC = () => {
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
       width: 90,
-      render: renderPaymentTag,
+      align: 'center',
+      render: (status, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'paymentStatus';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <Select
+                value={editingValue}
+                onChange={(value) => setEditingValue(value)}
+                size="small"
+                style={{ width: 80 }}
+                onSelect={handleSaveEdit}
+              >
+                <Option value="已付">已付</Option>
+                <Option value="未付">未付</Option>
+              </Select>
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'paymentStatus', status)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {renderPaymentTag(status)}
+          </div>
+        );
+      },
       filters: filterOptions.paymentStatus?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.paymentStatus ? [filters.paymentStatus] : null,
+      filteredValue: filters.paymentStatus || null,
+      filterMode: 'tree',
     },
     {
       title: '税金状态',
       dataIndex: 'taxPaymentStatus',
       key: 'taxPaymentStatus',
       width: 90,
-      render: renderPaymentTag,
+      align: 'center',
+      render: (status, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'taxPaymentStatus';
+        if (isEditing) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <Select
+                value={editingValue}
+                onChange={(value) => setEditingValue(value)}
+                size="small"
+                style={{ width: 80 }}
+                onSelect={handleSaveEdit}
+              >
+                <Option value="已付">已付</Option>
+                <Option value="未付">未付</Option>
+              </Select>
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelEdit}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            onDoubleClick={() => handleStartEdit(record.shippingId, 'taxPaymentStatus', status)}
+            style={{ cursor: 'pointer', textAlign: 'center' }}
+            title="双击编辑"
+          >
+            {renderPaymentTag(status)}
+          </div>
+        );
+      },
       filters: filterOptions.taxPaymentStatus?.map(item => ({ text: item, value: item })),
-      filteredValue: filters.taxPaymentStatus ? [filters.taxPaymentStatus] : null,
+      filteredValue: filters.taxPaymentStatus || null,
+      filterMode: 'tree',
     },
     {
       title: '物流节点',
       dataIndex: 'logisticsNode',
       key: 'logisticsNode',
       width: 200,
-      render: (text) => (
-        <Tooltip title={text}>
-          <Text ellipsis>{text}</Text>
-        </Tooltip>
-      ),
+      align: 'left',
+      render: (text, record) => {
+        const isEditing = editingKey === record.shippingId && editingField === 'logisticsNode';
+        if (isEditing) {
+          return renderEditableCell(text, record, 'logisticsNode');
+        }
+        return (
+          <Tooltip title={text}>
+            <div
+              onDoubleClick={() => handleStartEdit(record.shippingId, 'logisticsNode', text)}
+              style={{ cursor: 'pointer', textAlign: 'left' }}
+              title="双击编辑"
+            >
+              <Text ellipsis>{text}</Text>
+            </div>
+          </Tooltip>
+        );
+      },
     },
   ];
 
   // 表格筛选变化处理
   const handleTableChange = (pagination: any, tableFilters: any) => {
     const newFilters: SearchParams['filters'] = {
-      logisticsProvider: tableFilters.logisticsProvider?.[0],
-      channel: tableFilters.channel?.[0],
-      status: tableFilters.status?.[0],
-      destinationCountry: tableFilters.destinationCountry?.[0],
-      taxPaymentStatus: tableFilters.taxPaymentStatus?.[0],
-      paymentStatus: tableFilters.paymentStatus?.[0],
+      logisticsProvider: tableFilters.logisticsProvider,
+      channel: tableFilters.channel,
+      status: tableFilters.status,
+      destinationCountry: tableFilters.destinationCountry,
+      taxPaymentStatus: tableFilters.taxPaymentStatus,
+      paymentStatus: tableFilters.paymentStatus,
     };
     
     setFilters(newFilters);
@@ -546,6 +941,12 @@ const LogisticsPage: React.FC = () => {
                   >
                     查询全部
                   </Button>
+                  <Button
+                    icon={<DatabaseOutlined />}
+                    onClick={() => setBatchUpdateModalVisible(true)}
+                  >
+                    批量更新货件详情
+                  </Button>
                 </Space>
                 <Text type="secondary">
                   当前显示: {data.length} 条记录
@@ -616,12 +1017,96 @@ const LogisticsPage: React.FC = () => {
         />
       </Card>
 
+      {/* 批量更新模态框 */}
+      <Modal
+        title="批量更新货件详情"
+        open={batchUpdateModalVisible}
+        onCancel={() => {
+          setBatchUpdateModalVisible(false);
+          setBatchUpdateText('');
+          setParsedBatchData([]);
+        }}
+        width={800}
+        footer={null}
+      >
+        <div>
+          <Text strong>请按以下格式输入数据：</Text>
+          <pre style={{ backgroundColor: '#f5f5f5', padding: '8px', marginTop: '8px' }}>
+{`Shipping ID：FBA18YCL0JBL
+渠道：普船卡派
+物流节点：周一起航
+Shipping ID：FBA18YCL0JBL2
+渠道：快船
+状态：在途`}
+          </pre>
+          <TextArea
+            rows={10}
+            value={batchUpdateText}
+            onChange={(e) => {
+              setBatchUpdateText(e.target.value);
+              setParsedBatchData(parseBatchUpdateText(e.target.value));
+            }}
+            placeholder="请输入要更新的数据..."
+            style={{ marginTop: '16px' }}
+          />
+          
+          {parsedBatchData.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <Text strong>解析结果预览：</Text>
+              <div style={{ maxHeight: '300px', overflow: 'auto', marginTop: '8px' }}>
+                {parsedBatchData.map((item, index) => (
+                  <div key={index} style={{ 
+                    border: '1px dashed #d9d9d9', 
+                    padding: '8px', 
+                    marginBottom: '8px',
+                    backgroundColor: '#fafafa'
+                  }}>
+                    <Text strong>Shipping ID: {item.shippingId}</Text>
+                    <div style={{ marginTop: '4px' }}>
+                      {Object.entries(item.updates).map(([key, value]) => (
+                        <div key={key}>
+                          <Text>{key}: </Text>
+                          <Text type="secondary">{value}</Text>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div style={{ marginTop: '16px', textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setBatchUpdateModalVisible(false);
+                setBatchUpdateText('');
+                setParsedBatchData([]);
+              }}>
+                取消
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleBatchUpdateConfirm}
+                loading={batchLoading}
+                disabled={parsedBatchData.length === 0}
+              >
+                确认更新 ({parsedBatchData.length} 条记录)
+              </Button>
+            </Space>
+          </div>
+        </div>
+      </Modal>
+
       <style>{`
         .logistics-completed {
           background-color: #f6ffed;
         }
         .logistics-transit {
           background-color: #e6f7ff;
+        }
+        .ant-table-thead > tr > th {
+          text-align: center !important;
         }
       `}</style>
     </div>

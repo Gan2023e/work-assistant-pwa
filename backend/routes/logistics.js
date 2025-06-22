@@ -20,30 +20,49 @@ router.post('/search', async (req, res) => {
 
     // 添加筛选条件
     if (filters) {
-      if (filters.status === 'not_completed') {
-        // 状态为非完成，假设完成状态为 '完成'
-        where.status = { [Op.ne]: '完成' };
-      } else if (filters.status) {
-        where.status = filters.status;
+      // 处理状态筛选
+      if (filters.status) {
+        if (Array.isArray(filters.status)) {
+          if (filters.status.includes('not_completed')) {
+            // 如果包含 not_completed，则查询非完成状态
+            const otherStatuses = filters.status.filter(s => s !== 'not_completed');
+            if (otherStatuses.length > 0) {
+              where[Op.or] = [
+                { status: { [Op.ne]: '完成' } },
+                { status: { [Op.in]: otherStatuses } }
+              ];
+            } else {
+              where.status = { [Op.ne]: '完成' };
+            }
+          } else {
+            where.status = { [Op.in]: filters.status };
+          }
+        } else if (filters.status === 'not_completed') {
+          where.status = { [Op.ne]: '完成' };
+        } else {
+          where.status = filters.status;
+        }
       }
-      if (filters.logisticsProvider) {
-        where.logisticsProvider = filters.logisticsProvider;
-      }
-      if (filters.channel) {
-        where.channel = filters.channel;
-      }
-      if (filters.destinationCountry) {
-        where.destinationCountry = filters.destinationCountry;
-      }
-      if (filters.taxPaymentStatus) {
-        where.taxPaymentStatus = filters.taxPaymentStatus;
-      }
-      if (filters.taxDeclarationStatus) {
-        where.taxDeclarationStatus = filters.taxDeclarationStatus;
-      }
-      if (filters.paymentStatus) {
-        where.paymentStatus = filters.paymentStatus;
-      }
+
+      // 处理其他筛选条件（支持数组和单值）
+      const filterFields = [
+        'logisticsProvider',
+        'channel', 
+        'destinationCountry',
+        'taxPaymentStatus',
+        'taxDeclarationStatus',
+        'paymentStatus'
+      ];
+
+      filterFields.forEach(field => {
+        if (filters[field]) {
+          if (Array.isArray(filters[field]) && filters[field].length > 0) {
+            where[field] = { [Op.in]: filters[field] };
+          } else if (!Array.isArray(filters[field])) {
+            where[field] = filters[field];
+          }
+        }
+      });
     }
 
     console.log('\x1b[35m%s\x1b[0m', '查询条件:', JSON.stringify(where, null, 2));
@@ -62,6 +81,174 @@ router.post('/search', async (req, res) => {
     });
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', '搜索物流信息失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
+// 更新单个记录
+router.post('/update', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到单个记录更新请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shippingId, ...updateData } = req.body;
+    
+    // 验证参数
+    if (!shippingId) {
+      return res.status(400).json({
+        code: 400,
+        message: 'shippingId 是必需的'
+      });
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: '至少需要提供一个要更新的字段'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', `更新记录 ${shippingId}:`, updateData);
+
+    // 查找记录是否存在
+    const existingRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+
+    if (!existingRecord) {
+      return res.status(404).json({
+        code: 404,
+        message: '记录不存在'
+      });
+    }
+
+    // 执行更新
+    const [affectedCount] = await Logistics.update(updateData, {
+      where: { shippingId }
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', '成功更新记录数:', affectedCount);
+
+    // 返回更新后的记录
+    const updatedRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: updatedRecord
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '更新记录失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
+// 批量更新多字段
+router.post('/batch-update', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到批量更新多字段请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { updates } = req.body;
+    
+    // 验证参数
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'updates 必须是非空数组'
+      });
+    }
+
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    // 逐个处理更新
+    for (const updateItem of updates) {
+      const { shippingId, updates: updateData } = updateItem;
+      
+      if (!shippingId || !updateData || Object.keys(updateData).length === 0) {
+        console.log('\x1b[33m%s\x1b[0m', `跳过无效的更新项:`, updateItem);
+        errorCount++;
+        results.push({
+          shippingId,
+          success: false,
+          error: 'shippingId 和 updates 是必需的'
+        });
+        continue;
+      }
+
+      try {
+        // 检查记录是否存在
+        const existingRecord = await Logistics.findOne({
+          where: { shippingId }
+        });
+
+        if (!existingRecord) {
+          console.log('\x1b[33m%s\x1b[0m', `记录不存在: ${shippingId}`);
+          errorCount++;
+          results.push({
+            shippingId,
+            success: false,
+            error: '记录不存在'
+          });
+          continue;
+        }
+
+        // 执行更新
+        const [affectedCount] = await Logistics.update(updateData, {
+          where: { shippingId }
+        });
+
+        if (affectedCount > 0) {
+          successCount++;
+          results.push({
+            shippingId,
+            success: true,
+            updatedFields: Object.keys(updateData)
+          });
+          console.log('\x1b[32m%s\x1b[0m', `成功更新记录: ${shippingId}`);
+        } else {
+          errorCount++;
+          results.push({
+            shippingId,
+            success: false,
+            error: '更新失败'
+          });
+        }
+      } catch (itemError) {
+        console.error('\x1b[31m%s\x1b[0m', `更新记录 ${shippingId} 失败:`, itemError);
+        errorCount++;
+        results.push({
+          shippingId,
+          success: false,
+          error: itemError.message
+        });
+      }
+    }
+
+    console.log('\x1b[32m%s\x1b[0m', `批量更新完成: 成功 ${successCount} 条，失败 ${errorCount} 条`);
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        totalCount: updates.length,
+        successCount,
+        errorCount,
+        results
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '批量更新多字段失败:', error);
     res.status(500).json({
       code: 500,
       message: '服务器错误',
