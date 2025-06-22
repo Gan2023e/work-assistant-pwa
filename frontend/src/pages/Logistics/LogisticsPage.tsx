@@ -132,12 +132,12 @@ const LogisticsPage: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
-      });
-
+        });
+        
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
+        }
+        
       const result = await response.json();
       const sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
         const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
@@ -169,8 +169,8 @@ const LogisticsPage: React.FC = () => {
         setFilterOptions(result.data || {});
     } catch (error) {
       console.error('获取筛选选项失败:', error);
-    }
-  };
+      }
+    };
 
   // 获取统计数据
   const fetchStatistics = async () => {
@@ -338,8 +338,8 @@ const LogisticsPage: React.FC = () => {
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
+        }
+        
       const result = await response.json();
       
       if (result.code === 0) {
@@ -383,7 +383,7 @@ const LogisticsPage: React.FC = () => {
       }
 
       const result = await response.json();
-      
+        
       if (result.code === 0) {
         message.success(`成功将 ${selectedRowKeys.length} 条记录的状态修改为"${newStatus}"`);
         setSelectedRowKeys([]);
@@ -392,14 +392,14 @@ const LogisticsPage: React.FC = () => {
         fetchData({ filters });
         } else {
         throw new Error(result.message || '批量更新失败');
-      }
+        }
     } catch (error) {
       console.error('批量更新失败:', error);
       message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setBatchLoading(false);
     }
-  };
+    };
 
   // 处理批量状态选择
   const handleBatchStatusChange = (value: string) => {
@@ -1263,7 +1263,7 @@ const LogisticsPage: React.FC = () => {
                     onClick={() => setBatchUpdateModalVisible(true)}
                   >
                     批量更新货件详情
-                  </Button>
+          </Button>
         </Space>
                 <Text type="secondary">
                   当前显示: {data.length} 条记录
