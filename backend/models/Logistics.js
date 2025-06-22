@@ -15,10 +15,6 @@ const Logistics = sequelize.define('Logistics', {
     type: DataTypes.STRING,
     field: 'tracking_number',
   },
-  transferNumber: {
-    type: DataTypes.STRING,
-    field: 'transfer_number',
-  },
   packageCount: {
     type: DataTypes.INTEGER,
     field: 'package_count',

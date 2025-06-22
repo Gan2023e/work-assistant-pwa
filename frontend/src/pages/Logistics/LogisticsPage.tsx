@@ -46,7 +46,6 @@ interface LogisticsRecord {
   shippingId: string;
   logisticsProvider: string;
   trackingNumber: string;
-  transferNumber: string;
   packageCount: number;
   productCount: number;
   channel: string;
