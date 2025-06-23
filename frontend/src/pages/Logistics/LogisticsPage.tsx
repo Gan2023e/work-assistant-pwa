@@ -292,7 +292,7 @@ const LogisticsPage: React.FC = () => {
       formData.append('pdf', file);
 
       const response = await fetch(`${API_BASE_URL}/api/shipments/extract-pdf`, {
-        method: 'POST',
+          method: 'POST',
         body: formData
       });
 
@@ -510,7 +510,7 @@ const LogisticsPage: React.FC = () => {
         setParsedBatchData([]);
         // 刷新数据
         fetchData({ filters });
-      } else {
+        } else {
         throw new Error(result.message || '批量更新失败');
       }
     } catch (error) {
@@ -1852,7 +1852,7 @@ const LogisticsPage: React.FC = () => {
                   fetchHsCodes();
                   setEditingHsCode(null);
                   hsCodeForm.resetFields();
-                } else {
+        } else {
                   message.error(result.message || '操作失败');
                 }
               } catch (error) {
@@ -2197,7 +2197,7 @@ const LogisticsPage: React.FC = () => {
                 <Button type="primary" htmlType="submit">
                   创建货件
                 </Button>
-                <Button 
+          <Button 
                   onClick={async () => {
                     if (!selectedProvider) {
                       message.warning('请先选择物流商');
@@ -2215,8 +2215,8 @@ const LogisticsPage: React.FC = () => {
                   shipmentForm.resetFields();
                 }}>
                   取消
-                </Button>
-              </Space>
+          </Button>
+        </Space>
             </Form.Item>
           </Form>
         </div>
