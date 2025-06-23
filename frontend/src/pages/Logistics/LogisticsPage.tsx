@@ -158,6 +158,7 @@ const LogisticsPage: React.FC = () => {
   const [extractedData, setExtractedData] = useState<any>(null);
   const [logisticsProviders, setLogisticsProviders] = useState<any[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [newHsCodeRecord, setNewHsCodeRecord] = useState<HsCode | null>(null);
   const [form] = Form.useForm();
   const [warehouseForm] = Form.useForm();
   const [hsCodeForm] = Form.useForm();
@@ -1817,6 +1818,7 @@ const LogisticsPage: React.FC = () => {
         onCancel={() => {
           setHsCodeModalVisible(false);
           setEditingHsCode(null);
+          setNewHsCodeRecord(null);
           hsCodeForm.resetFields();
         }}
         width={1400}
@@ -1826,34 +1828,17 @@ const LogisticsPage: React.FC = () => {
           <Space style={{ marginBottom: 16 }}>
             <Button 
               type="primary" 
-              onClick={async () => {
-                // 创建新记录
+              onClick={() => {
+                // 创建新的临时记录
                 const newRecord: HsCode = {
-                  parent_sku: '新建SKU',
+                  parent_sku: '',
                   weblink: '',
                   uk_hscode: '',
                   us_hscode: '',
                   declared_value: 0,
                   declared_value_currency: 'USD'
                 };
-                
-                try {
-                  const response = await fetch(`${API_BASE_URL}/api/hscode`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newRecord)
-                  });
-                  
-                  const result = await response.json();
-                  if (result.code === 0) {
-                    message.success('创建成功，请双击单元格编辑内容');
-                    await fetchHsCodes();
-                  } else {
-                    message.error(result.message || '创建失败');
-                  }
-                } catch (error) {
-                  message.error('创建失败');
-                }
+                setNewHsCodeRecord(newRecord);
               }}
             >
               新增记录
@@ -1864,9 +1849,9 @@ const LogisticsPage: React.FC = () => {
           </Space>
           
           <Table
-            dataSource={hsCodeList}
+            dataSource={newHsCodeRecord ? [newHsCodeRecord, ...hsCodeList] : hsCodeList}
             loading={hsCodeLoading}
-            rowKey="parent_sku"
+            rowKey={(record) => record.parent_sku || 'new-record'}
             size="small"
             pagination={{ pageSize: 10 }}
             scroll={{ x: 1000, y: 500 }}
@@ -1877,6 +1862,19 @@ const LogisticsPage: React.FC = () => {
                 width: 120, 
                 fixed: 'left',
                 render: (text: string, record: HsCode) => {
+                  // 如果是新增记录，直接显示输入框
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <Input
+                        value={newHsCodeRecord.parent_sku}
+                        onChange={(e) => setNewHsCodeRecord({...newHsCodeRecord, parent_sku: e.target.value})}
+                        placeholder="请输入父SKU"
+                        size="small"
+                        style={{ width: 100, fontWeight: 'bold' }}
+                      />
+                    );
+                  }
+                  
                   const isEditing = editingKey === record.parent_sku && editingField === 'parent_sku';
                   if (isEditing) {
                     return (
@@ -1975,6 +1973,19 @@ const LogisticsPage: React.FC = () => {
                 dataIndex: 'weblink', 
                 width: 250,
                 render: (text: string, record: HsCode) => {
+                  // 如果是新增记录，直接显示输入框
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <Input
+                        value={newHsCodeRecord.weblink}
+                        onChange={(e) => setNewHsCodeRecord({...newHsCodeRecord, weblink: e.target.value})}
+                        placeholder="请输入产品链接"
+                        size="small"
+                        style={{ width: 220 }}
+                      />
+                    );
+                  }
+                  
                   const isEditing = editingKey === record.parent_sku && editingField === 'weblink';
                   if (isEditing) {
                     return (
@@ -2060,6 +2071,19 @@ const LogisticsPage: React.FC = () => {
                 dataIndex: 'uk_hscode', 
                 width: 130,
                 render: (text: string, record: HsCode) => {
+                  // 如果是新增记录，直接显示输入框
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <Input
+                        value={newHsCodeRecord.uk_hscode}
+                        onChange={(e) => setNewHsCodeRecord({...newHsCodeRecord, uk_hscode: e.target.value})}
+                        placeholder="英国HSCODE"
+                        size="small"
+                        style={{ width: 110 }}
+                      />
+                    );
+                  }
+                  
                   const isEditing = editingKey === record.parent_sku && editingField === 'uk_hscode';
                   if (isEditing) {
                     return (
@@ -2128,6 +2152,19 @@ const LogisticsPage: React.FC = () => {
                 dataIndex: 'us_hscode', 
                 width: 130,
                 render: (text: string, record: HsCode) => {
+                  // 如果是新增记录，直接显示输入框
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <Input
+                        value={newHsCodeRecord.us_hscode}
+                        onChange={(e) => setNewHsCodeRecord({...newHsCodeRecord, us_hscode: e.target.value})}
+                        placeholder="美国HSCODE"
+                        size="small"
+                        style={{ width: 110 }}
+                      />
+                    );
+                  }
+                  
                   const isEditing = editingKey === record.parent_sku && editingField === 'us_hscode';
                   if (isEditing) {
                     return (
@@ -2195,6 +2232,34 @@ const LogisticsPage: React.FC = () => {
                 title: '申报价值', 
                 width: 120,
                 render: (_, record: HsCode) => {
+                  // 如果是新增记录，直接显示输入框
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                        <InputNumber
+                          value={newHsCodeRecord.declared_value}
+                          onChange={(value) => setNewHsCodeRecord({...newHsCodeRecord, declared_value: value || 0})}
+                          placeholder="价值"
+                          size="small"
+                          style={{ width: 60 }}
+                          min={0}
+                          precision={2}
+                        />
+                        <Select
+                          value={newHsCodeRecord.declared_value_currency}
+                          onChange={(value) => setNewHsCodeRecord({...newHsCodeRecord, declared_value_currency: value})}
+                          size="small"
+                          style={{ width: 50 }}
+                        >
+                          <Option value="USD">USD</Option>
+                          <Option value="EUR">EUR</Option>
+                          <Option value="GBP">GBP</Option>
+                          <Option value="CNY">CNY</Option>
+                        </Select>
+                      </div>
+                    );
+                  }
+                  
                   const isEditingValue = editingKey === record.parent_sku && editingField === 'declared_value';
                   const isEditingCurrency = editingKey === record.parent_sku && editingField === 'declared_value_currency';
                   
@@ -2315,62 +2380,133 @@ const LogisticsPage: React.FC = () => {
                 dataIndex: 'created_at', 
                 width: 100,
                 align: 'center',
-                render: (date: string) => date ? formatDate(date, true) : '-'
+                render: (date: string, record: HsCode) => {
+                  if (record === newHsCodeRecord) return '-';
+                  return date ? formatDate(date, true) : '-';
+                }
               },
               { 
                 title: '更新时间', 
                 dataIndex: 'updated_at', 
                 width: 100,
                 align: 'center',
-                render: (date: string) => date ? formatDate(date, true) : '-'
+                render: (date: string, record: HsCode) => {
+                  if (record === newHsCodeRecord) return '-';
+                  return date ? formatDate(date, true) : '-';
+                }
               },
               {
                 title: '操作',
                 width: 80,
                 fixed: 'right',
                 align: 'center',
-                render: (_, record: HsCode) => (
-                  <Button 
-                    size="small" 
-                    danger
-                    onClick={() => {
-                      Modal.confirm({
-                        title: '确认删除',
-                        content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
-                        okText: '确定',
-                        cancelText: '取消',
-                        onOk: async () => {
-                          try {
-                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
-                              method: 'DELETE',
-                              headers: {
-                                'Content-Type': 'application/json'
+                render: (_, record: HsCode) => {
+                  // 如果是新增的临时记录
+                  if (record === newHsCodeRecord) {
+                    return (
+                      <Space>
+                        <Button 
+                          size="small" 
+                          type="primary"
+                          onClick={async () => {
+                            try {
+                              // 验证必填字段
+                              if (!newHsCodeRecord?.parent_sku || !newHsCodeRecord?.weblink || 
+                                  !newHsCodeRecord?.uk_hscode || !newHsCodeRecord?.us_hscode) {
+                                message.error('请填写所有必填字段');
+                                return;
                               }
-                            });
-                            
-                            if (!response.ok) {
-                              throw new Error(`删除请求失败: ${response.status}`);
+
+                              // 检查SKU是否已存在
+                              const existingRecord = hsCodeList.find(item => item.parent_sku === newHsCodeRecord.parent_sku);
+                              if (existingRecord) {
+                                message.error('该SKU已存在');
+                                return;
+                              }
+
+                              const response = await fetch(`${API_BASE_URL}/api/hscode`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(newHsCodeRecord)
+                              });
+                              
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('创建成功');
+                                setNewHsCodeRecord(null);
+                                await fetchHsCodes();
+                              } else {
+                                message.error(result.message || '创建失败');
+                              }
+                            } catch (error) {
+                              message.error('创建失败');
                             }
-                            
-                            const result = await response.json();
-                            
-                            if (result.code === 0) {
-                              message.success('删除成功');
-                              await fetchHsCodes(); // 重新获取列表
-                            } else {
-                              throw new Error(result.message || '删除失败');
+                          }}
+                        >
+                          确定
+                        </Button>
+                        <Button 
+                          size="small" 
+                          onClick={() => {
+                            setNewHsCodeRecord(null);
+                          }}
+                        >
+                          取消
+                        </Button>
+                      </Space>
+                    );
+                  }
+                  
+                  // 普通记录的删除按钮
+                  return (
+                    <Button 
+                      size="small" 
+                      danger
+                      onClick={() => {
+                        Modal.confirm({
+                          title: '确认删除',
+                          content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
+                          okText: '确定',
+                          cancelText: '取消',
+                          onOk: async () => {
+                            try {
+                              console.log('删除HSCODE记录:', record.parent_sku);
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${encodeURIComponent(record.parent_sku)}`, {
+                                method: 'DELETE',
+                                headers: {
+                                  'Content-Type': 'application/json'
+                                }
+                              });
+                              
+                              console.log('删除响应状态:', response.status);
+                              
+                              if (!response.ok) {
+                                const errorText = await response.text();
+                                console.error('删除失败响应:', errorText);
+                                throw new Error(`删除请求失败: ${response.status} - ${errorText}`);
+                              }
+                              
+                              const result = await response.json();
+                              console.log('删除响应结果:', result);
+                              
+                              if (result.code === 0) {
+                                message.success('删除成功');
+                                await fetchHsCodes(); // 重新获取列表
+                              } else {
+                                throw new Error(result.message || '删除失败');
+                              }
+                            } catch (error) {
+                              console.error('删除失败:', error);
+                              message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
                             }
-                          } catch (error) {
-                            console.error('删除失败:', error);
-                            message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
                           }
-                        }
-                      });
-                    }}
-                  >
-                    删除
-                  </Button>
-                )
+                        });
+                      }}
+                    >
+                      删除
+                    </Button>
+                  );
+                }
               }
             ]}
           />
