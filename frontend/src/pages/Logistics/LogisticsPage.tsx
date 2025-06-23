@@ -1810,7 +1810,7 @@ const LogisticsPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* HSCODE编码管理模态框 */}
+            {/* HSCODE编码管理模态框 */}
       <Modal
         title="HSCODE编码管理"
         open={hsCodeModalVisible}
@@ -1823,228 +1823,553 @@ const LogisticsPage: React.FC = () => {
         footer={null}
       >
         <div>
-                    <Space style={{ marginBottom: 16 }}>
+          <Space style={{ marginBottom: 16 }}>
             <Button 
               type="primary" 
-              onClick={() => {
-                setEditingHsCode(null);
-                hsCodeForm.resetFields();
+              onClick={async () => {
+                // 创建新记录
+                const newRecord: HsCode = {
+                  parent_sku: '新建SKU',
+                  weblink: '',
+                  uk_hscode: '',
+                  us_hscode: '',
+                  declared_value: 0,
+                  declared_value_currency: 'USD'
+                };
+                
+                try {
+                  const response = await fetch(`${API_BASE_URL}/api/hscode`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newRecord)
+                  });
+                  
+                  const result = await response.json();
+                  if (result.code === 0) {
+                    message.success('创建成功，请双击单元格编辑内容');
+                    await fetchHsCodes();
+                  } else {
+                    message.error(result.message || '创建失败');
+                  }
+                } catch (error) {
+                  message.error('创建失败');
+                }
               }}
             >
-              新增HSCODE
+              新增记录
             </Button>
             <Text type="secondary">
-              HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。
+              HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。双击单元格编辑内容。
             </Text>
           </Space>
-          
-          <Form
-            form={hsCodeForm}
-            layout="vertical"
-            style={{ marginBottom: 16 }}
-            onFinish={async (values) => {
-              try {
-                const formData = new FormData();
-                Object.keys(values).forEach(key => {
-                  if (values[key] !== undefined && values[key] !== null) {
-                    formData.append(key, values[key]);
-                  }
-                });
-                
-                const url = editingHsCode 
-                  ? `${API_BASE_URL}/api/hscode/${editingHsCode.parent_sku}`
-                  : `${API_BASE_URL}/api/hscode`;
-                const method = editingHsCode ? 'PUT' : 'POST';
-                
-                const response = await fetch(url, {
-                  method,
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(values)
-                });
-                
-                const result = await response.json();
-                if (result.code === 0) {
-                  message.success(editingHsCode ? '更新成功' : '创建成功');
-                  fetchHsCodes();
-                  setEditingHsCode(null);
-                  hsCodeForm.resetFields();
-        } else {
-                  message.error(result.message || '操作失败');
-                }
-              } catch (error) {
-                message.error('操作失败');
-              }
-            }}
-          >
-            <Row gutter={16}>
-              <Col span={6}>
-                <Form.Item name="parent_sku" label="父SKU" rules={[{ required: true }]}>
-                  <Input 
-                    placeholder="请输入父SKU" 
-                    disabled={!!editingHsCode}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={18}>
-                <Form.Item name="weblink" label="产品链接" rules={[{ required: true }]}>
-                  <Input placeholder="请输入产品链接" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="uk_hscode" label="英国HSCODE编码" rules={[{ required: true }]}>
-                  <Input placeholder="请输入英国HSCODE编码" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="us_hscode" label="美国HSCODE编码" rules={[{ required: true }]}>
-                  <Input placeholder="请输入美国HSCODE编码" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="declared_value" label="申报价值">
-                  <InputNumber 
-                    placeholder="请输入申报价值" 
-                    style={{ width: '100%' }}
-                    min={0}
-                    precision={2}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="declared_value_currency" label="申报价值货币" initialValue="USD">
-                  <Select>
-                    <Option value="USD">USD</Option>
-                    <Option value="EUR">EUR</Option>
-                    <Option value="GBP">GBP</Option>
-                    <Option value="CNY">CNY</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item>
-              <Space>
-                <Button type="primary" htmlType="submit">
-                  {editingHsCode ? '更新' : '创建'}
-                </Button>
-                <Button onClick={() => {
-                  setEditingHsCode(null);
-                  hsCodeForm.resetFields();
-                }}>
-                  取消
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
           
           <Table
             dataSource={hsCodeList}
             loading={hsCodeLoading}
             rowKey="parent_sku"
             size="small"
-            pagination={{ pageSize: 8 }}
-            scroll={{ x: 920, y: 400 }}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: 1000, y: 500 }}
             columns={[
-              { title: '父SKU', dataIndex: 'parent_sku', width: 100, fixed: 'left' },
+              { 
+                title: '父SKU', 
+                dataIndex: 'parent_sku', 
+                width: 120, 
+                fixed: 'left',
+                render: (text: string, record: HsCode) => {
+                  const isEditing = editingKey === record.parent_sku && editingField === 'parent_sku';
+                  if (isEditing) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Input
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          size="small"
+                          style={{ width: 100 }}
+                          onPressEnter={async () => {
+                            try {
+                              // 先检查新SKU是否已存在
+                              const existingRecord = hsCodeList.find(item => item.parent_sku === editingValue && item.parent_sku !== record.parent_sku);
+                              if (existingRecord) {
+                                message.error('该SKU已存在');
+                                return;
+                              }
+                              
+                              // 删除旧记录
+                              await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'DELETE'
+                              });
+                              
+                              // 创建新记录
+                              const newRecord = { ...record, parent_sku: editingValue };
+                              const response = await fetch(`${API_BASE_URL}/api/hscode`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(newRecord)
+                              });
+                              
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        />
+                        <Button type="text" size="small" icon={<SaveOutlined />} onClick={async () => {
+                          try {
+                            // 先检查新SKU是否已存在
+                            const existingRecord = hsCodeList.find(item => item.parent_sku === editingValue && item.parent_sku !== record.parent_sku);
+                            if (existingRecord) {
+                              message.error('该SKU已存在');
+                              return;
+                            }
+                            
+                            // 删除旧记录
+                            await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'DELETE'
+                            });
+                            
+                            // 创建新记录
+                            const newRecord = { ...record, parent_sku: editingValue };
+                            const response = await fetch(`${API_BASE_URL}/api/hscode`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRecord)
+                            });
+                            
+                            const result = await response.json();
+                            if (result.code === 0) {
+                              message.success('更新成功');
+                              await fetchHsCodes();
+                              handleCancelEdit();
+                            } else {
+                              message.error(result.message || '更新失败');
+                            }
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }} />
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      onDoubleClick={() => handleStartEdit(record.parent_sku, 'parent_sku', text)}
+                      style={{ cursor: 'pointer', minHeight: 22, fontWeight: 'bold' }}
+                      title="双击编辑"
+                    >
+                      {text}
+                    </div>
+                  );
+                }
+              },
               { 
                 title: '产品链接', 
                 dataIndex: 'weblink', 
-                width: 200,
-                ellipsis: true,
-                render: (link: string) => (
-                  <a 
-                    href={link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ color: '#1890ff' }}
-                  >
-                    {link}
-                  </a>
-                )
+                width: 250,
+                render: (text: string, record: HsCode) => {
+                  const isEditing = editingKey === record.parent_sku && editingField === 'weblink';
+                  if (isEditing) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Input
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          size="small"
+                          style={{ width: 200 }}
+                          onPressEnter={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...record, weblink: editingValue })
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        />
+                        <Button type="text" size="small" icon={<SaveOutlined />} onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ...record, weblink: editingValue })
+                            });
+                            const result = await response.json();
+                            if (result.code === 0) {
+                              message.success('更新成功');
+                              await fetchHsCodes();
+                              handleCancelEdit();
+                            } else {
+                              message.error(result.message || '更新失败');
+                            }
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }} />
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
+                  }
+                  return text ? (
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <a 
+                        href={text} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: '#1890ff', marginRight: 8, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {text}
+                      </a>
+                      <div
+                        onDoubleClick={() => handleStartEdit(record.parent_sku, 'weblink', text)}
+                        style={{ cursor: 'pointer', flex: 1, minHeight: 22 }}
+                        title="双击编辑"
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      onDoubleClick={() => handleStartEdit(record.parent_sku, 'weblink', text)}
+                      style={{ cursor: 'pointer', minHeight: 22 }}
+                      title="双击编辑"
+                    >
+                      -
+                    </div>
+                  );
+                }
               },
-              { title: '英国HSCODE', dataIndex: 'uk_hscode', width: 120 },
-              { title: '美国HSCODE', dataIndex: 'us_hscode', width: 120 },
+              { 
+                title: '英国HSCODE', 
+                dataIndex: 'uk_hscode', 
+                width: 130,
+                render: (text: string, record: HsCode) => {
+                  const isEditing = editingKey === record.parent_sku && editingField === 'uk_hscode';
+                  if (isEditing) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Input
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          size="small"
+                          style={{ width: 100 }}
+                          onPressEnter={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...record, uk_hscode: editingValue })
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        />
+                        <Button type="text" size="small" icon={<SaveOutlined />} onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ...record, uk_hscode: editingValue })
+                            });
+                            const result = await response.json();
+                            if (result.code === 0) {
+                              message.success('更新成功');
+                              await fetchHsCodes();
+                              handleCancelEdit();
+                            } else {
+                              message.error(result.message || '更新失败');
+                            }
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }} />
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      onDoubleClick={() => handleStartEdit(record.parent_sku, 'uk_hscode', text)}
+                      style={{ cursor: 'pointer', minHeight: 22, textAlign: 'center' }}
+                      title="双击编辑"
+                    >
+                      {text || '-'}
+                    </div>
+                  );
+                }
+              },
+              { 
+                title: '美国HSCODE', 
+                dataIndex: 'us_hscode', 
+                width: 130,
+                render: (text: string, record: HsCode) => {
+                  const isEditing = editingKey === record.parent_sku && editingField === 'us_hscode';
+                  if (isEditing) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Input
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          size="small"
+                          style={{ width: 100 }}
+                          onPressEnter={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...record, us_hscode: editingValue })
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        />
+                        <Button type="text" size="small" icon={<SaveOutlined />} onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ...record, us_hscode: editingValue })
+                            });
+                            const result = await response.json();
+                            if (result.code === 0) {
+                              message.success('更新成功');
+                              await fetchHsCodes();
+                              handleCancelEdit();
+                            } else {
+                              message.error(result.message || '更新失败');
+                            }
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }} />
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      onDoubleClick={() => handleStartEdit(record.parent_sku, 'us_hscode', text)}
+                      style={{ cursor: 'pointer', minHeight: 22, textAlign: 'center' }}
+                      title="双击编辑"
+                    >
+                      {text || '-'}
+                    </div>
+                  );
+                }
+              },
               { 
                 title: '申报价值', 
-                width: 110,
+                width: 120,
                 render: (_, record: HsCode) => {
-                  if (record.declared_value) {
-                    return `${record.declared_value} ${record.declared_value_currency || 'USD'}`;
+                  const isEditingValue = editingKey === record.parent_sku && editingField === 'declared_value';
+                  const isEditingCurrency = editingKey === record.parent_sku && editingField === 'declared_value_currency';
+                  
+                  if (isEditingValue) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <InputNumber
+                          value={editingValue}
+                          onChange={(value) => setEditingValue(value)}
+                          size="small"
+                          style={{ width: 80 }}
+                          min={0}
+                          precision={2}
+                          onPressEnter={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...record, declared_value: editingValue })
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        />
+                        <Button type="text" size="small" icon={<SaveOutlined />} onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ...record, declared_value: editingValue })
+                            });
+                            const result = await response.json();
+                            if (result.code === 0) {
+                              message.success('更新成功');
+                              await fetchHsCodes();
+                              handleCancelEdit();
+                            } else {
+                              message.error(result.message || '更新失败');
+                            }
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }} />
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
                   }
-                  return '-';
+                  
+                  if (isEditingCurrency) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Select
+                          value={editingValue}
+                          onChange={(value) => setEditingValue(value)}
+                          size="small"
+                          style={{ width: 80 }}
+                          onSelect={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...record, declared_value_currency: editingValue })
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('更新成功');
+                                await fetchHsCodes();
+                                handleCancelEdit();
+                              } else {
+                                message.error(result.message || '更新失败');
+                              }
+                            } catch (error) {
+                              message.error('更新失败');
+                            }
+                          }}
+                        >
+                          <Option value="USD">USD</Option>
+                          <Option value="EUR">EUR</Option>
+                          <Option value="GBP">GBP</Option>
+                          <Option value="CNY">CNY</Option>
+                        </Select>
+                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleCancelEdit} />
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span
+                        onDoubleClick={() => handleStartEdit(record.parent_sku, 'declared_value', record.declared_value)}
+                        style={{ cursor: 'pointer', marginRight: 4 }}
+                        title="双击编辑价值"
+                      >
+                        {record.declared_value || 0}
+                      </span>
+                      <span
+                        onDoubleClick={() => handleStartEdit(record.parent_sku, 'declared_value_currency', record.declared_value_currency)}
+                        style={{ cursor: 'pointer' }}
+                        title="双击编辑货币"
+                      >
+                        {record.declared_value_currency || 'USD'}
+                      </span>
+                    </div>
+                  );
                 }
               },
               { 
                 title: '创建时间', 
                 dataIndex: 'created_at', 
                 width: 100,
+                align: 'center',
                 render: (date: string) => date ? formatDate(date, true) : '-'
               },
               { 
                 title: '更新时间', 
                 dataIndex: 'updated_at', 
                 width: 100,
+                align: 'center',
                 render: (date: string) => date ? formatDate(date, true) : '-'
               },
               {
                 title: '操作',
-                width: 120,
+                width: 80,
                 fixed: 'right',
+                align: 'center',
                 render: (_, record: HsCode) => (
-        <Space>
-          <Button 
-                      size="small" 
-                      onClick={() => {
-                        setEditingHsCode(record);
-                        hsCodeForm.setFieldsValue(record);
-                      }}
-                    >
-                      编辑
-                    </Button>
-                    <Button 
-                      size="small" 
-                      danger
-                      onClick={() => {
-                        Modal.confirm({
-                          title: '确认删除',
-                          content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
-                          okText: '确定',
-                          cancelText: '取消',
-                          onOk: async () => {
-                            try {
-                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
-                                method: 'DELETE',
-                                headers: {
-                                  'Content-Type': 'application/json'
-                                }
-                              });
-                              
-                              if (!response.ok) {
-                                throw new Error(`删除请求失败: ${response.status}`);
+                  <Button 
+                    size="small" 
+                    danger
+                    onClick={() => {
+                      Modal.confirm({
+                        title: '确认删除',
+                        content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
+                        okText: '确定',
+                        cancelText: '取消',
+                        onOk: async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'DELETE',
+                              headers: {
+                                'Content-Type': 'application/json'
                               }
-                              
-                              const result = await response.json();
-                              
-                              if (result.code === 0) {
-                                message.success('删除成功');
-                                await fetchHsCodes(); // 重新获取列表
-                              } else {
-                                throw new Error(result.message || '删除失败');
-                              }
-                            } catch (error) {
-                              console.error('删除失败:', error);
-                              message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                            });
+                            
+                            if (!response.ok) {
+                              throw new Error(`删除请求失败: ${response.status}`);
                             }
+                            
+                            const result = await response.json();
+                            
+                            if (result.code === 0) {
+                              message.success('删除成功');
+                              await fetchHsCodes(); // 重新获取列表
+                            } else {
+                              throw new Error(result.message || '删除失败');
+                            }
+                          } catch (error) {
+                            console.error('删除失败:', error);
+                            message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
                           }
-                        });
-                      }}
-                    >
-                      删除
-          </Button>
-        </Space>
+                        }
+                      });
+                    }}
+                  >
+                    删除
+                  </Button>
                 )
               }
             ]}
@@ -2244,7 +2569,7 @@ const LogisticsPage: React.FC = () => {
                 }}>
                   取消
           </Button>
-      </Space>
+        </Space>
             </Form.Item>
           </Form>
         </div>
