@@ -6,7 +6,7 @@ const AmzWarehouse = require('../models/AmzWarehouse');
 router.get('/', async (req, res) => {
   try {
     const warehouses = await AmzWarehouse.findAll({
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
     res.json({
       code: 0,
@@ -43,14 +43,14 @@ router.post('/', async (req, res) => {
 });
 
 // 更新仓库
-router.put('/:id', async (req, res) => {
+router.put('/:warehouseCode', async (req, res) => {
   try {
     const [updated] = await AmzWarehouse.update(req.body, {
-      where: { id: req.params.id }
+      where: { warehouse_code: req.params.warehouseCode }
     });
     
     if (updated) {
-      const warehouse = await AmzWarehouse.findByPk(req.params.id);
+      const warehouse = await AmzWarehouse.findByPk(req.params.warehouseCode);
       res.json({
         code: 0,
         message: '更新成功',
@@ -73,10 +73,10 @@ router.put('/:id', async (req, res) => {
 });
 
 // 删除仓库
-router.delete('/:id', async (req, res) => {
+router.delete('/:warehouseCode', async (req, res) => {
   try {
     const deleted = await AmzWarehouse.destroy({
-      where: { id: req.params.id }
+      where: { warehouse_code: req.params.warehouseCode }
     });
     
     if (deleted) {
@@ -105,7 +105,7 @@ router.get('/active', async (req, res) => {
   try {
     const warehouses = await AmzWarehouse.findAll({
       where: { status: 'active' },
-      attributes: ['id', 'recipient_name', 'warehouse_code', 'country', 'city'],
+      attributes: ['warehouse_code', 'recipient_name', 'country', 'city'],
       order: [['recipient_name', 'ASC']]
     });
     res.json({

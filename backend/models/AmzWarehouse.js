@@ -2,16 +2,10 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./index');
 
 const AmzWarehouse = sequelize.define('AmzWarehouse', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-    comment: '主键ID'
-  },
   warehouse_code: {
     type: DataTypes.STRING(50),
+    primaryKey: true,
     allowNull: false,
-    unique: true,
     comment: '仓库代码'
   },
   recipient_name: {
@@ -80,11 +74,6 @@ const AmzWarehouse = sequelize.define('AmzWarehouse', {
   tableName: 'amz_warehouse_address',
   timestamps: false, // 使用自定义的 created_at 和 updated_at
   indexes: [
-    {
-      unique: true,
-      fields: ['warehouse_code'],
-      name: 'idx_warehouse_code_unique'
-    },
     {
       fields: ['country'],
       name: 'idx_country'

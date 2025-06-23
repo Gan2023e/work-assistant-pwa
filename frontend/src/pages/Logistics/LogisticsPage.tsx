@@ -102,8 +102,7 @@ interface BatchUpdateData {
 
 // 亚马逊仓库接口
 interface AmzWarehouse {
-  id: number;
-  warehouse_code: string;
+  warehouse_code: string; // 主键
   recipient_name: string;
   address_line1: string;
   address_line2?: string;
@@ -1633,7 +1632,7 @@ const LogisticsPage: React.FC = () => {
             onFinish={async (values) => {
               try {
                 const url = editingWarehouse 
-                  ? `${API_BASE_URL}/api/warehouse/${editingWarehouse.id}`
+                  ? `${API_BASE_URL}/api/warehouse/${editingWarehouse.warehouse_code}`
                   : `${API_BASE_URL}/api/warehouse`;
                 const method = editingWarehouse ? 'PUT' : 'POST';
                 
@@ -1660,7 +1659,10 @@ const LogisticsPage: React.FC = () => {
             <Row gutter={16}>
               <Col span={8}>
                 <Form.Item name="warehouse_code" label="仓库代码" rules={[{ required: true }]}>
-                  <Input placeholder="请输入仓库代码" />
+                  <Input 
+                    placeholder="请输入仓库代码" 
+                    disabled={!!editingWarehouse}
+                  />
                 </Form.Item>
               </Col>
               <Col span={8}>
@@ -1741,7 +1743,7 @@ const LogisticsPage: React.FC = () => {
           <Table
             dataSource={warehouseList}
             loading={warehouseLoading}
-            rowKey="id"
+            rowKey="warehouse_code"
             size="small"
             pagination={{ pageSize: 10 }}
             scroll={{ x: 1200, y: 400 }}
@@ -1788,7 +1790,7 @@ const LogisticsPage: React.FC = () => {
                           content: `确定要删除仓库"${record.recipient_name}"吗？`,
                           onOk: async () => {
                             try {
-                              const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.id}`, {
+                              const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.warehouse_code}`, {
                                 method: 'DELETE'
                               });
                               const result = await response.json();
