@@ -38,6 +38,7 @@ import {
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
 import HsCodeManagement from './HsCodeManagement';
+import WarehouseManagement from './WarehouseManagement';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -101,22 +102,7 @@ interface BatchUpdateData {
   updates: { [key: string]: any };
 }
 
-// 亚马逊仓库接口
-interface AmzWarehouse {
-  warehouse_code: string; // 主键
-  recipient_name: string;
-  address_line1: string;
-  address_line2?: string;
-  city: string;
-  state_province?: string;
-  postal_code: string;
-  country: string;
-  phone?: string;
-  status: 'active' | 'inactive';
-  notes?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+
 
 // HSCODE接口
 interface HsCode {
@@ -149,15 +135,11 @@ const LogisticsPage: React.FC = () => {
   const [warehouseModalVisible, setWarehouseModalVisible] = useState(false);
   const [hsCodeModalVisible, setHsCodeModalVisible] = useState(false);
   const [newShipmentModalVisible, setNewShipmentModalVisible] = useState(false);
-  const [warehouseList, setWarehouseList] = useState<AmzWarehouse[]>([]);
-  const [warehouseLoading, setWarehouseLoading] = useState(false);
-  const [editingWarehouse, setEditingWarehouse] = useState<AmzWarehouse | null>(null);
   const [pdfExtracting, setPdfExtracting] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [logisticsProviders, setLogisticsProviders] = useState<any[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [form] = Form.useForm();
-  const [warehouseForm] = Form.useForm();
   const [shipmentForm] = Form.useForm();
   const [statisticsData, setStatisticsData] = useState({
     yearlyCount: 0,
@@ -228,22 +210,7 @@ const LogisticsPage: React.FC = () => {
     }
   };
 
-  // 获取仓库列表
-  const fetchWarehouses = async () => {
-    setWarehouseLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/warehouse`);
-      const result = await response.json();
-      if (result.code === 0) {
-        setWarehouseList(result.data);
-      }
-    } catch (error) {
-      console.error('获取仓库列表失败:', error);
-      message.error('获取仓库列表失败');
-    } finally {
-      setWarehouseLoading(false);
-    }
-  };
+
 
 
 
@@ -1406,10 +1373,7 @@ const LogisticsPage: React.FC = () => {
           </Button>
                   <Button
                     icon={<BoxPlotOutlined />}
-                    onClick={() => {
-                      setWarehouseModalVisible(true);
-                      fetchWarehouses();
-                    }}
+                    onClick={() => setWarehouseModalVisible(true)}
                   >
                     亚马逊仓库管理
                   </Button>
@@ -1578,217 +1542,13 @@ const LogisticsPage: React.FC = () => {
       <Modal
         title="亚马逊仓库管理"
         open={warehouseModalVisible}
-        onCancel={() => {
-          setWarehouseModalVisible(false);
-          setEditingWarehouse(null);
-          warehouseForm.resetFields();
-        }}
-        width={1200}
+        onCancel={() => setWarehouseModalVisible(false)}
+        width="95%"
+        style={{ maxWidth: '1600px', top: 20 }}
         footer={null}
+        destroyOnClose
       >
-        <div>
-          <Space style={{ marginBottom: 16 }}>
-            <Button 
-              type="primary" 
-              onClick={() => {
-                setEditingWarehouse(null);
-                warehouseForm.resetFields();
-              }}
-            >
-              新增仓库
-            </Button>
-          </Space>
-          
-          <Form
-            form={warehouseForm}
-            layout="vertical"
-            style={{ marginBottom: 16 }}
-            onFinish={async (values) => {
-              try {
-                const url = editingWarehouse 
-                  ? `${API_BASE_URL}/api/warehouse/${editingWarehouse.warehouse_code}`
-                  : `${API_BASE_URL}/api/warehouse`;
-                const method = editingWarehouse ? 'PUT' : 'POST';
-                
-                const response = await fetch(url, {
-                  method,
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(values)
-                });
-                
-                const result = await response.json();
-                if (result.code === 0) {
-                  message.success(editingWarehouse ? '更新成功' : '创建成功');
-                  fetchWarehouses();
-                  setEditingWarehouse(null);
-                  warehouseForm.resetFields();
-                } else {
-                  message.error(result.message || '操作失败');
-                }
-              } catch (error) {
-                message.error('操作失败');
-              }
-            }}
-          >
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item name="warehouse_code" label="仓库代码" rules={[{ required: true }]}>
-                  <Input 
-                    placeholder="请输入仓库代码" 
-                    disabled={!!editingWarehouse}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="recipient_name" label="收件人" rules={[{ required: true }]}>
-                  <Input placeholder="请输入收件人" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="status" label="状态" initialValue="active">
-                  <Select>
-                    <Option value="active">启用</Option>
-                    <Option value="inactive">禁用</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="address_line1" label="地址一" rules={[{ required: true }]}>
-                  <Input placeholder="请输入地址一" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="address_line2" label="地址二">
-                  <Input placeholder="请输入地址二（可选）" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={6}>
-                <Form.Item name="city" label="城市" rules={[{ required: true }]}>
-                  <Input placeholder="请输入城市" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="state_province" label="州/省">
-                  <Input placeholder="请输入州/省" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="postal_code" label="邮编" rules={[{ required: true }]}>
-                  <Input placeholder="请输入邮编" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="country" label="国家" rules={[{ required: true }]}>
-                  <Input placeholder="请输入国家" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item name="phone" label="电话">
-                  <Input placeholder="请输入电话" />
-                </Form.Item>
-              </Col>
-              <Col span={16}>
-                <Form.Item name="notes" label="备注">
-                  <TextArea rows={2} placeholder="请输入备注" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item>
-              <Space>
-                <Button type="primary" htmlType="submit">
-                  {editingWarehouse ? '更新' : '创建'}
-                </Button>
-                <Button onClick={() => {
-                  setEditingWarehouse(null);
-                  warehouseForm.resetFields();
-                }}>
-                  取消
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
-          
-          <Table
-            dataSource={warehouseList}
-            loading={warehouseLoading}
-            rowKey="warehouse_code"
-            size="small"
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 1200, y: 400 }}
-            columns={[
-              { title: '仓库代码', dataIndex: 'warehouse_code', width: 100, fixed: 'left' },
-              { title: '收件人', dataIndex: 'recipient_name', width: 120 },
-              { title: '地址一', dataIndex: 'address_line1', width: 200, ellipsis: true },
-              { title: '地址二', dataIndex: 'address_line2', width: 150, ellipsis: true },
-              { title: '城市', dataIndex: 'city', width: 80 },
-              { title: '州/省', dataIndex: 'state_province', width: 80 },
-              { title: '邮编', dataIndex: 'postal_code', width: 80 },
-              { title: '国家', dataIndex: 'country', width: 80 },
-              { 
-                title: '状态', 
-                dataIndex: 'status', 
-                width: 80,
-                render: (status: string) => (
-                  <Tag color={status === 'active' ? 'green' : 'red'}>
-                    {status === 'active' ? '启用' : '禁用'}
-                  </Tag>
-                )
-              },
-                              {
-                title: '操作',
-                width: 120,
-                fixed: 'right',
-                render: (_, record: AmzWarehouse) => (
-                  <Space>
-                    <Button 
-                      size="small" 
-                      onClick={() => {
-                        setEditingWarehouse(record);
-                        warehouseForm.setFieldsValue(record);
-                      }}
-                    >
-                      编辑
-                    </Button>
-                    <Button 
-                      size="small" 
-                      danger
-                      onClick={async () => {
-                        Modal.confirm({
-                          title: '确认删除',
-                          content: `确定要删除仓库"${record.recipient_name}"吗？`,
-                          onOk: async () => {
-                            try {
-                              const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.warehouse_code}`, {
-                                method: 'DELETE'
-                              });
-                              const result = await response.json();
-                              if (result.code === 0) {
-                                message.success('删除成功');
-                                fetchWarehouses();
-                              } else {
-                                message.error(result.message || '删除失败');
-                              }
-                            } catch (error) {
-                              message.error('删除失败');
-                            }
-                          }
-                        });
-                      }}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                )
-              }
-            ]}
-          />
-        </div>
+        <WarehouseManagement />
       </Modal>
 
             {/* HSCODE编码管理模态框 */}
