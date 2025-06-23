@@ -1,10 +1,14 @@
 require('dotenv').config(); // 读取 .env
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { sequelize } = require('./models');
 const productWeblinkRouter = require('./routes/productWeblink');
 const logisticsRouter = require('./routes/logistics');
 const salaryRouter = require('./routes/salary');
+const warehouseRouter = require('./routes/warehouse');
+const hsCodeRouter = require('./routes/hscode');
+const shipmentRouter = require('./routes/shipment');
 const { router: authRouter } = require('./routes/auth');
 
 // 触发Railway重新部署 - 2024-06-21
@@ -71,6 +75,12 @@ app.use('/api/auth', authRouter);
 app.use('/api/product_weblink', productWeblinkRouter);
 app.use('/api/logistics', logisticsRouter);
 app.use('/api/salary', salaryRouter);
+app.use('/api/warehouse', warehouseRouter);
+app.use('/api/hscode', hsCodeRouter);
+app.use('/api/shipments', shipmentRouter);
+
+// 静态文件服务 - 用于图片访问
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 根路径
 app.get('/', (req, res) => {

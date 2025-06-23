@@ -17,7 +17,8 @@ import {
   Tooltip,
   Modal,
   Form,
-  InputNumber
+  InputNumber,
+  Upload
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -99,6 +100,40 @@ interface BatchUpdateData {
   updates: { [key: string]: any };
 }
 
+// 亚马逊仓库接口
+interface AmzWarehouse {
+  id: number;
+  warehouseName: string;
+  warehouseCode: string;
+  country: string;
+  state?: string;
+  city: string;
+  address: string;
+  zipCode: string;
+  phone?: string;
+  status: 'active' | 'inactive';
+  notes?: string;
+}
+
+// HSCODE接口
+interface HsCode {
+  id: number;
+  hsCode: string;
+  productName: string;
+  productNameEn?: string;
+  category?: string;
+  description?: string;
+  declaredValue?: number;
+  declaredValueCurrency: string;
+  tariffRate?: number;
+  imageUrl?: string;
+  imageName?: string;
+  status: 'active' | 'inactive';
+  usageCount: number;
+  lastUsedAt?: string;
+  notes?: string;
+}
+
 const LogisticsPage: React.FC = () => {
   // 状态管理
   const [data, setData] = useState<LogisticsRecord[]>([]);
@@ -115,7 +150,23 @@ const LogisticsPage: React.FC = () => {
   const [batchUpdateModalVisible, setBatchUpdateModalVisible] = useState(false);
   const [batchUpdateText, setBatchUpdateText] = useState('');
   const [parsedBatchData, setParsedBatchData] = useState<BatchUpdateData[]>([]);
+  const [warehouseModalVisible, setWarehouseModalVisible] = useState(false);
+  const [hsCodeModalVisible, setHsCodeModalVisible] = useState(false);
+  const [newShipmentModalVisible, setNewShipmentModalVisible] = useState(false);
+  const [warehouseList, setWarehouseList] = useState<AmzWarehouse[]>([]);
+  const [hsCodeList, setHsCodeList] = useState<HsCode[]>([]);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [hsCodeLoading, setHsCodeLoading] = useState(false);
+  const [editingWarehouse, setEditingWarehouse] = useState<AmzWarehouse | null>(null);
+  const [editingHsCode, setEditingHsCode] = useState<HsCode | null>(null);
+  const [pdfExtracting, setPdfExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [logisticsProviders, setLogisticsProviders] = useState<any[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [form] = Form.useForm();
+  const [warehouseForm] = Form.useForm();
+  const [hsCodeForm] = Form.useForm();
+  const [shipmentForm] = Form.useForm();
   const [statisticsData, setStatisticsData] = useState({
     yearlyCount: 0,
     transitProductCount: 0,
@@ -182,6 +233,86 @@ const LogisticsPage: React.FC = () => {
       }
     } catch (error) {
       console.error('获取统计数据失败:', error);
+    }
+  };
+
+  // 获取仓库列表
+  const fetchWarehouses = async () => {
+    setWarehouseLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/warehouse`);
+      const result = await response.json();
+      if (result.code === 0) {
+        setWarehouseList(result.data);
+      }
+    } catch (error) {
+      console.error('获取仓库列表失败:', error);
+      message.error('获取仓库列表失败');
+    } finally {
+      setWarehouseLoading(false);
+    }
+  };
+
+  // 获取HSCODE列表
+  const fetchHsCodes = async () => {
+    setHsCodeLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/hscode`);
+      const result = await response.json();
+      if (result.code === 0) {
+        setHsCodeList(result.data);
+      }
+    } catch (error) {
+      console.error('获取HSCODE列表失败:', error);
+      message.error('获取HSCODE列表失败');
+    } finally {
+      setHsCodeLoading(false);
+    }
+  };
+
+  // 获取物流商列表
+  const fetchLogisticsProviders = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipments/providers`);
+      const result = await response.json();
+      if (result.code === 0) {
+        setLogisticsProviders(result.data);
+      }
+    } catch (error) {
+      console.error('获取物流商列表失败:', error);
+      message.error('获取物流商列表失败');
+    }
+  };
+
+  // 处理PDF上传和解析
+  const handlePdfUpload = async (file: File) => {
+    setPdfExtracting(true);
+    try {
+      const formData = new FormData();
+      formData.append('pdf', file);
+
+      const response = await fetch(`${API_BASE_URL}/api/shipments/extract-pdf`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      if (result.code === 0) {
+        setExtractedData(result.data);
+        shipmentForm.setFieldsValue({
+          packageCount: result.data.packageCount,
+          destinationWarehouse: result.data.destinationWarehouse,
+          destinationCountry: result.data.destinationCountry
+        });
+        message.success('PDF解析成功');
+      } else {
+        message.error(result.message || 'PDF解析失败');
+      }
+    } catch (error) {
+      console.error('PDF解析失败:', error);
+      message.error('PDF解析失败');
+    } finally {
+      setPdfExtracting(false);
     }
   };
 
@@ -1249,7 +1380,7 @@ const LogisticsPage: React.FC = () => {
       <Card title="搜索和筛选" style={{ marginBottom: 24 }}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={8}>
           <TextArea
             rows={4}
                 value={searchInput}
@@ -1263,7 +1394,7 @@ const LogisticsPage: React.FC = () => {
                 }}
               />
             </Col>
-            <Col span={12}>
+            <Col span={16}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space wrap>
           <Button 
@@ -1288,12 +1419,44 @@ const LogisticsPage: React.FC = () => {
                   >
                     查询全部
                   </Button>
+                </Space>
+                <Space wrap>
                   <Button
                     icon={<DatabaseOutlined />}
                     onClick={() => setBatchUpdateModalVisible(true)}
                   >
                     批量更新货件详情
           </Button>
+                  <Button
+                    icon={<BoxPlotOutlined />}
+                    onClick={() => {
+                      setWarehouseModalVisible(true);
+                      fetchWarehouses();
+                    }}
+                  >
+                    亚马逊仓库管理
+                  </Button>
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setHsCodeModalVisible(true);
+                      fetchHsCodes();
+                    }}
+                  >
+                    HSCODE编码管理
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<TruckOutlined />}
+                    onClick={() => {
+                      setNewShipmentModalVisible(true);
+                      fetchLogisticsProviders();
+                      setExtractedData(null);
+                      shipmentForm.resetFields();
+                    }}
+                  >
+                    新建货件及发票
+                  </Button>
         </Space>
                 <Text type="secondary">
                   当前显示: {data.length} 条记录
@@ -1432,6 +1595,630 @@ const LogisticsPage: React.FC = () => {
               </Button>
       </Space>
           </div>
+        </div>
+      </Modal>
+
+      {/* 亚马逊仓库管理模态框 */}
+      <Modal
+        title="亚马逊仓库管理"
+        open={warehouseModalVisible}
+        onCancel={() => {
+          setWarehouseModalVisible(false);
+          setEditingWarehouse(null);
+          warehouseForm.resetFields();
+        }}
+        width={1200}
+        footer={null}
+      >
+        <div>
+          <Space style={{ marginBottom: 16 }}>
+            <Button 
+              type="primary" 
+              onClick={() => {
+                setEditingWarehouse(null);
+                warehouseForm.resetFields();
+              }}
+            >
+              新增仓库
+            </Button>
+          </Space>
+          
+          <Form
+            form={warehouseForm}
+            layout="vertical"
+            style={{ marginBottom: 16 }}
+            onFinish={async (values) => {
+              try {
+                const url = editingWarehouse 
+                  ? `${API_BASE_URL}/api/warehouse/${editingWarehouse.id}`
+                  : `${API_BASE_URL}/api/warehouse`;
+                const method = editingWarehouse ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                  method,
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(values)
+                });
+                
+                const result = await response.json();
+                if (result.code === 0) {
+                  message.success(editingWarehouse ? '更新成功' : '创建成功');
+                  fetchWarehouses();
+                  setEditingWarehouse(null);
+                  warehouseForm.resetFields();
+                } else {
+                  message.error(result.message || '操作失败');
+                }
+              } catch (error) {
+                message.error('操作失败');
+              }
+            }}
+          >
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item name="warehouseName" label="仓库名称" rules={[{ required: true }]}>
+                  <Input placeholder="请输入仓库名称" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="warehouseCode" label="仓库代码" rules={[{ required: true }]}>
+                  <Input placeholder="请输入仓库代码" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="country" label="国家" rules={[{ required: true }]}>
+                  <Input placeholder="请输入国家" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="state" label="州/省">
+                  <Input placeholder="请输入州/省" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item name="city" label="城市" rules={[{ required: true }]}>
+                  <Input placeholder="请输入城市" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="zipCode" label="邮编" rules={[{ required: true }]}>
+                  <Input placeholder="请输入邮编" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="phone" label="电话">
+                  <Input placeholder="请输入电话" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="status" label="状态" initialValue="active">
+                  <Select>
+                    <Option value="active">启用</Option>
+                    <Option value="inactive">禁用</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="address" label="详细地址" rules={[{ required: true }]}>
+                  <TextArea rows={2} placeholder="请输入详细地址" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="notes" label="备注">
+                  <TextArea rows={2} placeholder="请输入备注" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  {editingWarehouse ? '更新' : '创建'}
+                </Button>
+                <Button onClick={() => {
+                  setEditingWarehouse(null);
+                  warehouseForm.resetFields();
+                }}>
+                  取消
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+          
+          <Table
+            dataSource={warehouseList}
+            loading={warehouseLoading}
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 10 }}
+            columns={[
+              { title: '仓库名称', dataIndex: 'warehouseName', width: 120 },
+              { title: '仓库代码', dataIndex: 'warehouseCode', width: 100 },
+              { title: '国家', dataIndex: 'country', width: 80 },
+              { title: '州/省', dataIndex: 'state', width: 80 },
+              { title: '城市', dataIndex: 'city', width: 80 },
+              { title: '邮编', dataIndex: 'zipCode', width: 80 },
+              { 
+                title: '状态', 
+                dataIndex: 'status', 
+                width: 80,
+                render: (status: string) => (
+                  <Tag color={status === 'active' ? 'green' : 'red'}>
+                    {status === 'active' ? '启用' : '禁用'}
+                  </Tag>
+                )
+              },
+              {
+                title: '操作',
+                width: 120,
+                render: (_, record: AmzWarehouse) => (
+                  <Space>
+                    <Button 
+                      size="small" 
+                      onClick={() => {
+                        setEditingWarehouse(record);
+                        warehouseForm.setFieldsValue(record);
+                      }}
+                    >
+                      编辑
+                    </Button>
+                    <Button 
+                      size="small" 
+                      danger
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.id}`, {
+                            method: 'DELETE'
+                          });
+                          const result = await response.json();
+                          if (result.code === 0) {
+                            message.success('删除成功');
+                            fetchWarehouses();
+                          } else {
+                            message.error(result.message || '删除失败');
+                          }
+                        } catch (error) {
+                          message.error('删除失败');
+                        }
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </Space>
+                )
+              }
+            ]}
+          />
+        </div>
+      </Modal>
+
+      {/* HSCODE编码管理模态框 */}
+      <Modal
+        title="HSCODE编码管理"
+        open={hsCodeModalVisible}
+        onCancel={() => {
+          setHsCodeModalVisible(false);
+          setEditingHsCode(null);
+          hsCodeForm.resetFields();
+        }}
+        width={1400}
+        footer={null}
+      >
+        <div>
+          <Space style={{ marginBottom: 16 }}>
+            <Button 
+              type="primary" 
+              onClick={() => {
+                setEditingHsCode(null);
+                hsCodeForm.resetFields();
+              }}
+            >
+              新增HSCODE
+            </Button>
+            <Text type="secondary">
+              图片建议保存到文件系统，数据库只存储图片路径。支持上传5MB以内的图片文件。
+            </Text>
+          </Space>
+          
+          <Form
+            form={hsCodeForm}
+            layout="vertical"
+            style={{ marginBottom: 16 }}
+            onFinish={async (values) => {
+              try {
+                const formData = new FormData();
+                Object.keys(values).forEach(key => {
+                  if (values[key] !== undefined && values[key] !== null) {
+                    formData.append(key, values[key]);
+                  }
+                });
+                
+                const url = editingHsCode 
+                  ? `${API_BASE_URL}/api/hscode/${editingHsCode.id}`
+                  : `${API_BASE_URL}/api/hscode`;
+                const method = editingHsCode ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                  method,
+                  body: formData
+                });
+                
+                const result = await response.json();
+                if (result.code === 0) {
+                  message.success(editingHsCode ? '更新成功' : '创建成功');
+                  fetchHsCodes();
+                  setEditingHsCode(null);
+                  hsCodeForm.resetFields();
+                } else {
+                  message.error(result.message || '操作失败');
+                }
+              } catch (error) {
+                message.error('操作失败');
+              }
+            }}
+          >
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item name="hsCode" label="HSCODE编码" rules={[{ required: true }]}>
+                  <Input placeholder="请输入HSCODE编码" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="productName" label="产品名称" rules={[{ required: true }]}>
+                  <Input placeholder="请输入产品名称" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="productNameEn" label="英文名称">
+                  <Input placeholder="请输入英文名称" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="category" label="产品类别">
+                  <Input placeholder="请输入产品类别" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item name="declaredValue" label="申报价值">
+                  <InputNumber placeholder="申报价值" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="declaredValueCurrency" label="货币" initialValue="USD">
+                  <Select>
+                    <Option value="USD">USD</Option>
+                    <Option value="EUR">EUR</Option>
+                    <Option value="GBP">GBP</Option>
+                    <Option value="CNY">CNY</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="tariffRate" label="关税税率(%)">
+                  <InputNumber placeholder="关税税率" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="status" label="状态" initialValue="active">
+                  <Select>
+                    <Option value="active">启用</Option>
+                    <Option value="inactive">禁用</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="description" label="产品描述">
+                  <TextArea rows={2} placeholder="请输入产品描述" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="notes" label="备注">
+                  <TextArea rows={2} placeholder="请输入备注" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  {editingHsCode ? '更新' : '创建'}
+                </Button>
+                <Button onClick={() => {
+                  setEditingHsCode(null);
+                  hsCodeForm.resetFields();
+                }}>
+                  取消
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+          
+          <Table
+            dataSource={hsCodeList}
+            loading={hsCodeLoading}
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 8 }}
+            scroll={{ y: 400 }}
+            columns={[
+              { title: 'HSCODE', dataIndex: 'hsCode', width: 100, fixed: 'left' },
+              { title: '产品名称', dataIndex: 'productName', width: 120 },
+              { title: '英文名称', dataIndex: 'productNameEn', width: 120 },
+              { title: '类别', dataIndex: 'category', width: 80 },
+              { 
+                title: '申报价值', 
+                width: 100,
+                render: (_, record: HsCode) => 
+                  record.declaredValue ? `${record.declaredValue} ${record.declaredValueCurrency}` : '-'
+              },
+              { 
+                title: '关税率', 
+                dataIndex: 'tariffRate', 
+                width: 80,
+                render: (rate: number) => rate ? `${rate}%` : '-'
+              },
+              { 
+                title: '使用次数', 
+                dataIndex: 'usageCount', 
+                width: 80,
+                sorter: (a: HsCode, b: HsCode) => a.usageCount - b.usageCount
+              },
+              { 
+                title: '状态', 
+                dataIndex: 'status', 
+                width: 80,
+                render: (status: string) => (
+                  <Tag color={status === 'active' ? 'green' : 'red'}>
+                    {status === 'active' ? '启用' : '禁用'}
+                  </Tag>
+                )
+              },
+              {
+                title: '操作',
+                width: 120,
+                fixed: 'right',
+                render: (_, record: HsCode) => (
+                  <Space>
+                    <Button 
+                      size="small" 
+                      onClick={() => {
+                        setEditingHsCode(record);
+                        hsCodeForm.setFieldsValue(record);
+                      }}
+                    >
+                      编辑
+                    </Button>
+                    <Button 
+                      size="small" 
+                      danger
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`${API_BASE_URL}/api/hscode/${record.id}`, {
+                            method: 'DELETE'
+                          });
+                          const result = await response.json();
+                          if (result.code === 0) {
+                            message.success('删除成功');
+                            fetchHsCodes();
+                          } else {
+                            message.error(result.message || '删除失败');
+                          }
+                        } catch (error) {
+                          message.error('删除失败');
+                        }
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </Space>
+                )
+              }
+            ]}
+          />
+        </div>
+      </Modal>
+
+      {/* 新建货件及发票模态框 */}
+      <Modal
+        title="新建货件及发票"
+        open={newShipmentModalVisible}
+        onCancel={() => {
+          setNewShipmentModalVisible(false);
+          setExtractedData(null);
+          setSelectedProvider('');
+          shipmentForm.resetFields();
+        }}
+        width={900}
+        footer={null}
+      >
+        <div>
+          <Form
+            form={shipmentForm}
+            layout="vertical"
+            onFinish={async (values) => {
+              try {
+                const shipmentData = {
+                  ...values,
+                  packageNumbers: extractedData?.packageNumbers || [],
+                  products: extractedData?.products || []
+                };
+
+                const response = await fetch(`${API_BASE_URL}/api/shipments`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(shipmentData)
+                });
+
+                const result = await response.json();
+                if (result.code === 0) {
+                  message.success('货件创建成功');
+                  setNewShipmentModalVisible(false);
+                  setExtractedData(null);
+                  shipmentForm.resetFields();
+                  // 刷新物流列表
+                  fetchData({ filters });
+                } else {
+                  message.error(result.message || '创建失败');
+                }
+              } catch (error) {
+                message.error('创建失败');
+              }
+            }}
+          >
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="logisticsProvider" label="物流商" rules={[{ required: true }]}>
+                  <Select
+                    placeholder="请选择物流商"
+                    onChange={(value) => {
+                      setSelectedProvider(value);
+                      shipmentForm.setFieldsValue({ channel: undefined });
+                    }}
+                  >
+                    {logisticsProviders.map(provider => (
+                      <Option key={provider.name} value={provider.name}>
+                        {provider.name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="channel" label="物流渠道" rules={[{ required: true }]}>
+                  <Select placeholder="请选择物流渠道">
+                    {selectedProvider && logisticsProviders
+                      .find(p => p.name === selectedProvider)
+                      ?.channels.map((channel: string) => (
+                        <Option key={channel} value={channel}>
+                          {channel}
+                        </Option>
+                      ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item label="上传发货单PDF">
+                  <Upload
+                    accept=".pdf"
+                    maxCount={1}
+                    beforeUpload={(file) => {
+                      handlePdfUpload(file);
+                      return false; // 阻止自动上传
+                    }}
+                    showUploadList={false}
+                  >
+                    <Button loading={pdfExtracting}>
+                      {pdfExtracting ? '解析中...' : '选择PDF文件'}
+                    </Button>
+                  </Upload>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    支持自动提取箱数、产品SKU、目的仓库等信息
+                  </Text>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {extractedData && (
+              <Card title="PDF解析结果" size="small" style={{ marginBottom: 16 }}>
+                <Row gutter={16}>
+                  <Col span={6}>
+                    <Text strong>箱数：</Text>
+                    <Text>{extractedData.packageCount || 0}</Text>
+                  </Col>
+                  <Col span={6}>
+                    <Text strong>目的国：</Text>
+                    <Text>{extractedData.destinationCountry || '-'}</Text>
+                  </Col>
+                  <Col span={12}>
+                    <Text strong>目的仓库：</Text>
+                    <Text>{extractedData.destinationWarehouse || '-'}</Text>
+                  </Col>
+                </Row>
+                {extractedData.packageNumbers?.length > 0 && (
+                  <Row style={{ marginTop: 8 }}>
+                    <Col span={24}>
+                      <Text strong>箱号：</Text>
+                      <Text>{extractedData.packageNumbers.join(', ')}</Text>
+                    </Col>
+                  </Row>
+                )}
+                {extractedData.products?.length > 0 && (
+                  <Row style={{ marginTop: 8 }}>
+                    <Col span={24}>
+                      <Text strong>产品SKU：</Text>
+                      <Text>{extractedData.products.join(', ')}</Text>
+                    </Col>
+                  </Row>
+                )}
+              </Card>
+            )}
+
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="packageCount" label="箱数" rules={[{ required: true }]}>
+                  <InputNumber 
+                    placeholder="箱数" 
+                    style={{ width: '100%' }} 
+                    min={1}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="destinationCountry" label="目的国" rules={[{ required: true }]}>
+                  <Input placeholder="目的国" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="destinationWarehouse" label="目的仓库" rules={[{ required: true }]}>
+                  <Input placeholder="目的仓库" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item name="notes" label="备注">
+                  <TextArea rows={3} placeholder="请输入备注信息" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  创建货件
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    if (!selectedProvider) {
+                      message.warning('请先选择物流商');
+                      return;
+                    }
+                    // 这里可以实现发票生成功能
+                    message.info('发票生成功能开发中...');
+                  }}
+                >
+                  生成发票
+                </Button>
+                <Button onClick={() => {
+                  setNewShipmentModalVisible(false);
+                  setExtractedData(null);
+                  shipmentForm.resetFields();
+                }}>
+                  取消
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
         </div>
       </Modal>
 
