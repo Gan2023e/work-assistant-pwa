@@ -2,98 +2,65 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./index');
 
 const HsCode = sequelize.define('HsCode', {
-  id: {
-    type: DataTypes.INTEGER,
+  parent_sku: {
+    type: DataTypes.STRING(10),
     primaryKey: true,
-    autoIncrement: true
+    allowNull: false,
+    comment: '父SKU - 主键'
   },
-  hsCode: {
+  weblink: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    comment: '产品链接'
+  },
+  uk_hscode: {
     type: DataTypes.STRING(20),
     allowNull: false,
-    unique: true,
-    comment: 'HSCODE编码'
+    comment: '英国HSCODE编码'
   },
-  productName: {
-    type: DataTypes.STRING(255),
+  us_hscode: {
+    type: DataTypes.STRING(20),
     allowNull: false,
-    comment: '产品名称'
+    comment: '美国HSCODE编码'
   },
-  productNameEn: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-    comment: '产品英文名称'
-  },
-  category: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-    comment: '产品类别'
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    comment: '产品描述'
-  },
-  declaredValue: {
+  declared_value: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
     comment: '申报价值'
   },
-  declaredValueCurrency: {
+  declared_value_currency: {
     type: DataTypes.STRING(10),
+    allowNull: true,
     defaultValue: 'USD',
     comment: '申报价值货币'
   },
-  tariffRate: {
-    type: DataTypes.DECIMAL(5, 2),
-    allowNull: true,
-    comment: '关税税率(%)'
-  },
-  imageUrl: {
-    type: DataTypes.STRING(500),
-    allowNull: true,
-    comment: '产品图片URL'
-  },
-  imageName: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-    comment: '图片文件名'
-  },
-  status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: 'active',
-    comment: '状态'
-  },
-  usageCount: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    comment: '使用次数'
-  },
-  lastUsedAt: {
+  created_at: {
     type: DataTypes.DATE,
-    allowNull: true,
-    comment: '最后使用时间'
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+    comment: '创建时间'
   },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    comment: '备注'
+  updated_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+    comment: '更新时间'
   }
 }, {
   tableName: 'hscode',
-  timestamps: true,
+  timestamps: false,
   indexes: [
     {
-      unique: true,
-      fields: ['hsCode']
+      fields: ['weblink']
     },
     {
-      fields: ['category']
+      fields: ['uk_hscode']
     },
     {
-      fields: ['status']
+      fields: ['us_hscode']
     },
     {
-      fields: ['productName']
+      fields: ['created_at']
     }
   ]
 });

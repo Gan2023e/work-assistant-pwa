@@ -1,62 +1,26 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { Op } = require('sequelize');
 const HsCode = require('../models/HsCode');
-
-// 创建uploads目录（如果不存在）
-const uploadsDir = path.join(__dirname, '../uploads/hscode');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// 配置文件上传
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB限制
-  },
-  fileFilter: function (req, file, cb) {
-    // 只允许图片文件
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('只允许上传图片文件'));
-    }
-  }
-});
 
 // 获取所有HSCODE
 router.get('/', async (req, res) => {
   try {
-    const { category, status, search } = req.query;
+    const { search } = req.query;
     const where = {};
     
-    if (category) where.category = category;
-    if (status) where.status = status;
     if (search) {
       where[Op.or] = [
-        { hsCode: { [Op.like]: `%${search}%` } },
-        { productName: { [Op.like]: `%${search}%` } },
-        { productNameEn: { [Op.like]: `%${search}%` } }
+        { parent_sku: { [Op.like]: `%${search}%` } },
+        { weblink: { [Op.like]: `%${search}%` } },
+        { uk_hscode: { [Op.like]: `%${search}%` } },
+        { us_hscode: { [Op.like]: `%${search}%` } }
       ];
     }
     
     const hsCodes = await HsCode.findAll({
       where,
-      order: [['usageCount', 'DESC'], ['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
     
     res.json({
@@ -74,18 +38,63 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 创建新HSCODE
-router.post('/', upload.single('image'), async (req, res) => {
+// 根据parent_sku获取单个HSCODE
+router.get('/:parentSku', async (req, res) => {
   try {
-    const hsCodeData = { ...req.body };
-    
-    // 如果有上传的图片
-    if (req.file) {
-      hsCodeData.imageUrl = `/uploads/hscode/${req.file.filename}`;
-      hsCodeData.imageName = req.file.originalname;
+    const hsCode = await HsCode.findByPk(req.params.parentSku);
+    if (!hsCode) {
+      return res.status(404).json({
+        code: 1,
+        message: 'HSCODE不存在'
+      });
     }
     
-    const hsCode = await HsCode.create(hsCodeData);
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: hsCode
+    });
+  } catch (error) {
+    console.error('获取HSCODE详情失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 创建新HSCODE
+router.post('/', async (req, res) => {
+  try {
+    const { parent_sku, weblink, uk_hscode, us_hscode, declared_value, declared_value_currency } = req.body;
+    
+    // 验证必填字段
+    if (!parent_sku || !weblink || !uk_hscode || !us_hscode) {
+      return res.status(400).json({
+        code: 1,
+        message: '缺少必填字段'
+      });
+    }
+    
+    // 检查parent_sku是否已存在
+    const existingHsCode = await HsCode.findByPk(parent_sku);
+    if (existingHsCode) {
+      return res.status(400).json({
+        code: 1,
+        message: '该父SKU已存在'
+      });
+    }
+    
+    const hsCode = await HsCode.create({
+      parent_sku,
+      weblink,
+      uk_hscode,
+      us_hscode,
+      declared_value,
+      declared_value_currency: declared_value_currency || 'USD'
+    });
+    
     res.json({
       code: 0,
       message: '创建成功',
@@ -102,31 +111,31 @@ router.post('/', upload.single('image'), async (req, res) => {
 });
 
 // 更新HSCODE
-router.put('/:id', upload.single('image'), async (req, res) => {
+router.put('/:parentSku', async (req, res) => {
   try {
-    const hsCodeData = { ...req.body };
+    const { weblink, uk_hscode, us_hscode, declared_value, declared_value_currency } = req.body;
     
-    // 如果有上传的新图片
-    if (req.file) {
-      // 删除旧图片
-      const oldHsCode = await HsCode.findByPk(req.params.id);
-      if (oldHsCode && oldHsCode.imageUrl) {
-        const oldImagePath = path.join(__dirname, '../', oldHsCode.imageUrl);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-      
-      hsCodeData.imageUrl = `/uploads/hscode/${req.file.filename}`;
-      hsCodeData.imageName = req.file.originalname;
+    // 验证必填字段
+    if (!weblink || !uk_hscode || !us_hscode) {
+      return res.status(400).json({
+        code: 1,
+        message: '缺少必填字段'
+      });
     }
     
-    const [updated] = await HsCode.update(hsCodeData, {
-      where: { id: req.params.id }
+    const [updated] = await HsCode.update({
+      weblink,
+      uk_hscode,
+      us_hscode,
+      declared_value,
+      declared_value_currency,
+      updated_at: new Date()
+    }, {
+      where: { parent_sku: req.params.parentSku }
     });
     
     if (updated) {
-      const hsCode = await HsCode.findByPk(req.params.id);
+      const hsCode = await HsCode.findByPk(req.params.parentSku);
       res.json({
         code: 0,
         message: '更新成功',
@@ -149,22 +158,14 @@ router.put('/:id', upload.single('image'), async (req, res) => {
 });
 
 // 删除HSCODE
-router.delete('/:id', async (req, res) => {
+router.delete('/:parentSku', async (req, res) => {
   try {
-    const hsCode = await HsCode.findByPk(req.params.id);
+    const hsCode = await HsCode.findByPk(req.params.parentSku);
     if (!hsCode) {
       return res.status(404).json({
         code: 1,
         message: 'HSCODE不存在'
       });
-    }
-    
-    // 删除关联的图片文件
-    if (hsCode.imageUrl) {
-      const imagePath = path.join(__dirname, '../', hsCode.imageUrl);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
     }
     
     await hsCode.destroy();
@@ -182,59 +183,47 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// 获取产品分类列表
-router.get('/categories', async (req, res) => {
+// 批量创建HSCODE
+router.post('/batch', async (req, res) => {
   try {
-    const categories = await HsCode.findAll({
-      attributes: ['category'],
-      where: {
-        category: { [Op.ne]: null },
-        status: 'active'
-      },
-      group: ['category'],
-      order: [['category', 'ASC']]
-    });
+    const { hsCodes } = req.body;
     
-    res.json({
-      code: 0,
-      message: '获取成功',
-      data: categories.map(item => item.category)
-    });
-  } catch (error) {
-    console.error('获取分类列表失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '获取失败',
-      error: error.message
-    });
-  }
-});
-
-// 增加使用次数
-router.post('/:id/use', async (req, res) => {
-  try {
-    const hsCode = await HsCode.findByPk(req.params.id);
-    if (!hsCode) {
-      return res.status(404).json({
+    if (!Array.isArray(hsCodes) || hsCodes.length === 0) {
+      return res.status(400).json({
         code: 1,
-        message: 'HSCODE不存在'
+        message: '请提供有效的HSCODE数据数组'
       });
     }
     
-    await hsCode.update({
-      usageCount: hsCode.usageCount + 1,
-      lastUsedAt: new Date()
+    // 验证数据格式
+    for (const hsCode of hsCodes) {
+      if (!hsCode.parent_sku || !hsCode.weblink || !hsCode.uk_hscode || !hsCode.us_hscode) {
+        return res.status(400).json({
+          code: 1,
+          message: '每条记录都需要包含parent_sku、weblink、uk_hscode、us_hscode字段'
+        });
+      }
+      // 设置默认货币
+      if (hsCode.declared_value && !hsCode.declared_value_currency) {
+        hsCode.declared_value_currency = 'USD';
+      }
+    }
+    
+    const createdHsCodes = await HsCode.bulkCreate(hsCodes, {
+      ignoreDuplicates: true,
+      returning: true
     });
     
     res.json({
       code: 0,
-      message: '使用次数更新成功'
+      message: `成功创建${createdHsCodes.length}条记录`,
+      data: createdHsCodes
     });
   } catch (error) {
-    console.error('更新使用次数失败:', error);
+    console.error('批量创建HSCODE失败:', error);
     res.status(500).json({
       code: 1,
-      message: '更新失败',
+      message: '批量创建失败',
       error: error.message
     });
   }

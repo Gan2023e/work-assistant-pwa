@@ -119,21 +119,14 @@ interface AmzWarehouse {
 
 // HSCODE接口
 interface HsCode {
-  id: number;
-  hsCode: string;
-  productName: string;
-  productNameEn?: string;
-  category?: string;
-  description?: string;
-  declaredValue?: number;
-  declaredValueCurrency: string;
-  tariffRate?: number;
-  imageUrl?: string;
-  imageName?: string;
-  status: 'active' | 'inactive';
-  usageCount: number;
-  lastUsedAt?: string;
-  notes?: string;
+  parent_sku: string; // 主键
+  weblink: string;
+  uk_hscode: string;
+  us_hscode: string;
+  declared_value?: number;
+  declared_value_currency?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const LogisticsPage: React.FC = () => {
@@ -1841,7 +1834,7 @@ const LogisticsPage: React.FC = () => {
               新增HSCODE
             </Button>
             <Text type="secondary">
-              图片建议保存到文件系统，数据库只存储图片路径。支持上传5MB以内的图片文件。
+              HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。
             </Text>
           </Space>
           
@@ -1859,13 +1852,14 @@ const LogisticsPage: React.FC = () => {
                 });
                 
                 const url = editingHsCode 
-                  ? `${API_BASE_URL}/api/hscode/${editingHsCode.id}`
+                  ? `${API_BASE_URL}/api/hscode/${editingHsCode.parent_sku}`
                   : `${API_BASE_URL}/api/hscode`;
                 const method = editingHsCode ? 'PUT' : 'POST';
                 
                 const response = await fetch(url, {
                   method,
-                  body: formData
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(values)
                 });
                 
                 const result = await response.json();
@@ -1884,65 +1878,50 @@ const LogisticsPage: React.FC = () => {
           >
             <Row gutter={16}>
               <Col span={6}>
-                <Form.Item name="hsCode" label="HSCODE编码" rules={[{ required: true }]}>
-                  <Input placeholder="请输入HSCODE编码" />
+                <Form.Item name="parent_sku" label="父SKU" rules={[{ required: true }]}>
+                  <Input 
+                    placeholder="请输入父SKU" 
+                    disabled={!!editingHsCode}
+                  />
                 </Form.Item>
               </Col>
-              <Col span={6}>
-                <Form.Item name="productName" label="产品名称" rules={[{ required: true }]}>
-                  <Input placeholder="请输入产品名称" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="productNameEn" label="英文名称">
-                  <Input placeholder="请输入英文名称" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="category" label="产品类别">
-                  <Input placeholder="请输入产品类别" />
+              <Col span={18}>
+                <Form.Item name="weblink" label="产品链接" rules={[{ required: true }]}>
+                  <Input placeholder="请输入产品链接" />
                 </Form.Item>
               </Col>
             </Row>
             <Row gutter={16}>
-              <Col span={6}>
-                <Form.Item name="declaredValue" label="申报价值">
-                  <InputNumber placeholder="申报价值" style={{ width: '100%' }} />
+              <Col span={12}>
+                <Form.Item name="uk_hscode" label="英国HSCODE编码" rules={[{ required: true }]}>
+                  <Input placeholder="请输入英国HSCODE编码" />
                 </Form.Item>
               </Col>
-              <Col span={6}>
-                <Form.Item name="declaredValueCurrency" label="货币" initialValue="USD">
+              <Col span={12}>
+                <Form.Item name="us_hscode" label="美国HSCODE编码" rules={[{ required: true }]}>
+                  <Input placeholder="请输入美国HSCODE编码" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="declared_value" label="申报价值">
+                  <InputNumber 
+                    placeholder="请输入申报价值" 
+                    style={{ width: '100%' }}
+                    min={0}
+                    precision={2}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="declared_value_currency" label="申报价值货币" initialValue="USD">
                   <Select>
                     <Option value="USD">USD</Option>
                     <Option value="EUR">EUR</Option>
                     <Option value="GBP">GBP</Option>
                     <Option value="CNY">CNY</Option>
                   </Select>
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="tariffRate" label="关税税率(%)">
-                  <InputNumber placeholder="关税税率" style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="status" label="状态" initialValue="active">
-                  <Select>
-                    <Option value="active">启用</Option>
-                    <Option value="inactive">禁用</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="description" label="产品描述">
-                  <TextArea rows={2} placeholder="请输入产品描述" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="notes" label="备注">
-                  <TextArea rows={2} placeholder="请输入备注" />
                 </Form.Item>
               </Col>
             </Row>
@@ -1964,42 +1943,51 @@ const LogisticsPage: React.FC = () => {
           <Table
             dataSource={hsCodeList}
             loading={hsCodeLoading}
-            rowKey="id"
+            rowKey="parent_sku"
             size="small"
             pagination={{ pageSize: 8 }}
-            scroll={{ y: 400 }}
+            scroll={{ x: 920, y: 400 }}
             columns={[
-              { title: 'HSCODE', dataIndex: 'hsCode', width: 100, fixed: 'left' },
-              { title: '产品名称', dataIndex: 'productName', width: 120 },
-              { title: '英文名称', dataIndex: 'productNameEn', width: 120 },
-              { title: '类别', dataIndex: 'category', width: 80 },
+              { title: '父SKU', dataIndex: 'parent_sku', width: 100, fixed: 'left' },
+              { 
+                title: '产品链接', 
+                dataIndex: 'weblink', 
+                width: 200,
+                ellipsis: true,
+                render: (link: string) => (
+                  <a 
+                    href={link} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ color: '#1890ff' }}
+                  >
+                    {link}
+                  </a>
+                )
+              },
+              { title: '英国HSCODE', dataIndex: 'uk_hscode', width: 120 },
+              { title: '美国HSCODE', dataIndex: 'us_hscode', width: 120 },
               { 
                 title: '申报价值', 
+                width: 110,
+                render: (_, record: HsCode) => {
+                  if (record.declared_value) {
+                    return `${record.declared_value} ${record.declared_value_currency || 'USD'}`;
+                  }
+                  return '-';
+                }
+              },
+              { 
+                title: '创建时间', 
+                dataIndex: 'created_at', 
                 width: 100,
-                render: (_, record: HsCode) => 
-                  record.declaredValue ? `${record.declaredValue} ${record.declaredValueCurrency}` : '-'
+                render: (date: string) => date ? formatDate(date, true) : '-'
               },
               { 
-                title: '关税率', 
-                dataIndex: 'tariffRate', 
-                width: 80,
-                render: (rate: number) => rate ? `${rate}%` : '-'
-              },
-              { 
-                title: '使用次数', 
-                dataIndex: 'usageCount', 
-                width: 80,
-                sorter: (a: HsCode, b: HsCode) => a.usageCount - b.usageCount
-              },
-              { 
-                title: '状态', 
-                dataIndex: 'status', 
-                width: 80,
-                render: (status: string) => (
-                  <Tag color={status === 'active' ? 'green' : 'red'}>
-                    {status === 'active' ? '启用' : '禁用'}
-                  </Tag>
-                )
+                title: '更新时间', 
+                dataIndex: 'updated_at', 
+                width: 100,
+                render: (date: string) => date ? formatDate(date, true) : '-'
               },
               {
                 title: '操作',
@@ -2020,20 +2008,26 @@ const LogisticsPage: React.FC = () => {
                       size="small" 
                       danger
                       onClick={async () => {
-                        try {
-                          const response = await fetch(`${API_BASE_URL}/api/hscode/${record.id}`, {
-                            method: 'DELETE'
-                          });
-                          const result = await response.json();
-                          if (result.code === 0) {
-                            message.success('删除成功');
-                            fetchHsCodes();
-                          } else {
-                            message.error(result.message || '删除失败');
+                        Modal.confirm({
+                          title: '确认删除',
+                          content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
+                          onOk: async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'DELETE'
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('删除成功');
+                                fetchHsCodes();
+                              } else {
+                                message.error(result.message || '删除失败');
+                              }
+                            } catch (error) {
+                              message.error('删除失败');
+                            }
                           }
-                        } catch (error) {
-                          message.error('删除失败');
-                        }
+                        });
                       }}
                     >
                       删除
