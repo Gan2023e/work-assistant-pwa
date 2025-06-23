@@ -10,21 +10,24 @@ import {
   Upload, 
   Popconfirm,
   Form,
-  Tooltip
+  Tooltip,
+  Typography
 } from 'antd';
 import { 
   UploadOutlined, 
   DeleteOutlined, 
   EditOutlined, 
   LinkOutlined,
-  ReloadOutlined 
+  ReloadOutlined,
+  SearchOutlined 
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { ColumnsType } from 'antd/es/table';
+import { ColumnsType, TableProps } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
 
 const { TextArea } = Input;
 const { Option } = Select;
+const { Text } = Typography;
 
 interface ProductRecord {
   id: number;
@@ -52,12 +55,15 @@ interface EditingCell {
   value: string;
 }
 
+// 更新状态选项
 const statusOptions = [
-  '待处理',
-  '已处理', 
-  '已上架',
-  '暂停',
-  '停售'
+  '已经上传',
+  '商品已下架',
+  '手动调库存',
+  '审核未通过',
+  '待P图',
+  '临时下架',
+  '待上传'
 ];
 
 const Purchase: React.FC = () => {
@@ -68,6 +74,10 @@ const Purchase: React.FC = () => {
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editForm] = Form.useForm();
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [skuQueryModalVisible, setSkuQueryModalVisible] = useState(false);
+  const [skuPrefix, setSkuPrefix] = useState('');
+  const [latestSku, setLatestSku] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 搜索功能
@@ -166,7 +176,7 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 批量打开链接
+  // 修复批量打开链接功能
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要打开的记录');
@@ -174,7 +184,7 @@ const Purchase: React.FC = () => {
     }
 
     const selectedRecords = data.filter(record => selectedRowKeys.includes(record.id));
-    const validLinks = selectedRecords.filter(record => record.weblink);
+    const validLinks = selectedRecords.filter(record => record.weblink && record.weblink.trim() !== '');
 
     if (validLinks.length === 0) {
       message.warning('所选记录中没有有效的产品链接');
@@ -186,14 +196,21 @@ const Purchase: React.FC = () => {
         title: '确认打开链接',
         content: `您将要打开 ${validLinks.length} 个链接，这可能会影响浏览器性能。是否继续？`,
         onOk: () => {
-          validLinks.forEach(record => {
-            window.open(record.weblink, '_blank');
+          // 修复：使用延时打开，防止浏览器阻止弹窗
+          validLinks.forEach((record, index) => {
+            setTimeout(() => {
+              window.open(record.weblink, '_blank', 'noopener,noreferrer');
+            }, index * 100); // 每个链接间隔100ms打开
           });
+          message.success(`已打开 ${validLinks.length} 个产品链接`);
         },
       });
     } else {
-      validLinks.forEach(record => {
-        window.open(record.weblink, '_blank');
+      // 修复：使用延时打开，防止浏览器阻止弹窗
+      validLinks.forEach((record, index) => {
+        setTimeout(() => {
+          window.open(record.weblink, '_blank', 'noopener,noreferrer');
+        }, index * 100); // 每个链接间隔100ms打开
       });
       message.success(`已打开 ${validLinks.length} 个产品链接`);
     }
@@ -244,8 +261,8 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // Excel上传
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // 新的Excel上传处理（支持SKU, 链接, 备注）
+  const handleExcelUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -253,7 +270,7 @@ const Purchase: React.FC = () => {
     formData.append('file', file);
 
     setLoading(true);
-    fetch(`${API_BASE_URL}/api/product_weblink/upload-excel`, {
+    fetch(`${API_BASE_URL}/api/product_weblink/upload-excel-new`, {
       method: 'POST',
       body: formData,
     })
@@ -265,6 +282,7 @@ const Purchase: React.FC = () => {
       })
       .then(result => {
         message.success(result.message);
+        setUploadModalVisible(false);
         if (result.count > 0) {
           // 刷新数据
           handleSearch();
@@ -283,6 +301,33 @@ const Purchase: React.FC = () => {
       });
   };
 
+  // SKU查询功能
+  const handleSkuQuery = async () => {
+    if (!skuPrefix.trim()) {
+      message.warning('请输入SKU前缀');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/latest-sku`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefix: skuPrefix.trim() }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      setLatestSku(result.latestSku || '未找到该前缀的SKU');
+    } catch (e) {
+      console.error('查询失败:', e);
+      message.error('查询失败');
+      setLatestSku('查询失败');
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -290,7 +335,12 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 表格列配置
+  // 表格排序处理
+  const handleTableChange: TableProps<ProductRecord>['onChange'] = (pagination, filters, sorter) => {
+    // 这里可以实现服务端排序，或者让antd Table自动处理客户端排序
+  };
+
+  // 表格列配置（添加排序功能）
   const columns: ColumnsType<ProductRecord> = [
     { 
       title: '母SKU', 
@@ -298,6 +348,7 @@ const Purchase: React.FC = () => {
       key: 'parent_sku', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'parent_sku'),
         style: { cursor: 'pointer' }
@@ -327,7 +378,8 @@ const Purchase: React.FC = () => {
       key: 'update_time', 
       render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '', 
       align: 'center',
-      width: 160
+      width: 160,
+      sorter: (a, b) => dayjs(a.update_time).unix() - dayjs(b.update_time).unix(),
     },
     { 
       title: '检查时间', 
@@ -335,7 +387,8 @@ const Purchase: React.FC = () => {
       key: 'check_time', 
       render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '', 
       align: 'center',
-      width: 160
+      width: 160,
+      sorter: (a, b) => dayjs(a.check_time || 0).unix() - dayjs(b.check_time || 0).unix(),
     },
     { 
       title: '产品状态', 
@@ -343,6 +396,7 @@ const Purchase: React.FC = () => {
       key: 'status', 
       align: 'center',
       width: 100,
+      sorter: (a, b) => (a.status || '').localeCompare(b.status || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'status'),
         style: { cursor: 'pointer' }
@@ -354,6 +408,7 @@ const Purchase: React.FC = () => {
       key: 'notice', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'notice'),
         style: { cursor: 'pointer' }
@@ -365,6 +420,7 @@ const Purchase: React.FC = () => {
       key: 'cpc_recommend', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.cpc_recommend || '').localeCompare(b.cpc_recommend || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'cpc_recommend'),
         style: { cursor: 'pointer' }
@@ -376,6 +432,7 @@ const Purchase: React.FC = () => {
       key: 'cpc_status', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.cpc_status || '').localeCompare(b.cpc_status || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'cpc_status'),
         style: { cursor: 'pointer' }
@@ -387,6 +444,7 @@ const Purchase: React.FC = () => {
       key: 'cpc_submit', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'cpc_submit'),
         style: { cursor: 'pointer' }
@@ -398,6 +456,7 @@ const Purchase: React.FC = () => {
       key: 'model_number', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'model_number'),
         style: { cursor: 'pointer' }
@@ -409,6 +468,7 @@ const Purchase: React.FC = () => {
       key: 'recommend_age', 
       align: 'center',
       width: 100,
+      sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'recommend_age'),
         style: { cursor: 'pointer' }
@@ -420,6 +480,7 @@ const Purchase: React.FC = () => {
       key: 'ads_add', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.ads_add || '').localeCompare(b.ads_add || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'ads_add'),
         style: { cursor: 'pointer' }
@@ -431,6 +492,7 @@ const Purchase: React.FC = () => {
       key: 'list_parent_sku', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.list_parent_sku || '').localeCompare(b.list_parent_sku || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'list_parent_sku'),
         style: { cursor: 'pointer' }
@@ -442,6 +504,7 @@ const Purchase: React.FC = () => {
       key: 'no_inventory_rate', 
       align: 'center',
       width: 100,
+      sorter: (a, b) => (parseFloat(a.no_inventory_rate) || 0) - (parseFloat(b.no_inventory_rate) || 0),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'no_inventory_rate'),
         style: { cursor: 'pointer' }
@@ -453,6 +516,7 @@ const Purchase: React.FC = () => {
       key: 'sales_30days', 
       align: 'center',
       width: 100,
+      sorter: (a, b) => (parseInt(a.sales_30days) || 0) - (parseInt(b.sales_30days) || 0),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'sales_30days'),
         style: { cursor: 'pointer' }
@@ -464,6 +528,7 @@ const Purchase: React.FC = () => {
       key: 'seller_name', 
       align: 'center',
       width: 120,
+      sorter: (a, b) => (a.seller_name || '').localeCompare(b.seller_name || ''),
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'seller_name'),
         style: { cursor: 'pointer' }
@@ -514,75 +579,74 @@ const Purchase: React.FC = () => {
             </div>
           </div>
 
-                     {/* 批量操作区域 */}
-           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-               <span>批量操作：</span>
-               
-               {/* 状态批量更新 */}
-               <Select
-                 placeholder="批量修改状态"
-                 style={{ width: 140 }}
-                 onSelect={(value) => handleBatchUpdateStatus(value)}
-                 disabled={selectedRowKeys.length === 0}
-               >
-                 {statusOptions.map(status => (
-                   <Option key={status} value={status}>{status}</Option>
-                 ))}
-               </Select>
+          {/* 批量操作区域 */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span>批量操作：</span>
+              
+              {/* 状态批量更新 */}
+              <Select
+                placeholder="批量修改状态"
+                style={{ width: 140 }}
+                onSelect={(value) => handleBatchUpdateStatus(value)}
+                disabled={selectedRowKeys.length === 0}
+              >
+                {statusOptions.map(status => (
+                  <Option key={status} value={status}>{status}</Option>
+                ))}
+              </Select>
 
-               {/* 批量打开链接 */}
-               <Button 
-                 icon={<LinkOutlined />}
-                 onClick={handleBatchOpenLinks}
-                 disabled={selectedRowKeys.length === 0}
-               >
-                 批量打开链接
-               </Button>
+              {/* 批量打开链接 */}
+              <Button 
+                icon={<LinkOutlined />}
+                onClick={handleBatchOpenLinks}
+                disabled={selectedRowKeys.length === 0}
+              >
+                批量打开链接
+              </Button>
 
-               {/* Excel上传 */}
-               <div>
-                 <input
-                   ref={fileInputRef}
-                   type="file"
-                   accept=".xlsx,.xls"
-                   onChange={handleFileUpload}
-                   style={{ display: 'none' }}
-                 />
-                 <Button 
-                   icon={<UploadOutlined />}
-                   onClick={() => fileInputRef.current?.click()}
-                   loading={loading}
-                 >
-                   上传Excel
-                 </Button>
-               </div>
+              {/* 批量上传新品 */}
+              <Button 
+                icon={<UploadOutlined />}
+                onClick={() => setUploadModalVisible(true)}
+                loading={loading}
+              >
+                批量上传新品
+              </Button>
 
-               {/* 选择状态提示 */}
-               {selectedRowKeys.length > 0 && (
-                 <span style={{ color: '#1890ff', marginLeft: '16px' }}>
-                   已选择 {selectedRowKeys.length} 条记录
-                 </span>
-               )}
-             </div>
+              {/* SKU最新编号查询 */}
+              <Button 
+                icon={<SearchOutlined />}
+                onClick={() => setSkuQueryModalVisible(true)}
+              >
+                SKU最新编号查询
+              </Button>
 
-             {/* 批量删除 - 放在最右边 */}
-             <Popconfirm
-               title="确定要删除选中的记录吗？"
-               onConfirm={handleBatchDelete}
-               okText="确定"
-               cancelText="取消"
-               disabled={selectedRowKeys.length === 0}
-             >
-               <Button 
-                 danger
-                 icon={<DeleteOutlined />}
-                 disabled={selectedRowKeys.length === 0}
-               >
-                 批量删除
-               </Button>
-             </Popconfirm>
-           </div>
+              {/* 选择状态提示 */}
+              {selectedRowKeys.length > 0 && (
+                <span style={{ color: '#1890ff', marginLeft: '16px' }}>
+                  已选择 {selectedRowKeys.length} 条记录
+                </span>
+              )}
+            </div>
+
+            {/* 批量删除 - 放在最右边 */}
+            <Popconfirm
+              title="确定要删除选中的记录吗？"
+              onConfirm={handleBatchDelete}
+              okText="确定"
+              cancelText="取消"
+              disabled={selectedRowKeys.length === 0}
+            >
+              <Button 
+                danger
+                icon={<DeleteOutlined />}
+                disabled={selectedRowKeys.length === 0}
+              >
+                批量删除
+              </Button>
+            </Popconfirm>
+          </div>
         </Space>
       </div>
 
@@ -595,6 +659,7 @@ const Purchase: React.FC = () => {
         rowSelection={rowSelection}
         scroll={{ x: 'max-content' }}
         bordered
+        onChange={handleTableChange}
         pagination={{
           showSizeChanger: true,
           showQuickJumper: true,
@@ -607,9 +672,9 @@ const Purchase: React.FC = () => {
             <span style={{ fontWeight: 'bold' }}>
               采购链接管理 
             </span>
-                         <span style={{ marginLeft: '16px', color: '#666', fontSize: '12px' }}>
-               提示：双击单元格可编辑内容（除ID、时间字段外）
-             </span>
+            <span style={{ marginLeft: '16px', color: '#666', fontSize: '12px' }}>
+              提示：双击单元格可编辑内容（除ID、时间字段外），点击列名可排序
+            </span>
           </div>
         )}
       />
@@ -629,26 +694,109 @@ const Purchase: React.FC = () => {
         width={400}
       >
         <Form form={editForm} layout="vertical">
-                     <Form.Item
-             label={`编辑 ${editingCell?.field}`}
-             name="value"
-             rules={[{ required: false }]}
-           >
-             {editingCell?.field === 'status' ? (
-               <Select placeholder="请选择状态">
-                 {statusOptions.map(status => (
-                   <Option key={status} value={status}>{status}</Option>
-                 ))}
-               </Select>
-             ) : editingCell?.field === 'notice' ? (
-               <TextArea rows={3} placeholder="请输入备注" />
-             ) : editingCell?.field === 'weblink' ? (
-               <Input placeholder="请输入产品链接" type="url" />
-             ) : (
-               <Input placeholder="请输入内容" />
-             )}
-           </Form.Item>
+          <Form.Item
+            label={`编辑 ${editingCell?.field}`}
+            name="value"
+            rules={[{ required: false }]}
+          >
+            {editingCell?.field === 'status' ? (
+              <Select placeholder="请选择状态">
+                {statusOptions.map(status => (
+                  <Option key={status} value={status}>{status}</Option>
+                ))}
+              </Select>
+            ) : editingCell?.field === 'notice' ? (
+              <TextArea rows={3} placeholder="请输入备注" />
+            ) : editingCell?.field === 'weblink' ? (
+              <Input placeholder="请输入产品链接" type="url" />
+            ) : (
+              <Input placeholder="请输入内容" />
+            )}
+          </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 批量上传新品对话框 */}
+      <Modal
+        title="批量上传新品"
+        open={uploadModalVisible}
+        onCancel={() => setUploadModalVisible(false)}
+        footer={null}
+        width={500}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <Text strong>Excel表格要求：</Text>
+            <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+              <li>A列：SKU</li>
+              <li>B列：产品链接</li>
+              <li>C列：备注</li>
+              <li>从第一行开始，无需表头</li>
+            </ul>
+          </div>
+          
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelUpload}
+              style={{ display: 'none' }}
+            />
+            <Button 
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              loading={loading}
+              block
+            >
+              选择Excel文件上传
+            </Button>
+          </div>
+        </Space>
+      </Modal>
+
+      {/* SKU查询对话框 */}
+      <Modal
+        title="SKU最新编号查询"
+        open={skuQueryModalVisible}
+        onOk={handleSkuQuery}
+        onCancel={() => {
+          setSkuQueryModalVisible(false);
+          setSkuPrefix('');
+          setLatestSku('');
+        }}
+        okText="查询"
+        cancelText="取消"
+        width={400}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>
+            <Text>请输入SKU前缀：</Text>
+            <Input
+              value={skuPrefix}
+              onChange={e => setSkuPrefix(e.target.value)}
+              placeholder="例如：XBC"
+              style={{ marginTop: '8px' }}
+            />
+          </div>
+          
+          {latestSku && (
+            <div style={{ marginTop: '16px' }}>
+              <Text strong>最新SKU：</Text>
+              <div style={{ 
+                padding: '8px 12px', 
+                backgroundColor: '#f5f5f5', 
+                borderRadius: '4px',
+                marginTop: '8px',
+                fontFamily: 'monospace',
+                fontSize: '14px'
+              }}>
+                {latestSku}
+              </div>
+            </div>
+          )}
+        </Space>
       </Modal>
     </div>
   );

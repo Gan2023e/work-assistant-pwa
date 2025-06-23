@@ -138,7 +138,7 @@ function generateSKU() {
   return sku;
 }
 
-// Excel文件上传
+// Excel文件上传（原有的）
 router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -200,6 +200,113 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: '文件上传失败: ' + err.message });
+  }
+});
+
+// 新的Excel上传（支持SKU, 链接, 备注）
+router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: '请选择Excel文件' });
+    }
+
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    const newRecords = [];
+    const errors = [];
+    
+    // 从第一行开始处理（无表头）
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (row[0] && row[0].toString().trim()) { // A列有SKU
+        const parent_sku = row[0].toString().trim();
+        const weblink = row[1] ? row[1].toString().trim() : '';
+        const notice = row[2] ? row[2].toString().trim() : '';
+        
+        // 检查SKU是否已存在
+        const existing = await ProductWeblink.findOne({
+          where: { parent_sku }
+        });
+        
+        if (existing) {
+          errors.push(`第${i+1}行：SKU ${parent_sku} 已存在`);
+          continue;
+        }
+
+        // 检查链接是否已存在（如果有链接的话）
+        if (weblink) {
+          const existingLink = await ProductWeblink.findOne({
+            where: { weblink }
+          });
+          
+          if (existingLink) {
+            errors.push(`第${i+1}行：链接已存在于SKU ${existingLink.parent_sku}`);
+            continue;
+          }
+        }
+
+        newRecords.push({
+          parent_sku,
+          weblink,
+          notice,
+          update_time: new Date(),
+          status: '已经上传'
+        });
+      }
+    }
+
+    let resultMessage = '';
+    if (newRecords.length > 0) {
+      await ProductWeblink.bulkCreate(newRecords);
+      resultMessage = `成功上传 ${newRecords.length} 条新记录`;
+    } else {
+      resultMessage = '没有找到有效的数据行';
+    }
+
+    if (errors.length > 0) {
+      resultMessage += `\n跳过的记录：\n${errors.join('\n')}`;
+    }
+
+    res.json({ 
+      message: resultMessage,
+      count: newRecords.length,
+      errors: errors
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '文件上传失败: ' + err.message });
+  }
+});
+
+// SKU最新编号查询
+router.post('/latest-sku', async (req, res) => {
+  try {
+    const { prefix } = req.body;
+    if (!prefix || prefix.trim() === '') {
+      return res.status(400).json({ message: '请提供SKU前缀' });
+    }
+
+    const result = await ProductWeblink.findOne({
+      where: {
+        parent_sku: {
+          [Op.like]: `${prefix.trim()}%`
+        }
+      },
+      order: [['parent_sku', 'DESC']],
+      attributes: ['parent_sku']
+    });
+
+    res.json({ 
+      latestSku: result ? result.parent_sku : '未找到该前缀的SKU'
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '查询失败: ' + err.message });
   }
 });
 
