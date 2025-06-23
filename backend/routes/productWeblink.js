@@ -253,7 +253,7 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
           weblink,
           notice,
           update_time: new Date(),
-          status: '已经上传'
+          status: '待P图'
         });
       }
     }
@@ -290,10 +290,14 @@ router.post('/latest-sku', async (req, res) => {
       return res.status(400).json({ message: '请提供SKU前缀' });
     }
 
+    const trimmedPrefix = prefix.trim();
+    
+    // 使用正则表达式精确匹配：前缀 + 数字
+    // 例如：XB001, XB002, ... XB999，但不包括XBC001
     const result = await ProductWeblink.findOne({
       where: {
         parent_sku: {
-          [Op.like]: `${prefix.trim()}%`
+          [Op.regexp]: `^${trimmedPrefix}[0-9]+$`
         }
       },
       order: [['parent_sku', 'DESC']],

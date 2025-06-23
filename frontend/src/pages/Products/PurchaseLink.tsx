@@ -176,7 +176,7 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 修复批量打开链接功能
+  // 改进的批量打开链接逻辑
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要打开的记录');
@@ -191,28 +191,51 @@ const Purchase: React.FC = () => {
       return;
     }
 
+    // 直接打开链接，提供更好的用户反馈
+    const openLinks = async () => {
+      let successCount = 0;
+      let blockedCount = 0;
+      
+      message.loading('正在打开产品链接...', 1);
+      
+      for (let i = 0; i < validLinks.length; i++) {
+        const record = validLinks[i];
+        try {
+          const opened = window.open(record.weblink, '_blank', 'noopener,noreferrer');
+          if (opened && !opened.closed) {
+            successCount++;
+          } else {
+            blockedCount++;
+          }
+          
+          // 短暂延时，避免浏览器认为是垃圾邮件
+          if (i < validLinks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        } catch (error) {
+          blockedCount++;
+          console.error('Error opening link:', record.weblink, error);
+        }
+      }
+      
+      // 详细的反馈信息
+      if (successCount === validLinks.length) {
+        message.success(`成功打开 ${successCount} 个产品链接`);
+      } else if (successCount > 0) {
+        message.warning(`成功打开 ${successCount} 个链接，${blockedCount} 个链接可能被浏览器阻止`);
+      } else {
+        message.error('所有链接都被浏览器阻止。请检查浏览器设置，允许此网站打开弹出窗口。');
+      }
+    };
+
     if (validLinks.length > 10) {
       Modal.confirm({
         title: '确认打开链接',
         content: `您将要打开 ${validLinks.length} 个链接，这可能会影响浏览器性能。是否继续？`,
-        onOk: () => {
-          // 修复：使用延时打开，防止浏览器阻止弹窗
-          validLinks.forEach((record, index) => {
-            setTimeout(() => {
-              window.open(record.weblink, '_blank', 'noopener,noreferrer');
-            }, index * 100); // 每个链接间隔100ms打开
-          });
-          message.success(`已打开 ${validLinks.length} 个产品链接`);
-        },
+        onOk: openLinks,
       });
     } else {
-      // 修复：使用延时打开，防止浏览器阻止弹窗
-      validLinks.forEach((record, index) => {
-        setTimeout(() => {
-          window.open(record.weblink, '_blank', 'noopener,noreferrer');
-        }, index * 100); // 每个链接间隔100ms打开
-      });
-      message.success(`已打开 ${validLinks.length} 个产品链接`);
+      openLinks();
     }
   };
 
