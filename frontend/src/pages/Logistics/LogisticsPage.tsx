@@ -1823,7 +1823,7 @@ const LogisticsPage: React.FC = () => {
         footer={null}
       >
         <div>
-          <Space style={{ marginBottom: 16 }}>
+                    <Space style={{ marginBottom: 16 }}>
             <Button 
               type="primary" 
               onClick={() => {
@@ -1832,90 +1832,6 @@ const LogisticsPage: React.FC = () => {
               }}
             >
               新增HSCODE
-            </Button>
-            <Button 
-              onClick={async () => {
-                try {
-                  const response = await fetch(`${API_BASE_URL}/api/hscode/debug/table-info`);
-                  const result = await response.json();
-                  console.log('HSCODE表信息:', result);
-                  
-                  if (result.code === 0) {
-                    message.success(`表状态正常，共${result.data.recordCount}条记录`);
-                  } else {
-                    message.warning(result.message);
-                  }
-                } catch (error) {
-                  console.error('检查表状态失败:', error);
-                  message.error('检查表状态失败');
-                }
-              }}
-            >
-              检查表状态
-            </Button>
-            <Button 
-              type="dashed"
-              onClick={async () => {
-                Modal.confirm({
-                  title: '创建HSCODE表',
-                  content: '这将重新创建HSCODE表并插入示例数据。现有数据将被清空，确定继续吗？',
-                  onOk: async () => {
-                    try {
-                      const response = await fetch(`${API_BASE_URL}/api/hscode/debug/create-table`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                      });
-                      const result = await response.json();
-                      
-                      if (result.code === 0) {
-                        message.success('表创建成功');
-                        fetchHsCodes();
-                      } else {
-                        message.error(result.message);
-                      }
-                    } catch (error) {
-                      console.error('创建表失败:', error);
-                      message.error('创建表失败');
-                    }
-                  }
-                });
-              }}
-            >
-              创建表
-            </Button>
-            <Button 
-              danger
-              onClick={async () => {
-                // 获取第一条记录进行测试
-                if (hsCodeList.length === 0) {
-                  message.warning('没有可测试的记录');
-                  return;
-                }
-                
-                const testRecord = hsCodeList[0];
-                try {
-                  console.log('测试删除记录:', testRecord.parent_sku);
-                  const response = await fetch(`${API_BASE_URL}/api/hscode/debug/test-delete/${testRecord.parent_sku}`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' }
-                  });
-                  
-                  const result = await response.json();
-                  console.log('测试删除结果:', result);
-                  
-                  if (result.code === 0) {
-                    message.success(`测试删除成功，记录${result.data.deleted ? '已删除' : '未删除'}`);
-                    fetchHsCodes();
-        } else {
-                    message.error(result.message);
-                  }
-                } catch (error) {
-                  console.error('测试删除失败:', error);
-                  message.error('测试删除失败');
-                }
-              }}
-            >
-              测试删除
             </Button>
             <Text type="secondary">
               HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。
@@ -2095,42 +2011,33 @@ const LogisticsPage: React.FC = () => {
                         Modal.confirm({
                           title: '确认删除',
                           content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
-                          onOk: () => {
-                            return new Promise(async (resolve, reject) => {
-                              try {
-                                console.log('🗑️ 表格删除HSCODE记录:', record.parent_sku);
-                                console.log('📡 API URL:', `${API_BASE_URL}/api/hscode/${record.parent_sku}`);
-                                
-                                const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
-                                  method: 'DELETE',
-                                  headers: {
-                                    'Content-Type': 'application/json'
-                                  }
-                                });
-                                
-                                console.log('📊 删除响应状态:', response.status);
-                                
-                                if (!response.ok) {
-                                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                          okText: '确定',
+                          cancelText: '取消',
+                          onOk: async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                                method: 'DELETE',
+                                headers: {
+                                  'Content-Type': 'application/json'
                                 }
-                                
-                                const result = await response.json();
-                                console.log('📋 删除响应数据:', result);
-                                
-                                if (result.code === 0) {
-                                  message.success('删除成功');
-                                  fetchHsCodes();
-                                  resolve(true);
-                                } else {
-                                  message.error(result.message || '删除失败');
-                                  reject(new Error(result.message || '删除失败'));
-                                }
-                              } catch (error) {
-                                console.error('❌ 表格删除HSCODE失败:', error);
-                                message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
-                                reject(error);
+                              });
+                              
+                              if (!response.ok) {
+                                throw new Error(`删除请求失败: ${response.status}`);
                               }
-                            });
+                              
+                              const result = await response.json();
+                              
+                              if (result.code === 0) {
+                                message.success('删除成功');
+                                await fetchHsCodes(); // 重新获取列表
+                              } else {
+                                throw new Error(result.message || '删除失败');
+                              }
+                            } catch (error) {
+                              console.error('删除失败:', error);
+                              message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                            }
                           }
                         });
                       }}
