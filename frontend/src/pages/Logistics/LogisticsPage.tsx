@@ -2030,7 +2030,7 @@ const LogisticsPage: React.FC = () => {
             rowKey="parent_sku"
             size="small"
             pagination={{ pageSize: 8 }}
-            scroll={{ x: 920, y: 400 }}
+            scroll={{ x: 980, y: 400 }}
             columns={[
               { title: '父SKU', dataIndex: 'parent_sku', width: 100, fixed: 'left' },
               { 
@@ -2075,7 +2075,7 @@ const LogisticsPage: React.FC = () => {
               },
               {
                 title: '操作',
-                width: 120,
+                width: 180,
                 fixed: 'right',
                 render: (_, record: HsCode) => (
                   <Space>
@@ -2090,43 +2090,78 @@ const LogisticsPage: React.FC = () => {
                     </Button>
                     <Button 
                       size="small" 
-                      danger
+                      type="dashed"
                       onClick={async () => {
+                        try {
+                          console.log('🧪 对比测试 - 使用测试删除API:', record.parent_sku);
+                          const response = await fetch(`${API_BASE_URL}/api/hscode/debug/test-delete/${record.parent_sku}`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' }
+                          });
+                          
+                          const result = await response.json();
+                          console.log('🧪 测试删除API结果:', result);
+                          
+                          if (result.code === 0 && result.data.deleted) {
+                            message.success('对比测试：使用测试删除API成功');
+                            fetchHsCodes();
+                          } else {
+                            message.warning('对比测试：使用测试删除API失败');
+                          }
+                        } catch (error) {
+                          console.error('对比测试失败:', error);
+                          message.error('对比测试失败');
+                        }
+                      }}
+                    >
+                      测试
+                    </Button>
+                    <Button 
+                      size="small" 
+                      danger
+                      onClick={() => {
+                        const handleDelete = async () => {
+                          try {
+                            console.log('🗑️ 表格删除操作 - 删除HSCODE记录:', record.parent_sku);
+                            console.log('🔗 API URL:', `${API_BASE_URL}/api/hscode/${record.parent_sku}`);
+                            
+                            const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
+                              method: 'DELETE',
+                              headers: {
+                                'Content-Type': 'application/json'
+                              }
+                            });
+                            
+                            console.log('📊 删除响应状态:', response.status);
+                            console.log('📋 响应头:', Object.fromEntries(response.headers));
+                            
+                            if (!response.ok) {
+                              const errorText = await response.text();
+                              console.error('❌ HTTP错误响应:', errorText);
+                              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                            }
+                            
+                            const result = await response.json();
+                            console.log('✅ 删除响应数据:', result);
+                            
+                            if (result.code === 0) {
+                              message.success('删除成功');
+                              fetchHsCodes();
+                            } else {
+                              message.error(result.message || '删除失败');
+                            }
+                          } catch (error) {
+                            console.error('❌ 删除HSCODE失败:', error);
+                            message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                          }
+                        };
+
                         Modal.confirm({
                           title: '确认删除',
                           content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
-                          onOk: async () => {
-                            try {
-                              console.log('删除HSCODE记录:', record.parent_sku);
-                              console.log('API URL:', `${API_BASE_URL}/api/hscode/${record.parent_sku}`);
-                              
-                              const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
-                                method: 'DELETE',
-                                headers: {
-                                  'Content-Type': 'application/json'
-                                }
-                              });
-                              
-                              console.log('删除响应状态:', response.status);
-                              
-                              if (!response.ok) {
-                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                              }
-                              
-                              const result = await response.json();
-                              console.log('删除响应数据:', result);
-                              
-                              if (result.code === 0) {
-                                message.success('删除成功');
-                                fetchHsCodes();
-                              } else {
-                                message.error(result.message || '删除失败');
-                              }
-                            } catch (error) {
-                              console.error('删除HSCODE失败:', error);
-                              message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
-                            }
-                          }
+                          onOk: handleDelete,
+                          okText: '确定',
+                          cancelText: '取消'
                         });
                       }}
                     >
