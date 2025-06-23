@@ -3,6 +3,59 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const HsCode = require('../models/HsCode');
 
+// 调试端点：测试删除
+router.delete('/debug/test-delete/:parentSku', async (req, res) => {
+  try {
+    const parentSku = req.params.parentSku;
+    console.log('🧪 测试删除功能，parentSku:', parentSku);
+    
+    // 1. 查看删除前的状态
+    const beforeDelete = await HsCode.findByPk(parentSku);
+    console.log('删除前记录:', beforeDelete ? beforeDelete.toJSON() : null);
+    
+    if (!beforeDelete) {
+      return res.json({
+        code: 1,
+        message: '记录不存在',
+        data: { parentSku, found: false }
+      });
+    }
+    
+    // 2. 尝试使用SQL直接删除
+    const sqlResult = await HsCode.sequelize.query(
+      'DELETE FROM hscode WHERE parent_sku = ?',
+      {
+        replacements: [parentSku],
+        type: HsCode.sequelize.QueryTypes.DELETE
+      }
+    );
+    console.log('SQL删除结果:', sqlResult);
+    
+    // 3. 验证删除结果
+    const afterDelete = await HsCode.findByPk(parentSku);
+    console.log('删除后记录:', afterDelete ? afterDelete.toJSON() : null);
+    
+    res.json({
+      code: 0,
+      message: '删除测试完成',
+      data: {
+        parentSku,
+        beforeDelete: beforeDelete ? beforeDelete.toJSON() : null,
+        sqlDeleteResult: sqlResult,
+        afterDelete: afterDelete ? afterDelete.toJSON() : null,
+        deleted: !afterDelete
+      }
+    });
+  } catch (error) {
+    console.error('删除测试失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除测试失败',
+      error: error.message
+    });
+  }
+});
+
 // 调试端点：创建表
 router.post('/debug/create-table', async (req, res) => {
   try {
@@ -247,25 +300,63 @@ router.put('/:parentSku', async (req, res) => {
 // 删除HSCODE
 router.delete('/:parentSku', async (req, res) => {
   try {
-    const hsCode = await HsCode.findByPk(req.params.parentSku);
+    const parentSku = req.params.parentSku;
+    console.log('🗑️ 接收到删除请求，parentSku:', parentSku);
+    
+    // 检查记录是否存在
+    const hsCode = await HsCode.findByPk(parentSku);
+    console.log('📍 查找记录结果:', hsCode ? '找到记录' : '记录不存在');
+    
     if (!hsCode) {
+      console.log('❌ 记录不存在，parentSku:', parentSku);
       return res.status(404).json({
         code: 1,
-        message: 'HSCODE不存在'
+        message: `HSCODE记录不存在: ${parentSku}`
       });
     }
     
-    await hsCode.destroy();
+    console.log('🔍 找到要删除的记录:', {
+      parent_sku: hsCode.parent_sku,
+      weblink: hsCode.weblink,
+      uk_hscode: hsCode.uk_hscode,
+      us_hscode: hsCode.us_hscode
+    });
+    
+    // 执行删除
+    const deleteResult = await hsCode.destroy();
+    console.log('🗑️ 删除操作结果:', deleteResult);
+    
+    // 验证删除是否成功
+    const verifyDeleted = await HsCode.findByPk(parentSku);
+    console.log('✅ 删除验证:', verifyDeleted ? '删除失败，记录仍存在' : '删除成功');
+    
+    if (verifyDeleted) {
+      throw new Error('删除操作执行后记录仍然存在');
+    }
+    
     res.json({
       code: 0,
-      message: '删除成功'
+      message: '删除成功',
+      data: {
+        deletedParentSku: parentSku
+      }
     });
   } catch (error) {
-    console.error('删除HSCODE失败:', error);
+    console.error('❌ 删除HSCODE失败:', error);
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
     res.status(500).json({
       code: 1,
       message: '删除失败',
-      error: error.message
+      error: error.message,
+      details: {
+        errorName: error.name,
+        parentSku: req.params.parentSku
+      }
     });
   }
 });

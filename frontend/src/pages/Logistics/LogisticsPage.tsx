@@ -1883,6 +1883,40 @@ const LogisticsPage: React.FC = () => {
             >
               创建表
             </Button>
+            <Button 
+              danger
+              onClick={async () => {
+                // 获取第一条记录进行测试
+                if (hsCodeList.length === 0) {
+                  message.warning('没有可测试的记录');
+                  return;
+                }
+                
+                const testRecord = hsCodeList[0];
+                try {
+                  console.log('测试删除记录:', testRecord.parent_sku);
+                  const response = await fetch(`${API_BASE_URL}/api/hscode/debug/test-delete/${testRecord.parent_sku}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                  
+                  const result = await response.json();
+                  console.log('测试删除结果:', result);
+                  
+                  if (result.code === 0) {
+                    message.success(`测试删除成功，记录${result.data.deleted ? '已删除' : '未删除'}`);
+                    fetchHsCodes();
+                  } else {
+                    message.error(result.message);
+                  }
+                } catch (error) {
+                  console.error('测试删除失败:', error);
+                  message.error('测试删除失败');
+                }
+              }}
+            >
+              测试删除
+            </Button>
             <Text type="secondary">
               HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。
             </Text>

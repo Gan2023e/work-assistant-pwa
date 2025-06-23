@@ -49,6 +49,7 @@ const HsCode = sequelize.define('HsCode', {
 }, {
   tableName: 'hscode',
   timestamps: false,
+  paranoid: false, // 确保真正删除，不是软删除
   indexes: [
     {
       fields: ['weblink']
