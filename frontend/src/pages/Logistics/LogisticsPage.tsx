@@ -2470,7 +2470,9 @@ const LogisticsPage: React.FC = () => {
                           cancelText: '取消',
                           onOk: async () => {
                             try {
-                              console.log('删除HSCODE记录:', record.parent_sku);
+                              console.log('🗑️ 前端删除HSCODE记录:', record.parent_sku);
+                              console.log('🗑️ 编码后的URL参数:', encodeURIComponent(record.parent_sku));
+                              
                               const response = await fetch(`${API_BASE_URL}/api/hscode/${encodeURIComponent(record.parent_sku)}`, {
                                 method: 'DELETE',
                                 headers: {
@@ -2478,25 +2480,30 @@ const LogisticsPage: React.FC = () => {
                                 }
                               });
                               
-                              console.log('删除响应状态:', response.status);
+                              console.log('🗑️ 删除响应状态:', response.status);
+                              console.log('🗑️ 响应头:', response.headers);
                               
-                              if (!response.ok) {
+                              // 首先尝试解析为JSON
+                              let result;
+                              const contentType = response.headers.get('content-type');
+                              if (contentType && contentType.includes('application/json')) {
+                                result = await response.json();
+                              } else {
                                 const errorText = await response.text();
-                                console.error('删除失败响应:', errorText);
-                                throw new Error(`删除请求失败: ${response.status} - ${errorText}`);
+                                console.error('🗑️ 非JSON响应:', errorText);
+                                throw new Error(`服务器返回非JSON响应: ${response.status} - ${errorText}`);
                               }
                               
-                              const result = await response.json();
-                              console.log('删除响应结果:', result);
+                              console.log('🗑️ 删除响应结果:', result);
                               
-                              if (result.code === 0) {
+                              if (response.ok && result.code === 0) {
                                 message.success('删除成功');
                                 await fetchHsCodes(); // 重新获取列表
                               } else {
-                                throw new Error(result.message || '删除失败');
+                                throw new Error(result.message || `删除失败: HTTP ${response.status}`);
                               }
                             } catch (error) {
-                              console.error('删除失败:', error);
+                              console.error('🗑️ 删除失败:', error);
                               message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
                             }
                           }

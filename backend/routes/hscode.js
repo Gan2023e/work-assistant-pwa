@@ -43,7 +43,10 @@ router.get('/', async (req, res) => {
 // 根据parent_sku获取单个HSCODE
 router.get('/:parentSku', async (req, res) => {
   try {
-    const hsCode = await HsCode.findByPk(req.params.parentSku);
+    const parentSku = decodeURIComponent(req.params.parentSku);
+    console.log('🔍 获取HSCODE请求 - parent_sku:', parentSku);
+    
+    const hsCode = await HsCode.findByPk(parentSku);
     if (!hsCode) {
       return res.status(404).json({
         code: 1,
@@ -115,6 +118,9 @@ router.post('/', async (req, res) => {
 // 更新HSCODE
 router.put('/:parentSku', async (req, res) => {
   try {
+    const parentSku = decodeURIComponent(req.params.parentSku);
+    console.log('📝 更新HSCODE请求 - parent_sku:', parentSku);
+    
     const { weblink, uk_hscode, us_hscode, declared_value, declared_value_currency } = req.body;
     
     // 验证必填字段
@@ -133,11 +139,11 @@ router.put('/:parentSku', async (req, res) => {
       declared_value_currency,
       updated_at: new Date()
     }, {
-      where: { parent_sku: req.params.parentSku }
+      where: { parent_sku: parentSku }
     });
     
     if (updated) {
-      const hsCode = await HsCode.findByPk(req.params.parentSku);
+      const hsCode = await HsCode.findByPk(parentSku);
       res.json({
         code: 0,
         message: '更新成功',
@@ -162,24 +168,64 @@ router.put('/:parentSku', async (req, res) => {
 // 删除HSCODE
 router.delete('/:parentSku', async (req, res) => {
   try {
-    const parentSku = req.params.parentSku;
+    const parentSku = decodeURIComponent(req.params.parentSku);
+    console.log('🗑️ 删除HSCODE请求 - parent_sku:', parentSku);
+    console.log('🗑️ 原始参数:', req.params.parentSku);
     
-    const hsCode = await HsCode.findByPk(parentSku);
+    // 先查找记录
+    const hsCode = await HsCode.findOne({
+      where: { parent_sku: parentSku }
+    });
+    console.log('🔍 查找结果:', hsCode ? JSON.stringify(hsCode.dataValues) : '记录不存在');
+    
     if (!hsCode) {
+      console.log('❌ 记录不存在，parent_sku:', parentSku);
       return res.status(404).json({
         code: 1,
         message: 'HSCODE记录不存在'
       });
     }
     
-    await hsCode.destroy();
+    // 执行删除
+    console.log('🗑️ 开始删除记录:', hsCode.parent_sku);
+    const deletedRows = await HsCode.destroy({
+      where: { parent_sku: parentSku }
+    });
+    console.log('✅ 删除操作完成，影响行数:', deletedRows);
+    
+    if (deletedRows === 0) {
+      console.error('⚠️ 删除异常：没有删除任何记录');
+      return res.status(500).json({
+        code: 1,
+        message: '删除操作失败，没有删除任何记录'
+      });
+    }
+    
+    // 验证删除是否成功
+    const verifyDeleted = await HsCode.findOne({
+      where: { parent_sku: parentSku }
+    });
+    console.log('🔍 删除验证:', verifyDeleted ? '删除失败，记录仍存在' : '删除成功');
+    
+    if (verifyDeleted) {
+      console.error('⚠️ 删除异常：记录仍然存在');
+      return res.status(500).json({
+        code: 1,
+        message: '删除操作失败，记录仍然存在'
+      });
+    }
     
     res.json({
       code: 0,
       message: '删除成功'
     });
   } catch (error) {
-    console.error('删除HSCODE失败:', error);
+    console.error('❌ 删除HSCODE失败:', error);
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      sql: error.sql
+    });
     res.status(500).json({
       code: 1,
       message: '删除失败',
