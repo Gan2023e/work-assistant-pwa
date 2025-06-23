@@ -105,8 +105,8 @@ router.get('/active', async (req, res) => {
   try {
     const warehouses = await AmzWarehouse.findAll({
       where: { status: 'active' },
-      attributes: ['id', 'warehouseName', 'warehouseCode', 'country', 'city'],
-      order: [['warehouseName', 'ASC']]
+      attributes: ['id', 'recipient_name', 'warehouse_code', 'country', 'city'],
+      order: [['recipient_name', 'ASC']]
     });
     res.json({
       code: 0,
@@ -115,6 +115,38 @@ router.get('/active', async (req, res) => {
     });
   } catch (error) {
     console.error('获取活跃仓库列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 根据仓库代码获取完整地址信息
+router.get('/by-code/:warehouseCode', async (req, res) => {
+  try {
+    const warehouse = await AmzWarehouse.findOne({
+      where: { 
+        warehouse_code: req.params.warehouseCode,
+        status: 'active'
+      }
+    });
+    
+    if (warehouse) {
+      res.json({
+        code: 0,
+        message: '获取成功',
+        data: warehouse
+      });
+    } else {
+      res.status(404).json({
+        code: 1,
+        message: '仓库不存在或已禁用'
+      });
+    }
+  } catch (error) {
+    console.error('获取仓库信息失败:', error);
     res.status(500).json({
       code: 1,
       message: '获取失败',

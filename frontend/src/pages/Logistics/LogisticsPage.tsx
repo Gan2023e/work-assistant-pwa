@@ -103,16 +103,19 @@ interface BatchUpdateData {
 // 亚马逊仓库接口
 interface AmzWarehouse {
   id: number;
-  warehouseName: string;
-  warehouseCode: string;
-  country: string;
-  state?: string;
+  warehouse_code: string;
+  recipient_name: string;
+  address_line1: string;
+  address_line2?: string;
   city: string;
-  address: string;
-  zipCode: string;
+  state_province?: string;
+  postal_code: string;
+  country: string;
   phone?: string;
   status: 'active' | 'inactive';
   notes?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // HSCODE接口
@@ -1655,44 +1658,17 @@ const LogisticsPage: React.FC = () => {
             }}
           >
             <Row gutter={16}>
-              <Col span={6}>
-                <Form.Item name="warehouseName" label="仓库名称" rules={[{ required: true }]}>
-                  <Input placeholder="请输入仓库名称" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="warehouseCode" label="仓库代码" rules={[{ required: true }]}>
+              <Col span={8}>
+                <Form.Item name="warehouse_code" label="仓库代码" rules={[{ required: true }]}>
                   <Input placeholder="请输入仓库代码" />
                 </Form.Item>
               </Col>
-              <Col span={6}>
-                <Form.Item name="country" label="国家" rules={[{ required: true }]}>
-                  <Input placeholder="请输入国家" />
+              <Col span={8}>
+                <Form.Item name="recipient_name" label="收件人" rules={[{ required: true }]}>
+                  <Input placeholder="请输入收件人" />
                 </Form.Item>
               </Col>
-              <Col span={6}>
-                <Form.Item name="state" label="州/省">
-                  <Input placeholder="请输入州/省" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={6}>
-                <Form.Item name="city" label="城市" rules={[{ required: true }]}>
-                  <Input placeholder="请输入城市" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="zipCode" label="邮编" rules={[{ required: true }]}>
-                  <Input placeholder="请输入邮编" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item name="phone" label="电话">
-                  <Input placeholder="请输入电话" />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
+              <Col span={8}>
                 <Form.Item name="status" label="状态" initialValue="active">
                   <Select>
                     <Option value="active">启用</Option>
@@ -1703,11 +1679,45 @@ const LogisticsPage: React.FC = () => {
             </Row>
             <Row gutter={16}>
               <Col span={12}>
-                <Form.Item name="address" label="详细地址" rules={[{ required: true }]}>
-                  <TextArea rows={2} placeholder="请输入详细地址" />
+                <Form.Item name="address_line1" label="地址一" rules={[{ required: true }]}>
+                  <Input placeholder="请输入地址一" />
                 </Form.Item>
               </Col>
               <Col span={12}>
+                <Form.Item name="address_line2" label="地址二">
+                  <Input placeholder="请输入地址二（可选）" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={6}>
+                <Form.Item name="city" label="城市" rules={[{ required: true }]}>
+                  <Input placeholder="请输入城市" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="state_province" label="州/省">
+                  <Input placeholder="请输入州/省" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="postal_code" label="邮编" rules={[{ required: true }]}>
+                  <Input placeholder="请输入邮编" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="country" label="国家" rules={[{ required: true }]}>
+                  <Input placeholder="请输入国家" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="phone" label="电话">
+                  <Input placeholder="请输入电话" />
+                </Form.Item>
+              </Col>
+              <Col span={16}>
                 <Form.Item name="notes" label="备注">
                   <TextArea rows={2} placeholder="请输入备注" />
                 </Form.Item>
@@ -1734,13 +1744,16 @@ const LogisticsPage: React.FC = () => {
             rowKey="id"
             size="small"
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 1200, y: 400 }}
             columns={[
-              { title: '仓库名称', dataIndex: 'warehouseName', width: 120 },
-              { title: '仓库代码', dataIndex: 'warehouseCode', width: 100 },
-              { title: '国家', dataIndex: 'country', width: 80 },
-              { title: '州/省', dataIndex: 'state', width: 80 },
+              { title: '仓库代码', dataIndex: 'warehouse_code', width: 100, fixed: 'left' },
+              { title: '收件人', dataIndex: 'recipient_name', width: 120 },
+              { title: '地址一', dataIndex: 'address_line1', width: 200, ellipsis: true },
+              { title: '地址二', dataIndex: 'address_line2', width: 150, ellipsis: true },
               { title: '城市', dataIndex: 'city', width: 80 },
-              { title: '邮编', dataIndex: 'zipCode', width: 80 },
+              { title: '州/省', dataIndex: 'state_province', width: 80 },
+              { title: '邮编', dataIndex: 'postal_code', width: 80 },
+              { title: '国家', dataIndex: 'country', width: 80 },
               { 
                 title: '状态', 
                 dataIndex: 'status', 
@@ -1751,9 +1764,10 @@ const LogisticsPage: React.FC = () => {
                   </Tag>
                 )
               },
-              {
+                              {
                 title: '操作',
                 width: 120,
+                fixed: 'right',
                 render: (_, record: AmzWarehouse) => (
                   <Space>
                     <Button 
@@ -1769,20 +1783,26 @@ const LogisticsPage: React.FC = () => {
                       size="small" 
                       danger
                       onClick={async () => {
-                        try {
-                          const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.id}`, {
-                            method: 'DELETE'
-                          });
-                          const result = await response.json();
-                          if (result.code === 0) {
-                            message.success('删除成功');
-                            fetchWarehouses();
-                          } else {
-                            message.error(result.message || '删除失败');
+                        Modal.confirm({
+                          title: '确认删除',
+                          content: `确定要删除仓库"${record.recipient_name}"吗？`,
+                          onOk: async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/api/warehouse/${record.id}`, {
+                                method: 'DELETE'
+                              });
+                              const result = await response.json();
+                              if (result.code === 0) {
+                                message.success('删除成功');
+                                fetchWarehouses();
+                              } else {
+                                message.error(result.message || '删除失败');
+                              }
+                            } catch (error) {
+                              message.error('删除失败');
+                            }
                           }
-                        } catch (error) {
-                          message.error('删除失败');
-                        }
+                        });
                       }}
                     >
                       删除
