@@ -514,73 +514,75 @@ const Purchase: React.FC = () => {
             </div>
           </div>
 
-          {/* 批量操作区域 */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span>批量操作：</span>
-            
-            {/* 状态批量更新 */}
-            <Select
-              placeholder="批量修改状态"
-              style={{ width: 140 }}
-              onSelect={(value) => handleBatchUpdateStatus(value)}
-              disabled={selectedRowKeys.length === 0}
-            >
-              {statusOptions.map(status => (
-                <Option key={status} value={status}>{status}</Option>
-              ))}
-            </Select>
+                     {/* 批量操作区域 */}
+           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+               <span>批量操作：</span>
+               
+               {/* 状态批量更新 */}
+               <Select
+                 placeholder="批量修改状态"
+                 style={{ width: 140 }}
+                 onSelect={(value) => handleBatchUpdateStatus(value)}
+                 disabled={selectedRowKeys.length === 0}
+               >
+                 {statusOptions.map(status => (
+                   <Option key={status} value={status}>{status}</Option>
+                 ))}
+               </Select>
 
-            {/* 批量打开链接 */}
-            <Button 
-              icon={<LinkOutlined />}
-              onClick={handleBatchOpenLinks}
-              disabled={selectedRowKeys.length === 0}
-            >
-              批量打开链接
-            </Button>
+               {/* 批量打开链接 */}
+               <Button 
+                 icon={<LinkOutlined />}
+                 onClick={handleBatchOpenLinks}
+                 disabled={selectedRowKeys.length === 0}
+               >
+                 批量打开链接
+               </Button>
 
-            {/* 批量删除 */}
-            <Popconfirm
-              title="确定要删除选中的记录吗？"
-              onConfirm={handleBatchDelete}
-              okText="确定"
-              cancelText="取消"
-              disabled={selectedRowKeys.length === 0}
-            >
-              <Button 
-                danger
-                icon={<DeleteOutlined />}
-                disabled={selectedRowKeys.length === 0}
-              >
-                批量删除
-              </Button>
-            </Popconfirm>
+               {/* Excel上传 */}
+               <div>
+                 <input
+                   ref={fileInputRef}
+                   type="file"
+                   accept=".xlsx,.xls"
+                   onChange={handleFileUpload}
+                   style={{ display: 'none' }}
+                 />
+                 <Button 
+                   icon={<UploadOutlined />}
+                   onClick={() => fileInputRef.current?.click()}
+                   loading={loading}
+                 >
+                   上传Excel
+                 </Button>
+               </div>
 
-            {/* Excel上传 */}
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
-              />
-              <Button 
-                icon={<UploadOutlined />}
-                onClick={() => fileInputRef.current?.click()}
-                loading={loading}
-              >
-                上传Excel
-              </Button>
-            </div>
+               {/* 选择状态提示 */}
+               {selectedRowKeys.length > 0 && (
+                 <span style={{ color: '#1890ff', marginLeft: '16px' }}>
+                   已选择 {selectedRowKeys.length} 条记录
+                 </span>
+               )}
+             </div>
 
-            {/* 选择状态提示 */}
-            {selectedRowKeys.length > 0 && (
-              <span style={{ color: '#1890ff', marginLeft: '16px' }}>
-                已选择 {selectedRowKeys.length} 条记录
-              </span>
-            )}
-          </div>
+             {/* 批量删除 - 放在最右边 */}
+             <Popconfirm
+               title="确定要删除选中的记录吗？"
+               onConfirm={handleBatchDelete}
+               okText="确定"
+               cancelText="取消"
+               disabled={selectedRowKeys.length === 0}
+             >
+               <Button 
+                 danger
+                 icon={<DeleteOutlined />}
+                 disabled={selectedRowKeys.length === 0}
+               >
+                 批量删除
+               </Button>
+             </Popconfirm>
+           </div>
         </Space>
       </div>
 
