@@ -1833,6 +1833,56 @@ const LogisticsPage: React.FC = () => {
             >
               新增HSCODE
             </Button>
+            <Button 
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_BASE_URL}/api/hscode/debug/table-info`);
+                  const result = await response.json();
+                  console.log('HSCODE表信息:', result);
+                  
+                  if (result.code === 0) {
+                    message.success(`表状态正常，共${result.data.recordCount}条记录`);
+                  } else {
+                    message.warning(result.message);
+                  }
+                } catch (error) {
+                  console.error('检查表状态失败:', error);
+                  message.error('检查表状态失败');
+                }
+              }}
+            >
+              检查表状态
+            </Button>
+            <Button 
+              type="dashed"
+              onClick={async () => {
+                Modal.confirm({
+                  title: '创建HSCODE表',
+                  content: '这将重新创建HSCODE表并插入示例数据。现有数据将被清空，确定继续吗？',
+                  onOk: async () => {
+                    try {
+                      const response = await fetch(`${API_BASE_URL}/api/hscode/debug/create-table`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                      });
+                      const result = await response.json();
+                      
+                      if (result.code === 0) {
+                        message.success('表创建成功');
+                        fetchHsCodes();
+                      } else {
+                        message.error(result.message);
+                      }
+                    } catch (error) {
+                      console.error('创建表失败:', error);
+                      message.error('创建表失败');
+                    }
+                  }
+                });
+              }}
+            >
+              创建表
+            </Button>
             <Text type="secondary">
               HSCODE编码管理：维护产品的SKU与英美HSCODE编码的对应关系。
             </Text>
@@ -2013,10 +2063,25 @@ const LogisticsPage: React.FC = () => {
                           content: `确定要删除父SKU"${record.parent_sku}"的HSCODE记录吗？`,
                           onOk: async () => {
                             try {
+                              console.log('删除HSCODE记录:', record.parent_sku);
+                              console.log('API URL:', `${API_BASE_URL}/api/hscode/${record.parent_sku}`);
+                              
                               const response = await fetch(`${API_BASE_URL}/api/hscode/${record.parent_sku}`, {
-                                method: 'DELETE'
+                                method: 'DELETE',
+                                headers: {
+                                  'Content-Type': 'application/json'
+                                }
                               });
+                              
+                              console.log('删除响应状态:', response.status);
+                              
+                              if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                              }
+                              
                               const result = await response.json();
+                              console.log('删除响应数据:', result);
+                              
                               if (result.code === 0) {
                                 message.success('删除成功');
                                 fetchHsCodes();
@@ -2024,7 +2089,8 @@ const LogisticsPage: React.FC = () => {
                                 message.error(result.message || '删除失败');
                               }
                             } catch (error) {
-                              message.error('删除失败');
+                              console.error('删除HSCODE失败:', error);
+                              message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
                             }
                           }
                         });

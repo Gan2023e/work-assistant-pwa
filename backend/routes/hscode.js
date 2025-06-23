@@ -3,6 +3,93 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const HsCode = require('../models/HsCode');
 
+// 调试端点：创建表
+router.post('/debug/create-table', async (req, res) => {
+  try {
+    // 强制同步表结构
+    await HsCode.sync({ force: true });
+    
+    // 插入示例数据
+    await HsCode.bulkCreate([
+      {
+        parent_sku: 'SKU001',
+        weblink: 'https://example.com/product1',
+        uk_hscode: '8526920000',
+        us_hscode: '8526920000',
+        declared_value: 15.50,
+        declared_value_currency: 'USD'
+      },
+      {
+        parent_sku: 'SKU002',
+        weblink: 'https://example.com/product2',
+        uk_hscode: '8471300000',
+        us_hscode: '8471300000',
+        declared_value: 25.99,
+        declared_value_currency: 'USD'
+      }
+    ], { ignoreDuplicates: true });
+    
+    res.json({
+      code: 0,
+      message: '表创建成功并插入示例数据',
+      data: {
+        created: true
+      }
+    });
+  } catch (error) {
+    console.error('创建表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建表失败',
+      error: error.message
+    });
+  }
+});
+
+// 调试端点：检查表状态
+router.get('/debug/table-info', async (req, res) => {
+  try {
+    // 检查表是否存在
+    const tableExists = await HsCode.sequelize.getQueryInterface().showAllTables().then(tables => {
+      return tables.includes('hscode');
+    });
+    
+    if (!tableExists) {
+      return res.json({
+        code: 1,
+        message: '表不存在',
+        data: {
+          tableExists: false,
+          suggestion: '请运行数据库迁移脚本创建表'
+        }
+      });
+    }
+    
+    // 获取表结构
+    const tableDescription = await HsCode.sequelize.getQueryInterface().describeTable('hscode');
+    
+    // 统计记录数
+    const count = await HsCode.count();
+    
+    res.json({
+      code: 0,
+      message: '表信息获取成功',
+      data: {
+        tableExists: true,
+        recordCount: count,
+        tableStructure: tableDescription
+      }
+    });
+  } catch (error) {
+    console.error('获取表信息失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取表信息失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取所有HSCODE
 router.get('/', async (req, res) => {
   try {
