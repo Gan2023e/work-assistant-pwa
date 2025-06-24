@@ -778,76 +778,9 @@ const Purchase: React.FC = () => {
         </Row>
       </div>
 
-      {/* 筛选区域 */}
-      <div style={{ marginBottom: '20px' }}>
-        <Card size="small" title={<><FilterOutlined /> 筛选条件</>}>
-          <Row gutter={16} align="middle">
-                         <Col span={5}>
-               <span>产品状态：</span>
-               <Select
-                 style={{ width: '100%' }}
-                 placeholder="选择状态"
-                 value={filters.status}
-                 onChange={(value) => handleFilterChange('status', value)}
-                 allowClear
-               >
-                 {getUniqueStatuses().map(statusItem => (
-                   <Option key={statusItem.value} value={statusItem.value}>
-                     {statusItem.value} ({statusItem.count})
-                   </Option>
-                 ))}
-               </Select>
-             </Col>
-                         <Col span={5}>
-               <span>CPC测试情况：</span>
-               <Select
-                 style={{ width: '100%' }}
-                 placeholder="选择CPC状态"
-                 value={filters.cpc_status}
-                 onChange={(value) => handleFilterChange('cpc_status', value)}
-                 allowClear
-               >
-                 {getUniqueCpcStatuses().map(statusItem => (
-                   <Option key={statusItem.value} value={statusItem.value}>
-                     {statusItem.value} ({statusItem.count})
-                   </Option>
-                 ))}
-               </Select>
-             </Col>
-                         <Col span={5}>
-               <span>供应商：</span>
-               <Select
-                 style={{ width: '100%' }}
-                 placeholder="选择供应商"
-                 value={filters.seller_name}
-                 onChange={(value) => handleFilterChange('seller_name', value)}
-                 allowClear
-                 showSearch
-                 filterOption={(input, option) =>
-                   (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-                 }
-               >
-                 {getUniqueSuppliers().map(supplierItem => (
-                   <Option key={supplierItem.value} value={supplierItem.value}>
-                     {supplierItem.value} ({supplierItem.count})
-                   </Option>
-                 ))}
-               </Select>
-             </Col>
-            <Col span={9}>
-              {(filters.status || filters.cpc_status || filters.seller_name) && (
-                <span style={{ color: '#1890ff' }}>
-                  已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name) ? filteredData.length : data.length} 条记录
-                </span>
-              )}
-            </Col>
-          </Row>
-        </Card>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '20px' }}>
         <Space direction="vertical" style={{ width: '100%' }}>
-          {/* 搜索区域 */}
+          {/* 搜索和筛选区域 */}
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
             <TextArea
               rows={6}
@@ -878,6 +811,71 @@ const Purchase: React.FC = () => {
                 清空
               </Button>
             </div>
+            
+            {/* 筛选条件区域 */}
+            <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }}>
+              <Row gutter={[16, 8]} align="middle">
+                <Col span={8}>
+                  <div style={{ marginBottom: '4px' }}>产品状态：</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="选择状态"
+                    value={filters.status}
+                    onChange={(value) => handleFilterChange('status', value)}
+                    allowClear
+                  >
+                    {getUniqueStatuses().map(statusItem => (
+                      <Option key={statusItem.value} value={statusItem.value}>
+                        {statusItem.value} ({statusItem.count})
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                <Col span={8}>
+                  <div style={{ marginBottom: '4px' }}>CPC测试情况：</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="选择CPC状态"
+                    value={filters.cpc_status}
+                    onChange={(value) => handleFilterChange('cpc_status', value)}
+                    allowClear
+                  >
+                    {getUniqueCpcStatuses().map(statusItem => (
+                      <Option key={statusItem.value} value={statusItem.value}>
+                        {statusItem.value} ({statusItem.count})
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                <Col span={8}>
+                  <div style={{ marginBottom: '4px' }}>供应商：</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="选择供应商"
+                    value={filters.seller_name}
+                    onChange={(value) => handleFilterChange('seller_name', value)}
+                    allowClear
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    {getUniqueSuppliers().map(supplierItem => (
+                      <Option key={supplierItem.value} value={supplierItem.value}>
+                        {supplierItem.value} ({supplierItem.count})
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                {(filters.status || filters.cpc_status || filters.seller_name) && (
+                  <Col span={24} style={{ textAlign: 'center', marginTop: '8px' }}>
+                    <span style={{ color: '#1890ff' }}>
+                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name) ? filteredData.length : data.length} 条记录
+                    </span>
+                  </Col>
+                )}
+              </Row>
+            </Card>
           </div>
 
           {/* 批量操作区域 */}
