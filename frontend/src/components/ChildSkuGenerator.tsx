@@ -85,17 +85,70 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   };
 
   // 处理文件下载
-  const downloadFile = (blob: Blob, filename: string) => {
+  const downloadFile = (blob: Blob, originalFileName: string) => {
+    // 从原文件名提取名称和扩展名
+    const lastDotIndex = originalFileName.lastIndexOf('.');
+    const nameWithoutExt = lastDotIndex > 0 ? originalFileName.substring(0, lastDotIndex) : originalFileName;
+    const extension = lastDotIndex > 0 ? originalFileName.substring(lastDotIndex) : '.xlsx';
+    
+    // 生成时间戳
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
+    
+    // 构建新文件名：原名称_时间戳.扩展名
+    const newFileName = `${nameWithoutExt}_${timestamp}${extension}`;
+    
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename;
+    link.download = newFileName;
     document.body.appendChild(link);
     link.click();
     
     // 清理
     window.URL.revokeObjectURL(url);
     document.body.removeChild(link);
+  };
+
+  // 显示详细错误对话框
+  const showErrorDialog = (error: string, details?: string) => {
+    Modal.error({
+      title: '处理失败',
+      content: (
+        <div>
+          <p style={{ marginBottom: '12px', fontWeight: 'bold', color: '#ff4d4f' }}>
+            {error}
+          </p>
+          {details && (
+            <div>
+              <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>详细信息：</p>
+              <div style={{ 
+                backgroundColor: '#f5f5f5', 
+                padding: '8px 12px', 
+                borderRadius: '4px',
+                border: '1px solid #d9d9d9',
+                maxHeight: '200px',
+                overflow: 'auto',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {details}
+              </div>
+            </div>
+          )}
+          <div style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
+            <p>可能的解决方案：</p>
+            <ul style={{ marginLeft: '16px' }}>
+              <li>检查输入的SKU是否存在于数据库中</li>
+              <li>确认Excel文件格式正确（包含Template工作表）</li>
+              <li>验证网络连接是否正常</li>
+              <li>联系管理员检查服务器状态</li>
+            </ul>
+          </div>
+        </div>
+      ),
+      width: 500
+    });
   };
 
   // 主要处理函数
@@ -117,32 +170,45 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       });
 
       if (!response.ok) {
-        let errorMessage = `请求失败 (${response.status})`;
+        let errorMessage = `请求失败 (HTTP ${response.status})`;
+        let errorDetails = '';
         
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorMessage;
-        } catch {
-          // 如果无法解析JSON，使用默认错误信息
+          
+          // 添加更多错误详情
           if (response.status === 500) {
-            errorMessage = '服务器内部错误，请检查数据库连接或联系管理员';
+            errorDetails = `服务器内部错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '未知错误'}\n请求URL: ${response.url}`;
+          } else if (response.status === 404) {
+            errorDetails = `资源未找到\n状态码: ${response.status}\n可能原因: API端点不存在或SKU数据未找到`;
+          } else if (response.status === 400) {
+            errorDetails = `请求参数错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '请检查输入的SKU和Excel文件'}`;
+          } else {
+            errorDetails = `HTTP错误\n状态码: ${response.status}\n状态文本: ${response.statusText}`;
           }
+        } catch (parseError) {
+          // 如果无法解析JSON响应
+          errorDetails = `无法解析服务器响应\n状态码: ${response.status}\n状态文本: ${response.statusText}\n响应类型: ${response.headers.get('content-type') || '未知'}`;
         }
         
-        throw new Error(errorMessage);
+        showErrorDialog(errorMessage, errorDetails);
+        return;
       }
 
       // 处理文件下载
       const blob = await response.blob();
       
       if (blob.size === 0) {
-        throw new Error('返回的文件为空，请检查输入的SKU是否存在于数据库中');
+        showErrorDialog(
+          '返回的文件为空', 
+          '可能的原因：\n1. 输入的SKU在数据库中不存在\n2. 数据库查询未返回任何结果\n3. Excel处理过程中出现错误'
+        );
+        return;
       }
 
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
-      const filename = `UK资料表_${timestamp}.xlsx`;
-      
-      downloadFile(blob, filename);
+      // 使用原文件名+时间戳
+      downloadFile(blob, selectedFile!.name);
       
       message.success('子SKU生成器处理完成，文件已下载');
       
@@ -155,7 +221,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       
     } catch (error) {
       console.error('子SKU生成器失败:', error);
-      message.error(`处理失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      
+      // 显示详细错误对话框
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      const errorDetails = `错误类型: ${error instanceof Error ? error.name : 'Unknown'}\n错误信息: ${errorMessage}\n发生时间: ${new Date().toLocaleString('zh-CN')}\n\n请检查网络连接和输入数据的正确性。`;
+      
+      showErrorDialog('处理过程中发生错误', errorDetails);
     } finally {
       setLoading(false);
     }
