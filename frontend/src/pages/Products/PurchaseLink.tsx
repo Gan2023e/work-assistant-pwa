@@ -523,9 +523,6 @@ const Purchase: React.FC = () => {
 
   // 子SKU生成器功能
   const handleChildSkuGenerator = async () => {
-    console.log('🔍 前端子SKU生成器开始');
-    console.log('📄 输入的SKU:', skuInput.trim());
-    
     if (!skuInput.trim()) {
       message.warning('请输入需要整理的SKU');
       return;
@@ -537,13 +534,9 @@ const Purchase: React.FC = () => {
     }
 
     const file = templateFileInputRef.current.files[0];
-    console.log('📁 选择的文件:', file.name, '大小:', file.size);
-    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parentSkus', skuInput.trim());
-    
-    console.log('📤 准备发送请求到:', `${API_BASE_URL}/api/product_weblink/child-sku-generator`);
 
     setGeneratorLoading(true);
     try {
@@ -551,20 +544,20 @@ const Purchase: React.FC = () => {
         method: 'POST',
         body: formData,
       });
-      
-      console.log('📥 收到响应:', res.status, res.statusText);
 
       if (!res.ok) {
-        console.log('❌ 响应不成功，尝试解析错误信息');
-        const errorData = await res.json();
-        throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+        let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // 如果无法解析JSON，使用默认错误信息
+        }
+        throw new Error(errorMessage);
       }
 
       // 下载生成的文件
-      console.log('📁 开始处理文件下载');
       const blob = await res.blob();
-      console.log('📁 Blob大小:', blob.size, '类型:', blob.type);
-      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -574,7 +567,6 @@ const Purchase: React.FC = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      console.log('✅ 文件下载完成');
       message.success('子SKU生成器处理完成，文件已下载');
       setChildSkuGeneratorVisible(false);
       setSkuInput('');

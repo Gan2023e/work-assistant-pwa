@@ -4,7 +4,7 @@ export const API_BASE_URL = 'https://work-assistant-pwa-production.up.railway.ap
 // 调试信息
 console.log('🔧 API配置信息:', {
   API_BASE_URL: API_BASE_URL,
-  配置方式: '强制使用Railway生产环境',
+  配置方式: 'Railway生产环境',
   NODE_ENV: process.env.NODE_ENV,
   hostname: window.location.hostname,
   timestamp: new Date().toLocaleString('zh-CN')

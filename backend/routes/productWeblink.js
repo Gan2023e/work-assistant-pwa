@@ -519,17 +519,12 @@ router.get('/statistics', async (req, res) => {
 router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
   try {
     const { parentSkus } = req.body;
-    console.log('🔍 子SKU生成器请求开始');
-    console.log('📄 接收到的parentSkus:', parentSkus);
-    console.log('📁 接收到的文件:', req.file ? req.file.originalname : '无文件');
     
     if (!req.file) {
-      console.log('❌ 错误: 未接收到文件');
       return res.status(400).json({ message: '请上传Excel文件' });
     }
 
     if (!parentSkus || parentSkus.trim() === '') {
-      console.log('❌ 错误: 未输入SKU');
       return res.status(400).json({ message: '请输入需要整理的SKU' });
     }
 
@@ -539,44 +534,33 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       .map(sku => sku.trim())
       .filter(Boolean);
 
-    console.log('📋 解析后的SKU列表:', skuList);
-
     if (skuList.length === 0) {
-      console.log('❌ 错误: SKU列表为空');
       return res.status(400).json({ message: '请输入有效的SKU' });
     }
 
     // 读取Excel文件
-    console.log('📖 开始读取Excel文件');
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    console.log('📊 工作表名称:', workbook.SheetNames);
     
     // 查找Template页面
     if (!workbook.SheetNames.includes('Template')) {
-      console.log('❌ 错误: 未找到Template页面');
       return res.status(400).json({ message: 'Excel文件中未找到Template页面' });
     }
 
     const worksheet = workbook.Sheets['Template'];
     const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-    console.log('📋 读取到的数据行数:', data.length);
-    console.log('📋 前3行数据:', data.slice(0, 3));
 
     if (data.length < 3) {
-      console.log('❌ 错误: 数据行数不足');
       return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
     }
 
     // 查找第三行中列的位置
     const headerRow = data[2]; // 第三行（索引2）
-    console.log('📋 第三行表头数据:', headerRow);
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
 
     for (let i = 0; i < headerRow.length; i++) {
       const cellValue = headerRow[i]?.toString().toLowerCase();
-      console.log(`列 ${i}: "${headerRow[i]}" -> "${cellValue}"`);
       if (cellValue === 'item_sku') {
         itemSkuCol = i;
       } else if (cellValue === 'color_name') {
@@ -586,20 +570,13 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       }
     }
 
-    console.log('🔍 找到的列位置:');
-    console.log(`  item_sku列: ${itemSkuCol}`);
-    console.log(`  color_name列: ${colorNameCol}`);
-    console.log(`  size_name列: ${sizeNameCol}`);
-
     if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
-      console.log('❌ 错误: 未找到必需的列');
       return res.status(400).json({ 
         message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
       });
     }
 
     // 从数据库查询子SKU信息
-    console.log('🔍 开始查询数据库...');
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
         parent_sku: {
@@ -608,16 +585,7 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       }
     });
 
-    console.log(`📊 查询到 ${inventorySkus.length} 条子SKU记录`);
-    if (inventorySkus.length > 0) {
-      console.log('📋 前几条记录:');
-      inventorySkus.slice(0, 3).forEach((sku, index) => {
-        console.log(`  ${index + 1}. parent_sku: ${sku.parent_sku}, child_sku: ${sku.child_sku}, color: ${sku.sellercolorname}, size: ${sku.sellersizename}`);
-      });
-    }
-
     if (inventorySkus.length === 0) {
-      console.log('❌ 错误: 未找到匹配的子SKU信息');
       return res.status(404).json({ 
         message: '在数据库中未找到匹配的子SKU信息' 
       });
@@ -628,11 +596,14 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       data.push([]);
     }
 
+    // 确保数据数组有足够的行数
+    while (data.length < 4 + inventorySkus.length) {
+      data.push([]);
+    }
+
     // 填充数据（从第4行开始，索引3）
-    console.log('📝 开始填充数据...');
     inventorySkus.forEach((sku, index) => {
       const rowIndex = 3 + index; // 第4行开始
-      console.log(`📝 处理第 ${rowIndex + 1} 行，SKU: ${sku.parent_sku} -> ${sku.child_sku}`);
       
       // 确保行存在
       if (!data[rowIndex]) {
@@ -646,40 +617,22 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       }
       
       // 填充数据
-      const itemSkuValue = `UK${sku.child_sku}`;
-      const colorValue = sku.sellercolorname || '';
-      const sizeValue = sku.sellersizename || '';
-      
-      data[rowIndex][itemSkuCol] = itemSkuValue;
-      data[rowIndex][colorNameCol] = colorValue;
-      data[rowIndex][sizeNameCol] = sizeValue;
-      
-      console.log(`  列 ${itemSkuCol} (item_sku): "${itemSkuValue}"`);
-      console.log(`  列 ${colorNameCol} (color_name): "${colorValue}"`);
-      console.log(`  列 ${sizeNameCol} (size_name): "${sizeValue}"`);
-    });
-
-    console.log(`📝 数据填充完成，总共处理 ${inventorySkus.length} 行`);
-    console.log('📋 填充后的前几行数据:');
-    data.slice(3, 6).forEach((row, index) => {
-      console.log(`  第 ${index + 4} 行:`, row);
+      data[rowIndex][itemSkuCol] = `UK${sku.child_sku}`;
+      data[rowIndex][colorNameCol] = sku.sellercolorname || '';
+      data[rowIndex][sizeNameCol] = sku.sellersizename || '';
     });
 
     // 重新创建工作表
-    console.log('📊 重新创建工作表...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     workbook.Sheets['Template'] = newWorksheet;
 
     // 生成Excel文件
-    console.log('📁 生成Excel文件...');
     const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    console.log(`📁 Excel文件生成完成，大小: ${excelBuffer.length} 字节`);
 
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=processed_template.xlsx');
     
-    console.log('✅ 子SKU生成器处理完成，开始发送文件');
     res.send(excelBuffer);
 
   } catch (err) {
