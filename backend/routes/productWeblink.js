@@ -611,7 +611,7 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       }
       
       // 填充数据
-      data[rowIndex][itemSkuCol] = `US${sku.child_sku}`;
+      data[rowIndex][itemSkuCol] = `UK${sku.child_sku}`;
       data[rowIndex][colorNameCol] = sku.sellercolorname || '';
       data[rowIndex][sizeNameCol] = sku.sellersizename || '';
     });

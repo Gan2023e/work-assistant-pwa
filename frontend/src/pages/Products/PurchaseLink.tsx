@@ -518,7 +518,7 @@ const Purchase: React.FC = () => {
     }
 
     if (!templateFileInputRef.current?.files?.[0]) {
-      message.warning('请选择美国资料表Excel文件');
+      message.warning('请选择英国资料表Excel文件');
       return;
     }
 
@@ -1196,7 +1196,7 @@ const Purchase: React.FC = () => {
           </div>
           
           <div>
-            <Text strong>选择待整理的美国资料表：</Text>
+            <Text strong>选择待整理的英国资料表：</Text>
             <div style={{ marginTop: '8px' }}>
               <input
                 ref={templateFileInputRef}
