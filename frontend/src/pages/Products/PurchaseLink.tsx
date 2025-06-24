@@ -93,6 +93,7 @@ const Purchase: React.FC = () => {
   const [skuInput, setSkuInput] = useState('');
   const [generatorLoading, setGeneratorLoading] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFileName, setSelectedFileName] = useState('');
   
   // 筛选相关状态
   const [filters, setFilters] = useState({
@@ -510,6 +511,16 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 处理模板文件选择
+  const handleTemplateFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFileName(file.name);
+    } else {
+      setSelectedFileName('');
+    }
+  };
+
   // 子SKU生成器功能
   const handleChildSkuGenerator = async () => {
     if (!skuInput.trim()) {
@@ -553,6 +564,7 @@ const Purchase: React.FC = () => {
       message.success('子SKU生成器处理完成，文件已下载');
       setChildSkuGeneratorVisible(false);
       setSkuInput('');
+      setSelectedFileName('');
       if (templateFileInputRef.current) {
         templateFileInputRef.current.value = '';
       }
@@ -1174,6 +1186,7 @@ const Purchase: React.FC = () => {
         onCancel={() => {
           setChildSkuGeneratorVisible(false);
           setSkuInput('');
+          setSelectedFileName('');
           if (templateFileInputRef.current) {
             templateFileInputRef.current.value = '';
           }
@@ -1203,15 +1216,32 @@ const Purchase: React.FC = () => {
                 type="file"
                 accept=".xlsx,.xls"
                 style={{ display: 'none' }}
+                onChange={handleTemplateFileChange}
               />
               <Button 
                 icon={<UploadOutlined />}
                 onClick={() => templateFileInputRef.current?.click()}
                 block
+                style={{ marginBottom: '8px' }}
               >
                 选择Excel文件
               </Button>
-              <div style={{ marginTop: '8px', color: '#666', fontSize: '12px' }}>
+              
+              {selectedFileName && (
+                <div style={{ 
+                  padding: '8px 12px', 
+                  backgroundColor: '#f0f9ff', 
+                  border: '1px solid #91d5ff',
+                  borderRadius: '6px',
+                  marginBottom: '8px' 
+                }}>
+                  <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                    已选择：{selectedFileName}
+                  </Text>
+                </div>
+              )}
+              
+              <div style={{ color: '#666', fontSize: '12px' }}>
                 提示：资料必须放置在Template页
               </div>
             </div>
