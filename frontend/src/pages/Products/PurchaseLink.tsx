@@ -11,7 +11,11 @@ import {
   Popconfirm,
   Form,
   Tooltip,
-  Typography
+  Typography,
+  Card,
+  Row,
+  Col,
+  Statistic
 } from 'antd';
 import { 
   UploadOutlined, 
@@ -19,7 +23,11 @@ import {
   EditOutlined, 
   LinkOutlined,
   ReloadOutlined,
-  SearchOutlined 
+  SearchOutlined,
+  CameraOutlined,
+  CloudUploadOutlined,
+  FilterOutlined,
+  ClearOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -79,6 +87,21 @@ const Purchase: React.FC = () => {
   const [skuPrefix, setSkuPrefix] = useState('');
   const [latestSku, setLatestSku] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 筛选相关状态
+  const [filters, setFilters] = useState({
+    status: '',
+    cpc_status: '',
+    seller_name: ''
+  });
+  const [filteredData, setFilteredData] = useState<ProductRecord[]>([]);
+  const [originalData, setOriginalData] = useState<ProductRecord[]>([]);
+  
+  // 统计数据
+  const [statistics, setStatistics] = useState({
+    waitingPImage: 0,
+    waitingUpload: 0
+  });
 
   // 搜索功能
   const handleSearch = async () => {
@@ -106,18 +129,125 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      setData(result.data || []);
+      const searchData = result.data || [];
+      setData(searchData);
+      setOriginalData(searchData);
       
-      if (!result.data || result.data.length === 0) {
+      // 计算统计数据
+      const waitingPImage = searchData.filter((item: ProductRecord) => item.status === '待P图').length;
+      const waitingUpload = searchData.filter((item: ProductRecord) => item.status === '待上传').length;
+      setStatistics({ waitingPImage, waitingUpload });
+      
+      // 应用当前筛选
+      applyFilters(searchData, filters);
+      
+      if (!searchData || searchData.length === 0) {
         message.info('未找到匹配的产品信息');
       } else {
-        message.success(`找到 ${result.data.length} 条产品信息`);
+        message.success(`找到 ${searchData.length} 条产品信息`);
       }
     } catch (e) {
       console.error('搜索失败:', e);
       message.error(`查询失败: ${e instanceof Error ? e.message : '未知错误'}`);
     }
     setLoading(false);
+  };
+
+  // 筛选功能
+  const applyFilters = (sourceData: ProductRecord[], currentFilters: any) => {
+    let filtered = [...sourceData];
+    
+    if (currentFilters.status) {
+      filtered = filtered.filter(item => item.status === currentFilters.status);
+    }
+    
+    if (currentFilters.cpc_status) {
+      filtered = filtered.filter(item => item.cpc_status === currentFilters.cpc_status);
+    }
+    
+    if (currentFilters.seller_name) {
+      filtered = filtered.filter(item => 
+        item.seller_name && item.seller_name.includes(currentFilters.seller_name)
+      );
+    }
+    
+    setFilteredData(filtered);
+  };
+
+  // 处理筛选变化
+  const handleFilterChange = (filterType: string, value: string) => {
+    const newFilters = { ...filters, [filterType]: value };
+    setFilters(newFilters);
+    applyFilters(originalData, newFilters);
+  };
+
+  // 清空筛选
+  const handleClearFilters = () => {
+    const emptyFilters = { status: '', cpc_status: '', seller_name: '' };
+    setFilters(emptyFilters);
+    setFilteredData(originalData);
+  };
+
+  // 点击卡片显示对应状态数据
+  const handleCardClick = (status: string) => {
+    const cardFilters = { ...filters, status };
+    setFilters(cardFilters);
+    applyFilters(originalData, cardFilters);
+    
+    // 更新输入框显示对应状态的SKU
+    const statusProducts = originalData.filter(item => item.status === status);
+    const skuList = statusProducts.map(item => item.parent_sku).join('\n');
+    setInput(skuList);
+    
+    message.info(`已显示 ${statusProducts.length} 条"${status}"状态的产品`);
+  };
+
+  // 获取唯一的CPC状态选项（基于当前搜索结果）
+  const getUniqueCpcStatuses = () => {
+    const currentData = data.length > 0 ? data : originalData;
+    const statusCount: { [key: string]: number } = {};
+    
+    currentData.forEach(item => {
+      if (item.cpc_status && item.cpc_status.trim() !== '') {
+        statusCount[item.cpc_status] = (statusCount[item.cpc_status] || 0) + 1;
+      }
+    });
+    
+    return Object.keys(statusCount)
+      .sort()
+      .map(status => ({ value: status, count: statusCount[status] }));
+  };
+
+  // 获取唯一的供应商选项（基于当前搜索结果）
+  const getUniqueSuppliers = () => {
+    const currentData = data.length > 0 ? data : originalData;
+    const supplierCount: { [key: string]: number } = {};
+    
+    currentData.forEach(item => {
+      if (item.seller_name && item.seller_name.trim() !== '') {
+        supplierCount[item.seller_name] = (supplierCount[item.seller_name] || 0) + 1;
+      }
+    });
+    
+    return Object.keys(supplierCount)
+      .sort()
+      .map(supplier => ({ value: supplier, count: supplierCount[supplier] }));
+  };
+
+  // 获取唯一的状态选项（基于当前搜索结果）
+  const getUniqueStatuses = () => {
+    const currentData = data.length > 0 ? data : originalData;
+    const statusCount: { [key: string]: number } = {};
+    
+    currentData.forEach(item => {
+      if (item.status && item.status.trim() !== '') {
+        statusCount[item.status] = (statusCount[item.status] || 0) + 1;
+      }
+    });
+    
+    return Object.keys(statusCount)
+      .sort()
+      .map(status => ({ value: status, count: statusCount[status] }));
   };
 
   // 批量更新状态
@@ -188,7 +318,8 @@ const Purchase: React.FC = () => {
     }
 
     // 确保类型匹配：将selectedRowKeys中的值转换为数字进行比较
-    const selectedRecords = data.filter(record => 
+    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name ? filteredData : data;
+    const selectedRecords = currentData.filter(record => 
       selectedRowKeys.some(key => Number(key) === record.id)
     );
     
@@ -600,6 +731,116 @@ const Purchase: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
+      {/* 统计卡片区域 */}
+      <div style={{ marginBottom: '20px' }}>
+        <Row gutter={16}>
+          <Col span={6}>
+            <Card 
+              hoverable 
+              onClick={() => handleCardClick('待P图')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="待P图产品数"
+                value={statistics.waitingPImage}
+                prefix={<CameraOutlined />}
+                valueStyle={{ color: '#cf1322' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card 
+              hoverable 
+              onClick={() => handleCardClick('待上传')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="待上传产品数"
+                value={statistics.waitingUpload}
+                prefix={<CloudUploadOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      </div>
+
+      {/* 筛选区域 */}
+      <div style={{ marginBottom: '20px' }}>
+        <Card size="small" title={<><FilterOutlined /> 筛选条件</>}>
+          <Row gutter={16} align="middle">
+                         <Col span={5}>
+               <span>产品状态：</span>
+               <Select
+                 style={{ width: '100%' }}
+                 placeholder="选择状态"
+                 value={filters.status}
+                 onChange={(value) => handleFilterChange('status', value)}
+                 allowClear
+               >
+                 {getUniqueStatuses().map(statusItem => (
+                   <Option key={statusItem.value} value={statusItem.value}>
+                     {statusItem.value} ({statusItem.count})
+                   </Option>
+                 ))}
+               </Select>
+             </Col>
+                         <Col span={5}>
+               <span>CPC测试情况：</span>
+               <Select
+                 style={{ width: '100%' }}
+                 placeholder="选择CPC状态"
+                 value={filters.cpc_status}
+                 onChange={(value) => handleFilterChange('cpc_status', value)}
+                 allowClear
+               >
+                 {getUniqueCpcStatuses().map(statusItem => (
+                   <Option key={statusItem.value} value={statusItem.value}>
+                     {statusItem.value} ({statusItem.count})
+                   </Option>
+                 ))}
+               </Select>
+             </Col>
+                         <Col span={5}>
+               <span>供应商：</span>
+               <Select
+                 style={{ width: '100%' }}
+                 placeholder="选择供应商"
+                 value={filters.seller_name}
+                 onChange={(value) => handleFilterChange('seller_name', value)}
+                 allowClear
+                 showSearch
+                 filterOption={(input, option) =>
+                   (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                 }
+               >
+                 {getUniqueSuppliers().map(supplierItem => (
+                   <Option key={supplierItem.value} value={supplierItem.value}>
+                     {supplierItem.value} ({supplierItem.count})
+                   </Option>
+                 ))}
+               </Select>
+             </Col>
+            <Col span={3}>
+              <Button 
+                icon={<ClearOutlined />} 
+                onClick={handleClearFilters}
+                block
+              >
+                清空筛选
+              </Button>
+            </Col>
+            <Col span={6}>
+              {(filters.status || filters.cpc_status || filters.seller_name) && (
+                <span style={{ color: '#1890ff' }}>
+                  已筛选：显示 {filteredData.length} 条记录
+                </span>
+              )}
+            </Col>
+          </Row>
+        </Card>
+      </div>
+
       <div style={{ marginBottom: '20px' }}>
         <Space direction="vertical" style={{ width: '100%' }}>
           {/* 搜索区域 */}
@@ -621,7 +862,11 @@ const Purchase: React.FC = () => {
                 onClick={() => {
                   setInput('');
                   setData([]);
+                  setOriginalData([]);
+                  setFilteredData([]);
                   setSelectedRowKeys([]);
+                  setStatistics({ waitingPImage: 0, waitingUpload: 0 });
+                  handleClearFilters();
                 }}
               >
                 清空
@@ -703,7 +948,7 @@ const Purchase: React.FC = () => {
       {/* 数据表格 */}
       <Table
         columns={columns}
-        dataSource={data}
+        dataSource={filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name ? filteredData : data}
         rowKey="id"
         loading={loading}
         rowSelection={rowSelection}
