@@ -253,7 +253,7 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
           weblink,
           notice,
           update_time: new Date(),
-          status: '待P图'
+          status: '待审核'
         });
       }
     }
