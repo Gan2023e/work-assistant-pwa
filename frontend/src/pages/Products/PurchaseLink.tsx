@@ -128,10 +128,12 @@ const Purchase: React.FC = () => {
     }
 
     try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedRowKeys, status }),
+        body: JSON.stringify({ ids, status }),
       });
 
       if (!res.ok) {
@@ -156,10 +158,12 @@ const Purchase: React.FC = () => {
     }
 
     try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedRowKeys }),
+        body: JSON.stringify({ ids }),
       });
 
       if (!res.ok) {
@@ -176,14 +180,18 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 改进的批量打开链接逻辑
+  // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要打开的记录');
       return;
     }
 
-    const selectedRecords = data.filter(record => selectedRowKeys.includes(record.id));
+    // 确保类型匹配：将selectedRowKeys中的值转换为数字进行比较
+    const selectedRecords = data.filter(record => 
+      selectedRowKeys.some(key => Number(key) === record.id)
+    );
+    
     const validLinks = selectedRecords.filter(record => record.weblink && record.weblink.trim() !== '');
 
     if (validLinks.length === 0) {
@@ -564,6 +572,25 @@ const Purchase: React.FC = () => {
     selectedRowKeys,
     onChange: (newSelectedRowKeys: React.Key[]) => {
       setSelectedRowKeys(newSelectedRowKeys);
+    },
+    onSelectAll: (selected: boolean, selectedRows: ProductRecord[], changeRows: ProductRecord[]) => {
+      if (selected) {
+        // 全选时，确保选择所有当前页面的记录
+        const allKeys = data.map(record => record.id);
+        setSelectedRowKeys(allKeys);
+      } else {
+        // 取消全选
+        setSelectedRowKeys([]);
+      }
+    },
+    onSelect: (record: ProductRecord, selected: boolean) => {
+      if (selected) {
+        // 添加选择的记录
+        setSelectedRowKeys(prev => [...prev, record.id]);
+      } else {
+        // 移除取消选择的记录
+        setSelectedRowKeys(prev => prev.filter(key => Number(key) !== record.id));
+      }
     },
     getCheckboxProps: (record: ProductRecord) => ({
       disabled: false,
