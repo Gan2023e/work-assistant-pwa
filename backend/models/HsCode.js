@@ -34,6 +34,11 @@ const HsCode = sequelize.define('HsCode', {
     defaultValue: 'USD',
     comment: '申报价值货币'
   },
+  declared_image: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    comment: '申报图片路径'
+  },
   created_at: {
     type: DataTypes.DATE,
     allowNull: false,

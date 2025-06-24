@@ -2,6 +2,44 @@ const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const HsCode = require('../models/HsCode');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// 创建上传目录
+const uploadDir = path.join(__dirname, '../uploads/hscode-images');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// 配置multer
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // 使用parent_sku + 时间戳 + 原文件扩展名
+    const parentSku = req.params.parentSku || req.body.parent_sku || 'unknown';
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    cb(null, `${parentSku}_${timestamp}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  fileFilter: function (req, file, cb) {
+    // 检查文件类型
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传图片文件'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB限制
+  }
+});
 
 
 
@@ -97,7 +135,8 @@ router.post('/', async (req, res) => {
       uk_hscode,
       us_hscode,
       declared_value,
-      declared_value_currency: declared_value_currency || 'USD'
+      declared_value_currency: declared_value_currency || 'USD',
+      declared_image: req.body.declared_image
     });
     
     res.json({
@@ -121,7 +160,7 @@ router.put('/:parentSku', async (req, res) => {
     const parentSku = decodeURIComponent(req.params.parentSku);
     console.log('📝 更新HSCODE请求 - parent_sku:', parentSku);
     
-    const { weblink, uk_hscode, us_hscode, declared_value, declared_value_currency } = req.body;
+    const { weblink, uk_hscode, us_hscode, declared_value, declared_value_currency, declared_image } = req.body;
     
     // 验证必填字段
     if (!weblink || !uk_hscode || !us_hscode) {
@@ -137,6 +176,7 @@ router.put('/:parentSku', async (req, res) => {
       us_hscode,
       declared_value,
       declared_value_currency,
+      declared_image,
       updated_at: new Date()
     }, {
       where: { parent_sku: parentSku }
@@ -229,6 +269,120 @@ router.delete('/:parentSku', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 上传申报图片
+router.post('/:parentSku/upload-image', upload.single('image'), async (req, res) => {
+  try {
+    const parentSku = decodeURIComponent(req.params.parentSku);
+    
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '请选择要上传的图片文件'
+      });
+    }
+    
+    // 检查记录是否存在
+    const hsCode = await HsCode.findByPk(parentSku);
+    if (!hsCode) {
+      // 删除已上传的文件
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        code: 1,
+        message: 'HSCODE记录不存在'
+      });
+    }
+    
+    // 如果之前有图片，删除旧图片
+    if (hsCode.declared_image) {
+      const oldImagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+    }
+    
+    // 更新数据库记录
+    const imagePath = `/uploads/hscode-images/${req.file.filename}`;
+    await HsCode.update({
+      declared_image: imagePath,
+      updated_at: new Date()
+    }, {
+      where: { parent_sku: parentSku }
+    });
+    
+    // 获取更新后的记录
+    const updatedHsCode = await HsCode.findByPk(parentSku);
+    
+    res.json({
+      code: 0,
+      message: '图片上传成功',
+      data: {
+        declared_image: imagePath,
+        record: updatedHsCode
+      }
+    });
+  } catch (error) {
+    console.error('上传申报图片失败:', error);
+    // 如果有上传的文件，删除它
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      code: 1,
+      message: '图片上传失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除申报图片
+router.delete('/:parentSku/image', async (req, res) => {
+  try {
+    const parentSku = decodeURIComponent(req.params.parentSku);
+    
+    // 查找记录
+    const hsCode = await HsCode.findByPk(parentSku);
+    if (!hsCode) {
+      return res.status(404).json({
+        code: 1,
+        message: 'HSCODE记录不存在'
+      });
+    }
+    
+    if (!hsCode.declared_image) {
+      return res.status(400).json({
+        code: 1,
+        message: '该记录没有申报图片'
+      });
+    }
+    
+    // 删除文件
+    const imagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+    
+    // 更新数据库记录
+    await HsCode.update({
+      declared_image: null,
+      updated_at: new Date()
+    }, {
+      where: { parent_sku: parentSku }
+    });
+    
+    res.json({
+      code: 0,
+      message: '申报图片删除成功'
+    });
+  } catch (error) {
+    console.error('删除申报图片失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除图片失败',
       error: error.message
     });
   }

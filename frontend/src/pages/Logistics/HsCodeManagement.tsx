@@ -36,7 +36,10 @@ import {
   DollarOutlined,
   InfoCircleOutlined,
   FilterOutlined,
-  ClearOutlined
+  ClearOutlined,
+  UploadOutlined,
+  EyeOutlined,
+  PictureOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -54,6 +57,7 @@ interface HsCode {
   us_hscode: string;
   declared_value?: number;
   declared_value_currency?: string;
+  declared_image?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -75,6 +79,9 @@ const HsCodeManagement: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<HsCode | null>(null);
   const [searchParams, setSearchParams] = useState<SearchParams>({});
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
+  const [uploadingParentSku, setUploadingParentSku] = useState<string | null>(null);
   
   // Form实例
   const [form] = Form.useForm();
@@ -271,6 +278,62 @@ const HsCodeManagement: React.FC = () => {
     setEditModalVisible(true);
   };
 
+  // 图片上传处理
+  const handleImageUpload = async (parentSku: string, file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    setUploadingParentSku(parentSku);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/hscode/${encodeURIComponent(parentSku)}/upload-image`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('申报图片上传成功');
+        await fetchHsCodes(searchParams);
+      } else {
+        throw new Error(result.message || '上传失败');
+      }
+    } catch (error) {
+      console.error('上传申报图片失败:', error);
+      message.error(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setUploadingParentSku(null);
+    }
+  };
+
+  // 删除图片
+  const handleDeleteImage = async (parentSku: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/hscode/${encodeURIComponent(parentSku)}/image`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('申报图片删除成功');
+        await fetchHsCodes(searchParams);
+      } else {
+        throw new Error(result.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除申报图片失败:', error);
+      message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
+  // 预览图片
+  const handlePreviewImage = (imageUrl: string) => {
+    setPreviewImageUrl(`${API_BASE_URL}${imageUrl}`);
+    setImagePreviewVisible(true);
+  };
+
   // 初始化
   useEffect(() => {
     fetchHsCodes();
@@ -365,6 +428,67 @@ const HsCodeManagement: React.FC = () => {
            </Space>
         );
       },
+    },
+    {
+      title: (
+        <Space>
+          <PictureOutlined />
+          申报图片
+        </Space>
+      ),
+      key: 'declared_image',
+      width: 150,
+      align: 'center',
+      render: (_, record) => (
+        <Space direction="vertical" size="small">
+          {record.declared_image ? (
+            <Space>
+              <Button
+                type="text"
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={() => handlePreviewImage(record.declared_image!)}
+              >
+                预览
+              </Button>
+              <Popconfirm
+                title="确定要删除这张申报图片吗？"
+                onConfirm={() => handleDeleteImage(record.parent_sku)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  danger
+                >
+                  删除
+                </Button>
+              </Popconfirm>
+            </Space>
+          ) : (
+            <Upload
+              accept="image/*"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleImageUpload(record.parent_sku, file);
+                return false;
+              }}
+              disabled={uploadingParentSku === record.parent_sku}
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<UploadOutlined />}
+                loading={uploadingParentSku === record.parent_sku}
+              >
+                上传
+              </Button>
+            </Upload>
+          )}
+        </Space>
+      ),
     },
     {
       title: '创建时间',
@@ -547,7 +671,7 @@ const HsCodeManagement: React.FC = () => {
           rowKey="parent_sku"
           loading={loading}
           size="small"
-          scroll={{ x: 1000, y: 600 }}
+          scroll={{ x: 1200, y: 600 }}
           pagination={{
             defaultPageSize: 20,
             showSizeChanger: true,
@@ -692,6 +816,77 @@ const HsCodeManagement: React.FC = () => {
             />
           </Form.Item>
 
+          <Form.Item
+            label="申报图片"
+          >
+            <div>
+              {editingRecord?.declared_image ? (
+                <div style={{ marginBottom: 16 }}>
+                  <img
+                    src={`${API_BASE_URL}${editingRecord.declared_image}`}
+                    alt="当前申报图片"
+                    style={{
+                      maxWidth: '200px',
+                      maxHeight: '150px',
+                      objectFit: 'contain',
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      padding: '8px'
+                    }}
+                  />
+                  <div style={{ marginTop: 8 }}>
+                    <Space>
+                      <Button
+                        size="small"
+                        icon={<EyeOutlined />}
+                        onClick={() => handlePreviewImage(editingRecord.declared_image!)}
+                      >
+                        预览
+                      </Button>
+                      <Popconfirm
+                        title="确定要删除当前图片吗？"
+                        onConfirm={() => handleDeleteImage(editingRecord.parent_sku)}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <Button
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          danger
+                        >
+                          删除当前图片
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  </div>
+                </div>
+              ) : null}
+              
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  if (editingRecord) {
+                    handleImageUpload(editingRecord.parent_sku, file);
+                  }
+                  return false;
+                }}
+                disabled={!editingRecord || uploadingParentSku === editingRecord?.parent_sku}
+              >
+                <Button
+                  icon={<UploadOutlined />}
+                  loading={uploadingParentSku === editingRecord?.parent_sku}
+                  disabled={!editingRecord}
+                >
+                  {editingRecord?.declared_image ? '替换图片' : '上传图片'}
+                </Button>
+              </Upload>
+              <div style={{ marginTop: 8, color: '#666', fontSize: '12px' }}>
+                支持格式：JPG、PNG、GIF等图片格式，文件大小不超过5MB
+              </div>
+            </div>
+          </Form.Item>
+
           <Divider />
           
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
@@ -709,6 +904,33 @@ const HsCodeManagement: React.FC = () => {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 图片预览模态框 */}
+      <Modal
+        title="申报图片预览"
+        open={imagePreviewVisible}
+        onCancel={() => {
+          setImagePreviewVisible(false);
+          setPreviewImageUrl('');
+        }}
+        footer={null}
+        width={800}
+        centered
+      >
+        {previewImageUrl && (
+          <div style={{ textAlign: 'center' }}>
+            <img
+              src={previewImageUrl}
+              alt="申报图片"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '70vh',
+                objectFit: 'contain'
+              }}
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );
