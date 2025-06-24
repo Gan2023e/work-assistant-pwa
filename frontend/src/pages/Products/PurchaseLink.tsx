@@ -26,7 +26,8 @@ import {
   SearchOutlined,
   CameraOutlined,
   CloudUploadOutlined,
-  FilterOutlined
+  FilterOutlined,
+  ToolOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -86,6 +87,12 @@ const Purchase: React.FC = () => {
   const [skuPrefix, setSkuPrefix] = useState('');
   const [latestSku, setLatestSku] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 子SKU生成器相关状态
+  const [childSkuGeneratorVisible, setChildSkuGeneratorVisible] = useState(false);
+  const [skuInput, setSkuInput] = useState('');
+  const [generatorLoading, setGeneratorLoading] = useState(false);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
   
   // 筛选相关状态
   const [filters, setFilters] = useState({
@@ -501,6 +508,59 @@ const Purchase: React.FC = () => {
       message.error('查询失败');
       setLatestSku('查询失败');
     }
+  };
+
+  // 子SKU生成器功能
+  const handleChildSkuGenerator = async () => {
+    if (!skuInput.trim()) {
+      message.warning('请输入需要整理的SKU');
+      return;
+    }
+
+    if (!templateFileInputRef.current?.files?.[0]) {
+      message.warning('请选择美国资料表Excel文件');
+      return;
+    }
+
+    const file = templateFileInputRef.current.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('parentSkus', skuInput.trim());
+
+    setGeneratorLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      // 下载生成的文件
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'processed_template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      message.success('子SKU生成器处理完成，文件已下载');
+      setChildSkuGeneratorVisible(false);
+      setSkuInput('');
+      if (templateFileInputRef.current) {
+        templateFileInputRef.current.value = '';
+      }
+    } catch (e) {
+      console.error('子SKU生成器失败:', e);
+      message.error('子SKU生成器失败: ' + (e instanceof Error ? e.message : '未知错误'));
+    }
+    setGeneratorLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -921,6 +981,14 @@ const Purchase: React.FC = () => {
                 SKU最新编号查询
               </Button>
 
+              {/* 子SKU生成器 */}
+              <Button 
+                icon={<ToolOutlined />}
+                onClick={() => setChildSkuGeneratorVisible(true)}
+              >
+                子SKU生成器
+              </Button>
+
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (
                 <span style={{ color: '#1890ff', marginLeft: '16px' }}>
@@ -1095,6 +1163,59 @@ const Purchase: React.FC = () => {
               </div>
             </div>
           )}
+        </Space>
+      </Modal>
+
+      {/* 子SKU生成器对话框 */}
+      <Modal
+        title="子SKU生成器"
+        open={childSkuGeneratorVisible}
+        onOk={handleChildSkuGenerator}
+        onCancel={() => {
+          setChildSkuGeneratorVisible(false);
+          setSkuInput('');
+          if (templateFileInputRef.current) {
+            templateFileInputRef.current.value = '';
+          }
+        }}
+        okText="确定"
+        cancelText="取消"
+        confirmLoading={generatorLoading}
+        width={600}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>
+            <Text strong>输入需要整理的SKU：</Text>
+            <TextArea
+              rows={6}
+              value={skuInput}
+              onChange={e => setSkuInput(e.target.value)}
+              placeholder="可以输入多行SKU，一行一个"
+              style={{ marginTop: '8px' }}
+            />
+          </div>
+          
+          <div>
+            <Text strong>选择待整理的美国资料表：</Text>
+            <div style={{ marginTop: '8px' }}>
+              <input
+                ref={templateFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: 'none' }}
+              />
+              <Button 
+                icon={<UploadOutlined />}
+                onClick={() => templateFileInputRef.current?.click()}
+                block
+              >
+                选择Excel文件
+              </Button>
+              <div style={{ marginTop: '8px', color: '#666', fontSize: '12px' }}>
+                提示：资料必须放置在Template页
+              </div>
+            </div>
+          </div>
         </Space>
       </Modal>
     </div>
