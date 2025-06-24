@@ -26,8 +26,7 @@ import {
   SearchOutlined,
   CameraOutlined,
   CloudUploadOutlined,
-  FilterOutlined,
-  ClearOutlined
+  FilterOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -164,9 +163,7 @@ const Purchase: React.FC = () => {
       const searchData = result.data || [];
       setData(searchData);
       setOriginalData(searchData);
-      
-      // 应用当前筛选
-      applyFilters(searchData, filters);
+      setFilteredData(searchData);
       
       if (!searchData || searchData.length === 0) {
         message.info('未找到匹配的产品信息');
@@ -180,53 +177,68 @@ const Purchase: React.FC = () => {
     setLoading(false);
   };
 
-  // 筛选功能
-  const applyFilters = (sourceData: ProductRecord[], currentFilters: any) => {
-    let filtered = [...sourceData];
-    
-    if (currentFilters.status) {
-      filtered = filtered.filter(item => item.status === currentFilters.status);
+  // 筛选功能 - 从全库数据中筛选
+  const applyFilters = async (currentFilters: any) => {
+    try {
+      // 构建查询条件
+      const conditions: any = {};
+      if (currentFilters.status) {
+        conditions.status = currentFilters.status;
+      }
+      if (currentFilters.cpc_status) {
+        conditions.cpc_status = currentFilters.cpc_status;
+      }
+      if (currentFilters.seller_name) {
+        conditions.seller_name = currentFilters.seller_name;
+      }
+
+      // 如果没有筛选条件，清空数据
+      if (Object.keys(conditions).length === 0) {
+        setFilteredData([]);
+        setData([]);
+        setOriginalData([]);
+        return;
+      }
+
+      // 调用后端API获取筛选数据
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(conditions),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条符合条件的记录`);
+    } catch (e) {
+      console.error('筛选失败:', e);
+      message.error('筛选失败');
     }
-    
-    if (currentFilters.cpc_status) {
-      filtered = filtered.filter(item => item.cpc_status === currentFilters.cpc_status);
-    }
-    
-    if (currentFilters.seller_name) {
-      filtered = filtered.filter(item => 
-        item.seller_name && item.seller_name.includes(currentFilters.seller_name)
-      );
-    }
-    
-    setFilteredData(filtered);
   };
 
   // 处理筛选变化
   const handleFilterChange = (filterType: string, value: string) => {
     const newFilters = { ...filters, [filterType]: value };
     setFilters(newFilters);
-    applyFilters(originalData, newFilters);
+    applyFilters(newFilters);
   };
 
-  // 清空筛选
-  const handleClearFilters = () => {
-    const emptyFilters = { status: '', cpc_status: '', seller_name: '' };
-    setFilters(emptyFilters);
-    setFilteredData(originalData);
-  };
+
 
   // 点击卡片显示对应状态数据
   const handleCardClick = (status: string) => {
     const cardFilters = { ...filters, status };
     setFilters(cardFilters);
-    applyFilters(originalData, cardFilters);
-    
-    // 更新输入框显示对应状态的SKU
-    const statusProducts = originalData.filter(item => item.status === status);
-    const skuList = statusProducts.map(item => item.parent_sku).join('\n');
-    setInput(skuList);
-    
-    message.info(`已显示 ${statusProducts.length} 条"${status}"状态的产品`);
+    applyFilters(cardFilters);
   };
 
   // 获取唯一的CPC状态选项（基于全库数据）
@@ -822,19 +834,10 @@ const Purchase: React.FC = () => {
                  ))}
                </Select>
              </Col>
-            <Col span={3}>
-              <Button 
-                icon={<ClearOutlined />} 
-                onClick={handleClearFilters}
-                block
-              >
-                清空筛选
-              </Button>
-            </Col>
-            <Col span={6}>
+            <Col span={9}>
               {(filters.status || filters.cpc_status || filters.seller_name) && (
                 <span style={{ color: '#1890ff' }}>
-                  已筛选：显示 {filteredData.length} 条记录
+                  已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name) ? filteredData.length : data.length} 条记录
                 </span>
               )}
             </Col>
@@ -866,7 +869,8 @@ const Purchase: React.FC = () => {
                   setOriginalData([]);
                   setFilteredData([]);
                   setSelectedRowKeys([]);
-                  handleClearFilters();
+                  // 清空筛选条件
+                  setFilters({ status: '', cpc_status: '', seller_name: '' });
                   // 重新获取统计数据
                   fetchAllDataStatistics();
                 }}

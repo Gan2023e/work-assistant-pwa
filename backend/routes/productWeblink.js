@@ -382,6 +382,53 @@ router.post('/latest-sku', async (req, res) => {
   }
 });
 
+// 筛选数据接口
+router.post('/filter', async (req, res) => {
+  try {
+    const { status, cpc_status, seller_name } = req.body;
+    
+    // 构建查询条件
+    const whereConditions = {};
+    if (status) {
+      whereConditions.status = status;
+    }
+    if (cpc_status) {
+      whereConditions.cpc_status = cpc_status;
+    }
+    if (seller_name) {
+      whereConditions.seller_name = { [Op.like]: `%${seller_name}%` };
+    }
+
+    const result = await ProductWeblink.findAll({
+      where: whereConditions,
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_recommend',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name'
+      ]
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '筛选失败' });
+  }
+});
+
 // 获取全部数据统计信息
 router.get('/statistics', async (req, res) => {
   try {
