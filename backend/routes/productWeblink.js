@@ -641,4 +641,23 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
   }
 });
 
+// 测试端点 - 检查SellerInventorySku表
+router.get('/test-seller-sku', async (req, res) => {
+  try {
+    const count = await SellerInventorySku.count();
+    const sample = await SellerInventorySku.findAll({ limit: 3 });
+    res.json({ 
+      message: '数据库表访问成功',
+      count: count,
+      sample: sample
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      message: '数据库表访问失败',
+      error: err.message,
+      name: err.name
+    });
+  }
+});
+
 module.exports = router; 
