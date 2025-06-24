@@ -97,11 +97,43 @@ const Purchase: React.FC = () => {
   const [filteredData, setFilteredData] = useState<ProductRecord[]>([]);
   const [originalData, setOriginalData] = useState<ProductRecord[]>([]);
   
-  // 统计数据
+  // 统计数据（基于全库数据）
   const [statistics, setStatistics] = useState({
     waitingPImage: 0,
     waitingUpload: 0
   });
+  
+  // 全库统计数据
+  const [allDataStats, setAllDataStats] = useState({
+    statusStats: [] as { value: string; count: number }[],
+    cpcStatusStats: [] as { value: string; count: number }[],
+    supplierStats: [] as { value: string; count: number }[]
+  });
+
+  // 获取全库统计数据
+  const fetchAllDataStatistics = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/statistics`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const result = await res.json();
+      setStatistics(result.statistics);
+      setAllDataStats({
+        statusStats: result.statusStats,
+        cpcStatusStats: result.cpcStatusStats,
+        supplierStats: result.supplierStats
+      });
+    } catch (e) {
+      console.error('获取统计数据失败:', e);
+    }
+  };
+
+  // 页面加载时获取统计数据
+  React.useEffect(() => {
+    fetchAllDataStatistics();
+  }, []);
 
   // 搜索功能
   const handleSearch = async () => {
@@ -132,11 +164,6 @@ const Purchase: React.FC = () => {
       const searchData = result.data || [];
       setData(searchData);
       setOriginalData(searchData);
-      
-      // 计算统计数据
-      const waitingPImage = searchData.filter((item: ProductRecord) => item.status === '待P图').length;
-      const waitingUpload = searchData.filter((item: ProductRecord) => item.status === '待上传').length;
-      setStatistics({ waitingPImage, waitingUpload });
       
       // 应用当前筛选
       applyFilters(searchData, filters);
@@ -202,52 +229,22 @@ const Purchase: React.FC = () => {
     message.info(`已显示 ${statusProducts.length} 条"${status}"状态的产品`);
   };
 
-  // 获取唯一的CPC状态选项（基于当前搜索结果）
+  // 获取唯一的CPC状态选项（基于全库数据）
   const getUniqueCpcStatuses = () => {
-    const currentData = data.length > 0 ? data : originalData;
-    const statusCount: { [key: string]: number } = {};
-    
-    currentData.forEach(item => {
-      if (item.cpc_status && item.cpc_status.trim() !== '') {
-        statusCount[item.cpc_status] = (statusCount[item.cpc_status] || 0) + 1;
-      }
-    });
-    
-    return Object.keys(statusCount)
-      .sort()
-      .map(status => ({ value: status, count: statusCount[status] }));
+    return allDataStats.cpcStatusStats
+      .sort((a, b) => a.value.localeCompare(b.value));
   };
 
-  // 获取唯一的供应商选项（基于当前搜索结果）
+  // 获取唯一的供应商选项（基于全库数据）
   const getUniqueSuppliers = () => {
-    const currentData = data.length > 0 ? data : originalData;
-    const supplierCount: { [key: string]: number } = {};
-    
-    currentData.forEach(item => {
-      if (item.seller_name && item.seller_name.trim() !== '') {
-        supplierCount[item.seller_name] = (supplierCount[item.seller_name] || 0) + 1;
-      }
-    });
-    
-    return Object.keys(supplierCount)
-      .sort()
-      .map(supplier => ({ value: supplier, count: supplierCount[supplier] }));
+    return allDataStats.supplierStats
+      .sort((a, b) => a.value.localeCompare(b.value));
   };
 
-  // 获取唯一的状态选项（基于当前搜索结果）
+  // 获取唯一的状态选项（基于全库数据）
   const getUniqueStatuses = () => {
-    const currentData = data.length > 0 ? data : originalData;
-    const statusCount: { [key: string]: number } = {};
-    
-    currentData.forEach(item => {
-      if (item.status && item.status.trim() !== '') {
-        statusCount[item.status] = (statusCount[item.status] || 0) + 1;
-      }
-    });
-    
-    return Object.keys(statusCount)
-      .sort()
-      .map(status => ({ value: status, count: statusCount[status] }));
+    return allDataStats.statusStats
+      .sort((a, b) => a.value.localeCompare(b.value));
   };
 
   // 批量更新状态
@@ -272,8 +269,9 @@ const Purchase: React.FC = () => {
 
       message.success('批量更新成功');
       setSelectedRowKeys([]);
-      // 刷新数据
+      // 刷新数据和统计信息
       handleSearch();
+      fetchAllDataStatistics();
     } catch (e) {
       console.error('批量更新失败:', e);
       message.error('批量更新失败');
@@ -302,8 +300,9 @@ const Purchase: React.FC = () => {
 
       message.success('批量删除成功');
       setSelectedRowKeys([]);
-      // 刷新数据
+      // 刷新数据和统计信息
       handleSearch();
+      fetchAllDataStatistics();
     } catch (e) {
       console.error('批量删除失败:', e);
       message.error('批量删除失败');
@@ -415,8 +414,9 @@ const Purchase: React.FC = () => {
       setEditModalVisible(false);
       setEditingCell(null);
       editForm.resetFields();
-      // 刷新数据
+      // 刷新数据和统计信息
       handleSearch();
+      fetchAllDataStatistics();
     } catch (e) {
       console.error('更新失败:', e);
       message.error('更新失败');
@@ -446,8 +446,9 @@ const Purchase: React.FC = () => {
         message.success(result.message);
         setUploadModalVisible(false);
         if (result.count > 0) {
-          // 刷新数据
+          // 刷新数据和统计信息
           handleSearch();
+          fetchAllDataStatistics();
         }
       })
       .catch(e => {
@@ -865,8 +866,9 @@ const Purchase: React.FC = () => {
                   setOriginalData([]);
                   setFilteredData([]);
                   setSelectedRowKeys([]);
-                  setStatistics({ waitingPImage: 0, waitingUpload: 0 });
                   handleClearFilters();
+                  // 重新获取统计数据
+                  fetchAllDataStatistics();
                 }}
               >
                 清空

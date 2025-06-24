@@ -382,4 +382,89 @@ router.post('/latest-sku', async (req, res) => {
   }
 });
 
+// 获取全部数据统计信息
+router.get('/statistics', async (req, res) => {
+  try {
+    // 获取状态统计
+    const statusStats = await ProductWeblink.findAll({
+      attributes: [
+        'status',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      where: {
+        status: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      group: ['status'],
+      raw: true
+    });
+
+    // 获取CPC状态统计
+    const cpcStatusStats = await ProductWeblink.findAll({
+      attributes: [
+        'cpc_status',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      where: {
+        cpc_status: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      group: ['cpc_status'],
+      raw: true
+    });
+
+    // 获取供应商统计
+    const supplierStats = await ProductWeblink.findAll({
+      attributes: [
+        'seller_name',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      where: {
+        seller_name: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      group: ['seller_name'],
+      raw: true
+    });
+
+    // 计算特定状态的产品数量
+    const waitingPImageCount = await ProductWeblink.count({
+      where: { status: '待P图' }
+    });
+
+    const waitingUploadCount = await ProductWeblink.count({
+      where: { status: '待上传' }
+    });
+
+    res.json({
+      statistics: {
+        waitingPImage: waitingPImageCount,
+        waitingUpload: waitingUploadCount
+      },
+      statusStats: statusStats.map(item => ({
+        value: item.status,
+        count: parseInt(item.count)
+      })),
+      cpcStatusStats: cpcStatusStats.map(item => ({
+        value: item.cpc_status,
+        count: parseInt(item.count)
+      })),
+      supplierStats: supplierStats.map(item => ({
+        value: item.seller_name,
+        count: parseInt(item.count)
+      }))
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '获取统计信息失败: ' + err.message });
+  }
+});
+
 module.exports = router; 
