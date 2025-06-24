@@ -4,6 +4,8 @@ const { Op } = require('sequelize');
 const ProductWeblink = require('../models/ProductWeblink');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const axios = require('axios');
+const crypto = require('crypto');
 const path = require('path');
 
 // 配置multer用于文件上传
@@ -119,6 +121,65 @@ router.put('/update/:id', async (req, res) => {
     res.status(500).json({ message: '服务器错误' });
   }
 });
+
+// 钉钉通知函数
+async function sendDingTalkNotification(newProductCount) {
+  try {
+    const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
+    
+    if (!DINGTALK_WEBHOOK) {
+      console.log('钉钉Webhook未配置，跳过通知');
+      return;
+    }
+
+    // 如果有SECRET_KEY，计算签名
+    let webhookUrl = DINGTALK_WEBHOOK;
+    if (SECRET_KEY) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${SECRET_KEY}`;
+      const sign = crypto.createHmac('sha256', SECRET_KEY)
+                        .update(stringToSign)
+                        .digest('base64');
+      
+      // 添加时间戳和签名参数
+      const urlObj = new URL(DINGTALK_WEBHOOK);
+      urlObj.searchParams.append('timestamp', timestamp.toString());
+      urlObj.searchParams.append('sign', encodeURIComponent(sign));
+      webhookUrl = urlObj.toString();
+    }
+
+    // 使用配置的手机号，如果没有配置则使用默认值
+    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+
+    const message = {
+      msgtype: 'text',
+      text: {
+        content: `有${newProductCount}款新品上传数据库，需要先审核再批图！@${mobileNumber}`
+      },
+      at: {
+        atMobiles: [mobileNumber],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(webhookUrl, message, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    if (response.data.errcode === 0) {
+      console.log('钉钉通知发送成功');
+    } else {
+      console.error('钉钉通知发送失败:', response.data);
+    }
+  } catch (error) {
+    console.error('发送钉钉通知时出错:', error.message);
+  }
+}
 
 // 生成SKU的函数
 function generateSKU() {
@@ -262,6 +323,13 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
     if (newRecords.length > 0) {
       await ProductWeblink.bulkCreate(newRecords);
       resultMessage = `成功上传 ${newRecords.length} 条新记录`;
+      
+      // 发送钉钉通知
+      try {
+        await sendDingTalkNotification(newRecords.length);
+      } catch (notificationError) {
+        console.error('钉钉通知发送失败，但不影响数据保存:', notificationError.message);
+      }
     } else {
       resultMessage = '没有找到有效的数据行';
     }
