@@ -7,3 +7,7 @@ trigger-deployment-1750852048
 修复时间：2024-01-04 16:30:00
 修复内容：更新WarehouseProductsNeed模型以匹配实际数据表字段结构
 字段映射：ori_quantity->quantity, shipping_method, send_out_date等
+
+库存统计优化
+修复时间：2025-01-24 17:15:00
+优化内容：过滤零库存记录，改进汇总逻辑，增加调试日志
