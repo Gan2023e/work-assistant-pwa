@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const { sequelize } = require('./index');
+const { sequelize } = require('./database');
 
 const AmzWarehouse = sequelize.define('AmzWarehouse', {
   warehouse_code: {
