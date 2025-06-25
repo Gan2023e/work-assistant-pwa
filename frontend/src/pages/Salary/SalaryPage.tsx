@@ -163,6 +163,19 @@ const SalaryPage: React.FC = () => {
         totalMixSalary += (row.打包单价 !== null && row.打包单价 !== undefined) ? Number(row.打包单价) * Number(row.total_quantity) : 0;
       }
     });
+    
+    // 确保选择的打包员即使没有打包封箱数据也要包含在packerMap中
+    if (selectedPacker && !packerMap[selectedPacker]) {
+      packerMap[selectedPacker] = {
+        zhengxiangBoxes: 0,
+        zhengxiangSalary: 0,
+        zhengxiangFengxiangSalary: 0,
+        mixBoxNums: new Set(),
+        mixSalary: 0,
+        mixFengxiangSalary: 0
+      };
+    }
+    
     // 统计混合箱封箱工资
     totalMixBoxes = mixBoxNumSet.size;
     totalMixFengxiangSalary = totalMixBoxes * 5;
@@ -438,40 +451,43 @@ const SalaryPage: React.FC = () => {
                 <div style={{ fontWeight: 500, color: '#1a1a1a', marginLeft: 8, marginTop: 4 }}>
                   小计：{(v.zhengxiangSalary + v.zhengxiangFengxiangSalary + v.mixSalary + v.mixFengxiangSalary + (v.otherSalary || 0)).toFixed(2)} 元
                 </div>
-                <div style={{ marginLeft: 8, marginTop: 8 }}>
-                  <Button size="small" type="primary"
-                    onClick={async () => {
-                      const wage = (v.zhengxiangSalary + v.zhengxiangFengxiangSalary + v.mixSalary + v.mixFengxiangSalary + (v.otherSalary || 0));
-                      
-                      // 显示 loading 提示
-                      const loadingMessage = message.loading('正在录入工资数据...', 0);
-                      
-                      try {
-                        const res = await fetch('/api/salary/record_wage', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name: packer, wage })
-                        });
+                {/* 只有在总工资大于0时才显示录入系统按钮 */}
+                {(v.zhengxiangSalary + v.zhengxiangFengxiangSalary + v.mixSalary + v.mixFengxiangSalary + (v.otherSalary || 0)) > 0 && (
+                  <div style={{ marginLeft: 8, marginTop: 8 }}>
+                    <Button size="small" type="primary"
+                      onClick={async () => {
+                        const wage = (v.zhengxiangSalary + v.zhengxiangFengxiangSalary + v.mixSalary + v.mixFengxiangSalary + (v.otherSalary || 0));
                         
-                        // 关闭 loading 提示
-                        loadingMessage();
+                        // 显示 loading 提示
+                        const loadingMessage = message.loading('正在录入工资数据...', 0);
                         
-                        const result = await res.json();
-                        if (result.code === 0) {
-                          message.success(`工资录入成功！${packer}: ¥${wage.toFixed(2)}`, 3);
-                          fetchUnreimbursedWages();
-                        } else {
-                          message.error(result.message || '录入失败，请重试', 3);
+                        try {
+                          const res = await fetch('/api/salary/record_wage', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: packer, wage })
+                          });
+                          
+                          // 关闭 loading 提示
+                          loadingMessage();
+                          
+                          const result = await res.json();
+                          if (result.code === 0) {
+                            message.success(`工资录入成功！${packer}: ¥${wage.toFixed(2)}`, 3);
+                            fetchUnreimbursedWages();
+                          } else {
+                            message.error(result.message || '录入失败，请重试', 3);
+                          }
+                        } catch (e) {
+                          // 关闭 loading 提示
+                          loadingMessage();
+                          message.error('网络错误，录入失败', 3);
+                          console.error('录入工资失败:', e);
                         }
-                      } catch (e) {
-                        // 关闭 loading 提示
-                        loadingMessage();
-                        message.error('网络错误，录入失败', 3);
-                        console.error('录入工资失败:', e);
-                      }
-                    }}
-                  >录入系统</Button>
-                </div>
+                      }}
+                    >录入系统</Button>
+                  </div>
+                )}
               </div>
             ))}
             <div style={{ fontWeight: 'bold', marginTop: 16 }}>全部汇总</div>
