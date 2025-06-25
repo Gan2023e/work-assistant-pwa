@@ -66,18 +66,37 @@ router.get('/needs', async (req, res) => {
     
     const { count, rows } = await WarehouseProductsNeed.findAndCountAll({
       where: whereCondition,
-      order: [['created_at', 'DESC']],
+      order: [['record_num', 'DESC']],  // 改为按record_num排序，因为created_at字段不存在
       limit: parseInt(limit),
       offset: offset
     });
 
     console.log('\x1b[32m%s\x1b[0m', '📊 查询结果:', { count, rowsLength: rows.length });
+    
+    // 数据字段映射，将数据库字段映射为前端期望的字段
+    const mappedRows = rows.map(row => ({
+      record_num: row.record_num,
+      need_num: row.need_num || '',
+      sku: '', // 实际表中没有sku字段，设为空
+      quantity: row.ori_quantity || 0, // 使用ori_quantity映射到quantity
+      marketplace: row.marketplace || '',
+      country: row.country || '',
+      status: row.status || '待发货',
+      created_at: row.send_out_date || new Date().toISOString(), // 使用send_out_date映射创建时间
+      updated_at: row.send_out_date || new Date().toISOString(),
+      created_by: 'System', // 实际表中没有此字段
+      remark: '', // 实际表中没有此字段
+      shipping_method: row.shipping_method || '',
+      send_out_date: row.send_out_date,
+      expired_date: row.expired_date,
+      expect_sold_out_date: row.expect_sold_out_date
+    }));
 
     res.json({
       code: 0,
       message: '获取成功',
       data: {
-        list: rows,
+        list: mappedRows,  // 使用映射后的数据
         total: count,
         page: parseInt(page),
         limit: parseInt(limit)

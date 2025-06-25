@@ -9,53 +9,52 @@ const WarehouseProductsNeed = sequelize.define('WarehouseProductsNeed', {
   },
   need_num: {
     type: DataTypes.STRING,
-    allowNull: false,
-    comment: '需求单号，时间戳生成'
+    allowNull: true,
+    comment: '需求单号'
   },
-  sku: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  quantity: {
+  ori_quantity: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: '需求数量'
-  },
-  marketplace: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: '平台'
+    allowNull: true,
+    comment: '原始数量'
   },
   country: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     comment: '发往国家'
   },
-  status: {
-    type: DataTypes.ENUM('待发货', '已发货', '已取消'),
-    defaultValue: '待发货'
-  },
-  created_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
-  },
-  updated_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
-  },
-  created_by: {
+  shipping_method: {
     type: DataTypes.STRING,
-    comment: '创建人'
+    allowNull: true,
+    comment: '运输方式'
   },
-  remark: {
-    type: DataTypes.TEXT,
-    comment: '备注'
+  send_out_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: '发出日期'
+  },
+  marketplace: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '平台'
+  },
+  expired_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: '过期日期'
+  },
+  expect_sold_out_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: '预期售完日期'
+  },
+  status: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '状态'
   }
 }, {
   tableName: 'pbi_warehouse_products_need',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  timestamps: false
 });
 
 module.exports = WarehouseProductsNeed; 
