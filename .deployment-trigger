@@ -2,3 +2,8 @@ trigger-deployment-1750852048
 
 # 强制重新部署 - 修复shipping路由404问题
 2025-01-24 - 添加发货需求管理API路由
+
+发货需求数据表字段映射修复
+修复时间：2024-01-04 16:30:00
+修复内容：更新WarehouseProductsNeed模型以匹配实际数据表字段结构
+字段映射：ori_quantity->quantity, shipping_method, send_out_date等
