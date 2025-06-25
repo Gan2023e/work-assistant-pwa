@@ -9,6 +9,7 @@ const salaryRouter = require('./routes/salary');
 const warehouseRouter = require('./routes/warehouse');
 const hsCodeRouter = require('./routes/hscode');
 const shipmentRouter = require('./routes/shipment');
+const shippingRouter = require('./routes/shipping');
 const { router: authRouter } = require('./routes/auth');
 
 // 触发Railway重新部署 - 2024-06-21
@@ -78,6 +79,7 @@ app.use('/api/salary', salaryRouter);
 app.use('/api/warehouse', warehouseRouter);
 app.use('/api/hscode', hsCodeRouter);
 app.use('/api/shipments', shipmentRouter);
+app.use('/api/shipping', shippingRouter);
 
 // 静态文件服务 - 用于图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

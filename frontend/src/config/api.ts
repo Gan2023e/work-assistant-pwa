@@ -46,6 +46,14 @@ export const API_ENDPOINTS = {
     update: (id: number) => `/api/salary/${id}`,
     delete: (id: number) => `/api/salary/${id}`,
   },
+  // 发货需求管理
+  shipping: {
+    needs: '/api/shipping/needs',
+    inventoryStats: '/api/shipping/inventory-stats',
+    updateNeed: (id: number) => `/api/shipping/needs/${id}`,
+    deleteNeed: (id: number) => `/api/shipping/needs/${id}`,
+    batchUpdateStatus: '/api/shipping/needs/batch-status',
+  },
   // 健康检查
   health: '/health',
 };

@@ -11,6 +11,7 @@ const LocalBox = sequelize.define('LocalBox', {
   操作员: DataTypes.STRING,
   打包员: DataTypes.STRING,
   mix_box_num: DataTypes.STRING,
+  marketPlace: DataTypes.STRING,
 }, {
   tableName: 'local_boxes',
   timestamps: false

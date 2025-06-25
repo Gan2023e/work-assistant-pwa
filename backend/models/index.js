@@ -1,5 +1,16 @@
 const { Sequelize } = require('sequelize');
 
+// 导入所有模型
+const User = require('./User');
+const LocalBox = require('./LocalBox');
+const WarehouseProductsNeed = require('./WarehouseProductsNeed');
+const AmzWarehouse = require('./AmzWarehouse');
+const HsCode = require('./HsCode');
+const Logistics = require('./Logistics');
+const PackagePrice = require('./PackagePrice');
+const ProductWeblink = require('./ProductWeblink');
+const SellerInventorySku = require('./SellerInventorySku');
+
 // 在Railway中，环境变量是直接注入的，但仍然尝试加载.env文件（如果存在）
 try {
   require('dotenv').config();
@@ -119,4 +130,15 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
   );
 }
 
-module.exports = { sequelize };
+module.exports = { 
+  sequelize,
+  User,
+  LocalBox,
+  WarehouseProductsNeed,
+  AmzWarehouse,
+  HsCode,
+  Logistics,
+  PackagePrice,
+  ProductWeblink,
+  SellerInventorySku
+};
