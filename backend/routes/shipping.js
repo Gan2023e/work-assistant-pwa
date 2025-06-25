@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WarehouseProductsNeed, LocalBox, AmzSkuMapping } = require('../models/index');
+const { WarehouseProductsNeed, LocalBox, AmzSkuMapping, sequelize } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -402,140 +402,196 @@ router.get('/health', async (req, res) => {
 
 // 获取合并的发货需求和库存数据
 router.get('/merged-data', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求');
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求 - 优化映射流程');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    // 1. 获取发货需求数据
-    const whereCondition = {};
-    if (status) {
-      whereCondition.status = status;
-    }
-
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    // 优化的映射流程：
+    // 1. 先获取库存统计数据（去重获取唯一的 sku + country 组合）
+    // 2. 通过库存 SKU + country 在映射表中查找对应的 Amazon SKU
+    // 3. 使用找到的 Amazon SKU 与发货需求进行匹配
+    // 4. 保留所有发货需求记录，同时也保留有库存但无需求的记录
     
-    const { count, rows: needsData } = await WarehouseProductsNeed.findAndCountAll({
-      where: whereCondition,
-      order: [['record_num', 'DESC']],
-      limit: parseInt(limit),
-      offset: offset
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 获取库存统计数据');
+    
+    // 1. 获取库存统计数据 (按 sku + country 分组)
+    const inventoryStats = await LocalBox.findAll({
+      attributes: [
+        'sku',
+        'country',
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_quantity ELSE 0 END`)
+        ), 'whole_box_quantity'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_boxes ELSE 0 END`)
+        ), 'whole_box_count'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NOT NULL AND mix_box_num != '' THEN total_quantity ELSE 0 END`)
+        ), 'mixed_box_quantity'],
+        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
+      ],
+      group: ['sku', 'country'],
+      having: sequelize.literal('SUM(total_quantity) != 0'), // 过滤掉零库存
+      raw: true
     });
 
-    console.log('\x1b[32m%s\x1b[0m', '📊 发货需求数据数量:', needsData.length);
+    console.log('\x1b[33m%s\x1b[0m', `📦 库存统计数据: ${inventoryStats.length} 条`, 
+      inventoryStats.slice(0, 3).map(i => `${i.sku}(${i.country}): ${i.total_quantity}`));
 
-    // 2. 对每个发货需求，查找对应的本地SKU和库存信息
-    const mergedData = await Promise.all(
-      needsData.map(async (need) => {
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查找库存对应的Amazon SKU映射');
+    
+    // 2. 对每个库存记录，查找对应的 Amazon SKU
+    const inventoryWithAmzSku = await Promise.all(
+      inventoryStats.map(async (inventory) => {
         try {
-          // 通过amz_sku + country查找对应的local_sku
-          console.log('\x1b[36m%s\x1b[0m', `🔍 查找SKU映射: amz_sku=${need.sku}, country=${need.country}`);
-          
           const skuMapping = await AmzSkuMapping.findOne({
             where: {
-              amz_sku: need.sku,
-              country: need.country
+              local_sku: inventory.sku,
+              country: inventory.country
             },
             raw: true
           });
 
-          console.log('\x1b[36m%s\x1b[0m', `📋 SKU映射结果:`, skuMapping);
-
-          let inventoryInfo = {
-            local_sku: '',
-            whole_box_quantity: 0,
-            whole_box_count: 0,
-            mixed_box_quantity: 0,
-            total_available: 0
-          };
-
-          if (skuMapping) {
-            // 查找对应的库存数据
-            const inventoryData = await LocalBox.findAll({
-              where: {
-                sku: skuMapping.local_sku,
-                country: need.country
-              },
-              raw: true
-            });
-
-            // 计算库存统计
-            let wholeBoxQty = 0, wholeBoxCount = 0, mixedBoxQty = 0;
-            
-            inventoryData.forEach(item => {
-              const quantity = parseInt(item.total_quantity) || 0;
-              const boxes = parseInt(item.total_boxes) || 0;
-              
-              if (!item.mix_box_num || item.mix_box_num.trim() === '') {
-                wholeBoxQty += quantity;
-                wholeBoxCount += boxes;
-              } else {
-                mixedBoxQty += quantity;
-              }
-            });
-
-            inventoryInfo = {
-              local_sku: skuMapping.local_sku,
-              whole_box_quantity: wholeBoxQty,
-              whole_box_count: wholeBoxCount,
-              mixed_box_quantity: mixedBoxQty,
-              total_available: wholeBoxQty + mixedBoxQty
-            };
-          }
-
-          // 合并发货需求和库存信息
           return {
-            record_num: need.record_num,
-            need_num: need.need_num || '',
-            amz_sku: need.sku || '',
-            local_sku: inventoryInfo.local_sku,
-            quantity: need.ori_quantity || 0,
-            shipping_method: need.shipping_method || '',
-            marketplace: need.marketplace || '',
-            country: need.country || '',
-            status: need.status || '待发货',
-            created_at: need.create_date || new Date().toISOString(),
-            // 库存信息
-            whole_box_quantity: inventoryInfo.whole_box_quantity,
-            whole_box_count: inventoryInfo.whole_box_count,
-            mixed_box_quantity: inventoryInfo.mixed_box_quantity,
-            total_available: inventoryInfo.total_available,
-            // 计算缺货情况
-            shortage: Math.max(0, (need.ori_quantity || 0) - inventoryInfo.total_available)
+            local_sku: inventory.sku,
+            country: inventory.country,
+            amz_sku: skuMapping?.amz_sku || null,
+            whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
+            whole_box_count: parseInt(inventory.whole_box_count) || 0,
+            mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
+            total_available: parseInt(inventory.total_quantity) || 0
           };
         } catch (error) {
-          console.error('处理单个需求数据失败:', error);
+          console.error(`处理库存映射失败 ${inventory.sku}:`, error);
           return {
-            record_num: need.record_num,
-            need_num: need.need_num || '',
-            amz_sku: need.sku || '',
-            local_sku: '',
-            quantity: need.ori_quantity || 0,
-            shipping_method: need.shipping_method || '',
-            marketplace: need.marketplace || '',
-            country: need.country || '',
-            status: need.status || '待发货',
-            created_at: need.create_date || new Date().toISOString(),
-            whole_box_quantity: 0,
-            whole_box_count: 0,
-            mixed_box_quantity: 0,
-            total_available: 0,
-            shortage: need.ori_quantity || 0
+            local_sku: inventory.sku,
+            country: inventory.country,
+            amz_sku: null,
+            whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
+            whole_box_count: parseInt(inventory.whole_box_count) || 0,
+            mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
+            total_available: parseInt(inventory.total_quantity) || 0
           };
         }
       })
     );
 
-    console.log('\x1b[35m%s\x1b[0m', '📊 合并数据示例（前3条）:', mergedData.slice(0, 3));
+    console.log('\x1b[33m%s\x1b[0m', `🔗 映射完成: ${inventoryWithAmzSku.filter(i => i.amz_sku).length} 条有映射，${inventoryWithAmzSku.filter(i => !i.amz_sku).length} 条无映射`);
+
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 获取发货需求数据');
+    
+    // 3. 获取发货需求数据
+    const whereCondition = {};
+    if (status) {
+      whereCondition.status = status;
+    }
+
+    const { count, rows: needsData } = await WarehouseProductsNeed.findAndCountAll({
+      where: whereCondition,
+      order: [['record_num', 'DESC']],
+      limit: parseInt(limit) === 1000 ? undefined : parseInt(limit), // 如果是1000，表示要全部数据
+      offset: parseInt(limit) === 1000 ? undefined : (parseInt(page) - 1) * parseInt(limit)
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `📋 发货需求数据: ${needsData.length} 条`);
+
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 合并发货需求和库存数据');
+    
+    // 4. 创建一个 Map 来快速查找库存信息
+    const inventoryMap = new Map();
+    inventoryWithAmzSku.forEach(inv => {
+      if (inv.amz_sku) {
+        const key = `${inv.amz_sku}_${inv.country}`;
+        inventoryMap.set(key, inv);
+      }
+    });
+
+    // 5. 处理发货需求，与库存信息合并
+    const mergedFromNeeds = needsData.map(need => {
+      const key = `${need.sku}_${need.country}`;
+      const inventoryInfo = inventoryMap.get(key) || {
+        local_sku: '',
+        whole_box_quantity: 0,
+        whole_box_count: 0,
+        mixed_box_quantity: 0,
+        total_available: 0
+      };
+
+      return {
+        record_num: need.record_num,
+        need_num: need.need_num || '',
+        amz_sku: need.sku || '',
+        local_sku: inventoryInfo.local_sku,
+        quantity: need.ori_quantity || 0,
+        shipping_method: need.shipping_method || '',
+        marketplace: need.marketplace || '',
+        country: need.country || '',
+        status: need.status || '待发货',
+        created_at: need.create_date || new Date().toISOString(),
+        // 库存信息
+        whole_box_quantity: inventoryInfo.whole_box_quantity,
+        whole_box_count: inventoryInfo.whole_box_count,
+        mixed_box_quantity: inventoryInfo.mixed_box_quantity,
+        total_available: inventoryInfo.total_available,
+        // 计算缺货情况
+        shortage: Math.max(0, (need.ori_quantity || 0) - inventoryInfo.total_available),
+        data_source: 'need' // 标记数据来源
+      };
+    });
+
+    // 6. 处理有库存但无需求的记录
+    const needsAmzSkuSet = new Set(needsData.map(need => `${need.sku}_${need.country}`));
+    const inventoryOnlyRecords = inventoryWithAmzSku
+      .filter(inv => inv.amz_sku && !needsAmzSkuSet.has(`${inv.amz_sku}_${inv.country}`))
+      .map((inv, index) => ({
+        record_num: -1 - index, // 使用负数作为临时ID
+        need_num: '',
+        amz_sku: inv.amz_sku,
+        local_sku: inv.local_sku,
+        quantity: 0,
+        shipping_method: '',
+        marketplace: '',
+        country: inv.country,
+        status: '有库存无需求',
+        created_at: new Date().toISOString(),
+        // 库存信息
+        whole_box_quantity: inv.whole_box_quantity,
+        whole_box_count: inv.whole_box_count,
+        mixed_box_quantity: inv.mixed_box_quantity,
+        total_available: inv.total_available,
+        shortage: 0, // 无需求，所以无缺货
+        data_source: 'inventory' // 标记数据来源
+      }));
+
+    // 7. 合并所有数据
+    const allMergedData = [...mergedFromNeeds, ...inventoryOnlyRecords];
+
+    console.log('\x1b[35m%s\x1b[0m', '📊 合并完成统计:', {
+      发货需求记录: mergedFromNeeds.length,
+      仅库存记录: inventoryOnlyRecords.length,
+      总计: allMergedData.length,
+      有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
+      无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
+    });
+
+    console.log('\x1b[35m%s\x1b[0m', '📊 合并数据示例（前3条）:', allMergedData.slice(0, 3));
 
     res.json({
       code: 0,
       message: '获取成功',
       data: {
-        list: mergedData,
-        total: count,
+        list: allMergedData,
+        total: allMergedData.length, // 注意：这里返回实际合并后的总数
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
+        summary: {
+          需求记录数: mergedFromNeeds.length,
+          库存记录数: inventoryOnlyRecords.length,
+          总记录数: allMergedData.length,
+          有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
+          无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
+        }
       }
     });
   } catch (error) {

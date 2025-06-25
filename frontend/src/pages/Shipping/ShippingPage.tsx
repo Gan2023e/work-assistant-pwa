@@ -45,6 +45,18 @@ const customStyles = `
   .unmapped-row:hover {
     background-color: #fff7e6 !important;
   }
+  .inventory-only-row {
+    background-color: #f0f9ff !important;
+  }
+  .inventory-only-row:hover {
+    background-color: #e6f4ff !important;
+  }
+  .sufficient-row {
+    background-color: #f6ffed !important;
+  }
+  .sufficient-row:hover {
+    background-color: #f0f9ff !important;
+  }
 `;
 
 // 注入样式
@@ -267,6 +279,7 @@ const ShippingPage: React.FC = () => {
       case '待发货': return 'orange';
       case '已发货': return 'green';
       case '已取消': return 'red';
+      case '有库存无需求': return 'blue';
       default: return 'default';
     }
   };
@@ -713,12 +726,13 @@ const ShippingPage: React.FC = () => {
                 onChange={(value) => {
                   setStatusFilter(value);
                 }}
-                style={{ width: 120 }}
+                style={{ width: 150 }}
               >
                 <Option value="">全部状态</Option>
                 <Option value="待发货">待发货</Option>
                 <Option value="已发货">已发货</Option>
                 <Option value="已取消">已取消</Option>
+                <Option value="有库存无需求">有库存无需求</Option>
               </Select>
             </Col>
             <Col>
@@ -735,49 +749,83 @@ const ShippingPage: React.FC = () => {
             <Row gutter={16}>
               <Col span={4}>
                 <Statistic
-                  title="总需求数"
-                  value={mergedData.length}
+                  title="发货需求数"
+                  value={mergedData.filter(item => item.quantity > 0).length}
                   prefix={<PlusOutlined />}
                 />
               </Col>
               <Col span={4}>
                 <Statistic
-                  title="库存充足"
-                  value={mergedData.filter(item => item.shortage === 0).length}
+                  title="库存充足需求"
+                  value={mergedData.filter(item => item.quantity > 0 && item.shortage === 0).length}
                   valueStyle={{ color: '#3f8600' }}
                   prefix={<CheckOutlined />}
                 />
               </Col>
               <Col span={4}>
                 <Statistic
-                  title="库存不足"
-                  value={mergedData.filter(item => item.shortage > 0).length}
+                  title="库存不足需求"
+                  value={mergedData.filter(item => item.quantity > 0 && item.shortage > 0).length}
                   valueStyle={{ color: '#cf1322' }}
                   prefix={<CloseOutlined />}
                 />
               </Col>
               <Col span={4}>
                 <Statistic
-                  title="未映射SKU"
-                  value={mergedData.filter(item => !item.local_sku).length}
+                  title="未映射需求"
+                  value={mergedData.filter(item => item.quantity > 0 && !item.local_sku).length}
                   valueStyle={{ color: '#fa8c16' }}
                 />
               </Col>
               <Col span={4}>
+                <Statistic
+                  title="有库存无需求"
+                  value={mergedData.filter(item => item.quantity === 0 && item.total_available > 0).length}
+                  valueStyle={{ color: '#1677ff' }}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="总记录数"
+                  value={mergedData.length}
+                  valueStyle={{ color: '#666' }}
+                />
+              </Col>
+            </Row>
+            <Divider />
+            <Row gutter={16}>
+              <Col span={8}>
                 <Statistic
                   title="总缺货数量"
                   value={mergedData.reduce((sum, item) => sum + item.shortage, 0)}
                   valueStyle={{ color: '#cf1322' }}
                 />
               </Col>
-              <Col span={4}>
+              <Col span={8}>
                 <Statistic
                   title="总可用库存"
                   value={mergedData.reduce((sum, item) => sum + item.total_available, 0)}
                   valueStyle={{ color: '#3f8600' }}
                 />
               </Col>
+              <Col span={8}>
+                <Statistic
+                  title="总需求数量"
+                  value={mergedData.reduce((sum, item) => sum + item.quantity, 0)}
+                  valueStyle={{ color: '#1677ff' }}
+                />
+              </Col>
             </Row>
+          </Card>
+
+          <Card size="small" style={{ marginBottom: 8 }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              行颜色说明：
+              <Tag color="blue" style={{ marginLeft: 8 }}>蓝色 - 有库存无需求</Tag>
+              <Tag color="red" style={{ marginLeft: 4 }}>红色 - 需求缺货</Tag>
+              <Tag color="orange" style={{ marginLeft: 4 }}>橙色 - 需求未映射</Tag>
+              <Tag color="green" style={{ marginLeft: 4 }}>绿色 - 需求库存充足</Tag>
+            </Text>
           </Card>
 
           <Table
@@ -788,8 +836,14 @@ const ShippingPage: React.FC = () => {
             pagination={false}
             scroll={{ x: 1500 }}
             rowClassName={(record) => {
-              if (record.shortage > 0) return 'shortage-row';
-              if (!record.local_sku) return 'unmapped-row';
+              // 有库存无需求的记录
+              if (record.quantity === 0 && record.total_available > 0) return 'inventory-only-row';
+              // 有需求但缺货的记录
+              if (record.quantity > 0 && record.shortage > 0) return 'shortage-row';
+              // 有需求但未映射SKU的记录
+              if (record.quantity > 0 && !record.local_sku) return 'unmapped-row';
+              // 有需求且库存充足的记录
+              if (record.quantity > 0 && record.shortage === 0 && record.local_sku) return 'sufficient-row';
               return '';
             }}
           />
