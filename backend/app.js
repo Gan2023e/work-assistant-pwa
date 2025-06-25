@@ -72,6 +72,7 @@ app.get('/health', async (req, res) => {
 });
 
 // API路由
+console.log('🔗 Registering API routes...');
 app.use('/api/auth', authRouter);
 app.use('/api/product_weblink', productWeblinkRouter);
 app.use('/api/logistics', logisticsRouter);
@@ -80,6 +81,7 @@ app.use('/api/warehouse', warehouseRouter);
 app.use('/api/hscode', hsCodeRouter);
 app.use('/api/shipments', shipmentRouter);
 app.use('/api/shipping', shippingRouter);
+console.log('✅ API routes registered including /api/shipping');
 
 // 静态文件服务 - 用于图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -90,7 +92,20 @@ app.get('/', (req, res) => {
     message: '工作助手PWA后端服务',
     version: '1.0.0',
     status: 'running',
-    endpoints: ['/health', '/api/auth', '/api/product_weblink', '/api/logistics', '/api/salary']
+    endpoints: [
+      '/health', 
+      '/api/auth', 
+      '/api/product_weblink', 
+      '/api/logistics', 
+      '/api/salary',
+      '/api/warehouse',
+      '/api/hscode',
+      '/api/shipments',
+      '/api/shipping',
+      '/api/shipping/health',
+      '/api/shipping/needs',
+      '/api/shipping/inventory-stats'
+    ]
   });
 });
 
