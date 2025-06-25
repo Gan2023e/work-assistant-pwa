@@ -213,14 +213,13 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 获取合并数据
-  const fetchMergedData = async (page = 1, status = '待发货') => {
+  // 获取合并数据（全部显示，不分页）
+  const fetchMergedData = async (status = '待发货') => {
     setMergedLoading(true);
     try {
       const queryParams = new URLSearchParams({
         ...(status && { status }),
-        page: page.toString(),
-        limit: mergedPagination.pageSize.toString()
+        limit: '1000' // 设置较大的限制来获取所有数据
       });
       
       console.log('🔍 合并数据API调用:', `${API_BASE_URL}/api/shipping/merged-data?${queryParams}`);
@@ -242,11 +241,6 @@ const ShippingPage: React.FC = () => {
       
       if (result.code === 0) {
         setMergedData(result.data.list || []);
-        setMergedPagination(prev => ({
-          ...prev,
-          current: page,
-          total: result.data.total || 0
-        }));
         message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
       } else {
         message.error(result.message || '获取合并数据失败');
@@ -256,7 +250,6 @@ const ShippingPage: React.FC = () => {
       message.error(`获取合并数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
       // 设置空数据以防止界面异常
       setMergedData([]);
-      setMergedPagination(prev => ({ ...prev, total: 0 }));
     } finally {
       setMergedLoading(false);
     }
@@ -265,7 +258,7 @@ const ShippingPage: React.FC = () => {
   useEffect(() => {
     fetchNeeds(1, statusFilter);
     fetchInventoryStats();
-    fetchMergedData(1, statusFilter);
+    fetchMergedData(statusFilter);
   }, [statusFilter]);
 
   // 状态颜色映射
@@ -719,7 +712,6 @@ const ShippingPage: React.FC = () => {
                 value={statusFilter}
                 onChange={(value) => {
                   setStatusFilter(value);
-                  setMergedPagination(prev => ({ ...prev, current: 1 }));
                 }}
                 style={{ width: 120 }}
               >
@@ -732,7 +724,7 @@ const ShippingPage: React.FC = () => {
             <Col>
               <Button
                 icon={<ReloadOutlined />}
-                onClick={() => fetchMergedData(mergedPagination.current, statusFilter)}
+                onClick={() => fetchMergedData(statusFilter)}
               >
                 刷新合并数据
               </Button>
@@ -793,16 +785,7 @@ const ShippingPage: React.FC = () => {
             dataSource={mergedData}
             rowKey="record_num"
             loading={mergedLoading}
-            pagination={{
-              ...mergedPagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-              onChange: (page, pageSize) => {
-                setMergedPagination(prev => ({ ...prev, pageSize: pageSize || 10 }));
-                fetchMergedData(page, statusFilter);
-              }
-            }}
+            pagination={false}
             scroll={{ x: 1500 }}
             rowClassName={(record) => {
               if (record.shortage > 0) return 'shortage-row';

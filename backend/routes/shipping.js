@@ -334,15 +334,34 @@ router.get('/health', async (req, res) => {
     // 检查数据表是否存在
     await WarehouseProductsNeed.describe();
     await LocalBox.describe();
+    await AmzSkuMapping.describe();
     
     // 检查数据表记录数
     const needsCount = await WarehouseProductsNeed.count();
     const localBoxCount = await LocalBox.count();
+    const mappingCount = await AmzSkuMapping.count();
+    
+    // 获取一些示例数据用于调试
+    const sampleNeeds = await WarehouseProductsNeed.findAll({
+      limit: 3,
+      attributes: ['sku', 'country', 'status'],
+      raw: true
+    });
+    
+    const sampleMappings = await AmzSkuMapping.findAll({
+      limit: 5,
+      attributes: ['amz_sku', 'country', 'local_sku'],
+      raw: true
+    });
     
     console.log('\x1b[32m%s\x1b[0m', '📊 数据表状态:', {
       pbi_warehouse_products_need: `${needsCount} 条记录`,
-      local_boxes: `${localBoxCount} 条记录`
+      local_boxes: `${localBoxCount} 条记录`,
+      pbi_amzsku_sku: `${mappingCount} 条记录`
     });
+    
+    console.log('\x1b[33m%s\x1b[0m', '📋 示例发货需求SKU:', sampleNeeds.map(n => n.sku));
+    console.log('\x1b[33m%s\x1b[0m', '📋 示例SKU映射:', sampleMappings.map(m => `${m.amz_sku}->${m.local_sku}`));
     
     res.json({
       code: 0,
@@ -356,7 +375,15 @@ router.get('/health', async (req, res) => {
           local_boxes: {
             exists: true,
             count: localBoxCount
+          },
+          pbi_amzsku_sku: {
+            exists: true,
+            count: mappingCount
           }
+        },
+        samples: {
+          needs: sampleNeeds,
+          mappings: sampleMappings
         },
         timestamp: new Date().toISOString()
       }
@@ -402,6 +429,8 @@ router.get('/merged-data', async (req, res) => {
       needsData.map(async (need) => {
         try {
           // 通过amz_sku + country查找对应的local_sku
+          console.log('\x1b[36m%s\x1b[0m', `🔍 查找SKU映射: amz_sku=${need.sku}, country=${need.country}`);
+          
           const skuMapping = await AmzSkuMapping.findOne({
             where: {
               amz_sku: need.sku,
@@ -409,6 +438,8 @@ router.get('/merged-data', async (req, res) => {
             },
             raw: true
           });
+
+          console.log('\x1b[36m%s\x1b[0m', `📋 SKU映射结果:`, skuMapping);
 
           let inventoryInfo = {
             local_sku: '',
@@ -522,8 +553,26 @@ router.post('/create-test-data', async (req, res) => {
   console.log('\x1b[33m%s\x1b[0m', '⚠️  创建测试数据请求');
   
   try {
-    // 1. 创建SKU映射测试数据
-    const testMappings = [
+    // 1. 获取现有的发货需求数据，为其创建SKU映射
+    const existingNeeds = await WarehouseProductsNeed.findAll({
+      attributes: ['sku', 'country'],
+      group: ['sku', 'country'],
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '📋 现有发货需求SKU:', existingNeeds);
+
+    // 2. 为现有的Amazon SKU创建映射到本地SKU
+    const testMappings = existingNeeds.map((need, index) => ({
+      amz_sku: need.sku,
+      site: 'Amazon.com',
+      country: need.country,
+      local_sku: `LOCAL-${need.sku.substr(-4)}-${need.country}`, // 生成对应的本地SKU
+      update_time: new Date()
+    }));
+
+    // 3. 添加一些额外的测试映射
+    testMappings.push(
       {
         amz_sku: 'AMZ-TEST-001',
         site: 'Amazon.com',
@@ -537,15 +586,8 @@ router.post('/create-test-data', async (req, res) => {
         country: 'UK',
         local_sku: 'LOCAL-002',
         update_time: new Date()
-      },
-      {
-        amz_sku: 'AMZ-TEST-003',
-        site: 'Amazon.de',
-        country: 'DE',
-        local_sku: 'LOCAL-003',
-        update_time: new Date()
       }
-    ];
+    );
 
     await AmzSkuMapping.bulkCreate(testMappings, {
       ignoreDuplicates: true
@@ -597,49 +639,35 @@ router.post('/create-test-data', async (req, res) => {
     
     const createdNeeds = await WarehouseProductsNeed.bulkCreate(testNeeds);
 
-    // 3. 创建一些对应的库存数据
-    const testInventory = [
-      {
-        sku: 'LOCAL-001',
-        country: 'US',
-        total_quantity: 120,
-        total_boxes: 5,
+    // 4. 为映射的本地SKU创建对应的库存数据
+    const testInventory = [];
+    
+    // 为每个映射的本地SKU创建库存数据
+    testMappings.forEach((mapping, index) => {
+      const baseQuantity = Math.floor(Math.random() * 100) + 50; // 50-150的随机数量
+      
+      // 添加整箱库存
+      testInventory.push({
+        sku: mapping.local_sku,
+        country: mapping.country,
+        total_quantity: baseQuantity,
+        total_boxes: Math.floor(baseQuantity / 20), // 假设每箱20个
         mix_box_num: null,
         marketPlace: 'Amazon'
-      },
-      {
-        sku: 'LOCAL-001',
-        country: 'US',
-        total_quantity: 20,
-        total_boxes: 0,
-        mix_box_num: 'MIX-001',
-        marketPlace: 'Amazon'
-      },
-      {
-        sku: 'LOCAL-002',
-        country: 'UK',
-        total_quantity: 30,
-        total_boxes: 2,
-        mix_box_num: null,
-        marketPlace: 'Amazon'
-      },
-      {
-        sku: 'LOCAL-003',
-        country: 'DE',
-        total_quantity: 60,
-        total_boxes: 3,
-        mix_box_num: null,
-        marketPlace: 'Amazon'
-      },
-      {
-        sku: 'LOCAL-003',
-        country: 'DE',
-        total_quantity: 10,
-        total_boxes: 0,
-        mix_box_num: 'MIX-002',
-        marketPlace: 'Amazon'
+      });
+      
+      // 随机添加一些混合箱库存
+      if (Math.random() > 0.5) {
+        testInventory.push({
+          sku: mapping.local_sku,
+          country: mapping.country,
+          total_quantity: Math.floor(Math.random() * 30) + 10,
+          total_boxes: 0,
+          mix_box_num: `MIX-${index + 1}`,
+          marketPlace: 'Amazon'
+        });
       }
-    ];
+    });
 
     await LocalBox.bulkCreate(testInventory, {
       ignoreDuplicates: true
