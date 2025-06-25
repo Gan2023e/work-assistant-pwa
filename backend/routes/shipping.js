@@ -50,6 +50,8 @@ async function sendDingTalkNotification(message, atMobiles = []) {
 
 // 获取发货需求列表
 router.get('/needs', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到发货需求查询请求:', JSON.stringify(req.query, null, 2));
+  
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
@@ -60,12 +62,16 @@ router.get('/needs', async (req, res) => {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
     
+    console.log('\x1b[35m%s\x1b[0m', '🔍 查询条件:', JSON.stringify({ whereCondition, offset, limit: parseInt(limit) }, null, 2));
+    
     const { count, rows } = await WarehouseProductsNeed.findAndCountAll({
       where: whereCondition,
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: offset
     });
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 查询结果:', { count, rowsLength: rows.length });
 
     res.json({
       code: 0,
@@ -78,7 +84,7 @@ router.get('/needs', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取发货需求列表失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取发货需求列表失败:', error);
     res.status(500).json({
       code: 1,
       message: '获取失败',
@@ -89,6 +95,8 @@ router.get('/needs', async (req, res) => {
 
 // 获取库存统计
 router.get('/inventory-stats', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存统计查询请求');
+  
   try {
     const stats = await LocalBox.findAll({
       attributes: [
@@ -103,13 +111,15 @@ router.get('/inventory-stats', async (req, res) => {
       raw: true
     });
 
+    console.log('\x1b[32m%s\x1b[0m', '📊 库存统计结果数量:', stats.length);
+
     res.json({
       code: 0,
       message: '获取成功',
       data: stats
     });
   } catch (error) {
-    console.error('获取库存统计失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取库存统计失败:', error);
     res.status(500).json({
       code: 1,
       message: '获取失败',
@@ -251,6 +261,102 @@ router.put('/needs/batch-status', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '批量更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 健康检查和测试端点
+router.get('/health', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 发货需求模块健康检查');
+  
+  try {
+    // 检查数据表是否存在
+    await WarehouseProductsNeed.describe();
+    await LocalBox.describe();
+    
+    // 检查数据表记录数
+    const needsCount = await WarehouseProductsNeed.count();
+    const localBoxCount = await LocalBox.count();
+    
+    console.log('\x1b[32m%s\x1b[0m', '📊 数据表状态:', {
+      pbi_warehouse_products_need: `${needsCount} 条记录`,
+      local_boxes: `${localBoxCount} 条记录`
+    });
+    
+    res.json({
+      code: 0,
+      message: '发货需求模块运行正常',
+      data: {
+        tables: {
+          pbi_warehouse_products_need: {
+            exists: true,
+            count: needsCount
+          },
+          local_boxes: {
+            exists: true,
+            count: localBoxCount
+          }
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 发货需求模块健康检查失败:', error);
+    
+    res.status(500).json({
+      code: 1,
+      message: '发货需求模块异常',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 创建测试数据端点（仅用于测试）
+router.post('/create-test-data', async (req, res) => {
+  console.log('\x1b[33m%s\x1b[0m', '⚠️  创建测试数据请求');
+  
+  try {
+    // 创建一些测试发货需求数据
+    const testNeeds = [
+      {
+        need_num: Date.now().toString(),
+        sku: 'TEST-SKU-001',
+        quantity: 100,
+        marketplace: 'Amazon',
+        country: 'US',
+        status: '待发货',
+        created_by: '测试用户',
+        remark: '这是测试数据'
+      },
+      {
+        need_num: Date.now().toString(),
+        sku: 'TEST-SKU-002',
+        quantity: 50,
+        marketplace: 'eBay',
+        country: 'UK',
+        status: '待发货',
+        created_by: '测试用户',
+        remark: '这是测试数据'
+      }
+    ];
+    
+    const createdNeeds = await WarehouseProductsNeed.bulkCreate(testNeeds);
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 测试数据创建成功:', createdNeeds.length);
+    
+    res.json({
+      code: 0,
+      message: '测试数据创建成功',
+      data: createdNeeds
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建测试数据失败:', error);
+    
+    res.status(500).json({
+      code: 1,
+      message: '创建测试数据失败',
       error: error.message
     });
   }

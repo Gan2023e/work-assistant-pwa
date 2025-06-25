@@ -28,7 +28,7 @@ import {
   CloseOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { apiClient } from '../../config/api';
+import { apiClient, API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { Option } = Select;
@@ -88,19 +88,41 @@ const ShippingPage: React.FC = () => {
         page: page.toString(),
         limit: pagination.pageSize.toString()
       });
-      const response = await apiClient.get(`/api/shipping/needs?${queryParams}`);
       
-      if (response.code === 0) {
-        setNeeds(response.data.list);
+      console.log('🔍 发货需求API调用:', `${API_BASE_URL}/api/shipping/needs?${queryParams}`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/shipping/needs?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('📊 发货需求API响应:', result);
+      
+      if (result.code === 0) {
+        setNeeds(result.data.list || []);
         setPagination(prev => ({
           ...prev,
           current: page,
-          total: response.data.total
+          total: result.data.total || 0
         }));
+        message.success(`加载了 ${result.data.list?.length || 0} 条发货需求`);
+      } else {
+        message.error(result.message || '获取发货需求失败');
       }
     } catch (error) {
       console.error('获取发货需求失败:', error);
-      message.error('获取发货需求失败');
+      message.error(`获取发货需求失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      // 设置空数据以防止界面异常
+      setNeeds([]);
+      setPagination(prev => ({ ...prev, total: 0 }));
     } finally {
       setLoading(false);
     }
@@ -109,13 +131,33 @@ const ShippingPage: React.FC = () => {
   // 获取库存统计
   const fetchInventoryStats = async () => {
     try {
-      const response = await apiClient.get('/api/shipping/inventory-stats');
-      if (response.code === 0) {
-        setInventoryStats(response.data);
+      console.log('🔍 库存统计API调用:', `${API_BASE_URL}/api/shipping/inventory-stats`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/shipping/inventory-stats`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('📊 库存统计API响应:', result);
+      
+      if (result.code === 0) {
+        setInventoryStats(result.data || []);
+      } else {
+        message.error(result.message || '获取库存统计失败');
       }
     } catch (error) {
       console.error('获取库存统计失败:', error);
-      message.error('获取库存统计失败');
+      message.error(`获取库存统计失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      // 设置空数据以防止界面异常
+      setInventoryStats([]);
     }
   };
 
@@ -304,20 +346,31 @@ const ShippingPage: React.FC = () => {
   // 添加需求
   const handleAdd = async (values: AddNeedForm[]) => {
     try {
-      const response = await apiClient.post('/api/shipping/needs', {
-        needs: values,
-        created_by: user?.username
+      const response = await fetch(`${API_BASE_URL}/api/shipping/needs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          needs: values,
+          created_by: user?.username
+        }),
       });
       
-      if (response.code === 0) {
+      const result = await response.json();
+      
+      if (result.code === 0) {
         message.success('添加成功');
         setAddModalVisible(false);
         addForm.resetFields();
         fetchNeeds(pagination.current, statusFilter);
+      } else {
+        message.error(result.message || '添加失败');
       }
     } catch (error) {
       console.error('添加失败:', error);
-      message.error('添加失败');
+      message.error(`添加失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -333,51 +386,83 @@ const ShippingPage: React.FC = () => {
     if (!currentNeed) return;
     
     try {
-      const response = await apiClient.put(`/api/shipping/needs/${currentNeed.record_num}`, values);
+      const response = await fetch(`${API_BASE_URL}/api/shipping/needs/${currentNeed.record_num}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify(values),
+      });
       
-      if (response.code === 0) {
+      const result = await response.json();
+      
+      if (result.code === 0) {
         message.success('更新成功');
         setEditModalVisible(false);
         setCurrentNeed(null);
         editForm.resetFields();
         fetchNeeds(pagination.current, statusFilter);
+      } else {
+        message.error(result.message || '更新失败');
       }
     } catch (error) {
       console.error('更新失败:', error);
-      message.error('更新失败');
+      message.error(`更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
   // 删除需求
   const handleDelete = async (id: number) => {
     try {
-      const response = await apiClient.delete(`/api/shipping/needs/${id}`);
+      const response = await fetch(`${API_BASE_URL}/api/shipping/needs/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       
-      if (response.code === 0) {
+      const result = await response.json();
+      
+      if (result.code === 0) {
         message.success('删除成功');
         fetchNeeds(pagination.current, statusFilter);
+      } else {
+        message.error(result.message || '删除失败');
       }
     } catch (error) {
       console.error('删除失败:', error);
-      message.error('删除失败');
+      message.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
   // 批量更新状态
   const handleBatchUpdateStatus = async (status: string, selectedIds: number[]) => {
     try {
-      const response = await apiClient.put('/api/shipping/needs/batch-status', {
-        ids: selectedIds,
-        status
+      const response = await fetch(`${API_BASE_URL}/api/shipping/needs/batch-status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          ids: selectedIds,
+          status
+        }),
       });
       
-      if (response.code === 0) {
+      const result = await response.json();
+      
+      if (result.code === 0) {
         message.success('批量更新成功');
         fetchNeeds(pagination.current, statusFilter);
+      } else {
+        message.error(result.message || '批量更新失败');
       }
     } catch (error) {
       console.error('批量更新失败:', error);
-      message.error('批量更新失败');
+      message.error(`批量更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -422,6 +507,53 @@ const ShippingPage: React.FC = () => {
                 onClick={() => fetchNeeds(pagination.current, statusFilter)}
               >
                 刷新
+              </Button>
+            </Col>
+            <Col>
+              <Button
+                type="default"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`${API_BASE_URL}/api/shipping/health`);
+                    const result = await response.json();
+                    if (result.code === 0) {
+                      message.success(`健康检查通过！发货需求表：${result.data.tables.pbi_warehouse_products_need.count}条，库存表：${result.data.tables.local_boxes.count}条`);
+                    } else {
+                      message.error(`健康检查失败：${result.message}`);
+                    }
+                  } catch (error) {
+                    message.error(`健康检查失败：${error instanceof Error ? error.message : '未知错误'}`);
+                  }
+                }}
+              >
+                健康检查
+              </Button>
+            </Col>
+            <Col>
+              <Button
+                type="dashed"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`${API_BASE_URL}/api/shipping/create-test-data`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                      },
+                    });
+                    const result = await response.json();
+                    if (result.code === 0) {
+                      message.success('测试数据创建成功！');
+                      fetchNeeds(pagination.current, statusFilter);
+                    } else {
+                      message.error(`创建测试数据失败：${result.message}`);
+                    }
+                  } catch (error) {
+                    message.error(`创建测试数据失败：${error instanceof Error ? error.message : '未知错误'}`);
+                  }
+                }}
+              >
+                创建测试数据
               </Button>
             </Col>
           </Row>
