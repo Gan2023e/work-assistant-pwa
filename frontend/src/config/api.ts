@@ -50,9 +50,12 @@ export const API_ENDPOINTS = {
   shipping: {
     needs: '/api/shipping/needs',
     inventoryStats: '/api/shipping/inventory-stats',
+    mergedData: '/api/shipping/merged-data',
     updateNeed: (id: number) => `/api/shipping/needs/${id}`,
     deleteNeed: (id: number) => `/api/shipping/needs/${id}`,
     batchUpdateStatus: '/api/shipping/needs/batch-status',
+    health: '/api/shipping/health',
+    createTestData: '/api/shipping/create-test-data'
   },
   // 健康检查
   health: '/health',

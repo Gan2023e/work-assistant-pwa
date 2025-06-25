@@ -11,6 +11,7 @@ const Logistics = require('./Logistics');
 const PackagePrice = require('./PackagePrice');
 const ProductWeblink = require('./ProductWeblink');
 const SellerInventorySku = require('./SellerInventorySku');
+const AmzSkuMapping = require('./AmzSkuMapping');
 
 module.exports = { 
   sequelize,
@@ -22,5 +23,6 @@ module.exports = {
   Logistics,
   PackagePrice,
   ProductWeblink,
-  SellerInventorySku
+  SellerInventorySku,
+  AmzSkuMapping
 };

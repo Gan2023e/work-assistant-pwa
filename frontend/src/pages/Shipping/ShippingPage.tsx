@@ -31,6 +31,32 @@ import type { ColumnsType } from 'antd/es/table';
 import { apiClient, API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 
+// 自定义样式
+const customStyles = `
+  .shortage-row {
+    background-color: #fff2f0 !important;
+  }
+  .shortage-row:hover {
+    background-color: #ffece6 !important;
+  }
+  .unmapped-row {
+    background-color: #fffbe6 !important;
+  }
+  .unmapped-row:hover {
+    background-color: #fff7e6 !important;
+  }
+`;
+
+// 注入样式
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = customStyles;
+  if (!document.head.querySelector('style[data-shipping-styles]')) {
+    styleElement.setAttribute('data-shipping-styles', 'true');
+    document.head.appendChild(styleElement);
+  }
+}
+
 const { Option } = Select;
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
@@ -62,6 +88,24 @@ interface InventoryStats {
   total_quantity: number;
 }
 
+interface MergedShippingData {
+  record_num: number;
+  need_num: string;
+  amz_sku: string;
+  local_sku: string;
+  quantity: number;
+  shipping_method?: string;
+  marketplace: string;
+  country: string;
+  status: '待发货' | '已发货' | '已取消';
+  created_at: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
+  total_available: number;
+  shortage: number;
+}
+
 interface AddNeedForm {
   sku: string;
   quantity: number;
@@ -75,7 +119,9 @@ const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const [needs, setNeeds] = useState<ShippingNeed[]>([]);
   const [inventoryStats, setInventoryStats] = useState<InventoryStats[]>([]);
+  const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mergedLoading, setMergedLoading] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentNeed, setCurrentNeed] = useState<ShippingNeed | null>(null);
@@ -83,6 +129,7 @@ const ShippingPage: React.FC = () => {
   const [editForm] = Form.useForm();
   const [statusFilter, setStatusFilter] = useState('待发货');
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [mergedPagination, setMergedPagination] = useState({ current: 1, pageSize: 10, total: 0 });
 
   // 获取发货需求列表
   const fetchNeeds = async (page = 1, status = '待发货') => {
@@ -166,9 +213,59 @@ const ShippingPage: React.FC = () => {
     }
   };
 
+  // 获取合并数据
+  const fetchMergedData = async (page = 1, status = '待发货') => {
+    setMergedLoading(true);
+    try {
+      const queryParams = new URLSearchParams({
+        ...(status && { status }),
+        page: page.toString(),
+        limit: mergedPagination.pageSize.toString()
+      });
+      
+      console.log('🔍 合并数据API调用:', `${API_BASE_URL}/api/shipping/merged-data?${queryParams}`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('📊 合并数据API响应:', result);
+      
+      if (result.code === 0) {
+        setMergedData(result.data.list || []);
+        setMergedPagination(prev => ({
+          ...prev,
+          current: page,
+          total: result.data.total || 0
+        }));
+        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
+      } else {
+        message.error(result.message || '获取合并数据失败');
+      }
+    } catch (error) {
+      console.error('获取合并数据失败:', error);
+      message.error(`获取合并数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      // 设置空数据以防止界面异常
+      setMergedData([]);
+      setMergedPagination(prev => ({ ...prev, total: 0 }));
+    } finally {
+      setMergedLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchNeeds(1, statusFilter);
     fetchInventoryStats();
+    fetchMergedData(1, statusFilter);
   }, [statusFilter]);
 
   // 状态颜色映射
@@ -375,6 +472,114 @@ const ShippingPage: React.FC = () => {
     },
   ];
 
+  // 合并数据表格列定义
+  const mergedColumns: ColumnsType<MergedShippingData> = [
+    {
+      title: '需求单号',
+      dataIndex: 'need_num',
+      key: 'need_num',
+      width: 130,
+      ellipsis: true,
+    },
+    {
+      title: 'Amazon SKU',
+      dataIndex: 'amz_sku',
+      key: 'amz_sku',
+      width: 130,
+      ellipsis: true,
+    },
+    {
+      title: '本地SKU',
+      dataIndex: 'local_sku',
+      key: 'local_sku',
+      width: 130,
+      ellipsis: true,
+      render: (value: string) => value || <Text type="secondary">未映射</Text>,
+    },
+    {
+      title: '需求数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 90,
+      align: 'center',
+      render: (value: number) => <Text strong>{value}</Text>,
+    },
+    {
+      title: '可用库存',
+      dataIndex: 'total_available',
+      key: 'total_available',
+      width: 90,
+      align: 'center',
+      render: (value: number) => (
+        <Text type={value > 0 ? 'success' : 'danger'}>
+          {value}
+        </Text>
+      ),
+    },
+    {
+      title: '缺货数量',
+      dataIndex: 'shortage',
+      key: 'shortage',
+      width: 90,
+      align: 'center',
+      render: (value: number) => (
+        value > 0 ? <Text type="danger">{value}</Text> : <Text type="success">充足</Text>
+      ),
+    },
+    {
+      title: '平台',
+      dataIndex: 'marketplace',
+      key: 'marketplace',
+      width: 90,
+    },
+    {
+      title: '国家',
+      dataIndex: 'country',
+      key: 'country',
+      width: 70,
+      align: 'center',
+    },
+    {
+      title: '运输方式',
+      dataIndex: 'shipping_method',
+      key: 'shipping_method',
+      width: 100,
+      render: (value: string) => value || '-',
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 90,
+      render: (status: string) => (
+        <Tag color={getStatusColor(status)}>{status}</Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 150,
+      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+    },
+    {
+      title: '整箱数量',
+      dataIndex: 'whole_box_quantity',
+      key: 'whole_box_quantity',
+      width: 90,
+      align: 'center',
+      render: (value: number) => value || '-',
+    },
+    {
+      title: '混合箱数量',
+      dataIndex: 'mixed_box_quantity',
+      key: 'mixed_box_quantity',
+      width: 90,
+      align: 'center',
+      render: (value: number) => value || '-',
+    },
+  ];
+
   // 添加需求
   const handleAdd = async (values: AddNeedForm[]) => {
     try {
@@ -503,10 +708,110 @@ const ShippingPage: React.FC = () => {
       <Title level={2}>发货需求管理</Title>
       
       <Tabs 
-        defaultActiveKey="needs" 
+        defaultActiveKey="merged" 
         type="card"
         style={{ marginBottom: 24 }}
       >
+        <TabPane tab="合并数据展示" key="merged">
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col>
+              <Select
+                value={statusFilter}
+                onChange={(value) => {
+                  setStatusFilter(value);
+                  setMergedPagination(prev => ({ ...prev, current: 1 }));
+                }}
+                style={{ width: 120 }}
+              >
+                <Option value="">全部状态</Option>
+                <Option value="待发货">待发货</Option>
+                <Option value="已发货">已发货</Option>
+                <Option value="已取消">已取消</Option>
+              </Select>
+            </Col>
+            <Col>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => fetchMergedData(mergedPagination.current, statusFilter)}
+              >
+                刷新合并数据
+              </Button>
+            </Col>
+          </Row>
+
+          <Card style={{ marginBottom: 16 }}>
+            <Row gutter={16}>
+              <Col span={4}>
+                <Statistic
+                  title="总需求数"
+                  value={mergedData.length}
+                  prefix={<PlusOutlined />}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="库存充足"
+                  value={mergedData.filter(item => item.shortage === 0).length}
+                  valueStyle={{ color: '#3f8600' }}
+                  prefix={<CheckOutlined />}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="库存不足"
+                  value={mergedData.filter(item => item.shortage > 0).length}
+                  valueStyle={{ color: '#cf1322' }}
+                  prefix={<CloseOutlined />}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="未映射SKU"
+                  value={mergedData.filter(item => !item.local_sku).length}
+                  valueStyle={{ color: '#fa8c16' }}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="总缺货数量"
+                  value={mergedData.reduce((sum, item) => sum + item.shortage, 0)}
+                  valueStyle={{ color: '#cf1322' }}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="总可用库存"
+                  value={mergedData.reduce((sum, item) => sum + item.total_available, 0)}
+                  valueStyle={{ color: '#3f8600' }}
+                />
+              </Col>
+            </Row>
+          </Card>
+
+          <Table
+            columns={mergedColumns}
+            dataSource={mergedData}
+            rowKey="record_num"
+            loading={mergedLoading}
+            pagination={{
+              ...mergedPagination,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+              onChange: (page, pageSize) => {
+                setMergedPagination(prev => ({ ...prev, pageSize: pageSize || 10 }));
+                fetchMergedData(page, statusFilter);
+              }
+            }}
+            scroll={{ x: 1500 }}
+            rowClassName={(record) => {
+              if (record.shortage > 0) return 'shortage-row';
+              if (!record.local_sku) return 'unmapped-row';
+              return '';
+            }}
+          />
+        </TabPane>
+
         <TabPane tab="发货需求" key="needs">
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col>

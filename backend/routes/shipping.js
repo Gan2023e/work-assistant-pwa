@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WarehouseProductsNeed, LocalBox } = require('../models/index');
+const { WarehouseProductsNeed, LocalBox, AmzSkuMapping } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -373,17 +373,190 @@ router.get('/health', async (req, res) => {
   }
 });
 
+// 获取合并的发货需求和库存数据
+router.get('/merged-data', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求');
+  
+  try {
+    const { status, page = 1, limit = 10 } = req.query;
+    
+    // 1. 获取发货需求数据
+    const whereCondition = {};
+    if (status) {
+      whereCondition.status = status;
+    }
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    const { count, rows: needsData } = await WarehouseProductsNeed.findAndCountAll({
+      where: whereCondition,
+      order: [['record_num', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 发货需求数据数量:', needsData.length);
+
+    // 2. 对每个发货需求，查找对应的本地SKU和库存信息
+    const mergedData = await Promise.all(
+      needsData.map(async (need) => {
+        try {
+          // 通过amz_sku + country查找对应的local_sku
+          const skuMapping = await AmzSkuMapping.findOne({
+            where: {
+              amz_sku: need.sku,
+              country: need.country
+            },
+            raw: true
+          });
+
+          let inventoryInfo = {
+            local_sku: '',
+            whole_box_quantity: 0,
+            whole_box_count: 0,
+            mixed_box_quantity: 0,
+            total_available: 0
+          };
+
+          if (skuMapping) {
+            // 查找对应的库存数据
+            const inventoryData = await LocalBox.findAll({
+              where: {
+                sku: skuMapping.local_sku,
+                country: need.country
+              },
+              raw: true
+            });
+
+            // 计算库存统计
+            let wholeBoxQty = 0, wholeBoxCount = 0, mixedBoxQty = 0;
+            
+            inventoryData.forEach(item => {
+              const quantity = parseInt(item.total_quantity) || 0;
+              const boxes = parseInt(item.total_boxes) || 0;
+              
+              if (!item.mix_box_num || item.mix_box_num.trim() === '') {
+                wholeBoxQty += quantity;
+                wholeBoxCount += boxes;
+              } else {
+                mixedBoxQty += quantity;
+              }
+            });
+
+            inventoryInfo = {
+              local_sku: skuMapping.local_sku,
+              whole_box_quantity: wholeBoxQty,
+              whole_box_count: wholeBoxCount,
+              mixed_box_quantity: mixedBoxQty,
+              total_available: wholeBoxQty + mixedBoxQty
+            };
+          }
+
+          // 合并发货需求和库存信息
+          return {
+            record_num: need.record_num,
+            need_num: need.need_num || '',
+            amz_sku: need.sku || '',
+            local_sku: inventoryInfo.local_sku,
+            quantity: need.ori_quantity || 0,
+            shipping_method: need.shipping_method || '',
+            marketplace: need.marketplace || '',
+            country: need.country || '',
+            status: need.status || '待发货',
+            created_at: need.create_date || new Date().toISOString(),
+            // 库存信息
+            whole_box_quantity: inventoryInfo.whole_box_quantity,
+            whole_box_count: inventoryInfo.whole_box_count,
+            mixed_box_quantity: inventoryInfo.mixed_box_quantity,
+            total_available: inventoryInfo.total_available,
+            // 计算缺货情况
+            shortage: Math.max(0, (need.ori_quantity || 0) - inventoryInfo.total_available)
+          };
+        } catch (error) {
+          console.error('处理单个需求数据失败:', error);
+          return {
+            record_num: need.record_num,
+            need_num: need.need_num || '',
+            amz_sku: need.sku || '',
+            local_sku: '',
+            quantity: need.ori_quantity || 0,
+            shipping_method: need.shipping_method || '',
+            marketplace: need.marketplace || '',
+            country: need.country || '',
+            status: need.status || '待发货',
+            created_at: need.create_date || new Date().toISOString(),
+            whole_box_quantity: 0,
+            whole_box_count: 0,
+            mixed_box_quantity: 0,
+            total_available: 0,
+            shortage: need.ori_quantity || 0
+          };
+        }
+      })
+    );
+
+    console.log('\x1b[35m%s\x1b[0m', '📊 合并数据示例（前3条）:', mergedData.slice(0, 3));
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        list: mergedData,
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取合并数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
 // 创建测试数据端点（仅用于测试）
 router.post('/create-test-data', async (req, res) => {
   console.log('\x1b[33m%s\x1b[0m', '⚠️  创建测试数据请求');
   
   try {
-    // 创建一些测试发货需求数据
+    // 1. 创建SKU映射测试数据
+    const testMappings = [
+      {
+        amz_sku: 'AMZ-TEST-001',
+        site: 'Amazon.com',
+        country: 'US',
+        local_sku: 'LOCAL-001',
+        update_time: new Date()
+      },
+      {
+        amz_sku: 'AMZ-TEST-002',
+        site: 'Amazon.co.uk',
+        country: 'UK',
+        local_sku: 'LOCAL-002',
+        update_time: new Date()
+      },
+      {
+        amz_sku: 'AMZ-TEST-003',
+        site: 'Amazon.de',
+        country: 'DE',
+        local_sku: 'LOCAL-003',
+        update_time: new Date()
+      }
+    ];
+
+    await AmzSkuMapping.bulkCreate(testMappings, {
+      ignoreDuplicates: true
+    });
+
+    // 2. 创建一些测试发货需求数据（使用映射的Amazon SKU）
     const testNeeds = [
       {
-        need_num: Date.now().toString(),
+        need_num: `NEED-${Date.now()}`,
         create_date: new Date(),
-        sku: 'TEST-SKU-001',
+        sku: 'AMZ-TEST-001',
         ori_quantity: 100,
         shipping_method: '空运',
         marketplace: 'Amazon',
@@ -391,25 +564,101 @@ router.post('/create-test-data', async (req, res) => {
         status: '待发货'
       },
       {
-        need_num: (Date.now() + 1).toString(),
+        need_num: `NEED-${Date.now() + 1}`,
         create_date: new Date(),
-        sku: 'TEST-SKU-002',
+        sku: 'AMZ-TEST-002',
         ori_quantity: 50,
         shipping_method: '海运',
-        marketplace: 'eBay',
+        marketplace: 'Amazon',
         country: 'UK',
+        status: '待发货'
+      },
+      {
+        need_num: `NEED-${Date.now() + 2}`,
+        create_date: new Date(),
+        sku: 'AMZ-TEST-003',
+        ori_quantity: 75,
+        shipping_method: '快递',
+        marketplace: 'Amazon',
+        country: 'DE',
+        status: '待发货'
+      },
+      {
+        need_num: `NEED-${Date.now() + 3}`,
+        create_date: new Date(),
+        sku: 'UNMAPPED-SKU',
+        ori_quantity: 30,
+        shipping_method: '空运',
+        marketplace: 'eBay',
+        country: 'US',
         status: '待发货'
       }
     ];
     
     const createdNeeds = await WarehouseProductsNeed.bulkCreate(testNeeds);
+
+    // 3. 创建一些对应的库存数据
+    const testInventory = [
+      {
+        sku: 'LOCAL-001',
+        country: 'US',
+        total_quantity: 120,
+        total_boxes: 5,
+        mix_box_num: null,
+        marketPlace: 'Amazon'
+      },
+      {
+        sku: 'LOCAL-001',
+        country: 'US',
+        total_quantity: 20,
+        total_boxes: 0,
+        mix_box_num: 'MIX-001',
+        marketPlace: 'Amazon'
+      },
+      {
+        sku: 'LOCAL-002',
+        country: 'UK',
+        total_quantity: 30,
+        total_boxes: 2,
+        mix_box_num: null,
+        marketPlace: 'Amazon'
+      },
+      {
+        sku: 'LOCAL-003',
+        country: 'DE',
+        total_quantity: 60,
+        total_boxes: 3,
+        mix_box_num: null,
+        marketPlace: 'Amazon'
+      },
+      {
+        sku: 'LOCAL-003',
+        country: 'DE',
+        total_quantity: 10,
+        total_boxes: 0,
+        mix_box_num: 'MIX-002',
+        marketPlace: 'Amazon'
+      }
+    ];
+
+    await LocalBox.bulkCreate(testInventory, {
+      ignoreDuplicates: true
+    });
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ 测试数据创建成功:', createdNeeds.length);
+    console.log('\x1b[32m%s\x1b[0m', '✅ 测试数据创建成功:', {
+      mappings: testMappings.length,
+      needs: createdNeeds.length,
+      inventory: testInventory.length
+    });
     
     res.json({
       code: 0,
       message: '测试数据创建成功',
-      data: createdNeeds
+      data: {
+        mappings: testMappings.length,
+        needs: createdNeeds.length,
+        inventory: testInventory.length
+      }
     });
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', '❌ 创建测试数据失败:', error);
