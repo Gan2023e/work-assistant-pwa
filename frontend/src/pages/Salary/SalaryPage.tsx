@@ -186,6 +186,13 @@ const SalaryPage: React.FC = () => {
 
   const salaryStats = getSalaryStats();
 
+  // 计算未报销工资总额
+  const getUnreimbursedTotal = () => {
+    return unreimbursedWages.reduce((total, wage) => {
+      return total + Number(wage.wage || 0);
+    }, 0);
+  };
+
   const fetchUnreimbursedWages = async () => {
     setUnreimbursedLoading(true);
     try {
@@ -302,6 +309,11 @@ const SalaryPage: React.FC = () => {
               />
             )}
             <Button type="primary" onClick={fetchData} loading={loading} style={{ marginLeft: 16 }}>计算工资</Button>
+            {selectedPacker && !queried && (
+              <span style={{ marginLeft: 16, fontSize: 13, color: '#1890ff' }}>
+                选择打包员后点击"计算工资"可录入其他工资
+              </span>
+            )}
             <Button
               danger
               disabled={selectedMainRowKeys.length !== 1}
@@ -330,9 +342,78 @@ const SalaryPage: React.FC = () => {
           )}
         </Col>
         <Col span={6}>
+          <Card 
+            title="未报销工资总额" 
+            bordered={false} 
+            style={{ marginBottom: 16, backgroundColor: '#fff2e8', borderColor: '#ffc53d' }}
+          >
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 24, fontWeight: 'bold', color: '#d46b08', marginBottom: 4 }}>
+                ¥{getUnreimbursedTotal().toFixed(2)}
+              </div>
+              <div style={{ fontSize: 14, color: '#8c8c8c' }}>
+                共 {unreimbursedWages.length} 条未报销记录
+              </div>
+            </div>
+          </Card>
           <Card title="工资统计" bordered={false}>
-            <div style={{ fontWeight: 'bold', marginBottom: 8 }}>按打包员统计</div>
-            {Object.entries(salaryStats.packerMap).map(([packer, v]: any) => (
+            {selectedPacker ? (
+              <>
+                <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#1890ff' }}>
+                  {selectedPacker} 的工资统计
+                </div>
+                <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f0f8ff', borderRadius: 6, border: '1px dashed #1890ff' }}>
+                  <div style={{ fontWeight: 500, marginBottom: 8, color: '#333' }}>其他工资录入</div>
+                  <div style={{ fontSize: 13, color: '#666', marginBottom: 8 }}>
+                    用于录入非打包封箱工资，如：搬运费、加班费、临时工作等
+                  </div>
+                  {otherSalaryEditing[selectedPacker] ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Input
+                        style={{ width: 120 }}
+                        value={otherSalaryInput[selectedPacker] || ''}
+                        onChange={e => setOtherSalaryInput(s => ({ ...s, [selectedPacker]: e.target.value }))}
+                        type="number"
+                        min={0}
+                        placeholder="输入金额"
+                        addonAfter="元"
+                      />
+                      <Button size="small" type="primary"
+                        onClick={() => {
+                          const val = Number(otherSalaryInput[selectedPacker] || 0);
+                          setOtherSalary(s => ({ ...s, [selectedPacker]: val }));
+                          setOtherSalaryEditing(s => ({ ...s, [selectedPacker]: false }));
+                          message.success(`已为 ${selectedPacker} 添加其他工资 ¥${val.toFixed(2)}`);
+                        }}>
+                        确认
+                      </Button>
+                      <Button size="small" onClick={() => {
+                        setOtherSalaryInput(s => ({ ...s, [selectedPacker]: '' }));
+                        setOtherSalaryEditing(s => ({ ...s, [selectedPacker]: false }));
+                      }}>取消</Button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>
+                        当前其他工资：
+                        <span style={{ fontWeight: 500, color: '#1890ff' }}>
+                          {otherSalary[selectedPacker] ? `¥${otherSalary[selectedPacker].toFixed(2)}` : '¥0.00'}
+                        </span>
+                      </span>
+                      <Button size="small" type="primary" ghost
+                        onClick={() => setOtherSalaryEditing(s => ({ ...s, [selectedPacker]: true }))}>
+                        {otherSalary[selectedPacker] ? '修改' : '添加'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontWeight: 'bold', marginBottom: 8 }}>按打包员统计</div>
+            )}
+            {Object.entries(salaryStats.packerMap)
+              .filter(([packer]) => !selectedPacker || packer === selectedPacker)
+              .map(([packer, v]: any) => (
               <div key={packer} style={{ marginBottom: 12, borderBottom: '1px solid #eee', paddingBottom: 4 }}>
                 <div style={{ fontWeight: 500 }}>{packer}</div>
                 {v.zhengxiangSalary > 0 && (
@@ -347,34 +428,11 @@ const SalaryPage: React.FC = () => {
                 )}
                 <div style={{ margin: '8px 0 4px 8px', fontSize: 13, color: '#333' }}>
                   <span style={{ fontWeight: 500 }}>其他工资：</span>
-                  {otherSalaryEditing[packer] ? (
-                    <>
-                      <Input
-                        style={{ width: 100, marginRight: 8 }}
-                        value={otherSalaryInput[packer] || ''}
-                        onChange={e => setOtherSalaryInput(s => ({ ...s, [packer]: e.target.value }))}
-                        type="number"
-                        min={0}
-                      />
-                      <Button size="small" type="primary" style={{ marginRight: 4 }}
-                        onClick={() => {
-                          const val = Number(otherSalaryInput[packer] || 0);
-                          setOtherSalary(s => ({ ...s, [packer]: val }));
-                          setOtherSalaryEditing(s => ({ ...s, [packer]: false }));
-                        }}>
-                        添加
-                      </Button>
-                      <Button size="small" onClick={() => {
-                        setOtherSalaryInput(s => ({ ...s, [packer]: '' }));
-                        setOtherSalary(s => ({ ...s, [packer]: 0 }));
-                        setOtherSalaryEditing(s => ({ ...s, [packer]: false }));
-                      }}>取消</Button>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ marginRight: 8 }}>{v.otherSalary ? v.otherSalary.toFixed(2) + ' 元' : '—'}</span>
-                      <Button size="small" onClick={() => setOtherSalaryEditing(s => ({ ...s, [packer]: true }))}>添加</Button>
-                    </>
+                  <span style={{ marginLeft: 8 }}>{v.otherSalary ? v.otherSalary.toFixed(2) + ' 元' : '0.00 元'}</span>
+                  {selectedPacker && selectedPacker === packer && (
+                    <span style={{ marginLeft: 8, fontSize: 12, color: '#1890ff' }}>
+                      ↑ 可在上方录入区域修改
+                    </span>
                   )}
                 </div>
                 <div style={{ fontWeight: 500, color: '#1a1a1a', marginLeft: 8, marginTop: 4 }}>
