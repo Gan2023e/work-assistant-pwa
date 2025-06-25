@@ -40,6 +40,7 @@ interface ShippingNeed {
   need_num: string;
   sku: string;
   quantity: number;
+  shipping_method?: string;
   marketplace: string;
   country: string;
   status: '待发货' | '已发货' | '已取消';
@@ -47,6 +48,9 @@ interface ShippingNeed {
   updated_at: string;
   created_by: string;
   remark?: string;
+  send_out_date?: string;
+  expired_date?: string;
+  expect_sold_out_date?: string;
 }
 
 interface InventoryStats {
@@ -61,6 +65,7 @@ interface InventoryStats {
 interface AddNeedForm {
   sku: string;
   quantity: number;
+  shipping_method?: string;
   marketplace: string;
   country: string;
   remark?: string;
@@ -192,6 +197,15 @@ const ShippingPage: React.FC = () => {
     'US', 'UK', 'DE', 'FR', 'IT', 'ES', 'CA', 'JP', 'AU', 'SG', 'MY', 'TH', 'PH', 'ID', 'VN'
   ];
 
+  // 运输方式选项
+  const shippingMethodOptions = [
+    '空运',
+    '海运',
+    '快递',
+    '陆运',
+    '铁运'
+  ];
+
   // 发货需求表格列定义
   const needsColumns: ColumnsType<ShippingNeed> = [
     {
@@ -212,6 +226,13 @@ const ShippingPage: React.FC = () => {
       key: 'quantity',
       width: 80,
       align: 'center',
+    },
+    {
+      title: '运输方式',
+      dataIndex: 'shipping_method',
+      key: 'shipping_method',
+      width: 120,
+      render: (value: string) => value || '-',
     },
     {
       title: '平台',
@@ -640,6 +661,7 @@ const ShippingPage: React.FC = () => {
             const needsArray = [{
               sku: values.sku,
               quantity: values.quantity,
+              shipping_method: values.shipping_method,
               marketplace: values.marketplace,
               country: values.country,
               remark: values.remark
@@ -694,6 +716,21 @@ const ShippingPage: React.FC = () => {
               >
                 <Select placeholder="请选择国家">
                   {countryOptions.map(option => (
+                    <Option key={option} value={option}>{option}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="运输方式"
+                name="shipping_method"
+              >
+                <Select placeholder="请选择运输方式">
+                  {shippingMethodOptions.map(option => (
                     <Option key={option} value={option}>{option}</Option>
                   ))}
                 </Select>
@@ -793,6 +830,18 @@ const ShippingPage: React.FC = () => {
           </Row>
           
           <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="运输方式"
+                name="shipping_method"
+              >
+                <Select placeholder="请选择运输方式">
+                  {shippingMethodOptions.map(option => (
+                    <Option key={option} value={option}>{option}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
             <Col span={12}>
               <Form.Item
                 label="状态"

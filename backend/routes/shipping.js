@@ -77,16 +77,16 @@ router.get('/needs', async (req, res) => {
     const mappedRows = rows.map(row => ({
       record_num: row.record_num,
       need_num: row.need_num || '',
-      sku: '', // 实际表中没有sku字段，设为空
+      sku: row.sku || '',
       quantity: row.ori_quantity || 0, // 使用ori_quantity映射到quantity
+      shipping_method: row.shipping_method || '',
       marketplace: row.marketplace || '',
       country: row.country || '',
       status: row.status || '待发货',
-      created_at: row.send_out_date || new Date().toISOString(), // 使用send_out_date映射创建时间
-      updated_at: row.send_out_date || new Date().toISOString(),
+      created_at: row.create_date || new Date().toISOString(), // 使用create_date作为创建时间
+      updated_at: row.create_date || new Date().toISOString(),
       created_by: 'System', // 实际表中没有此字段
       remark: '', // 实际表中没有此字段
-      shipping_method: row.shipping_method || '',
       send_out_date: row.send_out_date,
       expired_date: row.expired_date,
       expect_sold_out_date: row.expect_sold_out_date
@@ -341,23 +341,23 @@ router.post('/create-test-data', async (req, res) => {
     const testNeeds = [
       {
         need_num: Date.now().toString(),
+        create_date: new Date(),
         sku: 'TEST-SKU-001',
-        quantity: 100,
+        ori_quantity: 100,
+        shipping_method: '空运',
         marketplace: 'Amazon',
         country: 'US',
-        status: '待发货',
-        created_by: '测试用户',
-        remark: '这是测试数据'
+        status: '待发货'
       },
       {
-        need_num: Date.now().toString(),
+        need_num: (Date.now() + 1).toString(),
+        create_date: new Date(),
         sku: 'TEST-SKU-002',
-        quantity: 50,
+        ori_quantity: 50,
+        shipping_method: '海运',
         marketplace: 'eBay',
         country: 'UK',
-        status: '待发货',
-        created_by: '测试用户',
-        remark: '这是测试数据'
+        status: '待发货'
       }
     ];
     

@@ -12,6 +12,16 @@ const WarehouseProductsNeed = sequelize.define('WarehouseProductsNeed', {
     allowNull: true,
     comment: '需求单号'
   },
+  create_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: '创建日期'
+  },
+  sku: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'SKU'
+  },
   ori_quantity: {
     type: DataTypes.INTEGER,
     allowNull: true,
