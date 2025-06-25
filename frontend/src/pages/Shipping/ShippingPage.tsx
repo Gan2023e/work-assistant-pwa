@@ -154,15 +154,7 @@ const ShippingPage: React.FC = () => {
       console.log('📊 库存统计API响应:', result);
       
       if (result.code === 0) {
-        // 过滤掉数量为0或负数的记录
-        const filteredStats = (result.data || []).filter((item: InventoryStats) => 
-          item.total_quantity > 0
-        );
-        console.log('📊 过滤后的库存统计:', { 
-          原始数量: result.data?.length || 0, 
-          过滤后数量: filteredStats.length 
-        });
-        setInventoryStats(filteredStats);
+        setInventoryStats(result.data || []);
       } else {
         message.error(result.message || '获取库存统计失败');
       }
@@ -608,51 +600,31 @@ const ShippingPage: React.FC = () => {
 
         <TabPane tab="库存统计" key="inventory">
           <Card>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-              <Col>
-                <Title level={4} style={{ margin: 0 }}>库存汇总统计</Title>
-                <Text type="secondary">按SKU、国家、平台、混合箱号分组汇总，仅显示有库存的记录</Text>
-              </Col>
-              <Col>
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={fetchInventoryStats}
-                  loading={loading}
-                >
-                  刷新库存
-                </Button>
-              </Col>
-            </Row>
-            
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={6}>
                 <Statistic
-                  title="有库存SKU种类数"
-                  value={inventoryStats.length}
+                  title="有库存SKU数"
+                  value={inventoryStats.filter(item => item.total_quantity > 0).length}
                   prefix={<CheckOutlined style={{ color: '#52c41a' }} />}
-                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="缺货SKU数"
+                  value={inventoryStats.filter(item => item.total_quantity < 0).length}
+                  prefix={<CloseOutlined style={{ color: '#ff4d4f' }} />}
                 />
               </Col>
               <Col span={6}>
                 <Statistic
                   title="总库存数量"
-                  value={inventoryStats.reduce((sum, item) => sum + item.total_quantity, 0)}
-                  valueStyle={{ color: '#1890ff' }}
+                  value={inventoryStats.reduce((sum, item) => sum + Math.max(0, item.total_quantity), 0)}
                 />
               </Col>
               <Col span={6}>
                 <Statistic
                   title="总箱数"
-                  value={inventoryStats.reduce((sum, item) => sum + item.total_boxes, 0)}
-                  valueStyle={{ color: '#722ed1' }}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="平均每SKU数量"
-                  value={inventoryStats.length > 0 ? 
-                    Math.round(inventoryStats.reduce((sum, item) => sum + item.total_quantity, 0) / inventoryStats.length) : 0}
-                  valueStyle={{ color: '#fa8c16' }}
+                  value={inventoryStats.reduce((sum, item) => sum + Math.max(0, item.total_boxes), 0)}
                 />
               </Col>
             </Row>
@@ -661,7 +633,7 @@ const ShippingPage: React.FC = () => {
             
             <Table
               columns={inventoryColumns}
-              dataSource={inventoryStats}
+              dataSource={inventoryStats.filter(item => item.total_quantity !== 0)}
               rowKey={(record) => `${record.sku}_${record.country}_${record.marketPlace}_${record.mix_box_num}`}
               pagination={{ pageSize: 20 }}
               size="small"

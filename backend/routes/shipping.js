@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { WarehouseProductsNeed, LocalBox, sequelize } = require('../models/index');
-const { Sequelize } = require('sequelize');
+const { WarehouseProductsNeed, LocalBox } = require('../models/index');
+const { Sequelize, Op } = require('sequelize');
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -117,33 +117,50 @@ router.get('/inventory-stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存统计查询请求');
   
   try {
-    // 使用原生SQL查询以便更好地控制汇总和过滤逻辑
-    const stats = await sequelize.query(`
-      SELECT 
-        sku,
-        country,
-        mix_box_num,
-        marketPlace,
-        SUM(total_quantity) as total_quantity,
-        SUM(total_boxes) as total_boxes
-      FROM local_boxes 
-      WHERE sku IS NOT NULL 
-        AND sku != ''
-        AND total_quantity IS NOT NULL
-      GROUP BY sku, country, mix_box_num, marketPlace
-      HAVING SUM(total_quantity) > 0
-      ORDER BY sku, country, marketPlace
-    `, {
-      type: Sequelize.QueryTypes.SELECT
+    // 先查询原始数据进行调试
+    const rawData = await LocalBox.findAll({
+      attributes: ['sku', 'country', 'mix_box_num', 'marketPlace', 'total_quantity', 'total_boxes'],
+      limit: 10,
+      raw: true
+    });
+    console.log('\x1b[33m%s\x1b[0m', '🔍 原始数据示例（前10条）:', rawData);
+
+    const stats = await LocalBox.findAll({
+      attributes: [
+        'sku',
+        'country',
+        'mix_box_num',
+        'marketPlace',
+        [Sequelize.fn('SUM', Sequelize.col('total_quantity')), 'total_quantity'],
+        [Sequelize.fn('SUM', Sequelize.col('total_boxes')), 'total_boxes']
+      ],
+      group: ['sku', 'country', 'mix_box_num', 'marketPlace'],
+      having: Sequelize.where(
+        Sequelize.fn('SUM', Sequelize.col('total_quantity')),
+        {
+          [Op.ne]: 0  // 过滤掉汇总后数量为0的结果
+        }
+      ),
+      raw: true
     });
 
     console.log('\x1b[32m%s\x1b[0m', '📊 库存统计结果数量:', stats.length);
-    console.log('\x1b[36m%s\x1b[0m', '📊 前5条统计结果:', stats.slice(0, 5));
+    console.log('\x1b[35m%s\x1b[0m', '📊 统计详情（前5条）:', stats.slice(0, 5));
+
+    // 转换数据类型确保前端正确显示
+    const formattedStats = stats.map(item => ({
+      sku: item.sku || '',
+      country: item.country || '',
+      mix_box_num: item.mix_box_num || '',
+      marketPlace: item.marketPlace || '',
+      total_quantity: parseInt(item.total_quantity) || 0,
+      total_boxes: parseInt(item.total_boxes) || 0
+    }));
 
     res.json({
       code: 0,
       message: '获取成功',
-      data: stats
+      data: formattedStats
     });
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', '❌ 获取库存统计失败:', error);
