@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WarehouseProductsNeed, LocalBox } = require('../models/index');
+const { WarehouseProductsNeed, LocalBox, sequelize } = require('../models/index');
 const { Sequelize } = require('sequelize');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -117,20 +117,28 @@ router.get('/inventory-stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存统计查询请求');
   
   try {
-    const stats = await LocalBox.findAll({
-      attributes: [
-        'sku',
-        'country',
-        'mix_box_num',
-        'marketPlace',
-        [Sequelize.fn('SUM', Sequelize.col('total_quantity')), 'total_quantity'],
-        [Sequelize.fn('SUM', Sequelize.col('total_boxes')), 'total_boxes']
-      ],
-      group: ['sku', 'country', 'mix_box_num', 'marketPlace'],
-      raw: true
+    // 使用原生SQL查询以便更好地控制汇总和过滤逻辑
+    const stats = await sequelize.query(`
+      SELECT 
+        sku,
+        country,
+        mix_box_num,
+        marketPlace,
+        SUM(total_quantity) as total_quantity,
+        SUM(total_boxes) as total_boxes
+      FROM local_boxes 
+      WHERE sku IS NOT NULL 
+        AND sku != ''
+        AND total_quantity IS NOT NULL
+      GROUP BY sku, country, mix_box_num, marketPlace
+      HAVING SUM(total_quantity) > 0
+      ORDER BY sku, country, marketPlace
+    `, {
+      type: Sequelize.QueryTypes.SELECT
     });
 
     console.log('\x1b[32m%s\x1b[0m', '📊 库存统计结果数量:', stats.length);
+    console.log('\x1b[36m%s\x1b[0m', '📊 前5条统计结果:', stats.slice(0, 5));
 
     res.json({
       code: 0,
