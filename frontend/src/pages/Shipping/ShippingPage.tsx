@@ -56,10 +56,10 @@ interface ShippingNeed {
 interface InventoryStats {
   sku: string;
   country: string;
-  mix_box_num?: string;
-  marketPlace?: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
   total_quantity: number;
-  total_boxes: number;
 }
 
 interface AddNeedForm {
@@ -319,12 +319,6 @@ const ShippingPage: React.FC = () => {
       width: 150,
     },
     {
-      title: '平台',
-      dataIndex: 'marketPlace',
-      key: 'marketPlace',
-      width: 100,
-    },
-    {
       title: '国家',
       dataIndex: 'country',
       key: 'country',
@@ -332,16 +326,9 @@ const ShippingPage: React.FC = () => {
       align: 'center',
     },
     {
-      title: '混合箱号',
-      dataIndex: 'mix_box_num',
-      key: 'mix_box_num',
-      width: 120,
-      render: (value) => value || '-',
-    },
-    {
-      title: '总数量',
-      dataIndex: 'total_quantity',
-      key: 'total_quantity',
+      title: '整箱数量',
+      dataIndex: 'whole_box_quantity',
+      key: 'whole_box_quantity',
       width: 100,
       align: 'center',
       render: (value: number) => (
@@ -351,9 +338,33 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '总箱数',
-      dataIndex: 'total_boxes',
-      key: 'total_boxes',
+      title: '整箱箱数',
+      dataIndex: 'whole_box_count',
+      key: 'whole_box_count',
+      width: 100,
+      align: 'center',
+      render: (value: number) => (
+        <Text type={value >= 0 ? 'success' : 'danger'}>
+          {value >= 0 ? `+${value}` : value}
+        </Text>
+      ),
+    },
+    {
+      title: '混合箱数量',
+      dataIndex: 'mixed_box_quantity',
+      key: 'mixed_box_quantity',
+      width: 100,
+      align: 'center',
+      render: (value: number) => (
+        <Text type={value >= 0 ? 'success' : 'danger'}>
+          {value >= 0 ? `+${value}` : value}
+        </Text>
+      ),
+    },
+    {
+      title: '总数量',
+      dataIndex: 'total_quantity',
+      key: 'total_quantity',
       width: 100,
       align: 'center',
       render: (value: number) => (
@@ -624,7 +635,7 @@ const ShippingPage: React.FC = () => {
               <Col span={6}>
                 <Statistic
                   title="总箱数"
-                  value={inventoryStats.reduce((sum, item) => sum + Math.max(0, item.total_boxes), 0)}
+                  value={inventoryStats.reduce((sum, item) => sum + Math.max(0, item.whole_box_count), 0)}
                 />
               </Col>
             </Row>
@@ -634,7 +645,7 @@ const ShippingPage: React.FC = () => {
             <Table
               columns={inventoryColumns}
               dataSource={inventoryStats.filter(item => item.total_quantity !== 0)}
-              rowKey={(record) => `${record.sku}_${record.country}_${record.marketPlace}_${record.mix_box_num}`}
+              rowKey={(record) => `${record.sku}_${record.country}`}
               pagination={{ pageSize: 20 }}
               size="small"
             />

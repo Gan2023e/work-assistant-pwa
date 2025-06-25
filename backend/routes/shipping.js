@@ -117,45 +117,61 @@ router.get('/inventory-stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存统计查询请求');
   
   try {
-    // 先查询原始数据进行调试
-    const rawData = await LocalBox.findAll({
-      attributes: ['sku', 'country', 'mix_box_num', 'marketPlace', 'total_quantity', 'total_boxes'],
-      limit: 10,
-      raw: true
-    });
-    console.log('\x1b[33m%s\x1b[0m', '🔍 原始数据示例（前10条）:', rawData);
-
-    const stats = await LocalBox.findAll({
-      attributes: [
-        'sku',
-        'country',
-        'mix_box_num',
-        'marketPlace',
-        [Sequelize.fn('SUM', Sequelize.col('total_quantity')), 'total_quantity'],
-        [Sequelize.fn('SUM', Sequelize.col('total_boxes')), 'total_boxes']
-      ],
-      group: ['sku', 'country', 'mix_box_num', 'marketPlace'],
-      having: Sequelize.where(
-        Sequelize.fn('SUM', Sequelize.col('total_quantity')),
-        {
-          [Op.ne]: 0  // 过滤掉汇总后数量为0的结果
-        }
-      ),
+    // 查询所有库存数据
+    const allData = await LocalBox.findAll({
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
       raw: true
     });
 
-    console.log('\x1b[32m%s\x1b[0m', '📊 库存统计结果数量:', stats.length);
-    console.log('\x1b[35m%s\x1b[0m', '📊 统计详情（前5条）:', stats.slice(0, 5));
+    console.log('\x1b[33m%s\x1b[0m', '🔍 原始数据总数:', allData.length);
 
-    // 转换数据类型确保前端正确显示
-    const formattedStats = stats.map(item => ({
-      sku: item.sku || '',
-      country: item.country || '',
-      mix_box_num: item.mix_box_num || '',
-      marketPlace: item.marketPlace || '',
-      total_quantity: parseInt(item.total_quantity) || 0,
-      total_boxes: parseInt(item.total_boxes) || 0
-    }));
+    // 按SKU和国家分组，分别计算整箱和混合箱数据
+    const skuStats = {};
+    
+    allData.forEach(item => {
+      const key = `${item.sku}_${item.country}`;
+      
+      if (!skuStats[key]) {
+        skuStats[key] = {
+          sku: item.sku || '',
+          country: item.country || '',
+          // 整箱数据（mix_box_num为空或null）
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          // 混合箱数据（有mix_box_num）
+          mixed_box_quantity: 0,
+          mixed_box_numbers: new Set() // 用于统计不同的混合箱号
+        };
+      }
+      
+      const quantity = parseInt(item.total_quantity) || 0;
+      const boxes = parseInt(item.total_boxes) || 0;
+      
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
+        // 整箱数据
+        skuStats[key].whole_box_quantity += quantity;
+        skuStats[key].whole_box_count += boxes;
+      } else {
+        // 混合箱数据
+        skuStats[key].mixed_box_quantity += quantity;
+        skuStats[key].mixed_box_numbers.add(item.mix_box_num);
+      }
+    });
+
+    // 转换为数组格式，并过滤掉总数量为0的记录
+    const formattedStats = Object.values(skuStats)
+      .map(item => ({
+        sku: item.sku,
+        country: item.country,
+        whole_box_quantity: item.whole_box_quantity,
+        whole_box_count: item.whole_box_count,
+        mixed_box_quantity: item.mixed_box_quantity,
+        total_quantity: item.whole_box_quantity + item.mixed_box_quantity
+      }))
+      .filter(item => item.total_quantity !== 0); // 过滤掉总数量为0的记录
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 汇总后库存统计数量:', formattedStats.length);
+    console.log('\x1b[35m%s\x1b[0m', '📊 统计详情（前5条）:', formattedStats.slice(0, 5));
 
     res.json({
       code: 0,
