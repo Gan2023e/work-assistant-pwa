@@ -745,16 +745,7 @@ const ShippingPage: React.FC = () => {
             <Option value="库存未映射">库存未映射</Option>
           </Select>
         </Col>
-        {filterType && (
-          <Col>
-            <Button
-              onClick={() => setFilterType('')}
-              type="dashed"
-            >
-              清除筛选
-            </Button>
-          </Col>
-        )}
+
       </Row>
 
           <Card style={{ marginBottom: 16 }}>
@@ -762,7 +753,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'needs' ? '' : 'needs')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'needs' ? '' : 'needs';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="发货需求数"
@@ -775,7 +772,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'sufficient' ? '' : 'sufficient')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="库存充足需求"
@@ -788,7 +791,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'shortage' ? '' : 'shortage')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="库存不足需求"
@@ -801,7 +810,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'shortage' ? '' : 'shortage')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="缺货SKU"
@@ -813,7 +828,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'inventory-only' ? '' : 'inventory-only')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="有库存无需求"
@@ -825,7 +846,13 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory')}
+                  onClick={() => {
+                    const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
+                    setFilterType(newFilterType);
+                    if (newFilterType !== '') {
+                      setStatusFilter(''); // 自动设置为全部状态
+                    }
+                  }}
                 >
                   <Statistic
                     title="库存未映射"
@@ -837,7 +864,10 @@ const ShippingPage: React.FC = () => {
               <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType('')}
+                  onClick={() => {
+                    setFilterType('');
+                    setStatusFilter(''); // 清除所有筛选时也设置为全部状态
+                  }}
                 >
                   <Statistic
                     title="总记录数"
