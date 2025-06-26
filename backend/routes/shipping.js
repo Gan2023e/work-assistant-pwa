@@ -461,7 +461,7 @@ router.get('/merged-data', async (req, res) => {
 
           if (skuMappings.length > 0) {
             // 优先选择有特定前缀的记录
-            const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU'];
+            const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU', 'UW'];
             
             // 查找有优先前缀的映射
             const priorityMappings = skuMappings.filter(mapping => {

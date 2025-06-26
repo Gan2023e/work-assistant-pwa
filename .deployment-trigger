@@ -19,3 +19,8 @@ trigger-deployment-1750852048
 发货需求和库存合并功能
 修复时间：2025-01-24 21:15:00
 新增功能：通过pbi_amzsku_sku表将Amazon SKU与本地SKU映射，合并显示发货需求和库存数据
+
+SKU映射表模型修复
+修复时间：2025-01-24 22:30:00
+修复内容：修正AmzSkuMapping模型主键定义，使用amz_sku+site作为复合主键
+优化内容：实现SF/FBA/NA/AU/UW前缀优先级选择逻辑，解决WB041R->SFWB041R映射问题
