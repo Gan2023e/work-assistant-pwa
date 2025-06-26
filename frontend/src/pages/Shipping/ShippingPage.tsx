@@ -121,6 +121,22 @@ interface WholeBoxConfirmData {
   confirm_quantity: number;
 }
 
+interface UnmappedInventoryItem {
+  local_sku: string;
+  country: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
+  total_available: number;
+}
+
+interface SkuMappingForm {
+  local_sku: string;
+  amz_sku: string;
+  country: string;
+  site?: string;
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
@@ -141,6 +157,11 @@ const ShippingPage: React.FC = () => {
   const [wholeBoxData, setWholeBoxData] = useState<WholeBoxConfirmData[]>([]);
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
   const [boxCounter, setBoxCounter] = useState(1);
+  
+  // 未映射库存相关状态
+  const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
+  const [mappingModalVisible, setMappingModalVisible] = useState(false);
+  const [mappingForm] = Form.useForm();
 
 
 
@@ -172,6 +193,30 @@ const ShippingPage: React.FC = () => {
       
       if (result.code === 0) {
         setMergedData(result.data.list || []);
+        
+        // 检查是否有未映射的库存
+        const unmappedItems = result.data.unmapped_inventory || [];
+        setUnmappedInventory(unmappedItems);
+        
+        if (unmappedItems.length > 0) {
+          message.warning({
+            content: (
+              <div>
+                发现 {unmappedItems.length} 个库存SKU未映射到Amazon SKU，
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => setMappingModalVisible(true)}
+                  style={{ padding: 0, marginLeft: 4 }}
+                >
+                  点击创建映射
+                </Button>
+              </div>
+            ),
+            duration: 8
+          });
+        }
+        
         message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
       } else {
         message.error(result.message || '获取合并数据失败');
@@ -197,6 +242,7 @@ const ShippingPage: React.FC = () => {
       case '已发货': return 'green';
       case '已取消': return 'red';
       case '有库存无需求': return 'blue';
+      case '库存未映射': return 'purple';
       default: return 'default';
     }
   };
@@ -516,6 +562,47 @@ const ShippingPage: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // 创建SKU映射
+  const handleCreateMapping = async (values: any) => {
+    try {
+      const mappings = unmappedInventory.map(item => ({
+        local_sku: item.local_sku,
+        amz_sku: values[`amz_sku_${item.local_sku}_${item.country}`],
+        country: item.country,
+        site: `Amazon.${item.country.toLowerCase()}`
+      })).filter(mapping => mapping.amz_sku && mapping.amz_sku.trim() !== '');
+
+      if (mappings.length === 0) {
+        message.warning('请至少填写一个Amazon SKU映射');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/shipping/create-mapping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({ mappings }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success(`成功创建 ${result.data.created} 个SKU映射`);
+        setMappingModalVisible(false);
+        mappingForm.resetFields();
+        // 重新加载数据
+        fetchMergedData(statusFilter);
+      } else {
+        message.error(result.message || '创建映射失败');
+      }
+    } catch (error) {
+      console.error('创建映射失败:', error);
+      message.error(`创建映射失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
   };
 
   // 添加需求
@@ -995,6 +1082,94 @@ const ShippingPage: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* SKU映射对话框 */}
+      <Modal
+        title="创建SKU映射"
+        open={mappingModalVisible}
+        onCancel={() => {
+          setMappingModalVisible(false);
+          mappingForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        <Alert
+          message="未映射库存警告"
+          description={`发现 ${unmappedInventory.length} 个库存SKU没有对应的Amazon SKU映射，请为它们创建映射关系。`}
+          type="warning"
+          style={{ marginBottom: 16 }}
+        />
+        
+        <Form
+          form={mappingForm}
+          layout="vertical"
+          onFinish={handleCreateMapping}
+        >
+          <Table
+            dataSource={unmappedInventory}
+            columns={[
+              {
+                title: '本地SKU',
+                dataIndex: 'local_sku',
+                key: 'local_sku',
+                width: 150,
+              },
+              {
+                title: '国家',
+                dataIndex: 'country',
+                key: 'country',
+                width: 80,
+                align: 'center',
+              },
+              {
+                title: '可用库存',
+                dataIndex: 'total_available',
+                key: 'total_available',
+                width: 100,
+                align: 'center',
+                render: (value: number) => (
+                  <Text type="success" strong>{value}</Text>
+                ),
+              },
+              {
+                title: 'Amazon SKU',
+                key: 'amz_sku',
+                render: (_, record) => (
+                  <Form.Item
+                    name={`amz_sku_${record.local_sku}_${record.country}`}
+                    style={{ margin: 0 }}
+                  >
+                    <Input
+                      placeholder="请输入Amazon SKU"
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                ),
+              },
+            ]}
+            pagination={false}
+            size="small"
+            rowKey={(record) => `${record.local_sku}_${record.country}`}
+            scroll={{ y: 400 }}
+          />
+          
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setMappingModalVisible(false);
+                mappingForm.resetFields();
+              }}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit">
+                创建映射
+              </Button>
+            </Space>
+          </div>
+        </Form>
       </Modal>
 
     </div>

@@ -790,12 +790,42 @@ router.get('/merged-data', async (req, res) => {
         data_source: 'inventory' // 标记数据来源
       }));
 
-    // 7. 合并所有数据
-    const allMergedData = [...mergedFromNeeds, ...inventoryOnlyRecords];
+    // 7. 检测库存中没有映射的记录
+    const unmappedInventory = inventoryWithAmzSku.filter(inv => !inv.amz_sku && inv.total_available > 0);
+    
+    console.log('\x1b[31m%s\x1b[0m', '⚠️ 发现未映射的库存记录:', unmappedInventory.length);
+    if (unmappedInventory.length > 0) {
+      console.log('\x1b[31m%s\x1b[0m', '📋 未映射记录详情:', unmappedInventory.slice(0, 5));
+    }
+
+    // 8. 为未映射的库存创建记录显示在表格中
+    const unmappedRecords = unmappedInventory.map((inv, index) => ({
+      record_num: -1000 - index, // 使用更小的负数作为临时ID
+      need_num: '',
+      amz_sku: '', // 空的，表示未映射
+      local_sku: inv.local_sku,
+      quantity: 0,
+      shipping_method: '',
+      marketplace: '',
+      country: inv.country,
+      status: '库存未映射',
+      created_at: new Date().toISOString(),
+      // 库存信息
+      whole_box_quantity: inv.whole_box_quantity,
+      whole_box_count: inv.whole_box_count,
+      mixed_box_quantity: inv.mixed_box_quantity,
+      total_available: inv.total_available,
+      shortage: 0,
+      data_source: 'unmapped_inventory' // 标记为未映射库存
+    }));
+
+    // 9. 合并所有数据
+    const allMergedData = [...mergedFromNeeds, ...inventoryOnlyRecords, ...unmappedRecords];
 
     console.log('\x1b[35m%s\x1b[0m', '📊 合并完成统计:', {
       发货需求记录: mergedFromNeeds.length,
       仅库存记录: inventoryOnlyRecords.length,
+      未映射库存记录: unmappedRecords.length,
       总计: allMergedData.length,
       有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
       无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
@@ -811,9 +841,11 @@ router.get('/merged-data', async (req, res) => {
         total: allMergedData.length, // 注意：这里返回实际合并后的总数
         page: parseInt(page),
         limit: parseInt(limit),
+        unmapped_inventory: unmappedInventory, // 返回未映射的库存记录
         summary: {
           需求记录数: mergedFromNeeds.length,
           库存记录数: inventoryOnlyRecords.length,
+          未映射库存记录: unmappedRecords.length,
           总记录数: allMergedData.length,
           有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
           无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
@@ -1251,6 +1283,93 @@ router.post('/outbound-record', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '创建出库记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 创建SKU映射记录
+router.post('/create-mapping', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到创建SKU映射请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { mappings } = req.body;
+    
+    if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU映射数据不能为空'
+      });
+    }
+
+    // 验证必要字段
+    for (const mapping of mappings) {
+      if (!mapping.local_sku || !mapping.amz_sku || !mapping.country) {
+        return res.status(400).json({
+          code: 1,
+          message: 'local_sku、amz_sku和country字段都是必需的'
+        });
+      }
+    }
+
+    // 检查是否已经存在相同的映射
+    const existingMappings = await Promise.all(
+      mappings.map(async (mapping) => {
+        const existing = await AmzSkuMapping.findOne({
+          where: {
+            local_sku: mapping.local_sku,
+            country: mapping.country,
+            amz_sku: mapping.amz_sku
+          }
+        });
+        return { mapping, exists: !!existing };
+      })
+    );
+
+    const duplicates = existingMappings.filter(item => item.exists);
+    if (duplicates.length > 0) {
+      console.log('\x1b[33m%s\x1b[0m', '⚠️ 发现重复映射:', duplicates.map(d => d.mapping));
+    }
+
+    // 准备插入的数据
+    const mappingsToCreate = mappings.map(mapping => ({
+      local_sku: mapping.local_sku,
+      amz_sku: mapping.amz_sku,
+      country: mapping.country,
+      site: mapping.site || `Amazon.${mapping.country.toLowerCase()}`,
+      update_time: new Date()
+    }));
+
+    // 批量创建映射记录
+    const createdMappings = await AmzSkuMapping.bulkCreate(mappingsToCreate, {
+      ignoreDuplicates: true // 忽略重复记录
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射创建成功:', createdMappings.length);
+    
+    // 发送钉钉通知
+    const message = `📦 SKU映射创建通知\n` +
+      `新增映射记录: ${createdMappings.length}条\n` +
+      `重复记录: ${duplicates.length}条\n` +
+      `创建时间: ${new Date().toLocaleString('zh-CN')}\n` +
+      `映射详情: ${mappingsToCreate.map(m => `${m.local_sku}→${m.amz_sku}(${m.country})`).join(', ')}`;
+    
+    await sendDingTalkNotification(message);
+    
+    res.json({
+      code: 0,
+      message: 'SKU映射创建成功',
+      data: {
+        created: createdMappings.length,
+        duplicates: duplicates.length,
+        details: mappingsToCreate
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建SKU映射失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建SKU映射失败',
       error: error.message
     });
   }
