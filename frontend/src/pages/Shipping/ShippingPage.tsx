@@ -171,8 +171,11 @@ const ShippingPage: React.FC = () => {
   const fetchMergedData = async (status = '待发货') => {
     setMergedLoading(true);
     try {
+      // 如果选择了特定的状态，获取所有数据然后在前端筛选
+      // 如果选择的是空或者待发货，使用后端筛选优化性能
+      const useBackendFilter = !status || status === '待发货';
       const queryParams = new URLSearchParams({
-        ...(status && { status }),
+        ...(useBackendFilter && status && { status }),
         limit: '1000' // 设置较大的限制来获取所有数据
       });
       
@@ -871,6 +874,14 @@ const ShippingPage: React.FC = () => {
           <Table
             columns={mergedColumns}
             dataSource={mergedData.filter(item => {
+              // 首先按状态筛选下拉菜单进行过滤
+              if (statusFilter && statusFilter !== '') {
+                if (item.status !== statusFilter) {
+                  return false;
+                }
+              }
+              
+              // 然后按卡片筛选类型进行过滤
               switch (filterType) {
                 case 'needs':
                   return item.quantity > 0;
