@@ -739,6 +739,7 @@ const ShippingPage: React.FC = () => {
             <Option value="已发货">已发货</Option>
             <Option value="已取消">已取消</Option>
             <Option value="有库存无需求">有库存无需求</Option>
+            <Option value="库存未映射">库存未映射</Option>
           </Select>
         </Col>
         {filterType && (

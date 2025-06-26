@@ -1347,15 +1347,6 @@ router.post('/create-mapping', async (req, res) => {
     
     console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射创建成功:', createdMappings.length);
     
-    // 发送钉钉通知
-    const message = `📦 SKU映射创建通知\n` +
-      `新增映射记录: ${createdMappings.length}条\n` +
-      `重复记录: ${duplicates.length}条\n` +
-      `创建时间: ${new Date().toLocaleString('zh-CN')}\n` +
-      `映射详情: ${mappingsToCreate.map(m => `${m.local_sku}→${m.amz_sku}(${m.country})`).join(', ')}`;
-    
-    await sendDingTalkNotification(message);
-    
     res.json({
       code: 0,
       message: 'SKU映射创建成功',
