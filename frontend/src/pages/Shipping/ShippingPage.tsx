@@ -550,10 +550,15 @@ const ShippingPage: React.FC = () => {
   // 获取Amazon站点URL
   const getAmazonSite = (country: string) => {
     switch (country) {
+      case '英国': 
       case 'UK': return 'www.amazon.co.uk';
+      case '美国': 
       case 'US': return 'www.amazon.com';
+      case '阿联酋': 
       case 'AE': return 'www.amazon.ae';
+      case '澳大利亚': 
       case 'AU': return 'www.amazon.com.au';
+      case '加拿大': 
       case 'CA': return 'www.amazon.ca';
       default: return `www.amazon.${country.toLowerCase()}`;
     }
@@ -562,10 +567,15 @@ const ShippingPage: React.FC = () => {
   // 获取Amazon SKU前缀
   const getAmazonSkuPrefix = (country: string) => {
     switch (country) {
+      case '美国':
       case 'US': return 'NA';
+      case '英国':
       case 'UK': return 'SF';
+      case '澳大利亚':
       case 'AU': return 'AU';
+      case '阿联酋':
       case 'AE': return 'AE';
+      case '加拿大':
       case 'CA': return 'CH';
       default: return '';
     }
@@ -605,7 +615,10 @@ const ShippingPage: React.FC = () => {
         formValues[`amz_sku_${item.local_sku}_${item.country}`] = item.auto_amz_sku;
       }
     });
-    mappingForm.setFieldsValue(formValues);
+    // 使用setTimeout确保表单字段已经渲染完成后再设置值
+    setTimeout(() => {
+      mappingForm.setFieldsValue(formValues);
+    }, 100);
   };
 
   // 创建SKU映射
@@ -1174,45 +1187,40 @@ const ShippingPage: React.FC = () => {
                 title: '国家',
                 dataIndex: 'country',
                 key: 'country',
-                width: 60,
+                width: 80,
                 align: 'center',
               },
               {
                 title: 'Site',
                 key: 'site',
-                width: 150,
+                width: 180,
                 render: (_, record) => (
                   <Text>{record.site || getAmazonSite(record.country)}</Text>
                 ),
               },
               {
-                title: '可用库存',
-                dataIndex: 'total_available',
-                key: 'total_available',
-                width: 80,
-                align: 'center',
-                render: (value: number) => (
-                  <Text type="success" strong>{value}</Text>
-                ),
-              },
-              {
                 title: 'Amazon SKU',
                 key: 'amz_sku',
-                render: (_, record) => (
-                  <Form.Item
-                    name={`amz_sku_${record.local_sku}_${record.country}`}
-                    style={{ margin: 0 }}
-                  >
-                    <Input
-                      placeholder={
-                        getAmazonSkuPrefix(record.country) 
-                          ? `${getAmazonSkuPrefix(record.country)}${record.local_sku}` 
-                          : '请输入Amazon SKU'
-                      }
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                ),
+                render: (_, record) => {
+                  const prefix = getAmazonSkuPrefix(record.country);
+                  const defaultValue = prefix ? `${prefix}${record.local_sku}` : '';
+                  return (
+                    <Form.Item
+                      name={`amz_sku_${record.local_sku}_${record.country}`}
+                      style={{ margin: 0 }}
+                      initialValue={defaultValue}
+                    >
+                      <Input
+                        placeholder={
+                          prefix 
+                            ? `${prefix}${record.local_sku}` 
+                            : '请输入Amazon SKU'
+                        }
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  );
+                },
               },
             ]}
             pagination={false}
