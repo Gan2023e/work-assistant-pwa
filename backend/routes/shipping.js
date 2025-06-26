@@ -202,13 +202,12 @@ router.post('/mixed-boxes', async (req, res) => {
       });
     }
 
-    // 收集所有local_sku和country的组合
-    const skuCountryPairs = records
-      .filter(record => record.local_sku) // 只处理有local_sku的记录
-      .map(record => ({
-        sku: record.local_sku,
-        country: record.country
-      }));
+    // 收集所有sku和country的组合
+    const skuCountryPairs = records.map(record => ({
+      sku: record.local_sku || record.amz_sku, // 优先使用local_sku，如果没有则使用amz_sku
+      country: record.country,
+      original_record: record // 保存原始记录以便后续使用
+    }));
 
     if (skuCountryPairs.length === 0) {
       return res.json({
@@ -245,9 +244,9 @@ router.post('/mixed-boxes', async (req, res) => {
     inventoryData.forEach(item => {
       if (item.mix_box_num && item.mix_box_num.trim() !== '') {
         // 混合箱数据
-        // 查找对应的Amazon SKU
+        // 查找对应的记录（支持local_sku或amz_sku匹配）
         const correspondingRecord = records.find(r => 
-          r.local_sku === item.sku && r.country === item.country
+          (r.local_sku === item.sku || r.amz_sku === item.sku) && r.country === item.country
         );
         
         if (correspondingRecord) {
@@ -262,7 +261,7 @@ router.post('/mixed-boxes', async (req, res) => {
         // 整箱数据
         const key = `${item.sku}_${item.country}`;
         const correspondingRecord = records.find(r => 
-          r.local_sku === item.sku && r.country === item.country
+          (r.local_sku === item.sku || r.amz_sku === item.sku) && r.country === item.country
         );
         
         if (correspondingRecord) {

@@ -364,6 +364,7 @@ const ShippingPage: React.FC = () => {
           records: selectedRows.map(row => ({
             record_num: row.record_num,
             local_sku: row.local_sku,
+            amz_sku: row.amz_sku,
             country: row.country
           }))
         }),
@@ -670,11 +671,19 @@ const ShippingPage: React.FC = () => {
               type: 'checkbox',
               selectedRowKeys,
               onChange: (newSelectedRowKeys, newSelectedRows) => {
+                // 检查选中的记录是否都是同一个国家
+                if (newSelectedRows.length > 1) {
+                  const countries = Array.from(new Set(newSelectedRows.map(row => row.country)));
+                  if (countries.length > 1) {
+                    message.error(`只能选择同一国家的记录进行批量发货！当前选择了：${countries.join('、')}`);
+                    return; // 不更新选择状态
+                  }
+                }
                 setSelectedRowKeys(newSelectedRowKeys);
                 setSelectedRows(newSelectedRows);
               },
               getCheckboxProps: (record) => ({
-                disabled: record.quantity === 0, // 有库存无需求的记录不能选择
+                disabled: false, // 所有记录都可以选择
                 name: record.amz_sku,
               }),
             }}
