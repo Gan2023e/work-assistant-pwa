@@ -441,11 +441,12 @@ router.get('/merged-data', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查找库存对应的Amazon SKU映射');
     
-    // 2. 对每个库存记录，查找对应的 Amazon SKU
+    // 2. 对每个库存记录，查找对应的 Amazon SKU（处理多个结果的优先级选择）
     const inventoryWithAmzSku = await Promise.all(
       inventoryStats.map(async (inventory) => {
         try {
-          const skuMapping = await AmzSkuMapping.findOne({
+          // 查找所有匹配的映射记录
+          const skuMappings = await AmzSkuMapping.findAll({
             where: {
               local_sku: inventory.sku,
               country: inventory.country
@@ -453,14 +454,45 @@ router.get('/merged-data', async (req, res) => {
             raw: true
           });
 
+          console.log('\x1b[36m%s\x1b[0m', `🔍 库存${inventory.sku}(${inventory.country})找到${skuMappings.length}个映射:`, 
+            skuMappings.map(m => m.amz_sku));
+
+          let selectedMapping = null;
+
+          if (skuMappings.length > 0) {
+            // 优先选择有特定前缀的记录
+            const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU'];
+            
+            // 查找有优先前缀的映射
+            const priorityMappings = skuMappings.filter(mapping => {
+              const amzSku = mapping.amz_sku || '';
+              return priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
+            });
+
+            if (priorityMappings.length > 0) {
+              // 如果有多个优先级映射，选择第一个
+              selectedMapping = priorityMappings[0];
+              console.log('\x1b[32m%s\x1b[0m', `✅ 选择优先前缀映射: ${selectedMapping.amz_sku}`);
+            } else {
+              // 如果没有优先前缀，选择第一个可用的
+              selectedMapping = skuMappings[0];
+              console.log('\x1b[33m%s\x1b[0m', `⚠️ 选择普通映射: ${selectedMapping.amz_sku}`);
+            }
+          }
+
           return {
             local_sku: inventory.sku,
             country: inventory.country,
-            amz_sku: skuMapping?.amz_sku || null,
+            amz_sku: selectedMapping?.amz_sku || null,
             whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
             whole_box_count: parseInt(inventory.whole_box_count) || 0,
             mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
-            total_available: parseInt(inventory.total_quantity) || 0
+            total_available: parseInt(inventory.total_quantity) || 0,
+            mapping_info: {
+              total_mappings: skuMappings.length,
+              selected_mapping: selectedMapping,
+              all_mappings: skuMappings
+            }
           };
         } catch (error) {
           console.error(`处理库存映射失败 ${inventory.sku}:`, error);
@@ -471,13 +503,46 @@ router.get('/merged-data', async (req, res) => {
             whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
             whole_box_count: parseInt(inventory.whole_box_count) || 0,
             mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
-            total_available: parseInt(inventory.total_quantity) || 0
+            total_available: parseInt(inventory.total_quantity) || 0,
+            mapping_info: {
+              total_mappings: 0,
+              selected_mapping: null,
+              all_mappings: []
+            }
           };
         }
       })
     );
 
-    console.log('\x1b[33m%s\x1b[0m', `🔗 映射完成: ${inventoryWithAmzSku.filter(i => i.amz_sku).length} 条有映射，${inventoryWithAmzSku.filter(i => !i.amz_sku).length} 条无映射`);
+    // 统计映射情况
+    const mappingStats = {
+      总库存记录: inventoryWithAmzSku.length,
+      有映射记录: inventoryWithAmzSku.filter(i => i.amz_sku).length,
+      无映射记录: inventoryWithAmzSku.filter(i => !i.amz_sku).length,
+      优先前缀映射: 0,
+      普通映射: 0,
+      多映射记录: 0
+    };
+
+    inventoryWithAmzSku.forEach(inv => {
+      if (inv.mapping_info && inv.mapping_info.total_mappings > 0) {
+        const amzSku = inv.amz_sku || '';
+        const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU'];
+        const hasPriorityPrefix = priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
+        
+        if (hasPriorityPrefix) {
+          mappingStats.优先前缀映射++;
+        } else {
+          mappingStats.普通映射++;
+        }
+        
+        if (inv.mapping_info.total_mappings > 1) {
+          mappingStats.多映射记录++;
+        }
+      }
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔗 映射统计完成:', mappingStats);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 获取发货需求数据');
     
@@ -599,6 +664,205 @@ router.get('/merged-data', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 调试映射流程端点
+router.get('/debug-mapping', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔧 开始调试映射流程');
+  
+  try {
+    // 步骤1: 获取少量库存数据进行调试
+    const inventoryData = await LocalBox.findAll({
+      limit: 5,
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '📦 原始库存数据样例:', inventoryData);
+
+    // 步骤2: 获取映射表数据
+    const mappingData = await AmzSkuMapping.findAll({
+      limit: 10,
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '🔗 映射表数据样例:', mappingData);
+
+    // 步骤3: 获取发货需求数据
+    const needsData = await WarehouseProductsNeed.findAll({
+      limit: 5,
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '📋 发货需求数据样例:', needsData);
+
+    // 步骤4: 测试库存统计查询
+    const inventoryStats = await LocalBox.findAll({
+      attributes: [
+        'sku',
+        'country',
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_quantity ELSE 0 END`)
+        ), 'whole_box_quantity'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_boxes ELSE 0 END`)
+        ), 'whole_box_count'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NOT NULL AND mix_box_num != '' THEN total_quantity ELSE 0 END`)
+        ), 'mixed_box_quantity'],
+        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
+      ],
+      group: ['sku', 'country'],
+      limit: 5,
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '📊 库存统计查询结果:', inventoryStats);
+
+    // 步骤5: 测试映射查询（包含优先级选择逻辑）
+    const mappingTests = [];
+    for (const inv of inventoryStats.slice(0, 3)) {
+      const mappings = await AmzSkuMapping.findAll({
+        where: {
+          local_sku: inv.sku,
+          country: inv.country
+        },
+        raw: true
+      });
+      
+      let selectedMapping = null;
+      let selectionReason = '未找到';
+
+      if (mappings.length > 0) {
+        const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU'];
+        
+        const priorityMappings = mappings.filter(mapping => {
+          const amzSku = mapping.amz_sku || '';
+          return priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
+        });
+
+        if (priorityMappings.length > 0) {
+          selectedMapping = priorityMappings[0];
+          selectionReason = `优先前缀选择(${priorityMappings.length}个优先/${mappings.length}个总数)`;
+        } else {
+          selectedMapping = mappings[0];
+          selectionReason = `普通选择(${mappings.length}个总数，无优先前缀)`;
+        }
+      }
+      
+      mappingTests.push({
+        库存SKU: inv.sku,
+        国家: inv.country,
+        所有映射: mappings,
+        选择的映射: selectedMapping,
+        选择原因: selectionReason,
+        Amazon_SKU: selectedMapping?.amz_sku || '未找到'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', '🔍 映射查询测试结果:', mappingTests);
+
+    // 步骤6: 测试反向映射（从Amazon SKU到本地SKU）
+    const reverseMappingTests = [];
+    for (const need of needsData.slice(0, 3)) {
+      const mapping = await AmzSkuMapping.findOne({
+        where: {
+          amz_sku: need.sku,
+          country: need.country
+        },
+        raw: true
+      });
+      
+      reverseMappingTests.push({
+        需求Amazon_SKU: need.sku,
+        国家: need.country,
+        查找到的映射: mapping,
+        本地SKU: mapping?.local_sku || '未找到'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', '🔄 反向映射测试结果:', reverseMappingTests);
+
+    // 步骤7: 分析问题
+    const problemAnalysis = {
+      映射表是否为空: mappingData.length === 0,
+      库存数据字段检查: inventoryData.length > 0 ? Object.keys(inventoryData[0]) : [],
+      映射表字段检查: mappingData.length > 0 ? Object.keys(mappingData[0]) : [],
+      需求数据字段检查: needsData.length > 0 ? Object.keys(needsData[0]) : [],
+      常见问题分析: []
+    };
+
+    // 检查常见问题
+    if (mappingData.length === 0) {
+      problemAnalysis.常见问题分析.push('❌ 映射表为空，需要先创建SKU映射数据');
+    }
+    
+    if (inventoryStats.length === 0) {
+      problemAnalysis.常见问题分析.push('❌ 库存统计结果为空，检查库存表数据');
+    }
+    
+    if (mappingTests.filter(t => t.Amazon_SKU !== '未找到').length === 0) {
+      problemAnalysis.常见问题分析.push('❌ 正向映射全部失败，检查映射表local_sku字段是否与库存表sku字段匹配');
+    }
+    
+    if (reverseMappingTests.filter(t => t.本地SKU !== '未找到').length === 0) {
+      problemAnalysis.常见问题分析.push('❌ 反向映射全部失败，检查映射表amz_sku字段是否与需求表sku字段匹配');
+    }
+
+    // 字段名检查
+    if (inventoryData.length > 0 && !inventoryData[0].hasOwnProperty('sku')) {
+      problemAnalysis.常见问题分析.push('❌ 库存表缺少sku字段');
+    }
+    
+    if (inventoryData.length > 0 && !inventoryData[0].hasOwnProperty('country')) {
+      problemAnalysis.常见问题分析.push('❌ 库存表缺少country字段');
+    }
+
+    console.log('\x1b[31m%s\x1b[0m', '🚨 问题分析:', problemAnalysis);
+
+    res.json({
+      code: 0,
+      message: '映射调试完成',
+      data: {
+        库存原始数据: inventoryData,
+        映射表数据: mappingData,
+        发货需求数据: needsData,
+        库存统计查询: inventoryStats,
+        正向映射测试: mappingTests,
+        反向映射测试: reverseMappingTests,
+        问题分析: problemAnalysis,
+        分析: {
+          库存表记录数: inventoryData.length,
+          映射表记录数: mappingData.length,
+          需求表记录数: needsData.length,
+          库存统计结果数: inventoryStats.length,
+          映射成功数: mappingTests.filter(t => t.Amazon_SKU !== '未找到').length,
+          反向映射成功数: reverseMappingTests.filter(t => t.本地SKU !== '未找到').length
+        },
+        详细映射步骤说明: {
+          步骤1: '从库存表(local_boxes)获取数据，按sku+country分组统计',
+          步骤2: '对每个库存记录，在映射表(pbi_amzsku_sku)中查找：local_sku=库存sku AND country=库存country',
+          步骤3: '如果找到映射，获取对应的amz_sku',
+          步骤4: '从发货需求表获取数据',
+          步骤5: '创建映射Map，key为"amz_sku_country"，value为库存信息',
+          步骤6: '遍历发货需求，用"需求sku_需求country"作为key在Map中查找对应库存',
+          问题可能原因: [
+            '映射表数据不存在或不完整',
+            'SKU字段名称不匹配（大小写、特殊字符）',
+            '国家代码格式不一致（US vs USA, UK vs GB等）',
+            '数据类型不匹配（字符串vs数字）',
+            '空值或null值处理问题'
+          ]
+        }
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 映射调试失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '调试失败',
       error: error.message
     });
   }

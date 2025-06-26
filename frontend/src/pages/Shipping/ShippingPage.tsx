@@ -930,6 +930,46 @@ const ShippingPage: React.FC = () => {
                 创建测试数据
               </Button>
             </Col>
+            <Col>
+              <Button
+                type="primary"
+                danger
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`${API_BASE_URL}/api/shipping/debug-mapping`);
+                    const result = await response.json();
+                    if (result.code === 0) {
+                      console.log('🔧 映射调试结果:', result.data);
+                      message.success(`调试完成！查看控制台获取详细信息。映射成功率：${result.data.分析.映射成功数}/${result.data.分析.库存统计结果数}`);
+                      
+                      // 显示关键信息
+                      Modal.info({
+                        title: '映射调试结果',
+                        width: 800,
+                        content: (
+                          <div>
+                            <p><strong>库存表记录数：</strong>{result.data.分析.库存表记录数}</p>
+                            <p><strong>映射表记录数：</strong>{result.data.分析.映射表记录数}</p>
+                            <p><strong>需求表记录数：</strong>{result.data.分析.需求表记录数}</p>
+                            <p><strong>库存统计结果数：</strong>{result.data.分析.库存统计结果数}</p>
+                            <p><strong>正向映射成功数：</strong>{result.data.分析.映射成功数}</p>
+                            <p><strong>反向映射成功数：</strong>{result.data.分析.反向映射成功数}</p>
+                            <Divider />
+                            <p style={{ color: '#666' }}>详细信息请查看浏览器控制台（F12 → Console）</p>
+                          </div>
+                        ),
+                      });
+                    } else {
+                      message.error(`映射调试失败：${result.message}`);
+                    }
+                  } catch (error) {
+                    message.error(`映射调试失败：${error instanceof Error ? error.message : '未知错误'}`);
+                  }
+                }}
+              >
+                🔧 调试映射
+              </Button>
+            </Col>
           </Row>
 
           <Table
