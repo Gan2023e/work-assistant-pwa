@@ -1261,15 +1261,6 @@ router.post('/outbound-record', async (req, res) => {
     
     console.log('\x1b[32m%s\x1b[0m', '✅ 出库记录创建成功:', createdRecords.length);
     
-    // 发送钉钉通知
-    const message = `📦 发货出库通知\n` +
-      `操作员: ${operator}\n` +
-      `出库记录数: ${createdRecords.length}条\n` +
-      `出库时间: ${new Date().toLocaleString('zh-CN')}\n` +
-      `详情: ${outboundRecords.map(r => `${r.sku}(${r.total_quantity}件)`).join(', ')}`;
-    
-    await sendDingTalkNotification(message);
-    
     res.json({
       code: 0,
       message: '出库记录创建成功',
