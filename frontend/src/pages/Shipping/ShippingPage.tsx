@@ -136,6 +136,7 @@ const ShippingPage: React.FC = () => {
   const [shippingModalVisible, setShippingModalVisible] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [mixedBoxes, setMixedBoxes] = useState<MixedBoxItem[]>([]);
+  const [uniqueMixedBoxNums, setUniqueMixedBoxNums] = useState<string[]>([]);
   const [currentMixedBoxIndex, setCurrentMixedBoxIndex] = useState(0);
   const [wholeBoxData, setWholeBoxData] = useState<WholeBoxConfirmData[]>([]);
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
@@ -345,6 +346,64 @@ const ShippingPage: React.FC = () => {
     },
   ];
 
+  // 记录出库信息
+  const recordOutbound = async (items: MixedBoxItem[] | WholeBoxConfirmData[], isMixedBox: boolean = false) => {
+    try {
+      const shipments = items.map(item => {
+        if (isMixedBox) {
+          // 混合箱出库
+          const mixedItem = item as MixedBoxItem;
+          // 从选中的记录中找到对应的国家和平台信息
+          const selectedRecord = selectedRows.find(row => row.amz_sku === mixedItem.amz_sku);
+          return {
+            sku: mixedItem.sku,
+            total_quantity: mixedItem.quantity,
+            country: selectedRecord?.country || 'US',
+            marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
+            is_mixed_box: true
+          };
+        } else {
+          // 整箱出库
+          const wholeItem = item as WholeBoxConfirmData;
+          // 从选中的记录中找到对应的本地SKU、国家和平台信息
+          const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amz_sku);
+          return {
+            sku: selectedRecord?.local_sku || wholeItem.amz_sku,
+            total_quantity: wholeItem.confirm_quantity,
+            total_boxes: wholeItem.confirm_boxes,
+            country: selectedRecord?.country || 'US',
+            marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
+            is_mixed_box: false
+          };
+        }
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          shipments,
+          operator: '申报出库'
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        console.log('出库记录成功:', result.data);
+      } else {
+        console.error('出库记录失败:', result.message);
+        message.error(`出库记录失败: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('出库记录异常:', error);
+      message.error(`出库记录异常: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   // 开始发货流程
   const handleStartShipping = async () => {
     if (selectedRows.length === 0) {
@@ -376,7 +435,11 @@ const ShippingPage: React.FC = () => {
         const mixedBoxData = result.data.mixed_boxes || [];
         const wholeBoxData = result.data.whole_boxes || [];
         
+        // 获取所有唯一的混合箱号
+        const uniqueBoxNums: string[] = Array.from(new Set(mixedBoxData.map((item: MixedBoxItem) => item.box_num)));
+        
         setMixedBoxes(mixedBoxData);
+        setUniqueMixedBoxNums(uniqueBoxNums);
         setWholeBoxData(wholeBoxData);
         setCurrentMixedBoxIndex(0);
         setCurrentStep(0);
@@ -393,7 +456,7 @@ const ShippingPage: React.FC = () => {
   };
 
   // 确认混合箱发货
-  const confirmMixedBox = (boxData: MixedBoxItem[]) => {
+  const confirmMixedBox = async (boxData: MixedBoxItem[]) => {
     const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
       box_num: String(boxCounter + shippingData.length),
       amz_sku: item.amz_sku,
@@ -402,7 +465,10 @@ const ShippingPage: React.FC = () => {
     
     setShippingData([...shippingData, ...newShippingData]);
     
-    if (currentMixedBoxIndex < mixedBoxes.length - 1) {
+    // 记录混合箱出库信息
+    await recordOutbound(boxData, true);
+    
+    if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
       setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
     } else {
       // 混合箱处理完成，进入整箱确认
@@ -411,7 +477,7 @@ const ShippingPage: React.FC = () => {
   };
 
   // 确认整箱发货
-  const confirmWholeBox = (confirmedData: WholeBoxConfirmData[]) => {
+  const confirmWholeBox = async (confirmedData: WholeBoxConfirmData[]) => {
     const newShippingData: ShippingConfirmData[] = [];
     let currentBoxNum = boxCounter + shippingData.length;
     
@@ -427,6 +493,10 @@ const ShippingPage: React.FC = () => {
     });
     
     setShippingData([...shippingData, ...newShippingData]);
+    
+    // 记录整箱出库信息
+    await recordOutbound(confirmedData, false);
+    
     setCurrentStep(2);
   };
 
@@ -836,16 +906,16 @@ const ShippingPage: React.FC = () => {
           <Steps.Step title="完成" description="生成发货清单" />
         </Steps>
 
-        {currentStep === 0 && mixedBoxes.length > 0 && (
+        {currentStep === 0 && uniqueMixedBoxNums.length > 0 && (
           <div>
             <Alert
-              message={`混合箱 ${currentMixedBoxIndex + 1}/${mixedBoxes.length}: ${mixedBoxes[currentMixedBoxIndex]?.box_num}`}
+              message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}: ${uniqueMixedBoxNums[currentMixedBoxIndex]}`}
               description="以下是该混合箱内的所有产品，请确认是否发出"
               type="info"
               style={{ marginBottom: 16 }}
             />
             <Table
-              dataSource={mixedBoxes.filter(item => item.box_num === mixedBoxes[currentMixedBoxIndex]?.box_num)}
+              dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
               columns={[
                 { title: 'SKU', dataIndex: 'sku', key: 'sku' },
                 { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
@@ -858,7 +928,7 @@ const ShippingPage: React.FC = () => {
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
                 <Button onClick={() => {
-                  if (currentMixedBoxIndex < mixedBoxes.length - 1) {
+                  if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
                     setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
                   } else {
                     setCurrentStep(1);
@@ -867,7 +937,7 @@ const ShippingPage: React.FC = () => {
                   跳过此箱
                 </Button>
                 <Button type="primary" onClick={() => {
-                  const currentBoxData = mixedBoxes.filter(item => item.box_num === mixedBoxes[currentMixedBoxIndex]?.box_num);
+                  const currentBoxData = mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]);
                   confirmMixedBox(currentBoxData);
                 }}>
                   确认发出
@@ -877,7 +947,7 @@ const ShippingPage: React.FC = () => {
           </div>
         )}
 
-        {currentStep === 0 && mixedBoxes.length === 0 && (
+        {currentStep === 0 && uniqueMixedBoxNums.length === 0 && (
           <div>
             <Alert message="没有混合箱需要处理" type="info" style={{ marginBottom: 16 }} />
             <Button type="primary" onClick={() => setCurrentStep(1)}>

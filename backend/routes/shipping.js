@@ -1135,4 +1135,80 @@ router.post('/create-test-data', async (req, res) => {
   }
 });
 
+// 记录出库信息
+router.post('/outbound-record', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到出库记录请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shipments, operator = '申报出库' } = req.body;
+    
+    if (!shipments || !Array.isArray(shipments) || shipments.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '出库记录数据不能为空'
+      });
+    }
+
+    const outboundRecords = [];
+    
+    for (const shipment of shipments) {
+      const {
+        sku,
+        total_quantity,
+        total_boxes = null,
+        country,
+        marketplace = '亚马逊',
+        is_mixed_box = false
+      } = shipment;
+      
+      // 生成唯一的记录号
+      const recordId = `OUT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      
+      const record = {
+        记录号: recordId,
+        sku: sku,
+        total_quantity: -Math.abs(total_quantity), // 出库数量为负数
+        total_boxes: total_boxes ? -Math.abs(total_boxes) : null, // 如果是整箱出库，箱数也为负数
+        country: country,
+        time: new Date(),
+        操作员: operator,
+        marketPlace: marketplace,
+        mix_box_num: is_mixed_box ? `OUT-MIX-${Date.now()}` : null // 如果是混合箱出库，生成混合箱号
+      };
+      
+      outboundRecords.push(record);
+    }
+
+    // 批量插入出库记录
+    const createdRecords = await LocalBox.bulkCreate(outboundRecords);
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 出库记录创建成功:', createdRecords.length);
+    
+    // 发送钉钉通知
+    const message = `📦 发货出库通知\n` +
+      `操作员: ${operator}\n` +
+      `出库记录数: ${createdRecords.length}条\n` +
+      `出库时间: ${new Date().toLocaleString('zh-CN')}\n` +
+      `详情: ${outboundRecords.map(r => `${r.sku}(${r.total_quantity}件)`).join(', ')}`;
+    
+    await sendDingTalkNotification(message);
+    
+    res.json({
+      code: 0,
+      message: '出库记录创建成功',
+      data: {
+        records: createdRecords.length,
+        details: outboundRecords
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建出库记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建出库记录失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
