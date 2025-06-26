@@ -82,7 +82,7 @@ interface MergedShippingData {
   shipping_method?: string;
   marketplace: string;
   country: string;
-  status: '待发货' | '已发货' | '已取消';
+  status: '待发货' | '已发货' | '已取消' | '有库存无需求' | '库存未映射';
   created_at: string;
   whole_box_quantity: number;
   whole_box_count: number;
@@ -128,6 +128,8 @@ interface UnmappedInventoryItem {
   whole_box_count: number;
   mixed_box_quantity: number;
   total_available: number;
+  auto_amz_sku?: string; // 自动生成的Amazon SKU
+  site?: string; // Amazon站点URL
 }
 
 interface SkuMappingForm {
@@ -197,25 +199,6 @@ const ShippingPage: React.FC = () => {
         // 检查是否有未映射的库存
         const unmappedItems = result.data.unmapped_inventory || [];
         setUnmappedInventory(unmappedItems);
-        
-        if (unmappedItems.length > 0) {
-          message.warning({
-            content: (
-              <div>
-                发现 {unmappedItems.length} 个库存SKU未映射到Amazon SKU，
-                <Button 
-                  type="link" 
-                  size="small" 
-                  onClick={() => setMappingModalVisible(true)}
-                  style={{ padding: 0, marginLeft: 4 }}
-                >
-                  点击创建映射
-                </Button>
-              </div>
-            ),
-            duration: 8
-          });
-        }
         
         message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
       } else {
@@ -564,6 +547,67 @@ const ShippingPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // 获取Amazon站点URL
+  const getAmazonSite = (country: string) => {
+    switch (country) {
+      case 'UK': return 'www.amazon.co.uk';
+      case 'US': return 'www.amazon.com';
+      case 'AE': return 'www.amazon.ae';
+      case 'AU': return 'www.amazon.com.au';
+      case 'CA': return 'www.amazon.ca';
+      default: return `www.amazon.${country.toLowerCase()}`;
+    }
+  };
+
+  // 获取Amazon SKU前缀
+  const getAmazonSkuPrefix = (country: string) => {
+    switch (country) {
+      case 'US': return 'NA';
+      case 'UK': return 'SF';
+      case 'AU': return 'AU';
+      case 'AE': return 'AE';
+      case 'CA': return 'CH';
+      default: return '';
+    }
+  };
+
+  // 点击创建映射按钮
+  const handleCreateMappingClick = () => {
+    const unmappedSelectedRows = selectedRows.filter(row => row.status === '库存未映射');
+    if (unmappedSelectedRows.length === 0) {
+      message.warning('请先选择库存未映射的记录');
+      return;
+    }
+    
+    // 转换为UnmappedInventoryItem格式并自动生成Amazon SKU
+    const mappingData = unmappedSelectedRows.map(row => {
+      const prefix = getAmazonSkuPrefix(row.country);
+      const autoAmzSku = prefix ? `${prefix}${row.local_sku}` : '';
+      return {
+        local_sku: row.local_sku,
+        country: row.country,
+        whole_box_quantity: row.whole_box_quantity,
+        whole_box_count: row.whole_box_count,
+        mixed_box_quantity: row.mixed_box_quantity,
+        total_available: row.total_available,
+        auto_amz_sku: autoAmzSku, // 自动生成的Amazon SKU
+        site: getAmazonSite(row.country) // 正确的站点URL
+      };
+    });
+    
+    setUnmappedInventory(mappingData);
+    setMappingModalVisible(true);
+    
+    // 为所有有前缀的国家预填充表单
+    const formValues: any = {};
+    mappingData.forEach(item => {
+      if (item.auto_amz_sku) {
+        formValues[`amz_sku_${item.local_sku}_${item.country}`] = item.auto_amz_sku;
+      }
+    });
+    mappingForm.setFieldsValue(formValues);
+  };
+
   // 创建SKU映射
   const handleCreateMapping = async (values: any) => {
     try {
@@ -571,7 +615,7 @@ const ShippingPage: React.FC = () => {
         local_sku: item.local_sku,
         amz_sku: values[`amz_sku_${item.local_sku}_${item.country}`],
         country: item.country,
-        site: `Amazon.${item.country.toLowerCase()}`
+        site: item.site || getAmazonSite(item.country)
       })).filter(mapping => mapping.amz_sku && mapping.amz_sku.trim() !== '');
 
       if (mappings.length === 0) {
@@ -658,6 +702,15 @@ const ShippingPage: React.FC = () => {
             disabled={selectedRowKeys.length === 0}
           >
             批量发货 ({selectedRowKeys.length})
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
+            onClick={handleCreateMappingClick}
+            disabled={selectedRows.filter(row => row.status === '库存未映射').length === 0}
+          >
+            创建SKU映射 ({selectedRows.filter(row => row.status === '库存未映射').length})
           </Button>
         </Col>
         <Col>
@@ -1097,9 +1150,9 @@ const ShippingPage: React.FC = () => {
         destroyOnClose
       >
         <Alert
-          message="未映射库存警告"
-          description={`发现 ${unmappedInventory.length} 个库存SKU没有对应的Amazon SKU映射，请为它们创建映射关系。`}
-          type="warning"
+          message="创建SKU映射"
+          description={`您选择了 ${unmappedInventory.length} 个未映射的库存记录，请确认或修改Amazon SKU映射关系。系统已根据国家自动生成Amazon SKU：美国(NA)、英国(SF)、澳大利亚(AU)、阿联酋(AE)、加拿大(CH)。`}
+          type="info"
           style={{ marginBottom: 16 }}
         />
         
@@ -1115,20 +1168,28 @@ const ShippingPage: React.FC = () => {
                 title: '本地SKU',
                 dataIndex: 'local_sku',
                 key: 'local_sku',
-                width: 150,
+                width: 120,
               },
               {
                 title: '国家',
                 dataIndex: 'country',
                 key: 'country',
-                width: 80,
+                width: 60,
                 align: 'center',
+              },
+              {
+                title: 'Site',
+                key: 'site',
+                width: 150,
+                render: (_, record) => (
+                  <Text>{record.site || getAmazonSite(record.country)}</Text>
+                ),
               },
               {
                 title: '可用库存',
                 dataIndex: 'total_available',
                 key: 'total_available',
-                width: 100,
+                width: 80,
                 align: 'center',
                 render: (value: number) => (
                   <Text type="success" strong>{value}</Text>
@@ -1143,7 +1204,11 @@ const ShippingPage: React.FC = () => {
                     style={{ margin: 0 }}
                   >
                     <Input
-                      placeholder="请输入Amazon SKU"
+                      placeholder={
+                        getAmazonSkuPrefix(record.country) 
+                          ? `${getAmazonSkuPrefix(record.country)}${record.local_sku}` 
+                          : '请输入Amazon SKU'
+                      }
                       style={{ width: '100%' }}
                     />
                   </Form.Item>
