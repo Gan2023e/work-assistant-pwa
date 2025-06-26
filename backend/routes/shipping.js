@@ -188,6 +188,123 @@ router.get('/inventory-stats', async (req, res) => {
   }
 });
 
+// 获取混合箱和整箱数据
+router.post('/mixed-boxes', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱数据查询请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { records } = req.body;
+    
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '记录数据不能为空'
+      });
+    }
+
+    // 收集所有local_sku和country的组合
+    const skuCountryPairs = records
+      .filter(record => record.local_sku) // 只处理有local_sku的记录
+      .map(record => ({
+        sku: record.local_sku,
+        country: record.country
+      }));
+
+    if (skuCountryPairs.length === 0) {
+      return res.json({
+        code: 0,
+        message: '没有可处理的SKU数据',
+        data: {
+          mixed_boxes: [],
+          whole_boxes: []
+        }
+      });
+    }
+
+    // 构建查询条件
+    const whereConditions = skuCountryPairs.map(pair => ({
+      sku: pair.sku,
+      country: pair.country
+    }));
+
+    // 查询库存数据
+    const inventoryData = await LocalBox.findAll({
+      where: {
+        [Op.or]: whereConditions
+      },
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的库存数据:', inventoryData.length);
+
+    // 分离混合箱和整箱数据
+    const mixedBoxData = [];
+    const wholeBoxData = {};
+
+    inventoryData.forEach(item => {
+      if (item.mix_box_num && item.mix_box_num.trim() !== '') {
+        // 混合箱数据
+        // 查找对应的Amazon SKU
+        const correspondingRecord = records.find(r => 
+          r.local_sku === item.sku && r.country === item.country
+        );
+        
+        if (correspondingRecord) {
+          mixedBoxData.push({
+            box_num: item.mix_box_num,
+            sku: item.sku,
+            amz_sku: correspondingRecord.amz_sku || item.sku, // 使用Amazon SKU
+            quantity: parseInt(item.total_quantity) || 0
+          });
+        }
+      } else {
+        // 整箱数据
+        const key = `${item.sku}_${item.country}`;
+        const correspondingRecord = records.find(r => 
+          r.local_sku === item.sku && r.country === item.country
+        );
+        
+        if (correspondingRecord) {
+          if (!wholeBoxData[key]) {
+            wholeBoxData[key] = {
+              amz_sku: correspondingRecord.amz_sku || item.sku, // 使用Amazon SKU
+              local_sku: item.sku,
+              country: item.country,
+              total_quantity: 0,
+              total_boxes: 0
+            };
+          }
+          
+          wholeBoxData[key].total_quantity += parseInt(item.total_quantity) || 0;
+          wholeBoxData[key].total_boxes += parseInt(item.total_boxes) || 0;
+        }
+      }
+    });
+
+    const wholeBoxArray = Object.values(wholeBoxData);
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱数据数量:', mixedBoxData.length);
+    console.log('\x1b[32m%s\x1b[0m', '📊 整箱数据数量:', wholeBoxArray.length);
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        mixed_boxes: mixedBoxData,
+        whole_boxes: wholeBoxArray
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取混合箱数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
 // 创建发货需求
 router.post('/needs', async (req, res) => {
   try {

@@ -15,13 +15,16 @@ import {
   Col,
   Statistic,
   Typography,
-  Divider
+  Divider,
+  Steps,
+  Alert
 } from 'antd';
 import { 
   PlusOutlined,
-  ReloadOutlined,
   CheckOutlined,
-  CloseOutlined
+  CloseOutlined,
+  SendOutlined,
+  ExportOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -97,6 +100,27 @@ interface AddNeedForm {
   remark?: string;
 }
 
+interface MixedBoxItem {
+  box_num: string;
+  sku: string;
+  amz_sku: string;
+  quantity: number;
+}
+
+interface ShippingConfirmData {
+  box_num: string;
+  amz_sku: string;
+  quantity: number;
+}
+
+interface WholeBoxConfirmData {
+  amz_sku: string;
+  total_quantity: number;
+  total_boxes: number;
+  confirm_boxes: number;
+  confirm_quantity: number;
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
@@ -105,6 +129,17 @@ const ShippingPage: React.FC = () => {
   const [addForm] = Form.useForm();
   const [statusFilter, setStatusFilter] = useState('待发货');
   const [filterType, setFilterType] = useState<string>(''); // 新增：卡片筛选类型
+  
+  // 新增：多选和发货相关状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedRows, setSelectedRows] = useState<MergedShippingData[]>([]);
+  const [shippingModalVisible, setShippingModalVisible] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [mixedBoxes, setMixedBoxes] = useState<MixedBoxItem[]>([]);
+  const [currentMixedBoxIndex, setCurrentMixedBoxIndex] = useState(0);
+  const [wholeBoxData, setWholeBoxData] = useState<WholeBoxConfirmData[]>([]);
+  const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
+  const [boxCounter, setBoxCounter] = useState(1);
 
 
 
@@ -310,6 +345,108 @@ const ShippingPage: React.FC = () => {
     },
   ];
 
+  // 开始发货流程
+  const handleStartShipping = async () => {
+    if (selectedRows.length === 0) {
+      message.warning('请先选择需要发货的记录');
+      return;
+    }
+
+    // 获取混合箱数据
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/mixed-boxes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          records: selectedRows.map(row => ({
+            record_num: row.record_num,
+            local_sku: row.local_sku,
+            country: row.country
+          }))
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        const mixedBoxData = result.data.mixed_boxes || [];
+        const wholeBoxData = result.data.whole_boxes || [];
+        
+        setMixedBoxes(mixedBoxData);
+        setWholeBoxData(wholeBoxData);
+        setCurrentMixedBoxIndex(0);
+        setCurrentStep(0);
+        setShippingData([]);
+        setBoxCounter(1);
+        setShippingModalVisible(true);
+      } else {
+        message.error(result.message || '获取混合箱数据失败');
+      }
+    } catch (error) {
+      console.error('获取混合箱数据失败:', error);
+      message.error(`获取混合箱数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
+  // 确认混合箱发货
+  const confirmMixedBox = (boxData: MixedBoxItem[]) => {
+    const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
+      box_num: String(boxCounter + shippingData.length),
+      amz_sku: item.amz_sku,
+      quantity: item.quantity
+    }));
+    
+    setShippingData([...shippingData, ...newShippingData]);
+    
+    if (currentMixedBoxIndex < mixedBoxes.length - 1) {
+      setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
+    } else {
+      // 混合箱处理完成，进入整箱确认
+      setCurrentStep(1);
+    }
+  };
+
+  // 确认整箱发货
+  const confirmWholeBox = (confirmedData: WholeBoxConfirmData[]) => {
+    const newShippingData: ShippingConfirmData[] = [];
+    let currentBoxNum = boxCounter + shippingData.length;
+    
+    confirmedData.forEach(item => {
+      for (let i = 0; i < item.confirm_boxes; i++) {
+        newShippingData.push({
+          box_num: String(currentBoxNum + i),
+          amz_sku: item.amz_sku,
+          quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
+        });
+      }
+      currentBoxNum += item.confirm_boxes;
+    });
+    
+    setShippingData([...shippingData, ...newShippingData]);
+    setCurrentStep(2);
+  };
+
+  // 导出Excel
+  const exportToExcel = () => {
+    const csvContent = [
+      ['箱号', 'Amazon SKU', '发货数量'],
+      ...shippingData.map(item => [item.box_num, item.amz_sku, item.quantity])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `发货清单_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // 添加需求
   const handleAdd = async (values: AddNeedForm[]) => {
     try {
@@ -356,6 +493,16 @@ const ShippingPage: React.FC = () => {
           </Button>
         </Col>
         <Col>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleStartShipping}
+            disabled={selectedRowKeys.length === 0}
+          >
+            批量发货 ({selectedRowKeys.length})
+          </Button>
+        </Col>
+        <Col>
           <Select
             value={statusFilter}
             onChange={(value) => {
@@ -369,74 +516,6 @@ const ShippingPage: React.FC = () => {
             <Option value="已取消">已取消</Option>
             <Option value="有库存无需求">有库存无需求</Option>
           </Select>
-        </Col>
-        <Col>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => fetchMergedData(statusFilter)}
-          >
-            刷新数据
-          </Button>
-        </Col>
-        <Col>
-          <Button
-            type="default"
-            onClick={async () => {
-              try {
-                const response = await fetch(`${API_BASE_URL}/api/shipping/health`);
-                const result = await response.json();
-                if (result.code === 0) {
-                  message.success(`健康检查通过！发货需求表：${result.data.tables.pbi_warehouse_products_need.count}条，库存表：${result.data.tables.local_boxes.count}条`);
-                } else {
-                  message.error(`健康检查失败：${result.message}`);
-                }
-              } catch (error) {
-                message.error(`健康检查失败：${error instanceof Error ? error.message : '未知错误'}`);
-              }
-            }}
-          >
-            健康检查
-          </Button>
-        </Col>
-        <Col>
-          <Button
-            type="primary"
-            danger
-            onClick={async () => {
-              try {
-                const response = await fetch(`${API_BASE_URL}/api/shipping/debug-mapping`);
-                const result = await response.json();
-                if (result.code === 0) {
-                  console.log('🔧 映射调试结果:', result.data);
-                  message.success(`调试完成！查看控制台获取详细信息。映射成功率：${result.data.分析.映射成功数}/${result.data.分析.库存统计结果数}`);
-                  
-                  // 显示关键信息
-                  Modal.info({
-                    title: '映射调试结果',
-                    width: 800,
-                    content: (
-                      <div>
-                        <p><strong>库存表记录数：</strong>{result.data.分析.库存表记录数}</p>
-                        <p><strong>映射表记录数：</strong>{result.data.分析.映射表记录数}</p>
-                        <p><strong>需求表记录数：</strong>{result.data.分析.需求表记录数}</p>
-                        <p><strong>库存统计结果数：</strong>{result.data.分析.库存统计结果数}</p>
-                        <p><strong>正向映射成功数：</strong>{result.data.分析.映射成功数}</p>
-                        <p><strong>反向映射成功数：</strong>{result.data.分析.反向映射成功数}</p>
-                        <Divider />
-                        <p style={{ color: '#666' }}>详细信息请查看浏览器控制台（F12 → Console）</p>
-                      </div>
-                    ),
-                  });
-                } else {
-                  message.error(`映射调试失败：${result.message}`);
-                }
-              } catch (error) {
-                message.error(`映射调试失败：${error instanceof Error ? error.message : '未知错误'}`);
-              }
-            }}
-          >
-            🔧 调试映射
-          </Button>
         </Col>
         {filterType && (
           <Col>
@@ -494,12 +573,12 @@ const ShippingPage: React.FC = () => {
               <Col span={4}>
                 <div 
                   style={{ cursor: 'pointer' }} 
-                  onClick={() => setFilterType(filterType === 'unmapped' ? '' : 'unmapped')}
+                  onClick={() => setFilterType(filterType === 'shortage' ? '' : 'shortage')}
                 >
                   <Statistic
-                    title="未映射需求"
-                    value={mergedData.filter(item => item.quantity > 0 && !item.local_sku).length}
-                    valueStyle={{ color: filterType === 'unmapped' ? '#1677ff' : '#fa8c16' }}
+                    title="缺货SKU"
+                    value={mergedData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                    valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
                   />
                 </div>
               </Col>
@@ -587,6 +666,18 @@ const ShippingPage: React.FC = () => {
             pagination={false}
             scroll={{ x: 1500 }}
             onChange={handleTableChange}
+            rowSelection={{
+              type: 'checkbox',
+              selectedRowKeys,
+              onChange: (newSelectedRowKeys, newSelectedRows) => {
+                setSelectedRowKeys(newSelectedRowKeys);
+                setSelectedRows(newSelectedRows);
+              },
+              getCheckboxProps: (record) => ({
+                disabled: record.quantity === 0, // 有库存无需求的记录不能选择
+                name: record.amz_sku,
+              }),
+            }}
             rowClassName={(record) => {
               // 有库存无需求的记录
               if (record.quantity === 0 && record.total_available > 0) return 'inventory-only-row';
@@ -717,7 +808,221 @@ const ShippingPage: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 发货确认模态框 */}
+      <Modal
+        title="批量发货确认"
+        open={shippingModalVisible}
+        onCancel={() => {
+          setShippingModalVisible(false);
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        }}
+        footer={null}
+        width={1000}
+        destroyOnClose
+      >
+        <Steps current={currentStep} style={{ marginBottom: 24 }}>
+          <Steps.Step title="混合箱确认" description="确认混合箱发货" />
+          <Steps.Step title="整箱确认" description="确认整箱发货" />
+          <Steps.Step title="完成" description="生成发货清单" />
+        </Steps>
 
+        {currentStep === 0 && mixedBoxes.length > 0 && (
+          <div>
+            <Alert
+              message={`混合箱 ${currentMixedBoxIndex + 1}/${mixedBoxes.length}: ${mixedBoxes[currentMixedBoxIndex]?.box_num}`}
+              description="以下是该混合箱内的所有产品，请确认是否发出"
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            <Table
+              dataSource={mixedBoxes.filter(item => item.box_num === mixedBoxes[currentMixedBoxIndex]?.box_num)}
+              columns={[
+                { title: 'SKU', dataIndex: 'sku', key: 'sku' },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+                { title: '数量', dataIndex: 'quantity', key: 'quantity' },
+              ]}
+              pagination={false}
+              size="small"
+              rowKey={(record) => `${record.box_num}_${record.sku}`}
+            />
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button onClick={() => {
+                  if (currentMixedBoxIndex < mixedBoxes.length - 1) {
+                    setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
+                  } else {
+                    setCurrentStep(1);
+                  }
+                }}>
+                  跳过此箱
+                </Button>
+                <Button type="primary" onClick={() => {
+                  const currentBoxData = mixedBoxes.filter(item => item.box_num === mixedBoxes[currentMixedBoxIndex]?.box_num);
+                  confirmMixedBox(currentBoxData);
+                }}>
+                  确认发出
+                </Button>
+              </Space>
+            </div>
+          </div>
+        )}
+
+        {currentStep === 0 && mixedBoxes.length === 0 && (
+          <div>
+            <Alert message="没有混合箱需要处理" type="info" style={{ marginBottom: 16 }} />
+            <Button type="primary" onClick={() => setCurrentStep(1)}>
+              继续处理整箱
+            </Button>
+          </div>
+        )}
+
+        {currentStep === 1 && (
+          <WholeBoxConfirmForm 
+            data={wholeBoxData} 
+            onConfirm={confirmWholeBox}
+            onSkip={() => setCurrentStep(2)}
+          />
+        )}
+
+        {currentStep === 2 && (
+          <div>
+            <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
+            <Table
+              dataSource={shippingData}
+              columns={[
+                { title: '箱号', dataIndex: 'box_num', key: 'box_num' },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+                { title: '发货数量', dataIndex: 'quantity', key: 'quantity' },
+              ]}
+              pagination={false}
+              size="small"
+              rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
+            />
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button icon={<ExportOutlined />} onClick={exportToExcel}>
+                  导出Excel
+                </Button>
+                <Button type="primary" onClick={() => {
+                  setShippingModalVisible(false);
+                  setSelectedRowKeys([]);
+                  setSelectedRows([]);
+                  message.success('发货流程完成！');
+                }}>
+                  完成
+                </Button>
+              </Space>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+    </div>
+  );
+};
+
+// 整箱确认表单组件
+const WholeBoxConfirmForm: React.FC<{
+  data: WholeBoxConfirmData[];
+  onConfirm: (data: WholeBoxConfirmData[]) => void;
+  onSkip: () => void;
+}> = ({ data, onConfirm, onSkip }) => {
+  const [form] = Form.useForm();
+  const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
+    data.map(item => ({
+      ...item,
+      confirm_boxes: item.total_boxes,
+      confirm_quantity: item.total_quantity
+    }))
+  );
+
+  useEffect(() => {
+    form.setFieldsValue(
+      confirmData.reduce((acc, item, index) => {
+        acc[`confirm_boxes_${index}`] = item.confirm_boxes;
+        acc[`confirm_quantity_${index}`] = item.confirm_quantity;
+        return acc;
+      }, {} as any)
+    );
+  }, [confirmData, form]);
+
+  if (data.length === 0) {
+    return (
+      <div>
+        <Alert message="没有整箱需要处理" type="info" style={{ marginBottom: 16 }} />
+        <Button type="primary" onClick={onSkip}>
+          继续
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Alert
+        message="整箱发货确认"
+        description="请确认各SKU的发货箱数和数量"
+        type="info"
+        style={{ marginBottom: 16 }}
+      />
+      <Form form={form} layout="vertical">
+        <Table
+          dataSource={confirmData}
+          columns={[
+            { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+            { title: '总数量', dataIndex: 'total_quantity', key: 'total_quantity' },
+            { title: '总箱数', dataIndex: 'total_boxes', key: 'total_boxes' },
+            {
+              title: '确认箱数',
+              key: 'confirm_boxes',
+              render: (_, record, index) => (
+                <InputNumber
+                  min={0}
+                  max={record.total_boxes}
+                  value={record.confirm_boxes}
+                  onChange={(value) => {
+                    const newData = [...confirmData];
+                    newData[index].confirm_boxes = value || 0;
+                    newData[index].confirm_quantity = Math.min(
+                      value || 0 * Math.floor(record.total_quantity / record.total_boxes),
+                      record.total_quantity
+                    );
+                    setConfirmData(newData);
+                  }}
+                />
+              )
+            },
+            {
+              title: '确认数量',
+              key: 'confirm_quantity',
+              render: (_, record, index) => (
+                <InputNumber
+                  min={0}
+                  max={record.total_quantity}
+                  value={record.confirm_quantity}
+                  onChange={(value) => {
+                    const newData = [...confirmData];
+                    newData[index].confirm_quantity = value || 0;
+                    setConfirmData(newData);
+                  }}
+                />
+              )
+            },
+          ]}
+          pagination={false}
+          size="small"
+          rowKey="amz_sku"
+        />
+      </Form>
+      <div style={{ marginTop: 16, textAlign: 'right' }}>
+        <Space>
+          <Button onClick={onSkip}>跳过整箱</Button>
+          <Button type="primary" onClick={() => onConfirm(confirmData)}>
+            确认发货
+          </Button>
+        </Space>
+      </div>
     </div>
   );
 };
