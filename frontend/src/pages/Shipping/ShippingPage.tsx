@@ -759,7 +759,7 @@ const ShippingPage: React.FC = () => {
 
           <Card style={{ marginBottom: 16 }}>
             <Row gutter={16}>
-              <Col span={4}>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType(filterType === 'needs' ? '' : 'needs')}
@@ -772,7 +772,7 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-              <Col span={4}>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType(filterType === 'sufficient' ? '' : 'sufficient')}
@@ -785,7 +785,7 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-              <Col span={4}>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType(filterType === 'shortage' ? '' : 'shortage')}
@@ -798,7 +798,7 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-              <Col span={4}>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType(filterType === 'shortage' ? '' : 'shortage')}
@@ -810,7 +810,7 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-              <Col span={4}>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType(filterType === 'inventory-only' ? '' : 'inventory-only')}
@@ -822,7 +822,19 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-              <Col span={4}>
+              <Col span={3}>
+                <div 
+                  style={{ cursor: 'pointer' }} 
+                  onClick={() => setFilterType(filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory')}
+                >
+                  <Statistic
+                    title="库存未映射"
+                    value={mergedData.filter(item => item.status === '库存未映射').length}
+                    valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
+                  />
+                </div>
+              </Col>
+              <Col span={3}>
                 <div 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => setFilterType('')}
@@ -834,29 +846,8 @@ const ShippingPage: React.FC = () => {
                   />
                 </div>
               </Col>
-            </Row>
-            <Divider />
-            <Row gutter={16}>
-              <Col span={8}>
-                <Statistic
-                  title="总缺货数量"
-                  value={mergedData.reduce((sum, item) => sum + item.shortage, 0)}
-                  valueStyle={{ color: '#cf1322' }}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="总可用库存"
-                  value={mergedData.reduce((sum, item) => sum + item.total_available, 0)}
-                  valueStyle={{ color: '#3f8600' }}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="总需求数量"
-                  value={mergedData.reduce((sum, item) => sum + item.quantity, 0)}
-                  valueStyle={{ color: '#1677ff' }}
-                />
+              <Col span={3}>
+                {/* 空列用于保持布局对称 */}
               </Col>
             </Row>
           </Card>
@@ -893,6 +884,8 @@ const ShippingPage: React.FC = () => {
                   return item.quantity > 0 && !item.local_sku;
                 case 'inventory-only':
                   return item.quantity === 0 && item.total_available > 0;
+                case 'unmapped-inventory':
+                  return item.status === '库存未映射';
                 default:
                   return true; // 显示所有数据
               }
