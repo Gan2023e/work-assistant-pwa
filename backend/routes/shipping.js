@@ -237,37 +237,82 @@ router.post('/mixed-boxes', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的库存数据:', inventoryData.length);
 
-    // 分离混合箱和整箱数据
-    const mixedBoxData = [];
-    const wholeBoxData = {};
-
+    // 第一步：找到选中记录对应的混合箱号
+    const selectedMixedBoxNums = new Set();
     inventoryData.forEach(item => {
       if (item.mix_box_num && item.mix_box_num.trim() !== '') {
-        // 混合箱数据
-        // 查找对应的记录（支持local_sku或amz_sku匹配）
+        // 检查这个SKU是否在选中的记录中
         const correspondingRecord = records.find(r => 
           (r.local_sku === item.sku || r.amz_sku === item.sku) && r.country === item.country
         );
         
         if (correspondingRecord) {
-          mixedBoxData.push({
-            box_num: item.mix_box_num,
-            sku: item.sku,
-            amz_sku: correspondingRecord.amz_sku || item.sku, // 使用Amazon SKU
-            quantity: parseInt(item.total_quantity) || 0
-          });
+          selectedMixedBoxNums.add(item.mix_box_num);
         }
-      } else {
+      }
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 选中的混合箱号:', Array.from(selectedMixedBoxNums));
+
+    // 第二步：查询这些混合箱号下的所有SKU
+    let allMixedBoxData = [];
+    if (selectedMixedBoxNums.size > 0) {
+      const allMixedBoxItems = await LocalBox.findAll({
+        where: {
+          mix_box_num: {
+            [Op.in]: Array.from(selectedMixedBoxNums)
+          }
+        },
+        attributes: ['sku', 'country', 'mix_box_num', 'total_quantity'],
+        raw: true
+      });
+
+      console.log('\x1b[33m%s\x1b[0m', '🔍 混合箱内所有SKU数据:', allMixedBoxItems.length);
+
+      // 为每个混合箱内的SKU查找对应的Amazon SKU
+      for (const item of allMixedBoxItems) {
+        // 尝试通过映射表查找Amazon SKU
+        let amazonSku = item.sku;
+        try {
+          const mapping = await AmzSkuMapping.findOne({
+            where: {
+              local_sku: item.sku,
+              country: item.country
+            },
+            attributes: ['amz_sku'],
+            raw: true
+          });
+          
+          if (mapping && mapping.amz_sku) {
+            amazonSku = mapping.amz_sku;
+          }
+        } catch (mappingError) {
+          console.log('\x1b[33m%s\x1b[0m', `⚠️ 查找映射失败 ${item.sku}:`, mappingError.message);
+        }
+
+        allMixedBoxData.push({
+          box_num: item.mix_box_num,
+          sku: item.sku,
+          amz_sku: amazonSku,
+          quantity: parseInt(item.total_quantity) || 0
+        });
+      }
+    }
+
+    // 第三步：处理整箱数据（仅选中的记录）
+    const wholeBoxData = {};
+    inventoryData.forEach(item => {
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
         // 整箱数据
-        const key = `${item.sku}_${item.country}`;
         const correspondingRecord = records.find(r => 
           (r.local_sku === item.sku || r.amz_sku === item.sku) && r.country === item.country
         );
         
         if (correspondingRecord) {
+          const key = `${item.sku}_${item.country}`;
           if (!wholeBoxData[key]) {
             wholeBoxData[key] = {
-              amz_sku: correspondingRecord.amz_sku || item.sku, // 使用Amazon SKU
+              amz_sku: correspondingRecord.amz_sku || item.sku,
               local_sku: item.sku,
               country: item.country,
               total_quantity: 0,
@@ -283,14 +328,14 @@ router.post('/mixed-boxes', async (req, res) => {
 
     const wholeBoxArray = Object.values(wholeBoxData);
 
-    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱数据数量:', mixedBoxData.length);
+    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱数据数量:', allMixedBoxData.length);
     console.log('\x1b[32m%s\x1b[0m', '📊 整箱数据数量:', wholeBoxArray.length);
 
     res.json({
       code: 0,
       message: '获取成功',
       data: {
-        mixed_boxes: mixedBoxData,
+        mixed_boxes: allMixedBoxData,
         whole_boxes: wholeBoxArray
       }
     });
