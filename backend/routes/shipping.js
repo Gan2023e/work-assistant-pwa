@@ -269,26 +269,39 @@ router.post('/mixed-boxes', async (req, res) => {
 
       console.log('\x1b[33m%s\x1b[0m', '🔍 混合箱内所有SKU数据:', allMixedBoxItems.length);
 
-      // 为每个混合箱内的SKU查找对应的Amazon SKU
-      for (const item of allMixedBoxItems) {
-        // 尝试通过映射表查找Amazon SKU
-        let amazonSku = item.sku;
+      // 批量查询所有需要的SKU映射关系（性能优化）
+      const skuMappingConditions = allMixedBoxItems.map(item => ({
+        local_sku: item.sku,
+        country: item.country
+      }));
+      
+      let allMappings = [];
+      if (skuMappingConditions.length > 0) {
         try {
-          const mapping = await AmzSkuMapping.findOne({
+          allMappings = await AmzSkuMapping.findAll({
             where: {
-              local_sku: item.sku,
-              country: item.country
+              [Op.or]: skuMappingConditions
             },
-            attributes: ['amz_sku'],
+            attributes: ['local_sku', 'country', 'amz_sku'],
             raw: true
           });
-          
-          if (mapping && mapping.amz_sku) {
-            amazonSku = mapping.amz_sku;
-          }
+          console.log('\x1b[33m%s\x1b[0m', '🔍 批量查询到的映射关系:', allMappings.length);
         } catch (mappingError) {
-          console.log('\x1b[33m%s\x1b[0m', `⚠️ 查找映射失败 ${item.sku}:`, mappingError.message);
+          console.log('\x1b[33m%s\x1b[0m', '⚠️ 批量查找映射失败:', mappingError.message);
         }
+      }
+      
+      // 创建映射关系的快速查找表
+      const mappingMap = new Map();
+      allMappings.forEach(mapping => {
+        const key = `${mapping.local_sku}_${mapping.country}`;
+        mappingMap.set(key, mapping.amz_sku);
+      });
+
+      // 为每个混合箱内的SKU分配对应的Amazon SKU
+      allMixedBoxItems.forEach(item => {
+        const mappingKey = `${item.sku}_${item.country}`;
+        const amazonSku = mappingMap.get(mappingKey) || item.sku;
 
         allMixedBoxData.push({
           box_num: item.mix_box_num,
@@ -296,7 +309,7 @@ router.post('/mixed-boxes', async (req, res) => {
           amz_sku: amazonSku,
           quantity: parseInt(item.total_quantity) || 0
         });
-      }
+      });
     }
 
     // 第三步：处理整箱数据（仅选中的记录）

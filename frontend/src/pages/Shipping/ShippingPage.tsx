@@ -161,6 +161,7 @@ const ShippingPage: React.FC = () => {
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
   const [boxCounter, setBoxCounter] = useState(1);
   const [nextBoxNumber, setNextBoxNumber] = useState(1);
+  const [shippingLoading, setShippingLoading] = useState(false); // 新增：发货加载状态
   
   // 未映射库存相关状态
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
@@ -382,6 +383,7 @@ const ShippingPage: React.FC = () => {
 
   // 记录出库信息
   const recordOutbound = async (items: MixedBoxItem[] | WholeBoxConfirmData[], isMixedBox: boolean = false) => {
+    console.log(`🚀 开始记录${isMixedBox ? '混合箱' : '整箱'}出库信息, 项目数量: ${items.length}`);
     try {
       const shipments = items.map(item => {
         if (isMixedBox) {
@@ -446,6 +448,9 @@ const ShippingPage: React.FC = () => {
       return;
     }
 
+    setShippingLoading(true); // 开始加载
+    message.loading('正在获取混合箱数据，请稍候...', 0); // 显示加载提示
+    
     // 获取混合箱数据
     try {
       const response = await fetch(`${API_BASE_URL}/api/shipping/mixed-boxes`, {
@@ -482,12 +487,17 @@ const ShippingPage: React.FC = () => {
         setBoxCounter(1);
         setNextBoxNumber(1);
         setShippingModalVisible(true);
+        message.destroy(); // 关闭加载提示
       } else {
+        message.destroy(); // 关闭加载提示
         message.error(result.message || '获取混合箱数据失败');
       }
     } catch (error) {
       console.error('获取混合箱数据失败:', error);
+      message.destroy(); // 关闭加载提示
       message.error(`获取混合箱数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setShippingLoading(false); // 结束加载
     }
   };
 
@@ -734,6 +744,7 @@ const ShippingPage: React.FC = () => {
             icon={<SendOutlined />}
             onClick={handleStartShipping}
             disabled={selectedRowKeys.length === 0}
+            loading={shippingLoading}
           >
             批量发货 ({selectedRowKeys.length})
           </Button>
@@ -1190,11 +1201,21 @@ const ShippingPage: React.FC = () => {
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
                   导出Excel
                 </Button>
-                <Button type="primary" onClick={() => {
+                <Button type="primary" onClick={async () => {
                   setShippingModalVisible(false);
                   setSelectedRowKeys([]);
                   setSelectedRows([]);
                   message.success('发货流程完成！');
+                  // 刷新数据
+                  message.loading('正在刷新发货需求数据...', 0);
+                  try {
+                    await fetchMergedData(statusFilter);
+                    message.destroy();
+                    message.success('数据已刷新！');
+                  } catch (error) {
+                    message.destroy();
+                    message.error('数据刷新失败，请手动刷新页面');
+                  }
                 }}>
                   完成
                 </Button>
