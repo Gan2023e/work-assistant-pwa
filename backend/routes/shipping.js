@@ -241,6 +241,7 @@ router.get('/inventory-by-country', async (req, res) => {
           whole_box_quantity: 0,
           whole_box_count: 0,
           mixed_box_quantity: 0,
+          mixed_box_numbers: new Set(), // 用于记录不同的混合箱号
           total_quantity: 0
         };
       }
@@ -255,6 +256,8 @@ router.get('/inventory-by-country', async (req, res) => {
       } else {
         // 混合箱数据
         skuStats[skuKey].mixed_box_quantity += quantity;
+        // 记录混合箱号
+        skuStats[skuKey].mixed_box_numbers.add(item.mix_box_num);
       }
       
       skuStats[skuKey].total_quantity += quantity;
@@ -278,6 +281,7 @@ router.get('/inventory-by-country', async (req, res) => {
           whole_box_quantity: 0,
           whole_box_count: 0,
           mixed_box_quantity: 0,
+          mixed_box_numbers: new Set(), // 用于记录该国家的所有混合箱号
           total_quantity: 0
         };
       }
@@ -287,6 +291,11 @@ router.get('/inventory-by-country', async (req, res) => {
       countryStats[skuStat.country].whole_box_count += skuStat.whole_box_count;
       countryStats[skuStat.country].mixed_box_quantity += skuStat.mixed_box_quantity;
       countryStats[skuStat.country].total_quantity += skuStat.total_quantity;
+      
+      // 合并混合箱号集合
+      skuStat.mixed_box_numbers.forEach(boxNum => {
+        countryStats[skuStat.country].mixed_box_numbers.add(boxNum);
+      });
     });
 
     // 第四步：格式化并过滤数据
@@ -296,12 +305,16 @@ router.get('/inventory-by-country', async (req, res) => {
         whole_box_quantity: item.whole_box_quantity,
         whole_box_count: item.whole_box_count,
         mixed_box_quantity: item.mixed_box_quantity,
+        mixed_box_count: item.mixed_box_numbers.size, // 混合箱数量 = 不同混合箱号的数量
         total_quantity: item.total_quantity
       }))
       .filter(item => item.total_quantity > 0) // 确保总数量大于0
       .sort((a, b) => b.total_quantity - a.total_quantity); // 按总数量降序排列
 
     console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据（排除已发货）:', formattedData.length);
+    console.log('\x1b[35m%s\x1b[0m', '📊 详细国家统计结果:', formattedData.map(item => 
+      `${item.country}: 整箱${item.whole_box_count}箱${item.whole_box_quantity}件, 混合箱${item.mixed_box_count}箱${item.mixed_box_quantity}件, 总计${item.total_quantity}件`
+    ));
 
     res.json({
       code: 0,

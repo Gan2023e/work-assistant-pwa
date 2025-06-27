@@ -146,6 +146,7 @@ interface CountryInventory {
   whole_box_quantity: number;
   whole_box_count: number;
   mixed_box_quantity: number;
+  mixed_box_count: number;
   total_quantity: number;
 }
 
@@ -871,7 +872,7 @@ const ShippingPage: React.FC = () => {
                         <Text strong>{country.country}</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: '10px' }}>
-                          整箱: {country.whole_box_quantity} | 混合箱: {country.mixed_box_quantity}
+                          整箱: {country.whole_box_count}箱 | 混合箱: {country.mixed_box_count}箱
                         </Text>
                       </div>
                     }
