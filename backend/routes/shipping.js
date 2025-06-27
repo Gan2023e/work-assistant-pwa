@@ -221,81 +221,122 @@ router.get('/inventory-by-country', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 总库存记录数量:', allInventory.length);
 
-    // 第三步：先按SKU+国家分组汇总，再按国家汇总
-    // 步骤3.1：按SKU+国家分组汇总所有库存记录
-    const skuStats = {};
+    // 第三步：分别处理整箱和混合箱数据
+    
+    // 步骤3.1：处理整箱数据 - 按SKU+国家分组汇总
+    const wholeBoxStats = {};
     
     allInventory.forEach(item => {
+      // 只处理整箱数据（mix_box_num为空）
+      if (item.mix_box_num && item.mix_box_num.trim() !== '') {
+        return;
+      }
+      
       const skuKey = `${item.sku}_${item.country}`;
       
       // 跳过已发货的SKU
       if (shippedSkuSet.has(skuKey)) {
-        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货SKU: ${item.sku} (${item.country})`);
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货整箱SKU: ${item.sku} (${item.country})`);
         return;
       }
       
-      if (!skuStats[skuKey]) {
-        skuStats[skuKey] = {
+      if (!wholeBoxStats[skuKey]) {
+        wholeBoxStats[skuKey] = {
           sku: item.sku,
           country: item.country,
-          whole_box_quantity: 0,
-          whole_box_count: 0,
-          mixed_box_quantity: 0,
-          mixed_box_numbers: new Set(), // 用于记录不同的混合箱号
-          total_quantity: 0
+          quantity: 0,
+          boxes: 0
         };
       }
       
       const quantity = parseInt(item.total_quantity) || 0;
       const boxes = parseInt(item.total_boxes) || 0;
       
-      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
-        // 整箱数据
-        skuStats[skuKey].whole_box_quantity += quantity;
-        skuStats[skuKey].whole_box_count += boxes;
-      } else {
-        // 混合箱数据
-        skuStats[skuKey].mixed_box_quantity += quantity;
-        // 记录混合箱号
-        skuStats[skuKey].mixed_box_numbers.add(item.mix_box_num);
-      }
-      
-      skuStats[skuKey].total_quantity += quantity;
+      wholeBoxStats[skuKey].quantity += quantity;
+      wholeBoxStats[skuKey].boxes += boxes;
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔍 SKU汇总后记录数量:', Object.keys(skuStats).length);
-
-    // 步骤3.2：过滤掉汇总后数量为0或负数的SKU，然后按国家分组汇总
-    const countryStats = {};
+    // 步骤3.2：处理混合箱数据 - 先按混合箱号汇总，再筛选有效混合箱
+    const mixedBoxStats = {};
     
-    Object.values(skuStats).forEach(skuStat => {
-      // 只统计汇总后数量为正的SKU
-      if (skuStat.total_quantity <= 0) {
-        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过数量为${skuStat.total_quantity}的SKU: ${skuStat.sku} (${skuStat.country})`);
+    allInventory.forEach(item => {
+      // 只处理混合箱数据（mix_box_num不为空）
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
         return;
       }
       
-      if (!countryStats[skuStat.country]) {
-        countryStats[skuStat.country] = {
-          country: skuStat.country,
-          whole_box_quantity: 0,
-          whole_box_count: 0,
-          mixed_box_quantity: 0,
-          mixed_box_numbers: new Set(), // 用于记录该国家的所有混合箱号
+      const skuKey = `${item.sku}_${item.country}`;
+      
+      // 跳过已发货的SKU
+      if (shippedSkuSet.has(skuKey)) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货混合箱SKU: ${item.sku} (${item.country}) 混合箱:${item.mix_box_num}`);
+        return;
+      }
+      
+      // 按混合箱号+国家分组汇总
+      const mixedBoxKey = `${item.mix_box_num}_${item.country}`;
+      
+      if (!mixedBoxStats[mixedBoxKey]) {
+        mixedBoxStats[mixedBoxKey] = {
+          mix_box_num: item.mix_box_num,
+          country: item.country,
           total_quantity: 0
         };
       }
       
-      // 累加正数量SKU的库存和箱数
-      countryStats[skuStat.country].whole_box_quantity += skuStat.whole_box_quantity;
-      countryStats[skuStat.country].whole_box_count += skuStat.whole_box_count;
-      countryStats[skuStat.country].mixed_box_quantity += skuStat.mixed_box_quantity;
-      countryStats[skuStat.country].total_quantity += skuStat.total_quantity;
+      const quantity = parseInt(item.total_quantity) || 0;
+      mixedBoxStats[mixedBoxKey].total_quantity += quantity;
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 整箱SKU统计:', Object.keys(wholeBoxStats).length);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 混合箱统计:', Object.keys(mixedBoxStats).length);
+
+    // 步骤3.3：筛选有效的混合箱（汇总后数量大于0）
+    const validMixedBoxes = Object.values(mixedBoxStats).filter(box => box.total_quantity > 0);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 有效混合箱数量:', validMixedBoxes.length);
+
+    // 步骤3.4：按国家汇总数据
+    const countryStats = {};
+    
+    // 汇总整箱数据
+    Object.values(wholeBoxStats).forEach(stat => {
+      if (stat.quantity <= 0) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过数量为${stat.quantity}的整箱SKU: ${stat.sku} (${stat.country})`);
+        return;
+      }
       
-      // 合并混合箱号集合
-      skuStat.mixed_box_numbers.forEach(boxNum => {
-        countryStats[skuStat.country].mixed_box_numbers.add(boxNum);
-      });
+      if (!countryStats[stat.country]) {
+        countryStats[stat.country] = {
+          country: stat.country,
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          valid_mixed_boxes: 0,
+          total_quantity: 0
+        };
+      }
+      
+      countryStats[stat.country].whole_box_quantity += stat.quantity;
+      countryStats[stat.country].whole_box_count += stat.boxes;
+      countryStats[stat.country].total_quantity += stat.quantity;
+    });
+    
+    // 汇总混合箱数据
+    validMixedBoxes.forEach(box => {
+      if (!countryStats[box.country]) {
+        countryStats[box.country] = {
+          country: box.country,
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          valid_mixed_boxes: 0,
+          total_quantity: 0
+        };
+      }
+      
+      countryStats[box.country].mixed_box_quantity += box.total_quantity;
+      countryStats[box.country].valid_mixed_boxes += 1; // 每个有效混合箱计数+1
+      countryStats[box.country].total_quantity += box.total_quantity;
     });
 
     // 第四步：格式化并过滤数据
@@ -305,7 +346,7 @@ router.get('/inventory-by-country', async (req, res) => {
         whole_box_quantity: item.whole_box_quantity,
         whole_box_count: item.whole_box_count,
         mixed_box_quantity: item.mixed_box_quantity,
-        mixed_box_count: item.mixed_box_numbers.size, // 混合箱数量 = 不同混合箱号的数量
+        mixed_box_count: item.valid_mixed_boxes, // 混合箱数量 = 有效混合箱的数量
         total_quantity: item.total_quantity
       }))
       .filter(item => item.total_quantity > 0) // 确保总数量大于0
@@ -314,6 +355,11 @@ router.get('/inventory-by-country', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据（排除已发货）:', formattedData.length);
     console.log('\x1b[35m%s\x1b[0m', '📊 详细国家统计结果:', formattedData.map(item => 
       `${item.country}: 整箱${item.whole_box_count}箱${item.whole_box_quantity}件, 混合箱${item.mixed_box_count}箱${item.mixed_box_quantity}件, 总计${item.total_quantity}件`
+    ));
+    
+    // 额外的调试信息：显示有效混合箱的详细信息
+    console.log('\x1b[36m%s\x1b[0m', '📦 有效混合箱详情:', validMixedBoxes.map(box => 
+      `${box.mix_box_num}(${box.country}): ${box.total_quantity}件`
     ));
 
     res.json({
