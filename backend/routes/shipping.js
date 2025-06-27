@@ -188,45 +188,90 @@ router.get('/inventory-stats', async (req, res) => {
   }
 });
 
-// 获取按国家汇总的库存数据
+// 获取按国家汇总的库存数据（排除已发货状态的记录）
 router.get('/inventory-by-country', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到按国家汇总库存查询请求');
   
   try {
-    // 查询所有库存数据，按国家分组汇总
-    const countryInventory = await LocalBox.findAll({
-      attributes: [
-        'country',
-        [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_quantity ELSE 0 END`)
-        ), 'whole_box_quantity'],
-        [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_boxes ELSE 0 END`)
-        ), 'whole_box_count'],
-        [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NOT NULL AND mix_box_num != '' THEN total_quantity ELSE 0 END`)
-        ), 'mixed_box_quantity'],
-        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
-      ],
-      group: ['country'],
-      having: sequelize.literal('SUM(total_quantity) > 0'), // 只显示有库存的国家
+    // 第一步：查询所有已发货的需求记录
+    const shippedNeeds = await WarehouseProductsNeed.findAll({
+      where: {
+        status: '已发货'
+      },
+      attributes: ['sku', 'country'],
       raw: true
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔍 按国家汇总库存数据:', countryInventory.length);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 已发货需求数量:', shippedNeeds.length);
 
-    // 格式化数据
-    const formattedData = countryInventory.map(item => ({
-      country: item.country || '未知',
-      whole_box_quantity: parseInt(item.whole_box_quantity) || 0,
-      whole_box_count: parseInt(item.whole_box_count) || 0,
-      mixed_box_quantity: parseInt(item.mixed_box_quantity) || 0,
-      total_quantity: parseInt(item.total_quantity) || 0
-    }))
-    .filter(item => item.total_quantity > 0) // 确保总数量大于0
-    .sort((a, b) => b.total_quantity - a.total_quantity); // 按总数量降序排列
+    // 创建已发货SKU的查找集合，用于快速排除
+    const shippedSkuSet = new Set();
+    shippedNeeds.forEach(need => {
+      const key = `${need.sku}_${need.country}`;
+      shippedSkuSet.add(key);
+    });
 
-    console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据:', formattedData.length);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 已发货SKU组合数量:', shippedSkuSet.size);
+
+    // 第二步：查询所有库存数据
+    const allInventory = await LocalBox.findAll({
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 总库存记录数量:', allInventory.length);
+
+    // 第三步：过滤掉已发货的SKU，并按国家分组汇总
+    const countryStats = {};
+    
+    allInventory.forEach(item => {
+      const skuKey = `${item.sku}_${item.country}`;
+      
+      // 跳过已发货的SKU
+      if (shippedSkuSet.has(skuKey)) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货SKU: ${item.sku} (${item.country})`);
+        return;
+      }
+      
+      // 统计未发货的库存
+      if (!countryStats[item.country]) {
+        countryStats[item.country] = {
+          country: item.country,
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          total_quantity: 0
+        };
+      }
+      
+      const quantity = parseInt(item.total_quantity) || 0;
+      const boxes = parseInt(item.total_boxes) || 0;
+      
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
+        // 整箱数据
+        countryStats[item.country].whole_box_quantity += quantity;
+        countryStats[item.country].whole_box_count += boxes;
+      } else {
+        // 混合箱数据
+        countryStats[item.country].mixed_box_quantity += quantity;
+      }
+      
+      countryStats[item.country].total_quantity += quantity;
+    });
+
+    // 第四步：格式化并过滤数据
+    const formattedData = Object.values(countryStats)
+      .map(item => ({
+        country: item.country || '未知',
+        whole_box_quantity: item.whole_box_quantity,
+        whole_box_count: item.whole_box_count,
+        mixed_box_quantity: item.mixed_box_quantity,
+        total_quantity: item.total_quantity
+      }))
+      .filter(item => item.total_quantity > 0) // 确保总数量大于0
+      .sort((a, b) => b.total_quantity - a.total_quantity); // 按总数量降序排列
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据（排除已发货）:', formattedData.length);
 
     res.json({
       code: 0,

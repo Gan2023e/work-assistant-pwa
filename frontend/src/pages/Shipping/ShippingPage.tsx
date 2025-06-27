@@ -826,7 +826,7 @@ const ShippingPage: React.FC = () => {
               <GlobalOutlined style={{ marginRight: 8 }} />
               按国家库存汇总
               <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
-                (点击卡片筛选对应国家数据)
+                (不含已发货记录，点击卡片筛选对应国家数据)
               </Text>
             </span>
           } 
