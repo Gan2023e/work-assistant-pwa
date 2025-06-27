@@ -155,7 +155,7 @@ const ShippingPage: React.FC = () => {
   const [mergedLoading, setMergedLoading] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addForm] = Form.useForm();
-  const [statusFilter, setStatusFilter] = useState('待发货');
+
   const [filterType, setFilterType] = useState<string>(''); // 新增：卡片筛选类型
   
   // 新增：多选和发货相关状态
@@ -261,9 +261,9 @@ const ShippingPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchMergedData(statusFilter);
+    fetchMergedData(); // 默认获取待发货数据
     fetchCountryInventory(); // 同时获取国家库存数据
-  }, [statusFilter]);
+  }, []);
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
@@ -724,7 +724,7 @@ const ShippingPage: React.FC = () => {
         setMappingModalVisible(false);
         mappingForm.resetFields();
         // 重新加载数据
-        fetchMergedData(statusFilter);
+        fetchMergedData();
       } else {
         message.error(result.message || '创建映射失败');
       }
@@ -755,7 +755,7 @@ const ShippingPage: React.FC = () => {
         message.success('添加成功');
         setAddModalVisible(false);
         addForm.resetFields();
-        fetchMergedData(statusFilter);
+        fetchMergedData();
       } else {
         message.error(result.message || '添加失败');
       }
@@ -799,22 +799,7 @@ const ShippingPage: React.FC = () => {
             创建SKU映射 ({selectedRows.filter(row => row.status === '库存未映射').length})
           </Button>
         </Col>
-        <Col>
-          <Select
-            value={statusFilter}
-            onChange={(value) => {
-              setStatusFilter(value);
-            }}
-            style={{ width: 150 }}
-          >
-            <Option value="">全部状态</Option>
-            <Option value="待发货">待发货</Option>
-            <Option value="已发货">已发货</Option>
-            <Option value="已取消">已取消</Option>
-            <Option value="有库存无需求">有库存无需求</Option>
-            <Option value="库存未映射">库存未映射</Option>
-          </Select>
-        </Col>
+
 
       </Row>
 
@@ -878,7 +863,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     setSelectedCountry(selectedCountry === country.country ? '' : country.country);
                     setFilterType(''); // 清除其他筛选
-                    setStatusFilter(''); // 清除状态筛选
                   }}
                 >
                   <Statistic
@@ -913,9 +897,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'needs' ? '' : 'needs';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -932,9 +913,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -951,9 +929,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'shortage' ? '' : 'shortage';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -970,9 +945,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'shortage' ? '' : 'shortage';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -988,9 +960,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -1006,9 +975,6 @@ const ShippingPage: React.FC = () => {
                   onClick={() => {
                     const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
                     setFilterType(newFilterType);
-                    if (newFilterType !== '') {
-                      setStatusFilter(''); // 自动设置为全部状态
-                    }
                   }}
                 >
                   <Statistic
@@ -1023,7 +989,6 @@ const ShippingPage: React.FC = () => {
                   style={{ cursor: 'pointer' }} 
                   onClick={() => {
                     setFilterType('');
-                    setStatusFilter(''); // 清除所有筛选时也设置为全部状态
                   }}
                 >
                   <Statistic
@@ -1063,12 +1028,7 @@ const ShippingPage: React.FC = () => {
                 }
               }
               
-              // 然后按状态筛选下拉菜单进行过滤
-              if (statusFilter && statusFilter !== '') {
-                if (item.status !== statusFilter) {
-                  return false;
-                }
-              }
+
               
               // 最后按卡片筛选类型进行过滤
               switch (filterType) {
@@ -1349,8 +1309,8 @@ const ShippingPage: React.FC = () => {
                   message.loading('正在刷新发货需求数据...', 0);
                   try {
                     await Promise.all([
-                      fetchMergedData(statusFilter),
-                      fetchCountryInventory() // 同时刷新国家库存数据
+                      fetchMergedData(),
+                      fetchCountryInventory()
                     ]);
                     message.destroy();
                     message.success('数据已刷新！');
