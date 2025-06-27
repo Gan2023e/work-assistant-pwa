@@ -188,6 +188,61 @@ router.get('/inventory-stats', async (req, res) => {
   }
 });
 
+// 获取按国家汇总的库存数据
+router.get('/inventory-by-country', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到按国家汇总库存查询请求');
+  
+  try {
+    // 查询所有库存数据，按国家分组汇总
+    const countryInventory = await LocalBox.findAll({
+      attributes: [
+        'country',
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_quantity ELSE 0 END`)
+        ), 'whole_box_quantity'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_boxes ELSE 0 END`)
+        ), 'whole_box_count'],
+        [sequelize.fn('SUM', 
+          sequelize.literal(`CASE WHEN mix_box_num IS NOT NULL AND mix_box_num != '' THEN total_quantity ELSE 0 END`)
+        ), 'mixed_box_quantity'],
+        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
+      ],
+      group: ['country'],
+      having: sequelize.literal('SUM(total_quantity) > 0'), // 只显示有库存的国家
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 按国家汇总库存数据:', countryInventory.length);
+
+    // 格式化数据
+    const formattedData = countryInventory.map(item => ({
+      country: item.country || '未知',
+      whole_box_quantity: parseInt(item.whole_box_quantity) || 0,
+      whole_box_count: parseInt(item.whole_box_count) || 0,
+      mixed_box_quantity: parseInt(item.mixed_box_quantity) || 0,
+      total_quantity: parseInt(item.total_quantity) || 0
+    }))
+    .filter(item => item.total_quantity > 0) // 确保总数量大于0
+    .sort((a, b) => b.total_quantity - a.total_quantity); // 按总数量降序排列
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据:', formattedData.length);
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: formattedData
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取按国家汇总库存失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取混合箱和整箱数据
 router.post('/mixed-boxes', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱数据查询请求:', JSON.stringify(req.body, null, 2));

@@ -24,7 +24,8 @@ import {
   CheckOutlined,
   CloseOutlined,
   SendOutlined,
-  ExportOutlined
+  ExportOutlined,
+  GlobalOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -140,6 +141,14 @@ interface SkuMappingForm {
   site?: string;
 }
 
+interface CountryInventory {
+  country: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
+  total_quantity: number;
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
@@ -167,6 +176,10 @@ const ShippingPage: React.FC = () => {
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
   const [mappingModalVisible, setMappingModalVisible] = useState(false);
   const [mappingForm] = Form.useForm();
+  
+  // 国家库存相关状态
+  const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>(''); // 选中的国家
 
 
 
@@ -220,8 +233,36 @@ const ShippingPage: React.FC = () => {
     }
   };
 
+  // 获取国家库存数据
+  const fetchCountryInventory = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/inventory-by-country`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setCountryInventory(result.data || []);
+      } else {
+        console.error('获取国家库存数据失败:', result.message);
+      }
+    } catch (error) {
+      console.error('获取国家库存数据失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchMergedData(statusFilter);
+    fetchCountryInventory(); // 同时获取国家库存数据
   }, [statusFilter]);
 
   // 状态颜色映射
@@ -777,6 +818,93 @@ const ShippingPage: React.FC = () => {
 
       </Row>
 
+      {/* 国家库存卡片栏 */}
+      {countryInventory.length > 0 && (
+        <Card 
+          title={
+            <span>
+              <GlobalOutlined style={{ marginRight: 8 }} />
+              按国家库存汇总
+              <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                (点击卡片筛选对应国家数据)
+              </Text>
+            </span>
+          } 
+          size="small" 
+          style={{ marginBottom: 16 }}
+        >
+          <Row gutter={[16, 16]}>
+            {/* 全部国家按钮 */}
+            <Col>
+              <div
+                style={{
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  border: `2px solid ${selectedCountry === '' ? '#1677ff' : '#d9d9d9'}`,
+                  borderRadius: '6px',
+                  backgroundColor: selectedCountry === '' ? '#f0f6ff' : '#fff',
+                  transition: 'all 0.3s'
+                }}
+                onClick={() => {
+                  setSelectedCountry('');
+                  setFilterType(''); // 清除其他筛选
+                }}
+              >
+                <Statistic
+                  title="全部国家"
+                  value={countryInventory.reduce((sum, item) => sum + item.total_quantity, 0)}
+                  valueStyle={{ 
+                    color: selectedCountry === '' ? '#1677ff' : '#666',
+                    fontSize: '16px'
+                  }}
+                  suffix="件"
+                />
+              </div>
+            </Col>
+            
+            {/* 各国家库存卡片 */}
+            {countryInventory.map((country) => (
+              <Col key={country.country}>
+                <div
+                  style={{
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    border: `2px solid ${selectedCountry === country.country ? '#1677ff' : '#d9d9d9'}`,
+                    borderRadius: '6px',
+                    backgroundColor: selectedCountry === country.country ? '#f0f6ff' : '#fff',
+                    transition: 'all 0.3s',
+                    minWidth: '120px'
+                  }}
+                  onClick={() => {
+                    setSelectedCountry(selectedCountry === country.country ? '' : country.country);
+                    setFilterType(''); // 清除其他筛选
+                    setStatusFilter(''); // 清除状态筛选
+                  }}
+                >
+                  <Statistic
+                    title={
+                      <div>
+                        <Text strong>{country.country}</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '10px' }}>
+                          整箱: {country.whole_box_quantity} | 混合箱: {country.mixed_box_quantity}
+                        </Text>
+                      </div>
+                    }
+                    value={country.total_quantity}
+                    valueStyle={{ 
+                      color: selectedCountry === country.country ? '#1677ff' : '#666',
+                      fontSize: '18px'
+                    }}
+                    suffix="件"
+                  />
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
+
           <Card style={{ marginBottom: 16 }}>
             <Row gutter={16}>
               <Col span={3}>
@@ -924,14 +1052,21 @@ const ShippingPage: React.FC = () => {
           <Table
             columns={mergedColumns}
             dataSource={mergedData.filter(item => {
-              // 首先按状态筛选下拉菜单进行过滤
+              // 首先按国家筛选（新增）
+              if (selectedCountry && selectedCountry !== '') {
+                if (item.country !== selectedCountry) {
+                  return false;
+                }
+              }
+              
+              // 然后按状态筛选下拉菜单进行过滤
               if (statusFilter && statusFilter !== '') {
                 if (item.status !== statusFilter) {
                   return false;
                 }
               }
               
-              // 然后按卡片筛选类型进行过滤
+              // 最后按卡片筛选类型进行过滤
               switch (filterType) {
                 case 'needs':
                   return item.quantity > 0;
@@ -1209,7 +1344,10 @@ const ShippingPage: React.FC = () => {
                   // 刷新数据
                   message.loading('正在刷新发货需求数据...', 0);
                   try {
-                    await fetchMergedData(statusFilter);
+                    await Promise.all([
+                      fetchMergedData(statusFilter),
+                      fetchCountryInventory() // 同时刷新国家库存数据
+                    ]);
                     message.destroy();
                     message.success('数据已刷新！');
                   } catch (error) {
