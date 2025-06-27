@@ -1057,6 +1057,10 @@ const ShippingPage: React.FC = () => {
                 if (item.country !== selectedCountry) {
                   return false;
                 }
+                // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
+                if (item.status === '已发货') {
+                  return false;
+                }
               }
               
               // 然后按状态筛选下拉菜单进行过滤
