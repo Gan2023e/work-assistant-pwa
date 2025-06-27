@@ -1241,16 +1241,30 @@ router.post('/outbound-record', async (req, res) => {
       // 生成唯一的记录号
       const recordId = `OUT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
       
+      // 统一country字段为中文
+      let normalizedCountry = country;
+      if (country === 'US') {
+        normalizedCountry = '美国';
+      } else if (country === 'UK') {
+        normalizedCountry = '英国';
+      } else if (country === 'AU') {
+        normalizedCountry = '澳大利亚';
+      } else if (country === 'AE') {
+        normalizedCountry = '阿联酋';
+      } else if (country === 'CA') {
+        normalizedCountry = '加拿大';
+      }
+      
       const record = {
         记录号: recordId,
         sku: sku,
         total_quantity: -Math.abs(total_quantity), // 出库数量为负数
         total_boxes: total_boxes ? -Math.abs(total_boxes) : null, // 如果是整箱出库，箱数也为负数
-        country: country,
+        country: normalizedCountry,
         time: new Date(),
         操作员: operator,
         marketPlace: marketplace,
-        mix_box_num: is_mixed_box ? `OUT-MIX-${Date.now()}` : null // 如果是混合箱出库，生成混合箱号
+        mix_box_num: is_mixed_box ? `${Date.now()}` : null // 如果是混合箱出库，生成混合箱号（不加前缀）
       };
       
       outboundRecords.push(record);

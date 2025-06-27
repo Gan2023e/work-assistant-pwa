@@ -392,7 +392,7 @@ const ShippingPage: React.FC = () => {
           return {
             sku: mixedItem.sku,
             total_quantity: mixedItem.quantity,
-            country: selectedRecord?.country || 'US',
+            country: selectedRecord?.country || '美国',
             marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
             is_mixed_box: true
           };
@@ -405,7 +405,7 @@ const ShippingPage: React.FC = () => {
             sku: selectedRecord?.local_sku || wholeItem.amz_sku,
             total_quantity: wholeItem.confirm_quantity,
             total_boxes: wholeItem.confirm_boxes,
-            country: selectedRecord?.country || 'US',
+            country: selectedRecord?.country || '美国',
             marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
             is_mixed_box: false
           };
