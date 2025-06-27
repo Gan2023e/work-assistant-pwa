@@ -221,8 +221,9 @@ router.get('/inventory-by-country', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 总库存记录数量:', allInventory.length);
 
-    // 第三步：过滤掉已发货的SKU，并按国家分组汇总
-    const countryStats = {};
+    // 第三步：先按SKU+国家分组汇总，再按国家汇总
+    // 步骤3.1：按SKU+国家分组汇总所有库存记录
+    const skuStats = {};
     
     allInventory.forEach(item => {
       const skuKey = `${item.sku}_${item.country}`;
@@ -233,9 +234,9 @@ router.get('/inventory-by-country', async (req, res) => {
         return;
       }
       
-      // 统计未发货的库存
-      if (!countryStats[item.country]) {
-        countryStats[item.country] = {
+      if (!skuStats[skuKey]) {
+        skuStats[skuKey] = {
+          sku: item.sku,
           country: item.country,
           whole_box_quantity: 0,
           whole_box_count: 0,
@@ -249,14 +250,43 @@ router.get('/inventory-by-country', async (req, res) => {
       
       if (!item.mix_box_num || item.mix_box_num.trim() === '') {
         // 整箱数据
-        countryStats[item.country].whole_box_quantity += quantity;
-        countryStats[item.country].whole_box_count += boxes;
+        skuStats[skuKey].whole_box_quantity += quantity;
+        skuStats[skuKey].whole_box_count += boxes;
       } else {
         // 混合箱数据
-        countryStats[item.country].mixed_box_quantity += quantity;
+        skuStats[skuKey].mixed_box_quantity += quantity;
       }
       
-      countryStats[item.country].total_quantity += quantity;
+      skuStats[skuKey].total_quantity += quantity;
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 SKU汇总后记录数量:', Object.keys(skuStats).length);
+
+    // 步骤3.2：过滤掉汇总后数量为0或负数的SKU，然后按国家分组汇总
+    const countryStats = {};
+    
+    Object.values(skuStats).forEach(skuStat => {
+      // 只统计汇总后数量为正的SKU
+      if (skuStat.total_quantity <= 0) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过数量为${skuStat.total_quantity}的SKU: ${skuStat.sku} (${skuStat.country})`);
+        return;
+      }
+      
+      if (!countryStats[skuStat.country]) {
+        countryStats[skuStat.country] = {
+          country: skuStat.country,
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          total_quantity: 0
+        };
+      }
+      
+      // 累加正数量SKU的库存和箱数
+      countryStats[skuStat.country].whole_box_quantity += skuStat.whole_box_quantity;
+      countryStats[skuStat.country].whole_box_count += skuStat.whole_box_count;
+      countryStats[skuStat.country].mixed_box_quantity += skuStat.mixed_box_quantity;
+      countryStats[skuStat.country].total_quantity += skuStat.total_quantity;
     });
 
     // 第四步：格式化并过滤数据
