@@ -353,21 +353,43 @@ router.post('/mixed-boxes', async (req, res) => {
         mappingMap.set(key, mapping.amz_sku);
       });
 
-      // 为每个混合箱内的SKU分配对应的Amazon SKU
+      // 按SKU+混合箱号分组汇总数量（关键优化：过滤已出库的SKU）
+      const skuSummaryMap = new Map();
       allMixedBoxItems.forEach(item => {
-        const mappingKey = `${item.sku}_${item.country}`;
-        const amazonSku = mappingMap.get(mappingKey) || item.sku;
+        const summaryKey = `${item.sku}_${item.country}_${item.mix_box_num}`;
+        const quantity = parseInt(item.total_quantity) || 0;
+        
+        if (skuSummaryMap.has(summaryKey)) {
+          skuSummaryMap.set(summaryKey, skuSummaryMap.get(summaryKey) + quantity);
+        } else {
+          skuSummaryMap.set(summaryKey, quantity);
+        }
+      });
 
-        allMixedBoxData.push({
-          box_num: item.mix_box_num,
-          sku: item.sku,
-          amz_sku: amazonSku,
-          quantity: parseInt(item.total_quantity) || 0
-        });
+      console.log('\x1b[33m%s\x1b[0m', '🔍 SKU汇总后数据:', skuSummaryMap.size);
+
+      // 只处理汇总后数量大于0的SKU（过滤掉已完全出库的SKU）
+      skuSummaryMap.forEach((totalQuantity, summaryKey) => {
+        if (totalQuantity > 0) { // 只处理库存为正的SKU
+          const [sku, country, mixBoxNum] = summaryKey.split('_');
+          const mappingKey = `${sku}_${country}`;
+          const amazonSku = mappingMap.get(mappingKey) || sku;
+
+          allMixedBoxData.push({
+            box_num: mixBoxNum,
+            sku: sku,
+            amz_sku: amazonSku,
+            quantity: totalQuantity
+          });
+        } else {
+          // 记录已出库的SKU
+          const [sku, country, mixBoxNum] = summaryKey.split('_');
+          console.log('\x1b[31m%s\x1b[0m', `🚫 已完全出库的SKU: ${sku} (混合箱: ${mixBoxNum}, 汇总数量: ${totalQuantity})`);
+        }
       });
     }
 
-    // 第三步：处理整箱数据（仅选中的记录）
+    // 第三步：处理整箱数据（仅选中的记录，并过滤已出库的SKU）
     const wholeBoxData = {};
     inventoryData.forEach(item => {
       if (!item.mix_box_num || item.mix_box_num.trim() === '') {
@@ -394,7 +416,15 @@ router.post('/mixed-boxes', async (req, res) => {
       }
     });
 
-    const wholeBoxArray = Object.values(wholeBoxData);
+    // 过滤掉已完全出库的整箱SKU（数量小于等于0的）
+    const wholeBoxArray = Object.values(wholeBoxData).filter(item => {
+      if (item.total_quantity > 0) {
+        return true;
+      } else {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 已完全出库的整箱SKU: ${item.local_sku} (汇总数量: ${item.total_quantity})`);
+        return false;
+      }
+    });
 
     console.log('\x1b[32m%s\x1b[0m', '📊 混合箱数据数量:', allMixedBoxData.length);
     console.log('\x1b[32m%s\x1b[0m', '📊 整箱数据数量:', wholeBoxArray.length);
