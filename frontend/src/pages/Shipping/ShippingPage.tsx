@@ -27,6 +27,7 @@ import {
   ExportOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -159,6 +160,7 @@ const ShippingPage: React.FC = () => {
   const [wholeBoxData, setWholeBoxData] = useState<WholeBoxConfirmData[]>([]);
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
   const [boxCounter, setBoxCounter] = useState(1);
+  const [nextBoxNumber, setNextBoxNumber] = useState(1);
   
   // 未映射库存相关状态
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
@@ -477,6 +479,7 @@ const ShippingPage: React.FC = () => {
         setCurrentStep(0);
         setShippingData([]);
         setBoxCounter(1);
+        setNextBoxNumber(1);
         setShippingModalVisible(true);
       } else {
         message.error(result.message || '获取混合箱数据失败');
@@ -490,12 +493,13 @@ const ShippingPage: React.FC = () => {
   // 确认混合箱发货
   const confirmMixedBox = async (boxData: MixedBoxItem[]) => {
     const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
-      box_num: String(boxCounter + shippingData.length),
+      box_num: String(nextBoxNumber),
       amz_sku: item.amz_sku,
       quantity: item.quantity
     }));
     
     setShippingData([...shippingData, ...newShippingData]);
+    setNextBoxNumber(nextBoxNumber + 1); // 递增箱号
     
     // 记录混合箱出库信息
     await recordOutbound(boxData, true);
@@ -511,20 +515,21 @@ const ShippingPage: React.FC = () => {
   // 确认整箱发货
   const confirmWholeBox = async (confirmedData: WholeBoxConfirmData[]) => {
     const newShippingData: ShippingConfirmData[] = [];
-    let currentBoxNum = boxCounter + shippingData.length;
+    let currentBoxNum = nextBoxNumber;
     
     confirmedData.forEach(item => {
       for (let i = 0; i < item.confirm_boxes; i++) {
         newShippingData.push({
-          box_num: String(currentBoxNum + i),
+          box_num: String(currentBoxNum),
           amz_sku: item.amz_sku,
           quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
         });
+        currentBoxNum++;
       }
-      currentBoxNum += item.confirm_boxes;
     });
     
     setShippingData([...shippingData, ...newShippingData]);
+    setNextBoxNumber(currentBoxNum); // 更新下一个箱号
     
     // 记录整箱出库信息
     await recordOutbound(confirmedData, false);
@@ -534,20 +539,32 @@ const ShippingPage: React.FC = () => {
 
   // 导出Excel
   const exportToExcel = () => {
-    const csvContent = [
+    // 准备Excel数据
+    const data = [
       ['箱号', 'Amazon SKU', '发货数量'],
       ...shippingData.map(item => [item.box_num, item.amz_sku, item.quantity])
-    ].map(row => row.join(',')).join('\n');
+    ];
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `发货清单_${new Date().toISOString().slice(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // 创建工作簿和工作表
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    
+    // 设置列宽
+    const columnWidths = [
+      { wch: 10 }, // 箱号
+      { wch: 20 }, // Amazon SKU
+      { wch: 12 }  // 发货数量
+    ];
+    worksheet['!cols'] = columnWidths;
+    
+    // 将工作表添加到工作簿
+    XLSX.utils.book_append_sheet(workbook, worksheet, '发货清单');
+    
+    // 生成文件名
+    const fileName = `发货清单_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    
+    // 导出文件
+    XLSX.writeFile(workbook, fileName);
   };
 
   // 获取Amazon站点URL
