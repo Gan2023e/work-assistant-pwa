@@ -1235,7 +1235,8 @@ router.post('/outbound-record', async (req, res) => {
         total_boxes = null,
         country,
         marketplace = '亚马逊',
-        is_mixed_box = false
+        is_mixed_box = false,
+        original_mix_box_num = null // 新增：原始混合箱单号
       } = shipment;
       
       // 生成唯一的记录号
@@ -1255,6 +1256,40 @@ router.post('/outbound-record', async (req, res) => {
         normalizedCountry = '加拿大';
       }
       
+      // 处理混合箱号：如果是混合箱出库，使用原来的混合箱单号
+      let mixBoxNum = null;
+      if (is_mixed_box) {
+        if (original_mix_box_num) {
+          // 使用原来的混合箱单号
+          mixBoxNum = original_mix_box_num;
+        } else {
+          // 如果没有提供原始箱号，尝试从库存中查找
+          try {
+            const existingRecord = await LocalBox.findOne({
+              where: {
+                sku: sku,
+                country: normalizedCountry,
+                mix_box_num: { [Op.ne]: null }
+              },
+              attributes: ['mix_box_num'],
+              raw: true
+            });
+            
+            if (existingRecord && existingRecord.mix_box_num) {
+              mixBoxNum = existingRecord.mix_box_num;
+              console.log(`📦 找到原始混合箱号: ${mixBoxNum} for SKU: ${sku}`);
+            } else {
+              // 如果找不到原始箱号，生成警告并使用新箱号
+              console.warn(`⚠️ 无法找到SKU ${sku} 的原始混合箱号，生成新箱号`);
+              mixBoxNum = `OUT-MIX-${Date.now()}`;
+            }
+          } catch (error) {
+            console.error(`❌ 查找原始混合箱号失败: ${error.message}`);
+            mixBoxNum = `OUT-MIX-${Date.now()}`;
+          }
+        }
+      }
+      
       const record = {
         记录号: recordId,
         sku: sku,
@@ -1264,7 +1299,7 @@ router.post('/outbound-record', async (req, res) => {
         time: new Date(),
         操作员: operator,
         marketPlace: marketplace,
-        mix_box_num: is_mixed_box ? `${Date.now()}` : null // 如果是混合箱出库，生成混合箱号（不加前缀）
+        mix_box_num: mixBoxNum // 使用原来的混合箱单号或查找到的箱号
       };
       
       outboundRecords.push(record);

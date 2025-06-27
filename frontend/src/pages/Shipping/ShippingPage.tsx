@@ -394,7 +394,8 @@ const ShippingPage: React.FC = () => {
             total_quantity: mixedItem.quantity,
             country: selectedRecord?.country || '美国',
             marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
-            is_mixed_box: true
+            is_mixed_box: true,
+            original_mix_box_num: mixedItem.box_num // 传递原始混合箱单号
           };
         } else {
           // 整箱出库
@@ -1122,9 +1123,10 @@ const ShippingPage: React.FC = () => {
             <Table
               dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
               columns={[
-                { title: 'SKU', dataIndex: 'sku', key: 'sku' },
-                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
-                { title: '数量', dataIndex: 'quantity', key: 'quantity' },
+                { title: '原始混合箱号', dataIndex: 'box_num', key: 'box_num', width: 120, align: 'center' },
+                { title: '本地SKU', dataIndex: 'sku', key: 'sku', width: 120 },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
+                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
               ]}
               pagination={false}
               size="small"
