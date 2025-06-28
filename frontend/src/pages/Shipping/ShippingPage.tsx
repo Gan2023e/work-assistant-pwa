@@ -18,9 +18,7 @@ import {
   Steps,
   Alert,
   Upload,
-  Descriptions,
-  Layout,
-  Menu
+  Descriptions
 } from 'antd';
 import { 
   PlusOutlined,
@@ -33,11 +31,7 @@ import {
   UploadOutlined,
   DownloadOutlined,
   FileExcelOutlined,
-  BarChartOutlined,
-  AppstoreOutlined,
-  FileTextOutlined,
-  HistoryOutlined,
-  UnorderedListOutlined
+  BarChartOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -86,7 +80,6 @@ if (typeof document !== 'undefined') {
 
 const { Option } = Select;
 const { Title, Text } = Typography;
-const { Content } = Layout;
 
 
 
@@ -1246,9 +1239,1470 @@ const ShippingPage: React.FC = () => {
   const [orderModalNeedNum, setOrderModalNeedNum] = useState<string | null>(null);
 
   return (
-    <Content style={{ padding: 24, minHeight: 280 }}>
-      {/* 这里插入原有的发货操作主内容 */}
-    </Content>
+    <div style={{ padding: '24px' }}>
+      <Title level={2}>发货操作</Title>
+      
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setAddModalVisible(true)}
+          >
+            添加需求
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleStartShipping}
+            disabled={selectedRowKeys.length === 0}
+            loading={shippingLoading}
+          >
+            批量发货 ({selectedRowKeys.length})
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
+            onClick={handleCreateMappingClick}
+            disabled={selectedRows.filter(row => row.status === '库存未映射').length === 0}
+          >
+            创建SKU映射 ({selectedRows.filter(row => row.status === '库存未映射').length})
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<SettingOutlined />}
+            onClick={() => setTemplateModalVisible(true)}
+          >
+            管理亚马逊发货上传模板
+            {amazonTemplateConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+          </Button>
+        </Col>
+      </Row>
+
+      {/* 国家库存卡片栏 */}
+      {countryInventory.length > 0 && (
+        <Card 
+          title={
+            <span>
+              <GlobalOutlined style={{ marginRight: 8 }} />
+              按国家库存汇总
+              <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                (不含已发货记录，点击卡片筛选对应国家数据)
+              </Text>
+            </span>
+          } 
+          size="small" 
+          style={{ marginBottom: 16 }}
+        >
+                <Row gutter={[16, 16]}>
+        {/* 各国家库存卡片 */}
+            {countryInventory.map((country) => (
+              <Col key={country.country}>
+                <div
+                  style={{
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    border: `2px solid ${selectedCountry === country.country ? '#1677ff' : '#d9d9d9'}`,
+                    borderRadius: '6px',
+                    backgroundColor: selectedCountry === country.country ? '#f0f6ff' : '#fff',
+                    transition: 'all 0.3s',
+                    minWidth: '120px'
+                  }}
+                  onClick={() => {
+                    // 如果点击的是当前选中的国家，则取消选中；否则选中该国家
+                    const newSelectedCountry = selectedCountry === country.country ? '' : country.country;
+                    setSelectedCountry(newSelectedCountry);
+                    setFilterType(''); // 清除其他筛选
+                  }}
+                >
+                  <Statistic
+                    title={
+                      <div>
+                        <Text strong>{country.country}</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '10px' }}>
+                          整箱: {country.whole_box_count}箱 | 混合箱: {country.mixed_box_count}箱
+                        </Text>
+                      </div>
+                    }
+                    value={country.total_quantity}
+                    valueStyle={{ 
+                      color: selectedCountry === country.country ? '#1677ff' : '#666',
+                      fontSize: '18px'
+                    }}
+                    suffix="件"
+                  />
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
+
+          <Card 
+            title={
+              <span>
+                <BarChartOutlined style={{ marginRight: 8 }} />
+                发货需求统计 
+                {selectedCountry && (
+                  <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                    (当前国家: {selectedCountry})
+                  </Text>
+                )}
+                {!selectedCountry && (
+                  <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                    (全部国家)
+                  </Text>
+                )}
+              </span>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            {(() => {
+              // 根据选中的国家筛选数据
+              const filteredData = selectedCountry 
+                ? mergedData.filter(item => item.country === selectedCountry)
+                : mergedData;
+              
+              return (
+                <Row gutter={16}>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'needs' ? '' : 'needs';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="发货需求数"
+                        value={filteredData.filter(item => item.quantity > 0).length}
+                        prefix={<PlusOutlined />}
+                        valueStyle={{ color: filterType === 'needs' ? '#1677ff' : undefined }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存充足需求"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage === 0).length}
+                        valueStyle={{ color: filterType === 'sufficient' ? '#1677ff' : '#3f8600' }}
+                        prefix={<CheckOutlined />}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存不足需求"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#cf1322' }}
+                        prefix={<CloseOutlined />}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="缺货SKU"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="有库存无需求"
+                        value={filteredData.filter(item => item.quantity === 0 && item.total_available > 0).length}
+                        valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存未映射"
+                        value={filteredData.filter(item => item.status === '库存未映射').length}
+                        valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        setFilterType('');
+                      }}
+                    >
+                      <Statistic
+                        title="总记录数"
+                        value={filteredData.length}
+                        valueStyle={{ color: filterType === '' ? '#1677ff' : '#666' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    {/* 空列用于保持布局对称 */}
+                  </Col>
+                </Row>
+              );
+            })()}
+          </Card>
+
+          <Card size="small" style={{ marginBottom: 8 }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              行颜色说明：
+              <Tag color="blue" style={{ marginLeft: 8 }}>蓝色 - 有库存无需求</Tag>
+              <Tag color="red" style={{ marginLeft: 4 }}>红色 - 需求缺货</Tag>
+              <Tag color="orange" style={{ marginLeft: 4 }}>橙色 - 需求未映射</Tag>
+              <Tag color="green" style={{ marginLeft: 4 }}>绿色 - 需求库存充足</Tag>
+            </Text>
+          </Card>
+
+          <Table
+            columns={mergedColumns}
+            dataSource={mergedData.filter(item => {
+              // 首先按国家筛选（新增）
+              if (selectedCountry && selectedCountry !== '') {
+                if (item.country !== selectedCountry) {
+                  return false;
+                }
+                // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
+                if (item.status === '已发货') {
+                  return false;
+                }
+              }
+              
+
+              
+              // 最后按卡片筛选类型进行过滤
+              switch (filterType) {
+                case 'needs':
+                  return item.quantity > 0;
+                case 'sufficient':
+                  return item.quantity > 0 && item.shortage === 0;
+                case 'shortage':
+                  return item.quantity > 0 && item.shortage > 0;
+                case 'unmapped':
+                  return item.quantity > 0 && !item.local_sku;
+                case 'inventory-only':
+                  return item.quantity === 0 && item.total_available > 0;
+                case 'unmapped-inventory':
+                  return item.status === '库存未映射';
+                default:
+                  return true; // 显示所有数据
+              }
+            })}
+            rowKey="record_num"
+            loading={mergedLoading}
+            pagination={false}
+            scroll={{ x: 1500 }}
+            onChange={handleTableChange}
+            rowSelection={{
+              type: 'checkbox',
+              selectedRowKeys,
+              onChange: (newSelectedRowKeys, newSelectedRows) => {
+                // 检查选中的记录是否都是同一个国家
+                if (newSelectedRows.length > 1) {
+                  const countries = Array.from(new Set(newSelectedRows.map(row => row.country)));
+                  if (countries.length > 1) {
+                    message.error(`只能选择同一国家的记录进行批量发货！当前选择了：${countries.join('、')}`);
+                    return; // 不更新选择状态
+                  }
+                }
+                setSelectedRowKeys(newSelectedRowKeys);
+                setSelectedRows(newSelectedRows);
+              },
+              getCheckboxProps: (record) => ({
+                disabled: false, // 所有记录都可以选择
+                name: record.amz_sku,
+              }),
+            }}
+            rowClassName={(record) => {
+              // 有库存无需求的记录
+              if (record.quantity === 0 && record.total_available > 0) return 'inventory-only-row';
+              // 有需求但缺货的记录
+              if (record.quantity > 0 && record.shortage > 0) return 'shortage-row';
+              // 有需求但未映射SKU的记录
+              if (record.quantity > 0 && !record.local_sku) return 'unmapped-row';
+              // 有需求且库存充足的记录
+              if (record.quantity > 0 && record.shortage === 0 && record.local_sku) return 'sufficient-row';
+              return '';
+            }}
+          />
+
+
+      {/* 添加需求模态框 */}
+      <Modal
+        title="添加发货需求"
+        open={addModalVisible}
+        onCancel={() => {
+          setAddModalVisible(false);
+          addForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+      >
+        <Form
+          form={addForm}
+          layout="vertical"
+          onFinish={(values) => {
+            // 支持批量添加，表单数据转换为数组
+            const needsArray = [{
+              sku: values.sku,
+              quantity: values.quantity,
+              shipping_method: values.shipping_method,
+              marketplace: values.marketplace,
+              country: values.country,
+              remark: values.remark
+            }];
+            handleAdd(needsArray);
+          }}
+        >
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="SKU"
+                name="sku"
+                rules={[{ required: true, message: '请输入SKU' }]}
+              >
+                <Input placeholder="请输入SKU" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="数量"
+                name="quantity"
+                rules={[{ required: true, message: '请输入数量' }]}
+              >
+                <InputNumber
+                  min={1}
+                  placeholder="请输入数量"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="平台"
+                name="marketplace"
+                rules={[{ required: true, message: '请选择平台' }]}
+              >
+                <Select placeholder="请选择平台">
+                  {marketplaceOptions.map(option => (
+                    <Option key={option} value={option}>{option}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="国家"
+                name="country"
+                rules={[{ required: true, message: '请选择国家' }]}
+              >
+                <Select placeholder="请选择国家">
+                  {countryOptions.map(option => (
+                    <Option key={option} value={option}>{option}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="运输方式"
+                name="shipping_method"
+              >
+                <Select placeholder="请选择运输方式">
+                  {shippingMethodOptions.map(option => (
+                    <Option key={option} value={option}>{option}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Form.Item label="备注" name="remark">
+            <Input.TextArea rows={3} placeholder="请输入备注" />
+          </Form.Item>
+          
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                提交
+              </Button>
+              <Button onClick={() => {
+                setAddModalVisible(false);
+                addForm.resetFields();
+              }}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 发货确认模态框 */}
+      <Modal
+        title="批量发货确认"
+        open={shippingModalVisible}
+        onCancel={() => {
+          setShippingModalVisible(false);
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        }}
+        footer={null}
+        width={1000}
+        destroyOnClose
+      >
+        <Steps current={currentStep} style={{ marginBottom: 24 }}>
+          <Steps.Step title="混合箱确认" description="确认混合箱发货" />
+          <Steps.Step title="整箱确认" description="确认整箱发货" />
+          <Steps.Step title="完成" description="生成发货清单" />
+        </Steps>
+
+        {currentStep === 0 && uniqueMixedBoxNums.length > 0 && (
+          <div>
+            <Alert
+              message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}: ${uniqueMixedBoxNums[currentMixedBoxIndex]}`}
+              description="以下是该混合箱内的所有产品，请确认是否发出"
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            <Table
+              dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
+              columns={[
+                { title: '原始混合箱号', dataIndex: 'box_num', key: 'box_num', width: 120, align: 'center' },
+                { title: '本地SKU', dataIndex: 'sku', key: 'sku', width: 120 },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
+                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
+              ]}
+              pagination={false}
+              size="small"
+              rowKey={(record) => `${record.box_num}_${record.sku}`}
+            />
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button 
+                  onClick={() => {
+                    if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
+                      setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
+                    } else {
+                      setCurrentStep(1);
+                    }
+                  }}
+                  disabled={shippingLoading}
+                >
+                  跳过此箱
+                </Button>
+                <Button 
+                  type="primary" 
+                  onClick={() => {
+                    const currentBoxData = mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]);
+                    confirmMixedBox(currentBoxData);
+                  }}
+                  loading={shippingLoading}
+                  disabled={shippingLoading}
+                >
+                  确认发出
+                </Button>
+              </Space>
+            </div>
+          </div>
+        )}
+
+        {currentStep === 0 && uniqueMixedBoxNums.length === 0 && (
+          <div>
+            <Alert message="没有混合箱需要处理" type="info" style={{ marginBottom: 16 }} />
+            <Button type="primary" onClick={() => setCurrentStep(1)}>
+              继续处理整箱
+            </Button>
+          </div>
+        )}
+
+        {currentStep === 1 && (
+          <WholeBoxConfirmForm 
+            data={wholeBoxData} 
+            onConfirm={confirmWholeBox}
+            onSkip={() => setCurrentStep(2)}
+            loading={shippingLoading}
+          />
+        )}
+
+        {currentStep === 2 && (
+          <div>
+            <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
+            
+            {/* 亚马逊模板状态 */}
+            <Card 
+              title={
+                <Space>
+                  <FileExcelOutlined />
+                  <span>亚马逊发货文件</span>
+                </Space>
+              }
+              size="small" 
+              style={{ marginBottom: 16 }}
+            >
+              {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 ? (
+                <div>
+                  <Alert 
+                    message={`已配置 ${amazonTemplateConfig.countries.length} 个国家的模板`}
+                    description={`配置的国家：${amazonTemplateConfig.countries.join('、')}`}
+                    type="success" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  
+                  {/* 显示各国家模板配置 */}
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {amazonTemplateConfig.countries.map(country => {
+                      const template = amazonTemplateConfig.templates?.[country];
+                      if (!template) return null;
+                      
+                      return (
+                        <Card key={country} size="small" style={{ marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1 }}>
+                              <Descriptions size="small" column={2}>
+                                <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                                <Descriptions.Item label="模板文件">{template.originalName}</Descriptions.Item>
+                                <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                                <Descriptions.Item label="SKU列">{template.merchantSkuColumn}</Descriptions.Item>
+                                <Descriptions.Item label="数量列">{template.quantityColumn}</Descriptions.Item>
+                                <Descriptions.Item label="开始行">{template.startRow}</Descriptions.Item>
+                              </Descriptions>
+                            </div>
+                            <Button 
+                              size="small"
+                              danger
+                              onClick={() => {
+                                setDeleteTargetCountry(country);
+                                setDeleteTargetTemplate(template);
+                                setDeleteConfirmVisible(true);
+                              }}
+                            >
+                              删除
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  
+                  <div style={{ marginTop: 16 }}>
+                    <Space>
+                      <Button 
+                        type="primary" 
+                        icon={<DownloadOutlined />} 
+                        onClick={generateAmazonFile}
+                        loading={generateLoading}
+                      >
+                        生成亚马逊发货文件
+                      </Button>
+                      <Button 
+                        icon={<SettingOutlined />} 
+                        onClick={() => setTemplateModalVisible(true)}
+                      >
+                        管理模板
+                      </Button>
+                      <Button 
+                        icon={<FileExcelOutlined />} 
+                        onClick={() => setPackingListModalVisible(true)}
+                      >
+                        填写装箱表
+                        {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+                      </Button>
+                      {/* 新增物流商下拉 */}
+                      <Select
+                        style={{ width: 140 }}
+                        value={logisticsProvider}
+                        onChange={setLogisticsProvider}
+                        options={logisticsProviderOptions}
+                        placeholder="选择物流商"
+                      />
+                    </Space>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Alert 
+                    message="尚未配置亚马逊模板" 
+                    description="请先上传亚马逊批量上传产品表模板，以便自动生成发货文件。"
+                    type="warning" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Space>
+                    <Button 
+                      type="primary" 
+                      icon={<UploadOutlined />} 
+                      onClick={() => setTemplateModalVisible(true)}
+                    >
+                      上传亚马逊模板
+                    </Button>
+                    <Button 
+                      icon={<FileExcelOutlined />} 
+                      onClick={() => setPackingListModalVisible(true)}
+                    >
+                      填写装箱表
+                      {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+                    </Button>
+                  </Space>
+                </div>
+              )}
+            </Card>
+
+            <Table
+              dataSource={shippingData}
+              columns={[
+                { title: '箱号', dataIndex: 'box_num', key: 'box_num' },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+                { title: '发货数量', dataIndex: 'quantity', key: 'quantity' },
+              ]}
+              pagination={false}
+              size="small"
+              rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
+            />
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button icon={<ExportOutlined />} onClick={exportToExcel}>
+                  导出Excel
+                </Button>
+                {packingListConfig && (
+                  <Button 
+                    icon={<FileExcelOutlined />} 
+                    onClick={applyPackingListToShipping}
+                    type="dashed"
+                  >
+                    应用装箱表数据 ({packingListConfig.items?.length || 0}条)
+                  </Button>
+                )}
+                <Button type="primary" onClick={async () => {
+                  // 统一处理出库记录
+                  if (confirmedMixedBoxes.length > 0 || confirmedWholeBoxes.length > 0) {
+                    try {
+                      message.loading('正在记录出库信息...', 0);
+                      
+                      // 处理混合箱出库记录
+                      if (confirmedMixedBoxes.length > 0) {
+                        await recordOutbound(confirmedMixedBoxes, true, logisticsProvider);
+                      }
+                      
+                      // 处理整箱出库记录
+                      if (confirmedWholeBoxes.length > 0) {
+                        await recordOutbound(confirmedWholeBoxes, false, logisticsProvider);
+                      }
+                      
+                      message.destroy();
+                      message.success('出库记录创建成功！');
+                    } catch (error) {
+                      message.destroy();
+                      message.error('出库记录失败，请检查后重试');
+                      console.error('出库记录失败:', error);
+                      return; // 如果出库记录失败，不继续执行
+                    }
+                  }
+                  
+                  // 关闭对话框并清理状态
+                  setShippingModalVisible(false);
+                  setSelectedRowKeys([]);
+                  setSelectedRows([]);
+                  setConfirmedMixedBoxes([]);
+                  setConfirmedWholeBoxes([]);
+                  
+                  message.success('发货流程完成！');
+                  
+                  // 刷新数据
+                  message.loading('正在刷新发货需求数据...', 0);
+                  try {
+                    await Promise.all([
+                      fetchMergedData(),
+                      fetchCountryInventory()
+                    ]);
+                    message.destroy();
+                    message.success('数据已刷新！');
+                  } catch (error) {
+                    message.destroy();
+                    message.error('数据刷新失败，请手动刷新页面');
+                  }
+                }}>
+                  完成
+                </Button>
+              </Space>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* SKU映射对话框 */}
+      <Modal
+        title="创建SKU映射"
+        open={mappingModalVisible}
+        onCancel={() => {
+          setMappingModalVisible(false);
+          mappingForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        <Alert
+          message="创建SKU映射"
+          description={`您选择了 ${unmappedInventory.length} 个未映射的库存记录，请确认或修改Amazon SKU映射关系。系统已根据国家自动生成Amazon SKU：美国(NA)、英国(SF)、澳大利亚(AU)、阿联酋(AE)、加拿大(CH)。`}
+          type="info"
+          style={{ marginBottom: 16 }}
+        />
+        
+        <Form
+          form={mappingForm}
+          layout="vertical"
+          onFinish={handleCreateMapping}
+        >
+          <Table
+            dataSource={unmappedInventory}
+            columns={[
+              {
+                title: '本地SKU',
+                dataIndex: 'local_sku',
+                key: 'local_sku',
+                width: 120,
+              },
+              {
+                title: '国家',
+                dataIndex: 'country',
+                key: 'country',
+                width: 80,
+                align: 'center',
+              },
+              {
+                title: 'Site',
+                key: 'site',
+                width: 180,
+                render: (_, record) => (
+                  <Text>{record.site || getAmazonSite(record.country)}</Text>
+                ),
+              },
+              {
+                title: 'Amazon SKU',
+                key: 'amz_sku',
+                render: (_, record) => {
+                  const prefix = getAmazonSkuPrefix(record.country);
+                  const defaultValue = prefix ? `${prefix}${record.local_sku}` : '';
+                  return (
+                    <Form.Item
+                      name={`amz_sku_${record.local_sku}_${record.country}`}
+                      style={{ margin: 0 }}
+                      initialValue={defaultValue}
+                    >
+                      <Input
+                        placeholder={
+                          prefix 
+                            ? `${prefix}${record.local_sku}` 
+                            : '请输入Amazon SKU'
+                        }
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  );
+                },
+              },
+            ]}
+            pagination={false}
+            size="small"
+            rowKey={(record) => `${record.local_sku}_${record.country}`}
+            scroll={{ y: 400 }}
+          />
+          
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setMappingModalVisible(false);
+                mappingForm.resetFields();
+              }}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit">
+                创建映射
+              </Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
+
+      {/* 亚马逊模板管理对话框 */}
+      <Modal
+        title="管理亚马逊发货上传模板"
+        open={templateModalVisible}
+        onCancel={() => {
+          setTemplateModalVisible(false);
+          setSelectedTemplateCountry('');
+          templateForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 && (
+          <div>
+            {/* 已配置的模板列表 */}
+            <Alert
+              message={`已配置 ${amazonTemplateConfig.countries.length} 个国家的亚马逊模板`}
+              description={`配置的国家：${amazonTemplateConfig.countries.join('、')}`}
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            {/* 模板列表 */}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: 16 }}>
+              {amazonTemplateConfig.countries.map(country => {
+                const template = amazonTemplateConfig.templates?.[country];
+                if (!template) return null;
+                
+                return (
+                  <Card key={country} size="small" style={{ marginBottom: 8 }}>
+                    <Row>
+                      <Col span={20}>
+                        <Descriptions size="small" column={2}>
+                          <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                          <Descriptions.Item label="文件名">{template.originalName}</Descriptions.Item>
+                          <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                          <Descriptions.Item label="SKU列">{template.merchantSkuColumn}</Descriptions.Item>
+                          <Descriptions.Item label="数量列">{template.quantityColumn}</Descriptions.Item>
+                          <Descriptions.Item label="开始行">{template.startRow}</Descriptions.Item>
+                          <Descriptions.Item label="上传时间" span={2}>
+                            {new Date(template.uploadTime).toLocaleString('zh-CN')}
+                          </Descriptions.Item>
+                        </Descriptions>
+                      </Col>
+                      <Col span={4} style={{ textAlign: 'right' }}>
+                        <Space direction="vertical" size="small">
+                          <Button 
+                            size="small"
+                            onClick={() => setSelectedTemplateCountry(country)}
+                          >
+                            更新
+                          </Button>
+                          <Button 
+                            size="small"
+                            danger
+                            onClick={() => {
+                                setDeleteTargetCountry(country);
+                                setDeleteTargetTemplate(template);
+                                setDeleteConfirmVisible(true);
+                              }}
+                          >
+                            删除
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+                );
+              })}
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <Button 
+                type="primary" 
+                icon={<UploadOutlined />} 
+                onClick={() => setSelectedTemplateCountry('new')}
+              >
+                添加新国家模板
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 上传/更新模板表单 */}
+        {(selectedTemplateCountry === 'new' || (selectedTemplateCountry && selectedTemplateCountry !== '')) && (
+          <div>
+            <Alert
+              message={selectedTemplateCountry === 'new' ? "添加新国家模板" : `更新 ${amazonTemplateConfig.templates?.[selectedTemplateCountry]?.countryName} 模板`}
+              description={
+                <div>
+                  <p>请上传亚马逊的Excel模板文件，并配置以下信息：</p>
+                  <ul>
+                    <li><strong>适用国家：</strong>该模板适用的亚马逊站点国家</li>
+                    <li><strong>Sheet页名称：</strong>需要填写数据的工作表名称（如：Create workflow – template）</li>
+                    <li><strong>Merchant SKU列：</strong>Merchant SKU所在的列（如：A）</li>
+                    <li><strong>Quantity列：</strong>Quantity所在的列（如：B）</li>
+                    <li><strong>开始行：</strong>开始填写数据的行号（如：9）</li>
+                  </ul>
+                </div>
+              }
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+
+            <Form
+              form={templateForm}
+              layout="vertical"
+              onFinish={handleUploadTemplate}
+              initialValues={selectedTemplateCountry !== 'new' && amazonTemplateConfig.templates?.[selectedTemplateCountry] ? {
+                country: selectedTemplateCountry,
+                sheetName: amazonTemplateConfig.templates[selectedTemplateCountry].sheetName,
+                merchantSkuColumn: amazonTemplateConfig.templates[selectedTemplateCountry].merchantSkuColumn,
+                quantityColumn: amazonTemplateConfig.templates[selectedTemplateCountry].quantityColumn,
+                startRow: amazonTemplateConfig.templates[selectedTemplateCountry].startRow,
+              } : {
+                // 新建模板时的默认值
+                sheetName: 'Create workflow - template',
+                merchantSkuColumn: 'A',
+                quantityColumn: 'B',
+                startRow: 9,
+              }}
+            >
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="country"
+                    label="适用国家"
+                    rules={[{ required: true, message: '请选择适用国家' }]}
+                  >
+                    <Select 
+                      placeholder="选择亚马逊站点国家"
+                      disabled={selectedTemplateCountry !== 'new'}
+                      showSearch
+                      optionLabelProp="label"
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase()) ||
+                        String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    >
+                      {countryTemplateOptions.map(option => (
+                        <Option 
+                          key={option.value} 
+                          value={option.value} 
+                          label={option.label}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{option.label}</span>
+                            <span style={{ fontSize: '12px', color: '#999', marginLeft: '8px' }}>{option.site}</span>
+                          </div>
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="template"
+                    label="Excel模板文件"
+                    rules={[{ required: true, message: '请选择模板文件' }]}
+                    getValueFromEvent={(e) => {
+                      if (Array.isArray(e)) {
+                        return e;
+                      }
+                      return e && e.fileList;
+                    }}
+                  >
+                    <Upload
+                      accept=".xlsx,.xls"
+                      beforeUpload={() => false}
+                      maxCount={1}
+                    >
+                      <Button icon={<UploadOutlined />}>选择Excel文件</Button>
+                    </Upload>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="sheetName"
+                    label="Sheet页名称"
+                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                  >
+                    <Input placeholder="例如：Create workflow – template" />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item
+                    name="merchantSkuColumn"
+                    label="Merchant SKU列"
+                    rules={[{ required: true, message: '请输入列标识' }]}
+                  >
+                    <Input placeholder="例如：A" />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item
+                    name="quantityColumn"
+                    label="Quantity列"
+                    rules={[{ required: true, message: '请输入列标识' }]}
+                  >
+                    <Input placeholder="例如：B" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={6}>
+                  <Form.Item
+                    name="startRow"
+                    label="开始填写行号"
+                    rules={[{ required: true, message: '请输入开始行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="例如：9" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div style={{ textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={() => {
+                    setSelectedTemplateCountry('');
+                    templateForm.resetFields();
+                  }}>
+                    取消
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={uploadLoading}>
+                    {selectedTemplateCountry === 'new' ? '上传并配置' : '更新配置'}
+                  </Button>
+                </Space>
+              </div>
+            </Form>
+          </div>
+        )}
+
+        {/* 没有配置任何模板时显示 */}
+        {!amazonTemplateConfig.hasTemplate && selectedTemplateCountry === '' && (
+          <div>
+            <Alert
+              message="尚未配置任何亚马逊模板"
+              description="请添加至少一个国家的亚马逊批量上传产品表模板，以便在发货时自动生成对应文件。"
+              type="warning"
+              style={{ marginBottom: 16 }}
+            />
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={() => setSelectedTemplateCountry('new')}
+            >
+              添加第一个模板
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* 装箱表管理对话框 */}
+      <Modal
+        title="填写装箱表"
+        open={packingListModalVisible}
+        onCancel={() => {
+          setPackingListModalVisible(false);
+          packingListForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {packingListConfig ? (
+          <div>
+            <Alert
+              message="装箱表已上传"
+              description={`文件名：${packingListConfig.originalName}，共 ${packingListConfig.items?.length || 0} 条记录`}
+              type="success"
+              style={{ marginBottom: 16 }}
+              action={
+                <Button 
+                  size="small" 
+                  onClick={() => setPackingListConfig(null)}
+                >
+                  重新上传
+                </Button>
+              }
+            />
+            
+            <div>
+              <Text strong>装箱明细:</Text>
+              <Table
+                dataSource={packingListConfig.items}
+                columns={[
+                  { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
+                  { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 150 },
+                  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
+                ]}
+                pagination={false}
+                size="small"
+                rowKey={(record, index) => `${record.box_num}_${record.sku}_${index}`}
+                scroll={{ y: 200 }}
+                style={{ marginBottom: 16 }}
+              />
+              
+              {packingListConfig.boxes && packingListConfig.boxes.length > 0 && (
+                <div>
+                  <Text strong>箱子信息:</Text>
+                  <Table
+                    dataSource={packingListConfig.boxes}
+                    columns={[
+                      { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
+                      { title: '重量(kg)', dataIndex: 'weight', key: 'weight', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '宽度(cm)', dataIndex: 'width', key: 'width', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '长度(cm)', dataIndex: 'length', key: 'length', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '高度(cm)', dataIndex: 'height', key: 'height', width: 100, align: 'center', render: (val) => val || '-' },
+                    ]}
+                    pagination={false}
+                    size="small"
+                    rowKey="box_num"
+                    scroll={{ y: 150 }}
+                  />
+                </div>
+              )}
+            </div>
+            
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button onClick={() => setPackingListModalVisible(false)}>
+                  关闭
+                </Button>
+                <Button 
+                  type="primary" 
+                  onClick={() => {
+                    applyPackingListToShipping();
+                    setPackingListModalVisible(false);
+                  }}
+                >
+                  应用到发货清单
+                </Button>
+              </Space>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <Alert
+              message="上传装箱表"
+              description="请上传亚马逊后台下载的装箱表Excel文件，系统将根据箱号列和SKU自动解析每箱的装箱SKU及数量"
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            <Form
+              form={packingListForm}
+              layout="vertical"
+              onFinish={handleUploadPackingList}
+              initialValues={{
+                sheetName: 'Sheet1',
+                headerRow: 5,
+                skuStartRow: 6,
+                boxStartColumn: 'L',
+                boxCount: 5
+              }}
+            >
+              <Form.Item
+                name="packingList"
+                label="装箱表文件"
+                rules={[{ required: true, message: '请选择装箱表文件' }]}
+                getValueFromEvent={(e) => {
+                  if (Array.isArray(e)) {
+                    return e;
+                  }
+                  return e && e.fileList;
+                }}
+              >
+                <Upload
+                  beforeUpload={() => false}
+                  accept=".xlsx,.xls"
+                  maxCount={1}
+                >
+                  <Button icon={<UploadOutlined />}>选择Excel文件</Button>
+                </Upload>
+              </Form.Item>
+
+              <Alert
+                message="亚马逊装箱表格式说明"
+                description="A列为SKU列，第5行为标题行(Box 1 quantity等)，第6行开始为SKU数据。系统将自动解析每个SKU在各个箱子中的数量。"
+                type="info"
+                style={{ marginBottom: 16 }}
+              />
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="sheetName"
+                    label="Sheet页名称"
+                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                  >
+                    <Input placeholder="Sheet1" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="headerRow"
+                    label="标题行号(Box 1 quantity所在行)"
+                    rules={[{ required: true, message: '请输入标题行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="5" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="skuStartRow"
+                    label="SKU开始行号"
+                    rules={[{ required: true, message: '请输入SKU开始行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="6" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="boxStartColumn"
+                    label="第一个箱子列(Box 1 quantity)"
+                    rules={[{ required: true, message: '请输入第一个箱子列' }]}
+                  >
+                    <Input placeholder="L" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="boxCount"
+                    label="箱子总数"
+                    rules={[{ required: true, message: '请输入箱子总数' }]}
+                  >
+                    <InputNumber min={1} max={20} placeholder="5" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={() => setPackingListModalVisible(false)}>
+                    取消
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={packingListLoading}>
+                    上传并解析
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </div>
+        )}
+      </Modal>
+
+      {/* 删除确认对话框 */}
+      <Modal
+        title="确认删除"
+        open={deleteConfirmVisible}
+        onCancel={() => {
+          setDeleteConfirmVisible(false);
+          setDeleteTargetCountry('');
+          setDeleteTargetTemplate(null);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setDeleteConfirmVisible(false);
+            setDeleteTargetCountry('');
+            setDeleteTargetTemplate(null);
+          }}>
+            取消
+          </Button>,
+          <Button 
+            key="confirm" 
+            type="primary" 
+            danger 
+            onClick={async () => {
+              setDeleteConfirmVisible(false);
+              await deleteTemplateConfig(deleteTargetCountry);
+              setDeleteTargetCountry('');
+              setDeleteTargetTemplate(null);
+            }}
+          >
+            确定删除
+          </Button>
+        ]}
+        centered
+        width={480}
+      >
+        <div>
+          <p>确定要删除 <strong>{deleteTargetTemplate?.countryName}</strong> 的模板配置吗？</p>
+          <p style={{ color: '#ff4d4f', fontSize: '14px' }}>
+            ⚠️ 此操作不可恢复，删除后需要重新上传模板。
+          </p>
+          {deleteTargetTemplate && (
+            <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+              <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                <strong>模板信息：</strong><br/>
+                文件名：{deleteTargetTemplate.originalName}<br/>
+                Sheet页：{deleteTargetTemplate.sheetName}<br/>
+                上传时间：{new Date(deleteTargetTemplate.uploadTime).toLocaleString('zh-CN')}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* 需求单管理弹窗 */}
+      <Modal
+        title={`需求单管理 - ${orderModalNeedNum || ''}`}
+        open={orderModalVisible}
+        onCancel={() => setOrderModalVisible(false)}
+        footer={null}
+        width={1100}
+        destroyOnClose
+      >
+        {orderModalNeedNum && (
+          <OrderManagementPage needNum={orderModalNeedNum} />
+        )}
+      </Modal>
+
+    </div>
+  );
+};
+
+// 整箱确认表单组件
+const WholeBoxConfirmForm: React.FC<{
+  data: WholeBoxConfirmData[];
+  onConfirm: (data: WholeBoxConfirmData[]) => void;
+  onSkip: () => void;
+  loading?: boolean;
+}> = ({ data, onConfirm, onSkip, loading = false }) => {
+  const [form] = Form.useForm();
+  const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
+    data.map(item => ({
+      ...item,
+      confirm_boxes: item.total_boxes,
+      confirm_quantity: item.total_quantity
+    }))
+  );
+
+  useEffect(() => {
+    form.setFieldsValue(
+      confirmData.reduce((acc, item, index) => {
+        acc[`confirm_boxes_${index}`] = item.confirm_boxes;
+        acc[`confirm_quantity_${index}`] = item.confirm_quantity;
+        return acc;
+      }, {} as any)
+    );
+  }, [confirmData, form]);
+
+  if (data.length === 0) {
+    return (
+      <div>
+        <Alert message="没有整箱需要处理" type="info" style={{ marginBottom: 16 }} />
+        <Button type="primary" onClick={onSkip}>
+          继续
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Alert
+        message="整箱发货确认"
+        description="请确认各SKU的发货箱数和数量"
+        type="info"
+        style={{ marginBottom: 16 }}
+      />
+      <Form form={form} layout="vertical">
+        <Table
+          dataSource={confirmData}
+          columns={[
+            { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+            { title: '总数量', dataIndex: 'total_quantity', key: 'total_quantity' },
+            { title: '总箱数', dataIndex: 'total_boxes', key: 'total_boxes' },
+            {
+              title: '确认箱数',
+              key: 'confirm_boxes',
+              render: (_, record, index) => (
+                <InputNumber
+                  min={0}
+                  max={record.total_boxes}
+                  value={record.confirm_boxes}
+                  onChange={(value) => {
+                    const newData = [...confirmData];
+                    newData[index].confirm_boxes = value || 0;
+                    newData[index].confirm_quantity = Math.min(
+                      value || 0 * Math.floor(record.total_quantity / record.total_boxes),
+                      record.total_quantity
+                    );
+                    setConfirmData(newData);
+                  }}
+                />
+              )
+            },
+            {
+              title: '确认数量',
+              key: 'confirm_quantity',
+              render: (_, record, index) => (
+                <InputNumber
+                  min={0}
+                  max={record.total_quantity}
+                  value={record.confirm_quantity}
+                  onChange={(value) => {
+                    const newData = [...confirmData];
+                    newData[index].confirm_quantity = value || 0;
+                    setConfirmData(newData);
+                  }}
+                />
+              )
+            },
+          ]}
+          pagination={false}
+          size="small"
+          rowKey="amz_sku"
+        />
+      </Form>
+      <div style={{ marginTop: 16, textAlign: 'right' }}>
+        <Space>
+          <Button onClick={onSkip} disabled={loading}>跳过整箱</Button>
+          <Button 
+            type="primary" 
+            onClick={() => onConfirm(confirmData)} 
+            loading={loading}
+            disabled={loading}
+          >
+            确认发货
+          </Button>
+        </Space>
+      </div>
+    </div>
   );
 };
 
