@@ -138,7 +138,7 @@ const OrderManagementPage: React.FC = () => {
           current: page,
           total: result.data.total
         }));
-        console.log('📊 需求单列表获取成功:', result.data);
+  
       } else {
         message.error(result.message || '获取需求单列表失败');
       }
@@ -164,7 +164,7 @@ const OrderManagementPage: React.FC = () => {
       
       if (result.code === 0) {
         setOrderDetails(result.data);
-        console.log('📊 需求单详情获取成功:', result.data);
+  
       } else {
         message.error(result.message || '获取需求单详情失败');
       }

@@ -327,7 +327,7 @@ const ShipmentHistoryPage: React.FC = () => {
               size="small" 
               icon={<EyeOutlined />}
               onClick={() => {
-                // TODO: 实现查看详情功能
+  
                 message.info('查看详情功能待实现');
               }}
             />

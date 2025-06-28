@@ -45,4 +45,7 @@ Thumbs.db
 
 # 临时文件
 *.tmp
-*.temp 
+*.temp
+
+# 用户上传文件
+backend/uploads/ 

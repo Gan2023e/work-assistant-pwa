@@ -15,7 +15,6 @@ import {
   Col,
   Statistic,
   Typography,
-  Divider,
   Steps,
   Alert,
   Upload,
@@ -31,12 +30,10 @@ import {
   SettingOutlined,
   UploadOutlined,
   DownloadOutlined,
-  DeleteOutlined,
   FileExcelOutlined,
   BarChartOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import type { UploadProps } from 'antd';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -144,13 +141,6 @@ interface UnmappedInventoryItem {
   site?: string; // Amazon站点URL
 }
 
-interface SkuMappingForm {
-  local_sku: string;
-  amz_sku: string;
-  country: string;
-  site?: string;
-}
-
 interface CountryInventory {
   country: string;
   whole_box_quantity: number;
@@ -212,7 +202,7 @@ const ShippingPage: React.FC = () => {
   const [currentMixedBoxIndex, setCurrentMixedBoxIndex] = useState(0);
   const [wholeBoxData, setWholeBoxData] = useState<WholeBoxConfirmData[]>([]);
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
-  const [boxCounter, setBoxCounter] = useState(1);
+
   const [nextBoxNumber, setNextBoxNumber] = useState(1);
   // 存储确认的发货数据，用于最终的出库记录
   const [confirmedMixedBoxes, setConfirmedMixedBoxes] = useState<MixedBoxItem[]>([]);
@@ -235,6 +225,11 @@ const ShippingPage: React.FC = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [selectedTemplateCountry, setSelectedTemplateCountry] = useState<string>('');
+  
+  // 删除确认对话框状态
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleteTargetCountry, setDeleteTargetCountry] = useState<string>('');
+  const [deleteTargetTemplate, setDeleteTargetTemplate] = useState<any>(null);
 
   // 国家选项配置
   const countryTemplateOptions = [
@@ -348,7 +343,7 @@ const ShippingPage: React.FC = () => {
       return;
     }
 
-    console.log('🔍 生成亚马逊文件的数据:', dataToGenerate);
+    
 
     setGenerateLoading(true);
     try {
@@ -375,7 +370,7 @@ const ShippingPage: React.FC = () => {
           setTimeout(async () => {
             try {
               const downloadUrl = `${API_BASE_URL}${file.downloadUrl}`;
-              console.log(`🔗 开始下载文件: ${file.filename}, URL: ${downloadUrl}`);
+    
               
               // 先检查文件是否存在
               const checkResponse = await fetch(downloadUrl, { method: 'HEAD' });
@@ -394,7 +389,7 @@ const ShippingPage: React.FC = () => {
               link.click();
               document.body.removeChild(link);
               
-              console.log(`✅ 文件下载触发成功: ${file.filename}`);
+
             } catch (error) {
               console.error(`❌ 文件下载失败: ${file.filename}`, error);
               message.error(`文件 ${file.filename} 下载失败`);
@@ -414,14 +409,10 @@ const ShippingPage: React.FC = () => {
 
   // 删除模板配置
   const deleteTemplateConfig = async (country?: string) => {
-    console.log('🗑️ 开始删除模板配置，国家:', country);
-    
     try {
       const url = country 
         ? `${API_BASE_URL}/api/shipping/amazon-template/config?country=${encodeURIComponent(country)}`
         : `${API_BASE_URL}/api/shipping/amazon-template/config`;
-      
-      console.log('🔗 删除请求URL:', url);
         
       const response = await fetch(url, {
         method: 'DELETE',
@@ -430,26 +421,20 @@ const ShippingPage: React.FC = () => {
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
         },
       });
-
-      console.log('📡 删除响应状态:', response.status);
       
       const result = await response.json();
-      console.log('📋 删除响应结果:', result);
       
       if (result.success) {
         message.success(result.message || '模板配置已删除');
         
         // 重新获取模板配置
-        console.log('🔄 重新获取模板配置...');
         await fetchAmazonTemplateConfig();
-        console.log('✅ 模板配置已刷新');
       } else {
-        console.error('❌ 删除失败:', result.message);
         message.error(result.message || '删除失败');
       }
     } catch (error) {
-      console.error('❌ 删除模板配置失败:', error);
-      message.error('删除失败: ' + (error as Error).message);
+      console.error('删除模板配置失败:', error);
+      message.error('删除失败');
     }
   };
 
@@ -467,7 +452,7 @@ const ShippingPage: React.FC = () => {
         limit: '1000' // 设置较大的限制来获取所有数据
       });
       
-      console.log('🔍 合并数据API调用:', `${API_BASE_URL}/api/shipping/merged-data?${queryParams}`);
+
       
       const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
         method: 'GET',
@@ -482,7 +467,7 @@ const ShippingPage: React.FC = () => {
       }
       
       const result = await response.json();
-      console.log('📊 合并数据API响应:', result);
+      
       
       if (result.code === 0) {
         setMergedData(result.data.list || []);
@@ -749,7 +734,7 @@ const ShippingPage: React.FC = () => {
         }
       });
 
-      console.log('🔍 发送出库记录数据:', shipments);
+
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
         method: 'POST',
@@ -768,7 +753,7 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       if (result.code === 0) {
-        console.log('✅ 出库记录成功:', result.data);
+
         if (result.data.shipment_number) {
           message.success(`出库记录创建成功，发货单号: ${result.data.shipment_number}`);
         }
@@ -825,7 +810,6 @@ const ShippingPage: React.FC = () => {
         setCurrentMixedBoxIndex(0);
         setCurrentStep(0);
         setShippingData([]);
-        setBoxCounter(1);
         setNextBoxNumber(1);
         setConfirmedMixedBoxes([]);
         setConfirmedWholeBoxes([]);
@@ -1681,11 +1665,9 @@ const ShippingPage: React.FC = () => {
                               size="small"
                               danger
                               onClick={() => {
-                                Modal.confirm({
-                                  title: '确认删除',
-                                  content: `确定要删除 ${template.countryName} 的模板配置吗？`,
-                                  onOk: () => deleteTemplateConfig(country),
-                                });
+                                setDeleteTargetCountry(country);
+                                setDeleteTargetTemplate(template);
+                                setDeleteConfirmVisible(true);
                               }}
                             >
                               删除
@@ -1959,12 +1941,10 @@ const ShippingPage: React.FC = () => {
                             size="small"
                             danger
                             onClick={() => {
-                              Modal.confirm({
-                                title: '确认删除',
-                                content: `确定要删除 ${template.countryName} 的模板配置吗？此操作不可恢复。`,
-                                onOk: () => deleteTemplateConfig(country),
-                              });
-                            }}
+                                setDeleteTargetCountry(country);
+                                setDeleteTargetTemplate(template);
+                                setDeleteConfirmVisible(true);
+                              }}
                           >
                             删除
                           </Button>
@@ -1976,7 +1956,7 @@ const ShippingPage: React.FC = () => {
               })}
             </div>
             
-            <Space style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 16 }}>
               <Button 
                 type="primary" 
                 icon={<UploadOutlined />} 
@@ -1984,20 +1964,7 @@ const ShippingPage: React.FC = () => {
               >
                 添加新国家模板
               </Button>
-              <Button 
-                danger 
-                icon={<DeleteOutlined />} 
-                onClick={() => {
-                  Modal.confirm({
-                    title: '确认删除',
-                    content: '确定要删除所有模板配置吗？此操作不可恢复。',
-                    onOk: () => deleteTemplateConfig(),
-                  });
-                }}
-              >
-                删除所有模板
-              </Button>
-            </Space>
+            </div>
           </div>
         )}
 
@@ -2032,7 +1999,13 @@ const ShippingPage: React.FC = () => {
                 merchantSkuColumn: amazonTemplateConfig.templates[selectedTemplateCountry].merchantSkuColumn,
                 quantityColumn: amazonTemplateConfig.templates[selectedTemplateCountry].quantityColumn,
                 startRow: amazonTemplateConfig.templates[selectedTemplateCountry].startRow,
-              } : undefined}
+              } : {
+                // 新建模板时的默认值
+                sheetName: 'Create workflow - template',
+                merchantSkuColumn: 'A',
+                quantityColumn: 'B',
+                startRow: 9,
+              }}
             >
               <Row gutter={16}>
                 <Col span={12}>
@@ -2160,6 +2133,58 @@ const ShippingPage: React.FC = () => {
             </Button>
           </div>
         )}
+      </Modal>
+
+      {/* 删除确认对话框 */}
+      <Modal
+        title="确认删除"
+        open={deleteConfirmVisible}
+        onCancel={() => {
+          setDeleteConfirmVisible(false);
+          setDeleteTargetCountry('');
+          setDeleteTargetTemplate(null);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setDeleteConfirmVisible(false);
+            setDeleteTargetCountry('');
+            setDeleteTargetTemplate(null);
+          }}>
+            取消
+          </Button>,
+          <Button 
+            key="confirm" 
+            type="primary" 
+            danger 
+            onClick={async () => {
+              setDeleteConfirmVisible(false);
+              await deleteTemplateConfig(deleteTargetCountry);
+              setDeleteTargetCountry('');
+              setDeleteTargetTemplate(null);
+            }}
+          >
+            确定删除
+          </Button>
+        ]}
+        centered
+        width={480}
+      >
+        <div>
+          <p>确定要删除 <strong>{deleteTargetTemplate?.countryName}</strong> 的模板配置吗？</p>
+          <p style={{ color: '#ff4d4f', fontSize: '14px' }}>
+            ⚠️ 此操作不可恢复，删除后需要重新上传模板。
+          </p>
+          {deleteTargetTemplate && (
+            <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+              <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                <strong>模板信息：</strong><br/>
+                文件名：{deleteTargetTemplate.originalName}<br/>
+                Sheet页：{deleteTargetTemplate.sheetName}<br/>
+                上传时间：{new Date(deleteTargetTemplate.uploadTime).toLocaleString('zh-CN')}
+              </p>
+            </div>
+          )}
+        </div>
       </Modal>
 
     </div>

@@ -1,15 +1,6 @@
 
 export const API_BASE_URL = 'https://work-assistant-pwa-production.up.railway.app';
 
-// 调试信息
-console.log('🔧 API配置信息:', {
-  API_BASE_URL: API_BASE_URL,
-  配置方式: 'Railway生产环境',
-  NODE_ENV: process.env.NODE_ENV,
-  hostname: window.location.hostname,
-  timestamp: new Date().toLocaleString('zh-CN')
-});
-
 // API端点
 export const API_ENDPOINTS = {
   // 认证
@@ -54,8 +45,7 @@ export const API_ENDPOINTS = {
     updateNeed: (id: number) => `/api/shipping/needs/${id}`,
     deleteNeed: (id: number) => `/api/shipping/needs/${id}`,
     batchUpdateStatus: '/api/shipping/needs/batch-status',
-    health: '/api/shipping/health',
-    createTestData: '/api/shipping/create-test-data'
+    health: '/api/shipping/health'
   },
   // 健康检查
   health: '/health',
