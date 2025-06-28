@@ -414,28 +414,42 @@ const ShippingPage: React.FC = () => {
 
   // 删除模板配置
   const deleteTemplateConfig = async (country?: string) => {
+    console.log('🗑️ 开始删除模板配置，国家:', country);
+    
     try {
       const url = country 
         ? `${API_BASE_URL}/api/shipping/amazon-template/config?country=${encodeURIComponent(country)}`
         : `${API_BASE_URL}/api/shipping/amazon-template/config`;
+      
+      console.log('🔗 删除请求URL:', url);
         
       const response = await fetch(url, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
       });
 
+      console.log('📡 删除响应状态:', response.status);
+      
       const result = await response.json();
+      console.log('📋 删除响应结果:', result);
       
       if (result.success) {
         message.success(result.message || '模板配置已删除');
         
         // 重新获取模板配置
+        console.log('🔄 重新获取模板配置...');
         await fetchAmazonTemplateConfig();
+        console.log('✅ 模板配置已刷新');
       } else {
+        console.error('❌ 删除失败:', result.message);
         message.error(result.message || '删除失败');
       }
     } catch (error) {
-      console.error('删除模板配置失败:', error);
-      message.error('删除失败');
+      console.error('❌ 删除模板配置失败:', error);
+      message.error('删除失败: ' + (error as Error).message);
     }
   };
 
