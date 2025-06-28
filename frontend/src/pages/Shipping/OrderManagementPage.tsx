@@ -32,6 +32,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
@@ -101,6 +102,7 @@ interface OrderDetails {
 
 const OrderManagementPage: React.FC = () => {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<string>('');
@@ -214,6 +216,21 @@ const OrderManagementPage: React.FC = () => {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  // 处理URL参数，自动显示指定的需求单详情
+  useEffect(() => {
+    const needNum = searchParams.get('needNum');
+    if (needNum && needNum !== selectedOrder) {
+      console.log('📍 从URL参数获取需求单号:', needNum);
+      setSelectedOrder(needNum);
+      fetchOrderDetails(needNum);
+      
+      // 清理URL参数，避免重复触发
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('needNum');
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [searchParams, selectedOrder, setSearchParams]);
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {

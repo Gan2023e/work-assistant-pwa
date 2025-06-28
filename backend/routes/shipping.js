@@ -2179,4 +2179,172 @@ router.delete('/amazon-template/config', async (req, res) => {
   }
 });
 
+// 获取发货历史列表
+router.get('/shipment-history', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取发货历史请求:', JSON.stringify(req.query, null, 2));
+  
+  try {
+    const { page = 1, limit = 10, status, operator, date_from, date_to } = req.query;
+    
+    const whereCondition = {};
+    
+    // 添加状态筛选
+    if (status) {
+      whereCondition.status = status;
+    }
+    
+    // 添加操作员筛选
+    if (operator) {
+      whereCondition.operator = { [Op.like]: `%${operator}%` };
+    }
+    
+    // 添加日期范围筛选
+    if (date_from || date_to) {
+      whereCondition.created_at = {};
+      if (date_from) {
+        whereCondition.created_at[Op.gte] = new Date(date_from);
+      }
+      if (date_to) {
+        whereCondition.created_at[Op.lte] = new Date(date_to + ' 23:59:59');
+      }
+    }
+    
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    console.log('\x1b[35m%s\x1b[0m', '🔍 查询条件:', JSON.stringify({ whereCondition, offset, limit: parseInt(limit) }, null, 2));
+    
+    // 查询发货记录
+    const { count, rows } = await ShipmentRecord.findAndCountAll({
+      where: whereCondition,
+      include: [
+        {
+          model: OrderShipmentRelation,
+          as: 'orderRelations',
+          attributes: ['need_num', 'total_requested', 'total_shipped', 'completion_status'],
+          required: false
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '📊 查询结果:', { count, rowsLength: rows.length });
+    
+    // 处理数据，添加完成状态统计
+    const processedRows = rows.map(row => {
+      const orderRelations = row.orderRelations || [];
+      const totalRequested = orderRelations.reduce((sum, rel) => sum + rel.total_requested, 0);
+      const totalShipped = orderRelations.reduce((sum, rel) => sum + rel.total_shipped, 0);
+      
+      // 计算整体完成状态
+      let overallStatus = '全部完成';
+      if (orderRelations.length > 0) {
+        const hasPartial = orderRelations.some(rel => rel.completion_status === '部分完成');
+        if (hasPartial) {
+          overallStatus = '部分完成';
+        }
+      }
+      
+      return {
+        ...row.toJSON(),
+        total_requested: totalRequested,
+        total_shipped: totalShipped,
+        completion_status: overallStatus,
+        order_count: orderRelations.length
+      };
+    });
+    
+    res.json({
+      code: 0,
+      message: '获取发货历史成功',
+      data: {
+        records: processedRows,
+        pagination: {
+          current: parseInt(page),
+          pageSize: parseInt(limit),
+          total: count
+        }
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取发货历史失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取发货历史失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量删除发货记录
+router.delete('/shipment-history', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量删除发货记录请求:', JSON.stringify(req.body, null, 2));
+  
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { shipment_ids } = req.body;
+    
+    if (!shipment_ids || !Array.isArray(shipment_ids) || shipment_ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '发货记录ID不能为空'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
+    
+    // 1. 删除发货明细
+    const deletedItems = await ShipmentItem.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    // 2. 删除订单发货关联记录
+    const deletedRelations = await OrderShipmentRelation.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    // 3. 删除发货记录主表
+    const deletedRecords = await ShipmentRecord.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    await transaction.commit();
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除成功:', {
+      deletedRecords,
+      deletedItems,
+      deletedRelations
+    });
+    
+    res.json({
+      code: 0,
+      message: '批量删除成功',
+      data: {
+        deleted_records: deletedRecords,
+        deleted_items: deletedItems,
+        deleted_relations: deletedRelations
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

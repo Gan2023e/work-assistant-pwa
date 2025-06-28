@@ -13,6 +13,7 @@ import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
 import ShippingPage from './pages/Shipping/ShippingPage';
 import OrderManagementPage from './pages/Shipping/OrderManagementPage';
+import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
 import LogisticsPage from './pages/Logistics/LogisticsPage';
 import SkuMapping from './pages/Season/SkuMapping';
 import Summary from './pages/Season/Summary';
@@ -94,7 +95,7 @@ const AppContent: React.FC = () => {
   const getSelectedKeys = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings"].includes(path)) return [path];
-    if (["/shipping/orders", "/shipping/management"].includes(path)) return [path];
+    if (["/shipping/orders", "/shipping/management", "/shipping/history"].includes(path)) return [path];
     if (["/season/sku-mapping", "/season/summary", "/season/supplier"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
@@ -117,6 +118,7 @@ const AppContent: React.FC = () => {
       children: [
         { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
         { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
+        { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
       ],
     },
     { label: <Link to="/logistics">头程物流管理</Link>, key: '/logistics' },
@@ -196,6 +198,11 @@ const AppContent: React.FC = () => {
           <Route path="/shipping/management" element={
             <ProtectedRoute>
               <ShippingPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/shipping/history" element={
+            <ProtectedRoute>
+              <ShipmentHistoryPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping" element={

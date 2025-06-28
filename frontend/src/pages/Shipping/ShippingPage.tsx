@@ -40,6 +40,7 @@ import type { UploadProps } from 'antd';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 // 自定义样式
 const customStyles = `
@@ -193,6 +194,7 @@ interface CountryTemplateConfig {
 
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
   const [mergedLoading, setMergedLoading] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -576,6 +578,20 @@ const ShippingPage: React.FC = () => {
       width: 130,
       ellipsis: true,
       sorter: true,
+      render: (needNum: string) => (
+        needNum ? (
+          <Button 
+            type="link" 
+            style={{ padding: 0, height: 'auto', fontSize: 'inherit' }}
+            onClick={() => {
+              // 跳转到需求单管理页面并显示该需求单详情
+              navigate(`/shipping/orders?needNum=${needNum}`);
+            }}
+          >
+            {needNum}
+          </Button>
+        ) : '-'
+      ),
     },
     {
       title: '状态',
@@ -1072,7 +1088,7 @@ const ShippingPage: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Title level={2}>发货需求管理</Title>
+      <Title level={2}>发货操作</Title>
       
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col>
