@@ -1756,7 +1756,7 @@ const ShippingPage: React.FC = () => {
         width={800}
         destroyOnClose
       >
-        {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 ? (
+        {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 && (
           <div>
             {/* 已配置的模板列表 */}
             <Alert
