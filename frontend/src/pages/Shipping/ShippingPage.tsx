@@ -182,6 +182,34 @@ interface CountryTemplateConfig {
   countryName: string;
 }
 
+interface PackingListItem {
+  box_num: string;
+  sku: string;
+  quantity: number;
+}
+
+interface BoxInfo {
+  box_num: string;
+  weight?: number;
+  width?: number;
+  length?: number;
+  height?: number;
+}
+
+interface PackingListConfig {
+  filename: string;
+  originalName: string;
+  uploadTime: string;
+  sheetName: string;
+  skuStartRow: number; // SKU开始行
+  headerRow: number; // 标题行
+  boxColumns: string[]; // 所有箱子列，如['L', 'M', 'N', 'O', 'P']
+  boxNumbers: string[]; // 箱子编号，如['1', '2', '3', '4', '5']
+  sheetNames: string[];
+  items: PackingListItem[];
+  boxes: BoxInfo[];
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -225,6 +253,12 @@ const ShippingPage: React.FC = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [selectedTemplateCountry, setSelectedTemplateCountry] = useState<string>('');
+  
+  // 装箱表相关状态
+  const [packingListConfig, setPackingListConfig] = useState<PackingListConfig | null>(null);
+  const [packingListModalVisible, setPackingListModalVisible] = useState(false);
+  const [packingListForm] = Form.useForm();
+  const [packingListLoading, setPackingListLoading] = useState(false);
   
   // 删除确认对话框状态
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -407,7 +441,7 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 删除模板配置
+    // 删除模板配置
   const deleteTemplateConfig = async (country?: string) => {
     try {
       const url = country 
@@ -421,7 +455,7 @@ const ShippingPage: React.FC = () => {
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
         },
       });
-      
+
       const result = await response.json();
       
       if (result.success) {
@@ -436,6 +470,73 @@ const ShippingPage: React.FC = () => {
       console.error('删除模板配置失败:', error);
       message.error('删除失败');
     }
+  };
+
+  // 获取装箱表配置
+  const fetchPackingListConfig = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/config`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setPackingListConfig(result.data);
+      }
+    } catch (error) {
+      console.error('获取装箱表配置失败:', error);
+    }
+  };
+
+  // 上传装箱表
+  const handleUploadPackingList = async (values: any) => {
+    setPackingListLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('packingList', values.packingList.file);
+      formData.append('sheetName', values.sheetName);
+      formData.append('headerRow', values.headerRow.toString());
+      formData.append('skuStartRow', values.skuStartRow.toString());
+      formData.append('boxStartColumn', values.boxStartColumn);
+      formData.append('boxCount', values.boxCount.toString());
+
+      const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success('装箱表上传成功！');
+        setPackingListConfig(result.data);
+        setPackingListModalVisible(false);
+        packingListForm.resetFields();
+      } else {
+        message.error(result.message || '上传失败');
+      }
+    } catch (error) {
+      console.error('上传装箱表失败:', error);
+      message.error('上传失败');
+    } finally {
+      setPackingListLoading(false);
+    }
+  };
+
+  // 应用装箱表数据到发货清单
+  const applyPackingListToShipping = () => {
+    if (!packingListConfig || !packingListConfig.items) {
+      message.warning('没有可用的装箱表数据');
+      return;
+    }
+
+    // 将装箱表数据转换为发货数据格式
+    const newShippingData = packingListConfig.items.map(item => ({
+      box_num: item.box_num,
+      amz_sku: item.sku, // 这里使用装箱表中的SKU作为Amazon SKU
+      quantity: item.quantity
+    }));
+
+    setShippingData(newShippingData);
+    message.success(`已应用装箱表数据，共 ${newShippingData.length} 条记录`);
   };
 
 
@@ -521,6 +622,7 @@ const ShippingPage: React.FC = () => {
     fetchMergedData(); // 默认获取待发货数据
     fetchCountryInventory(); // 同时获取国家库存数据
     fetchAmazonTemplateConfig(); // 获取亚马逊模板配置
+    fetchPackingListConfig(); // 获取装箱表配置
   }, []);
 
   // 状态颜色映射
@@ -1694,6 +1796,13 @@ const ShippingPage: React.FC = () => {
                       >
                         管理模板
                       </Button>
+                      <Button 
+                        icon={<FileExcelOutlined />} 
+                        onClick={() => setPackingListModalVisible(true)}
+                      >
+                        填写装箱表
+                        {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+                      </Button>
                     </Space>
                   </div>
                 </div>
@@ -1705,13 +1814,22 @@ const ShippingPage: React.FC = () => {
                     type="warning" 
                     style={{ marginBottom: 16 }}
                   />
-                  <Button 
-                    type="primary" 
-                    icon={<UploadOutlined />} 
-                    onClick={() => setTemplateModalVisible(true)}
-                  >
-                    上传亚马逊模板
-                  </Button>
+                  <Space>
+                    <Button 
+                      type="primary" 
+                      icon={<UploadOutlined />} 
+                      onClick={() => setTemplateModalVisible(true)}
+                    >
+                      上传亚马逊模板
+                    </Button>
+                    <Button 
+                      icon={<FileExcelOutlined />} 
+                      onClick={() => setPackingListModalVisible(true)}
+                    >
+                      填写装箱表
+                      {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+                    </Button>
+                  </Space>
                 </div>
               )}
             </Card>
@@ -1732,6 +1850,15 @@ const ShippingPage: React.FC = () => {
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
                   导出Excel
                 </Button>
+                {packingListConfig && (
+                  <Button 
+                    icon={<FileExcelOutlined />} 
+                    onClick={applyPackingListToShipping}
+                    type="dashed"
+                  >
+                    应用装箱表数据 ({packingListConfig.items?.length || 0}条)
+                  </Button>
+                )}
                 <Button type="primary" onClick={async () => {
                   // 统一处理出库记录
                   if (confirmedMixedBoxes.length > 0 || confirmedWholeBoxes.length > 0) {
@@ -2131,6 +2258,197 @@ const ShippingPage: React.FC = () => {
             >
               添加第一个模板
             </Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* 装箱表管理对话框 */}
+      <Modal
+        title="填写装箱表"
+        open={packingListModalVisible}
+        onCancel={() => {
+          setPackingListModalVisible(false);
+          packingListForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {packingListConfig ? (
+          <div>
+            <Alert
+              message="装箱表已上传"
+              description={`文件名：${packingListConfig.originalName}，共 ${packingListConfig.items?.length || 0} 条记录`}
+              type="success"
+              style={{ marginBottom: 16 }}
+              action={
+                <Button 
+                  size="small" 
+                  onClick={() => setPackingListConfig(null)}
+                >
+                  重新上传
+                </Button>
+              }
+            />
+            
+            <div>
+              <Text strong>装箱明细:</Text>
+              <Table
+                dataSource={packingListConfig.items}
+                columns={[
+                  { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
+                  { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 150 },
+                  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
+                ]}
+                pagination={false}
+                size="small"
+                rowKey={(record, index) => `${record.box_num}_${record.sku}_${index}`}
+                scroll={{ y: 200 }}
+                style={{ marginBottom: 16 }}
+              />
+              
+              {packingListConfig.boxes && packingListConfig.boxes.length > 0 && (
+                <div>
+                  <Text strong>箱子信息:</Text>
+                  <Table
+                    dataSource={packingListConfig.boxes}
+                    columns={[
+                      { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
+                      { title: '重量(kg)', dataIndex: 'weight', key: 'weight', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '宽度(cm)', dataIndex: 'width', key: 'width', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '长度(cm)', dataIndex: 'length', key: 'length', width: 100, align: 'center', render: (val) => val || '-' },
+                      { title: '高度(cm)', dataIndex: 'height', key: 'height', width: 100, align: 'center', render: (val) => val || '-' },
+                    ]}
+                    pagination={false}
+                    size="small"
+                    rowKey="box_num"
+                    scroll={{ y: 150 }}
+                  />
+                </div>
+              )}
+            </div>
+            
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                <Button onClick={() => setPackingListModalVisible(false)}>
+                  关闭
+                </Button>
+                <Button 
+                  type="primary" 
+                  onClick={() => {
+                    applyPackingListToShipping();
+                    setPackingListModalVisible(false);
+                  }}
+                >
+                  应用到发货清单
+                </Button>
+              </Space>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <Alert
+              message="上传装箱表"
+              description="请上传亚马逊后台下载的装箱表Excel文件，系统将根据箱号列和SKU自动解析每箱的装箱SKU及数量"
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            <Form
+              form={packingListForm}
+              layout="vertical"
+              onFinish={handleUploadPackingList}
+              initialValues={{
+                sheetName: 'Sheet1',
+                headerRow: 5,
+                skuStartRow: 6,
+                boxStartColumn: 'L',
+                boxCount: 5
+              }}
+            >
+              <Form.Item
+                name="packingList"
+                label="装箱表文件"
+                rules={[{ required: true, message: '请选择装箱表文件' }]}
+              >
+                <Upload
+                  beforeUpload={() => false}
+                  accept=".xlsx,.xls"
+                  maxCount={1}
+                >
+                  <Button icon={<UploadOutlined />}>选择Excel文件</Button>
+                </Upload>
+              </Form.Item>
+
+              <Alert
+                message="亚马逊装箱表格式说明"
+                description="A列为SKU列，第5行为标题行(Box 1 quantity等)，第6行开始为SKU数据。系统将自动解析每个SKU在各个箱子中的数量。"
+                type="info"
+                style={{ marginBottom: 16 }}
+              />
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="sheetName"
+                    label="Sheet页名称"
+                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                  >
+                    <Input placeholder="Sheet1" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="headerRow"
+                    label="标题行号(Box 1 quantity所在行)"
+                    rules={[{ required: true, message: '请输入标题行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="5" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="skuStartRow"
+                    label="SKU开始行号"
+                    rules={[{ required: true, message: '请输入SKU开始行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="6" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="boxStartColumn"
+                    label="第一个箱子列(Box 1 quantity)"
+                    rules={[{ required: true, message: '请输入第一个箱子列' }]}
+                  >
+                    <Input placeholder="L" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="boxCount"
+                    label="箱子总数"
+                    rules={[{ required: true, message: '请输入箱子总数' }]}
+                  >
+                    <InputNumber min={1} max={20} placeholder="5" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={() => setPackingListModalVisible(false)}>
+                    取消
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={packingListLoading}>
+                    上传并解析
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
           </div>
         )}
       </Modal>
