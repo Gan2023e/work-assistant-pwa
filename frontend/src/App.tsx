@@ -12,6 +12,7 @@ import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
 import ShippingPage from './pages/Shipping/ShippingPage';
+import OrderManagementPage from './pages/Shipping/OrderManagementPage';
 import LogisticsPage from './pages/Logistics/LogisticsPage';
 import SkuMapping from './pages/Season/SkuMapping';
 import Summary from './pages/Season/Summary';
@@ -93,6 +94,7 @@ const AppContent: React.FC = () => {
   const getSelectedKeys = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings"].includes(path)) return [path];
+    if (["/shipping/orders", "/shipping/management"].includes(path)) return [path];
     if (["/season/sku-mapping", "/season/summary", "/season/supplier"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
@@ -109,7 +111,14 @@ const AppContent: React.FC = () => {
         { label: <Link to="/products/listings">在线Listings管理</Link>, key: '/products/listings' },
       ],
     },
-    { label: <Link to="/shipping">发货需求管理</Link>, key: '/shipping' },
+    {
+      label: getMenuLabel('发货管理', openKeys.includes('shipping')),
+      key: 'shipping',
+      children: [
+        { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
+        { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
+      ],
+    },
     { label: <Link to="/logistics">头程物流管理</Link>, key: '/logistics' },
     {
       label: getMenuLabel('亚马逊旺季备货', openKeys.includes('season')),
@@ -177,6 +186,16 @@ const AppContent: React.FC = () => {
           <Route path="/products/listings" element={
             <ProtectedRoute>
               <Listings />
+            </ProtectedRoute>
+          } />
+          <Route path="/shipping/orders" element={
+            <ProtectedRoute>
+              <OrderManagementPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/shipping/management" element={
+            <ProtectedRoute>
+              <ShippingPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping" element={

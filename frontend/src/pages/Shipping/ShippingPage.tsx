@@ -439,7 +439,10 @@ const ShippingPage: React.FC = () => {
             country: selectedRecord?.country || '美国',
             marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
             is_mixed_box: true,
-            original_mix_box_num: mixedItem.box_num // 传递原始混合箱单号
+            original_mix_box_num: mixedItem.box_num, // 传递原始混合箱单号
+            // 新增：需求单相关信息
+            order_item_id: selectedRecord?.record_num,
+            need_num: selectedRecord?.need_num
           };
         } else {
           // 整箱出库
@@ -452,10 +455,15 @@ const ShippingPage: React.FC = () => {
             total_boxes: wholeItem.confirm_boxes,
             country: selectedRecord?.country || '美国',
             marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
-            is_mixed_box: false
+            is_mixed_box: false,
+            // 新增：需求单相关信息
+            order_item_id: selectedRecord?.record_num,
+            need_num: selectedRecord?.need_num
           };
         }
       });
+
+      console.log('🔍 发送出库记录数据:', shipments);
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
         method: 'POST',
@@ -465,20 +473,25 @@ const ShippingPage: React.FC = () => {
         },
         body: JSON.stringify({
           shipments,
-          operator: '申报出库'
+          operator: '申报出库',
+          shipping_method: selectedRows[0]?.shipping_method || '', // 传递运输方式
+          remark: `批量发货 - ${new Date().toLocaleString('zh-CN')}` // 添加备注
         }),
       });
 
       const result = await response.json();
       
       if (result.code === 0) {
-        console.log('出库记录成功:', result.data);
+        console.log('✅ 出库记录成功:', result.data);
+        if (result.data.shipment_number) {
+          message.success(`出库记录创建成功，发货单号: ${result.data.shipment_number}`);
+        }
       } else {
-        console.error('出库记录失败:', result.message);
+        console.error('❌ 出库记录失败:', result.message);
         message.error(`出库记录失败: ${result.message}`);
       }
     } catch (error) {
-      console.error('出库记录异常:', error);
+      console.error('❌ 出库记录异常:', error);
       message.error(`出库记录异常: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
