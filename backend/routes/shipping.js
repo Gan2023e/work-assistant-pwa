@@ -1798,7 +1798,11 @@ router.post('/amazon-template/upload', (req, res, next) => {
       console.error('❌ Sheet页不存在:', { requested: sheetName, available: sheetNames });
       return res.status(400).json({
         success: false,
-        message: `模板中不存在sheet页: ${sheetName}。可用的sheet页: ${sheetNames.join(', ')}`
+        message: `模板中不存在sheet页: ${sheetName}。可用的sheet页: ${sheetNames.join(', ')}`,
+        data: {
+          availableSheets: sheetNames,
+          requestedSheet: sheetName
+        }
       });
     }
 

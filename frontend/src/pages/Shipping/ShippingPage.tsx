@@ -265,6 +265,9 @@ const ShippingPage: React.FC = () => {
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleteTargetCountry, setDeleteTargetCountry] = useState<string>('');
   const [deleteTargetTemplate, setDeleteTargetTemplate] = useState<any>(null);
+  
+  // Sheet页选择相关状态
+  const [availableSheets, setAvailableSheets] = useState<string[]>([]);
 
   // 国家选项配置
   const countryTemplateOptions = [
@@ -421,7 +424,16 @@ const ShippingPage: React.FC = () => {
         setSelectedTemplateCountry('');
       } else {
         console.error('❌ 服务器返回错误:', result.message);
-        message.error(result.message || '上传失败');
+        
+        // 如果是Sheet页不存在的错误，提供可选的Sheet页
+        if (result.data && result.data.availableSheets) {
+          setAvailableSheets(result.data.availableSheets);
+          message.error(
+            `Sheet页"${result.data.requestedSheet}"不存在。请从以下可用页面中选择：${result.data.availableSheets.join('、')}`
+          );
+        } else {
+          message.error(result.message || '上传失败');
+        }
       }
     } catch (error) {
       console.error('❌ 上传模板失败:', error);
@@ -2136,6 +2148,7 @@ const ShippingPage: React.FC = () => {
         onCancel={() => {
           setTemplateModalVisible(false);
           setSelectedTemplateCountry('');
+          setAvailableSheets([]); // 清空Sheet页选项
           templateForm.resetFields();
         }}
         footer={null}
@@ -2246,7 +2259,7 @@ const ShippingPage: React.FC = () => {
                 startRow: amazonTemplateConfig.templates[selectedTemplateCountry].startRow,
               } : {
                 // 新建模板时的默认值
-                sheetName: 'Create workflow - template',
+                sheetName: 'Create workflow – template',
                 merchantSkuColumn: 'A',
                 quantityColumn: 'B',
                 startRow: 9,
@@ -2300,6 +2313,10 @@ const ShippingPage: React.FC = () => {
                       accept=".xlsx,.xls"
                       beforeUpload={() => false}
                       maxCount={1}
+                      onChange={() => {
+                        // 当用户重新选择文件时，清空Sheet页选项
+                        setAvailableSheets([]);
+                      }}
                     >
                       <Button icon={<UploadOutlined />}>选择Excel文件</Button>
                     </Upload>
@@ -2312,9 +2329,24 @@ const ShippingPage: React.FC = () => {
                   <Form.Item
                     name="sheetName"
                     label="Sheet页名称"
-                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                    rules={[{ required: true, message: '请选择或输入Sheet页名称' }]}
                   >
-                    <Input placeholder="例如：Create workflow – template" />
+                    {availableSheets.length > 0 ? (
+                      <div>
+                        <Select placeholder="请选择Sheet页" allowClear showSearch style={{ width: '100%' }}>
+                          {availableSheets.map(sheetName => (
+                            <Option key={sheetName} value={sheetName}>
+                              {sheetName}
+                            </Option>
+                          ))}
+                        </Select>
+                        <Text type="secondary" style={{ fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                          ✅ 已检测到Excel文件中的Sheet页，请选择一个
+                        </Text>
+                      </div>
+                    ) : (
+                      <Input placeholder="例如：Create workflow – template" />
+                    )}
                   </Form.Item>
                 </Col>
                 <Col span={6}>
@@ -2353,6 +2385,7 @@ const ShippingPage: React.FC = () => {
                 <Space>
                   <Button onClick={() => {
                     setSelectedTemplateCountry('');
+                    setAvailableSheets([]);
                     templateForm.resetFields();
                   }}>
                     取消
