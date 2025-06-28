@@ -73,7 +73,7 @@ const ShipmentHistoryPage: React.FC = () => {
   const [filters, setFilters] = useState<{
     status: string;
     operator: string;
-    date_range: [Dayjs, Dayjs] | null;
+    date_range: [dayjs.Dayjs, dayjs.Dayjs] | null;
   }>({
     status: '',
     operator: '',
@@ -396,7 +396,10 @@ const ShipmentHistoryPage: React.FC = () => {
               <Text>日期范围:</Text>
               <RangePicker
                 value={filters.date_range}
-                onChange={(dates) => setFilters(prev => ({ ...prev, date_range: dates }))}
+                onChange={(dates) => {
+                  const dateRange = dates && dates[0] && dates[1] ? [dates[0], dates[1]] as [dayjs.Dayjs, dayjs.Dayjs] : null;
+                  setFilters(prev => ({ ...prev, date_range: dateRange }));
+                }}
                 style={{ width: 280 }}
               />
             </Space>
