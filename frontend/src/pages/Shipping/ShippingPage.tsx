@@ -86,7 +86,7 @@ if (typeof document !== 'undefined') {
 
 const { Option } = Select;
 const { Title, Text } = Typography;
-const { Sider, Content } = Layout;
+const { Content } = Layout;
 
 
 
@@ -293,18 +293,6 @@ const ShippingPage: React.FC = () => {
   const logisticsProviderOptions = [
     { label: '裕盛泰', value: '裕盛泰' },
     { label: '东方瑞达', value: '东方瑞达' },
-  ];
-
-  // 侧边栏子功能key
-  const [sideKey, setSideKey] = useState('shipping-ops');
-
-  // 侧边栏菜单项
-  const sideMenuItems = [
-    { key: 'shipping-ops', icon: <AppstoreOutlined />, label: '发货操作' },
-    { key: 'order-mgmt', icon: <UnorderedListOutlined />, label: '需求单管理' },
-    { key: 'shipping-history', icon: <HistoryOutlined />, label: '发货历史' },
-    { key: 'template-mgmt', icon: <SettingOutlined />, label: '模板管理' },
-    { key: 'packing-list', icon: <FileExcelOutlined />, label: '装箱表管理' },
   ];
 
   // 获取亚马逊模板配置
@@ -1257,44 +1245,10 @@ const ShippingPage: React.FC = () => {
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [orderModalNeedNum, setOrderModalNeedNum] = useState<string | null>(null);
 
-  // 主内容区渲染
-  const renderMainContent = () => {
-    switch (sideKey) {
-      case 'shipping-ops':
-        return (
-          // ...原发货操作主内容（原return内容）...
-          <>{/* 这里插入原有的发货操作主内容 */}</>
-        );
-      case 'order-mgmt':
-        return <OrderManagementPage />;
-      case 'shipping-history':
-        return <div>发货历史（可集成ShipmentHistoryPage）</div>;
-      case 'template-mgmt':
-        return <div>模板管理（可集成模板相关内容）</div>;
-      case 'packing-list':
-        return <div>装箱表管理（可集成装箱表相关内容）</div>;
-      default:
-        return null;
-    }
-  };
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={220} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
-        <Menu
-          mode="inline"
-          selectedKeys={[sideKey]}
-          onClick={({ key }) => setSideKey(key as string)}
-          style={{ height: '100%', borderRight: 0 }}
-          items={sideMenuItems}
-        />
-      </Sider>
-      <Layout>
-        <Content style={{ padding: 24, minHeight: 280 }}>
-          {renderMainContent()}
-        </Content>
-      </Layout>
-    </Layout>
+    <Content style={{ padding: 24, minHeight: 280 }}>
+      {/* 这里插入原有的发货操作主内容 */}
+    </Content>
   );
 };
 

@@ -34,25 +34,67 @@ const getMenuLabel = (label: string, open: boolean) => (
   </span>
 );
 
-// 新增：通用左侧功能栏布局组件
+// LayoutWithSidebar组件，左侧功能栏与顶部主菜单一致
 const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
-  // 侧边栏菜单项（可根据当前路由动态调整）
+  // 与顶部主菜单一致的侧边栏菜单结构
   const sideMenuItems = [
-    { key: '/shipping/management', icon: <AppstoreOutlined />, label: <Link to="/shipping/management">发货操作</Link> },
-    { key: '/shipping/orders', icon: <UnorderedListOutlined />, label: <Link to="/shipping/orders">需求单管理</Link> },
-    { key: '/shipping/history', icon: <HistoryOutlined />, label: <Link to="/shipping/history">发货历史</Link> },
-    { key: '/shipping/template', icon: <SettingOutlined />, label: <span>模板管理</span> },
-    { key: '/shipping/packing-list', icon: <FileExcelOutlined />, label: <span>装箱表管理</span> },
+    { key: '/', label: <Link to="/">主页</Link> },
+    {
+      key: 'products',
+      label: '产品管理',
+      children: [
+        { key: '/products/purchase', label: <Link to="/products/purchase">采购链接管理</Link> },
+        { key: '/products/listings', label: <Link to="/products/listings">在线Listings管理</Link> },
+      ],
+    },
+    {
+      key: 'shipping',
+      label: '发货管理',
+      children: [
+        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
+        { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
+        { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
+      ],
+    },
+    { key: '/logistics', label: <Link to="/logistics">头程物流管理</Link> },
+    {
+      key: 'season',
+      label: '亚马逊旺季备货',
+      children: [
+        { key: '/season/sku-mapping', label: <Link to="/season/sku-mapping">SKU映射管理</Link> },
+        { key: '/season/summary', label: <Link to="/season/summary">旺季备货汇总</Link> },
+        { key: '/season/supplier', label: <Link to="/season/supplier">厂家发货与付款</Link> },
+      ],
+    },
+    { key: '/salary', label: <Link to="/salary">临工工资结算</Link> },
+    { key: '/profit', label: <Link to="/profit">直发小包利润分析</Link> },
+    { key: '/user-manage', label: <Link to="/user-manage">用户管理</Link> },
   ];
   // 侧边栏高亮
-  const selectedKey = sideMenuItems.find(item => location.pathname.startsWith(item.key))?.key || '/shipping/management';
+  const findSelectedKey = () => {
+    const path = location.pathname;
+    // 精确匹配子菜单
+    for (const item of sideMenuItems) {
+      if (item.children) {
+        for (const child of item.children) {
+          if (child.key === path) return [item.key, child.key];
+        }
+      } else if (item.key === path) {
+        return [item.key];
+      }
+    }
+    return [];
+  };
+  const selectedKeys = findSelectedKey();
+  const openKeys = selectedKeys.length > 1 ? [selectedKeys[0]] : [];
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider width={220} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
         <Menu
           mode="inline"
-          selectedKeys={[selectedKey]}
+          selectedKeys={selectedKeys}
+          defaultOpenKeys={openKeys}
           style={{ height: '100%', borderRight: 0 }}
           items={sideMenuItems}
         />
