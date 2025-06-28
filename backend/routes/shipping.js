@@ -2281,6 +2281,38 @@ router.delete('/shipment-history', async (req, res) => {
 
 // 装箱表相关API
 
+// 配置装箱表上传的multer
+const packingListStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadsDir = path.join(__dirname, '../uploads/packing-lists');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(7);
+    const ext = path.extname(file.originalname);
+    cb(null, `packing-list-${timestamp}-${random}${ext}`);
+  }
+});
+
+const uploadPackingList = multer({
+  storage: packingListStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传Excel文件'), false);
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB限制
+  }
+});
+
 // 自动分析装箱表Excel文件
 router.post('/packing-list/analyze', uploadPackingList.single('packingList'), async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到装箱表自动分析请求');
@@ -2431,38 +2463,6 @@ router.post('/packing-list/analyze', uploadPackingList.single('packingList'), as
       success: false,
       message: '装箱表分析失败: ' + error.message
     });
-  }
-});
-
-// 配置装箱表上传的multer
-const packingListStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadsDir = path.join(__dirname, '../uploads/packing-lists');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(7);
-    const ext = path.extname(file.originalname);
-    cb(null, `packing-list-${timestamp}-${random}${ext}`);
-  }
-});
-
-const uploadPackingList = multer({
-  storage: packingListStorage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-        file.mimetype === 'application/vnd.ms-excel') {
-      cb(null, true);
-    } else {
-      cb(new Error('只允许上传Excel文件'), false);
-    }
-  },
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB限制
   }
 });
 
