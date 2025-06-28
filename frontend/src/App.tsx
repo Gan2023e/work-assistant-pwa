@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Layout, Menu, ConfigProvider, Button, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
+import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, SettingOutlined, TeamOutlined, AppstoreOutlined, FileTextOutlined, HistoryOutlined, FileExcelOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import 'antd/dist/reset.css';
 import zhCN from 'antd/es/locale/zh_CN';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -24,7 +24,7 @@ import UserManagePage from './pages/User/UserManagePage';
 import ProfilePage from './pages/User/ProfilePage';
 import PWAManager from './components/PWAManager';
 
-const { Header, Content } = Layout;
+const { Header, Sider, Content } = Layout;
 
 // 自定义菜单项，带三角形指示符
 const getMenuLabel = (label: string, open: boolean) => (
@@ -33,6 +33,38 @@ const getMenuLabel = (label: string, open: boolean) => (
     {open ? <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} /> : <RightOutlined style={{ marginLeft: 4, fontSize: 10 }} />}
   </span>
 );
+
+// 新增：通用左侧功能栏布局组件
+const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  // 侧边栏菜单项（可根据当前路由动态调整）
+  const sideMenuItems = [
+    { key: '/shipping/management', icon: <AppstoreOutlined />, label: <Link to="/shipping/management">发货操作</Link> },
+    { key: '/shipping/orders', icon: <UnorderedListOutlined />, label: <Link to="/shipping/orders">需求单管理</Link> },
+    { key: '/shipping/history', icon: <HistoryOutlined />, label: <Link to="/shipping/history">发货历史</Link> },
+    { key: '/shipping/template', icon: <SettingOutlined />, label: <span>模板管理</span> },
+    { key: '/shipping/packing-list', icon: <FileExcelOutlined />, label: <span>装箱表管理</span> },
+  ];
+  // 侧边栏高亮
+  const selectedKey = sideMenuItems.find(item => location.pathname.startsWith(item.key))?.key || '/shipping/management';
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider width={220} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          style={{ height: '100%', borderRight: 0 }}
+          items={sideMenuItems}
+        />
+      </Sider>
+      <Layout>
+        <Content style={{ padding: 24, minHeight: 280 }}>
+          {children}
+        </Content>
+      </Layout>
+    </Layout>
+  );
+};
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -182,27 +214,37 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/products/purchase" element={
             <ProtectedRoute>
-              <Purchase />
+              <LayoutWithSidebar>
+                <Purchase />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/products/listings" element={
             <ProtectedRoute>
-              <Listings />
+              <LayoutWithSidebar>
+                <Listings />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/shipping/orders" element={
             <ProtectedRoute>
-              <OrderManagementPage />
+              <LayoutWithSidebar>
+                <OrderManagementPage />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/shipping/management" element={
             <ProtectedRoute>
-              <ShippingPage />
+              <LayoutWithSidebar>
+                <ShippingPage />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/shipping/history" element={
             <ProtectedRoute>
-              <ShipmentHistoryPage />
+              <LayoutWithSidebar>
+                <ShipmentHistoryPage />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/shipping" element={

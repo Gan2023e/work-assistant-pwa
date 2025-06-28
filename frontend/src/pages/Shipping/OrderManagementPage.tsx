@@ -100,7 +100,13 @@ interface OrderDetails {
   shipment_history: ShipmentHistory[];
 }
 
-const OrderManagementPage: React.FC = () => {
+// 新增props类型
+interface OrderManagementPageProps {
+  needNum?: string;
+}
+
+// 修改组件定义，支持props
+const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -118,6 +124,16 @@ const OrderManagementPage: React.FC = () => {
     pageSize: 20,
     total: 0
   });
+
+  // 根据props.needNum决定加载详情还是列表
+  useEffect(() => {
+    if (needNum) {
+      fetchOrderDetails(needNum);
+    } else {
+      fetchOrders();
+    }
+    // eslint-disable-next-line
+  }, [needNum]);
 
   // 获取需求单列表
   const fetchOrders = async (page = 1, pageSize = 20) => {
@@ -212,25 +228,6 @@ const OrderManagementPage: React.FC = () => {
       message.error('修改需求数量失败');
     }
   };
-
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  // 处理URL参数，自动显示指定的需求单详情
-  useEffect(() => {
-    const needNum = searchParams.get('needNum');
-    if (needNum && needNum !== selectedOrder) {
-      console.log('📍 从URL参数获取需求单号:', needNum);
-      setSelectedOrder(needNum);
-      fetchOrderDetails(needNum);
-      
-      // 清理URL参数，避免重复触发
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.delete('needNum');
-      setSearchParams(newSearchParams, { replace: true });
-    }
-  }, [searchParams, selectedOrder, setSearchParams]);
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {
@@ -505,51 +502,8 @@ const OrderManagementPage: React.FC = () => {
       
       <Row gutter={24}>
         {/* 左侧：需求单列表 */}
-        <Col span={selectedOrder ? 12 : 24}>
-          <Card 
-            title={
-              <Space>
-                <BarChartOutlined />
-                <span>需求单列表</span>
-                <Button 
-                  type="primary" 
-                  size="small"
-                  onClick={() => fetchOrders(pagination.current, pagination.pageSize)}
-                >
-                  刷新
-                </Button>
-              </Space>
-            }
-            size="small"
-          >
-            <Table
-              columns={orderColumns}
-              dataSource={orders}
-              rowKey="need_num"
-              loading={ordersLoading}
-              size="small"
-              scroll={{ x: 1200, y: 400 }}
-              pagination={{
-                ...pagination,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-                onChange: (page, pageSize) => {
-                  setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
-                  fetchOrders(page, pageSize);
-                }
-              }}
-              rowClassName={(record) => {
-                if (record.need_num === selectedOrder) return 'ant-table-row-selected';
-                return '';
-              }}
-            />
-          </Card>
-        </Col>
-
-        {/* 右侧：需求单详情 */}
-        {selectedOrder && (
-          <Col span={12}>
+        {needNum ? (
+          <Col span={24}>
             <Card 
               title={
                 <Space>
@@ -649,6 +603,48 @@ const OrderManagementPage: React.FC = () => {
                   )}
                 </div>
               )}
+            </Card>
+          </Col>
+        ) : (
+          <Col span={24}>
+            <Card 
+              title={
+                <Space>
+                  <BarChartOutlined />
+                  <span>需求单列表</span>
+                  <Button 
+                    type="primary" 
+                    size="small"
+                    onClick={() => fetchOrders(pagination.current, pagination.pageSize)}
+                  >
+                    刷新
+                  </Button>
+                </Space>
+              }
+              size="small"
+            >
+              <Table
+                columns={orderColumns}
+                dataSource={orders}
+                rowKey="need_num"
+                loading={ordersLoading}
+                size="small"
+                scroll={{ x: 1200, y: 400 }}
+                pagination={{
+                  ...pagination,
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                  onChange: (page, pageSize) => {
+                    setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
+                    fetchOrders(page, pageSize);
+                  }
+                }}
+                rowClassName={(record) => {
+                  if (record.need_num === selectedOrder) return 'ant-table-row-selected';
+                  return '';
+                }}
+              />
             </Card>
           </Col>
         )}
