@@ -312,6 +312,25 @@ const ShippingPage: React.FC = () => {
       return;
     }
 
+    // 使用已确认的发货数据，如果没有则使用所有待发货的数据
+    let dataToGenerate = shippingData;
+    if (!dataToGenerate || dataToGenerate.length === 0) {
+      // 将mergedData转换为发货数据格式
+      dataToGenerate = mergedData
+        .filter(item => item.status === '待发货' && item.amz_sku)
+        .map(item => ({
+          box_num: `AUTO-${item.record_num}`,
+          amz_sku: item.amz_sku,
+          quantity: item.quantity,
+          country: item.country
+        }));
+      
+      if (dataToGenerate.length === 0) {
+        message.warning('没有可用的发货数据，请确保有待发货的商品且已映射Amazon SKU');
+        return;
+      }
+    }
+
     setGenerateLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/generate`, {
@@ -320,7 +339,7 @@ const ShippingPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          shippingData: shippingData
+          shippingData: dataToGenerate
         }),
       });
 
@@ -759,49 +778,82 @@ const ShippingPage: React.FC = () => {
 
   // 确认混合箱发货
   const confirmMixedBox = async (boxData: MixedBoxItem[]) => {
-    const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
-      box_num: String(nextBoxNumber),
-      amz_sku: item.amz_sku,
-      quantity: item.quantity
-    }));
+    // 防止重复提交
+    if (shippingLoading) return;
+    setShippingLoading(true);
     
-    setShippingData([...shippingData, ...newShippingData]);
-    setNextBoxNumber(nextBoxNumber + 1); // 递增箱号
-    
-    // 记录混合箱出库信息
-    await recordOutbound(boxData, true);
-    
-    if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
-      setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
-    } else {
-      // 混合箱处理完成，进入整箱确认
-      setCurrentStep(1);
+    try {
+      // 检查当前混合箱是否已经确认过（通过箱号检查）
+      const currentBoxNumber = String(nextBoxNumber);
+      const isAlreadyConfirmed = shippingData.some(item => item.box_num === currentBoxNumber);
+      
+      if (!isAlreadyConfirmed) {
+        const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
+          box_num: currentBoxNumber,
+          amz_sku: item.amz_sku,
+          quantity: item.quantity
+        }));
+        
+        setShippingData([...shippingData, ...newShippingData]);
+        setNextBoxNumber(nextBoxNumber + 1); // 递增箱号
+        
+        // 记录混合箱出库信息
+        await recordOutbound(boxData, true);
+      }
+      
+      if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
+        setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
+      } else {
+        // 混合箱处理完成，进入整箱确认
+        setCurrentStep(1);
+      }
+    } finally {
+      setShippingLoading(false);
     }
   };
 
   // 确认整箱发货
   const confirmWholeBox = async (confirmedData: WholeBoxConfirmData[]) => {
-    const newShippingData: ShippingConfirmData[] = [];
-    let currentBoxNum = nextBoxNumber;
+    // 防止重复提交
+    if (shippingLoading) return;
+    setShippingLoading(true);
     
-    confirmedData.forEach(item => {
-      for (let i = 0; i < item.confirm_boxes; i++) {
-        newShippingData.push({
-          box_num: String(currentBoxNum),
-          amz_sku: item.amz_sku,
-          quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
-        });
-        currentBoxNum++;
+    try {
+      // 检查是否已经到第2步（避免重复确认）
+      if (currentStep >= 2) return;
+      
+      const newShippingData: ShippingConfirmData[] = [];
+      let currentBoxNum = nextBoxNumber;
+      
+      confirmedData.forEach(item => {
+        for (let i = 0; i < item.confirm_boxes; i++) {
+          // 检查箱号是否已存在，避免重复
+          const boxNumber = String(currentBoxNum);
+          const existsInShippingData = shippingData.some(existingItem => existingItem.box_num === boxNumber);
+          
+          if (!existsInShippingData) {
+            newShippingData.push({
+              box_num: boxNumber,
+              amz_sku: item.amz_sku,
+              quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
+            });
+          }
+          currentBoxNum++;
+        }
+      });
+      
+      if (newShippingData.length > 0) {
+        setShippingData([...shippingData, ...newShippingData]);
+        setNextBoxNumber(currentBoxNum); // 更新下一个箱号
+        
+        // 记录整箱出库信息
+        await recordOutbound(confirmedData, false);
       }
-    });
-    
-    setShippingData([...shippingData, ...newShippingData]);
-    setNextBoxNumber(currentBoxNum); // 更新下一个箱号
-    
-    // 记录整箱出库信息
-    await recordOutbound(confirmedData, false);
-    
-    setCurrentStep(2);
+      
+      setCurrentStep(2);
+    } finally {
+      setShippingLoading(false);
+    }
   };
 
   // 导出Excel
@@ -1468,19 +1520,27 @@ const ShippingPage: React.FC = () => {
             />
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
-                <Button onClick={() => {
-                  if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
-                    setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
-                  } else {
-                    setCurrentStep(1);
-                  }
-                }}>
+                <Button 
+                  onClick={() => {
+                    if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
+                      setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
+                    } else {
+                      setCurrentStep(1);
+                    }
+                  }}
+                  disabled={shippingLoading}
+                >
                   跳过此箱
                 </Button>
-                <Button type="primary" onClick={() => {
-                  const currentBoxData = mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]);
-                  confirmMixedBox(currentBoxData);
-                }}>
+                <Button 
+                  type="primary" 
+                  onClick={() => {
+                    const currentBoxData = mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]);
+                    confirmMixedBox(currentBoxData);
+                  }}
+                  loading={shippingLoading}
+                  disabled={shippingLoading}
+                >
                   确认发出
                 </Button>
               </Space>
@@ -1502,6 +1562,7 @@ const ShippingPage: React.FC = () => {
             data={wholeBoxData} 
             onConfirm={confirmWholeBox}
             onSkip={() => setCurrentStep(2)}
+            loading={shippingLoading}
           />
         )}
 
@@ -2003,7 +2064,8 @@ const WholeBoxConfirmForm: React.FC<{
   data: WholeBoxConfirmData[];
   onConfirm: (data: WholeBoxConfirmData[]) => void;
   onSkip: () => void;
-}> = ({ data, onConfirm, onSkip }) => {
+  loading?: boolean;
+}> = ({ data, onConfirm, onSkip, loading = false }) => {
   const [form] = Form.useForm();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
     data.map(item => ({
@@ -2093,8 +2155,13 @@ const WholeBoxConfirmForm: React.FC<{
       </Form>
       <div style={{ marginTop: 16, textAlign: 'right' }}>
         <Space>
-          <Button onClick={onSkip}>跳过整箱</Button>
-          <Button type="primary" onClick={() => onConfirm(confirmData)}>
+          <Button onClick={onSkip} disabled={loading}>跳过整箱</Button>
+          <Button 
+            type="primary" 
+            onClick={() => onConfirm(confirmData)} 
+            loading={loading}
+            disabled={loading}
+          >
             确认发货
           </Button>
         </Space>
