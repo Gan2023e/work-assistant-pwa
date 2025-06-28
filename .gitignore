@@ -48,4 +48,6 @@ Thumbs.db
 *.temp
 
 # 用户上传文件
-backend/uploads/ 
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/*/.gitkeep 
