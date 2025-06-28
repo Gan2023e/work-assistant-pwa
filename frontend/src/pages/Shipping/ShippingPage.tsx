@@ -829,7 +829,8 @@ const ShippingPage: React.FC = () => {
                   border: `2px solid ${selectedCountry === '' ? '#1677ff' : '#d9d9d9'}`,
                   borderRadius: '6px',
                   backgroundColor: selectedCountry === '' ? '#f0f6ff' : '#fff',
-                  transition: 'all 0.3s'
+                  transition: 'all 0.3s',
+                  minWidth: '120px'
                 }}
                 onClick={() => {
                   setSelectedCountry('');
