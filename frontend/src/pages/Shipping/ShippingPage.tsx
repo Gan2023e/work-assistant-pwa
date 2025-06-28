@@ -309,23 +309,73 @@ const ShippingPage: React.FC = () => {
     console.log('🔍 开始上传模板，提交的values:', values);
     setUploadLoading(true);
     try {
-      // 检查文件是否存在
-      if (!values.template || values.template.length === 0) {
-        console.error('❌ 文件检查失败:', values.template);
+      // 检查文件是否存在 - 改进文件检查逻辑
+      if (!values.template) {
+        console.error('❌ 未选择文件:', values.template);
         message.error('请选择要上传的模板文件');
         setUploadLoading(false);
         return;
       }
 
-      const file = values.template[0].originFileObj;
-      if (!file) {
-        console.error('❌ 文件对象获取失败:', values.template[0]);
-        message.error('文件获取失败，请重新选择');
+      let file = null;
+      
+      // 处理不同的文件对象结构
+      if (Array.isArray(values.template)) {
+        // 如果是数组形式
+        if (values.template.length === 0) {
+          console.error('❌ 文件数组为空:', values.template);
+          message.error('请选择要上传的模板文件');
+          setUploadLoading(false);
+          return;
+        }
+        
+        // 尝试不同的文件获取路径
+        const fileItem = values.template[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else if (values.template.fileList && values.template.fileList.length > 0) {
+        // 如果是fileList形式
+        const fileItem = values.template.fileList[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else {
+        // 直接是文件对象
+        file = values.template;
+      }
+
+      if (!file || !file.name) {
+        console.error('❌ 文件对象获取失败，values.template结构:', values.template);
+        message.error('文件获取失败，请重新选择文件');
+        setUploadLoading(false);
+        return;
+      }
+
+      // 验证文件类型
+      const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel' // .xls
+      ];
+      
+      if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+        console.error('❌ 文件类型不支持:', { type: file.type, name: file.name });
+        message.error('只支持Excel文件格式(.xlsx, .xls)');
         setUploadLoading(false);
         return;
       }
 
       console.log('📁 获取到文件:', { name: file.name, size: file.size, type: file.type });
+
+      // 验证必填字段
+      if (!values.sheetName || !values.merchantSkuColumn || !values.quantityColumn || !values.startRow || !values.country) {
+        console.error('❌ 必填字段缺失:', {
+          sheetName: values.sheetName,
+          merchantSkuColumn: values.merchantSkuColumn,
+          quantityColumn: values.quantityColumn,
+          startRow: values.startRow,
+          country: values.country
+        });
+        message.error('请填写完整的配置信息');
+        setUploadLoading(false);
+        return;
+      }
 
       const formData = new FormData();
       formData.append('template', file);
@@ -342,13 +392,21 @@ const ShippingPage: React.FC = () => {
       }
 
       console.log('🚀 发送上传请求到:', `${API_BASE_URL}/api/shipping/amazon-template/upload`);
+      console.log('📋 FormData内容已准备就绪，包含文件和配置信息');
       
       const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/upload`, {
         method: 'POST',
         body: formData,
+        // 注意：不要设置Content-Type header，让浏览器自动设置multipart/form-data边界
       });
 
       console.log('📡 服务器响应状态:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ' - ' + errorText : ''}`);
+      }
       
       const result = await response.json();
       console.log('📊 服务器响应结果:', result);
@@ -367,7 +425,7 @@ const ShippingPage: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ 上传模板失败:', error);
-      message.error('网络错误或服务器异常');
+      message.error(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setUploadLoading(false);
     }

@@ -1717,9 +1717,44 @@ router.get('/amazon-template/config', async (req, res) => {
 });
 
 // 上传亚马逊模板
-router.post('/amazon-template/upload', upload.single('template'), async (req, res) => {
+router.post('/amazon-template/upload', (req, res, next) => {
+  // Multer错误处理
+  upload.single('template')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Multer上传错误:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          message: '文件大小超过限制(最大10MB)'
+        });
+      } else if (err.message === '只允许上传Excel文件') {
+        return res.status(400).json({
+          success: false,
+          message: '只支持Excel文件格式(.xlsx, .xls)'
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: '文件上传失败: ' + err.message
+        });
+      }
+    }
+    next();
+  });
+}, async (req, res) => {
+  console.log('📥 收到亚马逊模板上传请求');
+  console.log('📋 请求体参数:', req.body);
+  console.log('📁 上传文件信息:', req.file ? {
+    originalname: req.file.originalname,
+    filename: req.file.filename,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    path: req.file.path
+  } : '无文件');
+  
   try {
     if (!req.file) {
+      console.error('❌ 未接收到文件');
       return res.status(400).json({
         success: false,
         message: '请选择要上传的Excel文件'
@@ -1729,6 +1764,9 @@ router.post('/amazon-template/upload', upload.single('template'), async (req, re
     const { sheetName, merchantSkuColumn, quantityColumn, startRow, country, countryName } = req.body;
 
     if (!sheetName || !merchantSkuColumn || !quantityColumn || !startRow || !country) {
+      console.error('❌ 缺少必填参数:', {
+        sheetName, merchantSkuColumn, quantityColumn, startRow, country
+      });
       return res.status(400).json({
         success: false,
         message: '请提供完整的模板配置信息，包括适用国家'
@@ -1736,10 +1774,28 @@ router.post('/amazon-template/upload', upload.single('template'), async (req, re
     }
 
     // 验证Excel文件并获取sheet信息
-    const workbook = XLSX.readFile(req.file.path);
-    const sheetNames = workbook.SheetNames;
+    let workbook, sheetNames;
+    try {
+      console.log('📖 正在读取Excel文件:', req.file.path);
+      workbook = XLSX.readFile(req.file.path);
+      sheetNames = workbook.SheetNames;
+      console.log('📊 Excel文件读取成功，Sheet页:', sheetNames);
+    } catch (xlsxError) {
+      console.error('❌ Excel文件读取失败:', xlsxError);
+      // 删除上传的文件
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (deleteError) {
+        console.warn('⚠️ 删除上传文件失败:', deleteError.message);
+      }
+      return res.status(400).json({
+        success: false,
+        message: '无法读取Excel文件，请确保文件格式正确且未损坏'
+      });
+    }
     
     if (!sheetNames.includes(sheetName)) {
+      console.error('❌ Sheet页不存在:', { requested: sheetName, available: sheetNames });
       return res.status(400).json({
         success: false,
         message: `模板中不存在sheet页: ${sheetName}。可用的sheet页: ${sheetNames.join(', ')}`
@@ -1783,8 +1839,27 @@ router.post('/amazon-template/upload', upload.single('template'), async (req, re
     }
 
     allConfigs[country] = config;
-    fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
+    
+    // 保存配置文件
+    try {
+      // 确保目录存在
+      const configDir = path.dirname(templateConfigPath);
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+        console.log('✅ 创建配置目录:', configDir);
+      }
+      
+      fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
+      console.log('✅ 配置文件保存成功:', templateConfigPath);
+    } catch (saveError) {
+      console.error('❌ 配置文件保存失败:', saveError);
+      return res.status(500).json({
+        success: false,
+        message: '模板配置保存失败: ' + saveError.message
+      });
+    }
 
+    console.log('✅ 模板上传完成:', country);
     res.json({
       success: true,
       message: `${countryName || country} 亚马逊模板上传成功`,
