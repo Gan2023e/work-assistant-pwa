@@ -44,6 +44,11 @@ const ShipmentRecord = sequelize.define('ShipmentRecord', {
     allowNull: true,
     comment: '备注'
   },
+  logistics_provider: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '物流商'
+  },
   created_at: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,

@@ -1305,7 +1305,7 @@ router.post('/outbound-record', async (req, res) => {
   const transaction = await sequelize.transaction();
   
   try {
-    const { shipments, operator = '申报出库', shipping_method = '', remark = '' } = req.body;
+    const { shipments, operator = '申报出库', shipping_method = '', remark = '', logistics_provider = '' } = req.body;
     
     if (!shipments || !Array.isArray(shipments) || shipments.length === 0) {
       return res.status(400).json({
@@ -1332,7 +1332,8 @@ router.post('/outbound-record', async (req, res) => {
       total_items: Math.abs(totalItems),
       shipping_method: shipping_method,
       status: '已发货',
-      remark: remark
+      remark: remark,
+      logistics_provider: logistics_provider // 新增物流商字段
     }, { transaction });
 
     // 第二步：处理出库记录和发货明细
@@ -1402,6 +1403,7 @@ router.post('/outbound-record', async (req, res) => {
       }
       
       // 创建出库记录（保持原有的local_boxes表记录）
+      // 新增：写入shipment_id字段，建立主表-明细表关联
       const record = {
         记录号: recordId,
         sku: sku,
@@ -1411,7 +1413,8 @@ router.post('/outbound-record', async (req, res) => {
         time: new Date(),
         操作员: operator,
         marketPlace: marketplace,
-        mix_box_num: mixBoxNum
+        mix_box_num: mixBoxNum,
+        shipment_id: shipmentRecord.shipment_id // 关键：写入发货单ID
       };
       
       outboundRecords.push(record);

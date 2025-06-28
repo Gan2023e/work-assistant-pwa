@@ -12,6 +12,15 @@ const LocalBox = sequelize.define('LocalBox', {
   打包员: DataTypes.STRING,
   mix_box_num: DataTypes.STRING,
   marketPlace: DataTypes.STRING,
+  shipment_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: '发货单ID',
+    references: {
+      model: 'shipment_records',
+      key: 'shipment_id'
+    }
+  },
 }, {
   tableName: 'local_boxes',
   timestamps: false
