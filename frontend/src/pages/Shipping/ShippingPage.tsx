@@ -2031,15 +2031,21 @@ const ShippingPage: React.FC = () => {
                       placeholder="选择亚马逊站点国家"
                       disabled={selectedTemplateCountry !== 'new'}
                       showSearch
+                      optionLabelProp="label"
                       filterOption={(input, option) =>
-                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase()) ||
+                        String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                       }
                     >
                       {countryTemplateOptions.map(option => (
-                        <Option key={option.value} value={option.value} label={option.label}>
-                          <div>
-                            <div>{option.label}</div>
-                            <div style={{ fontSize: '12px', color: '#999' }}>{option.site}</div>
+                        <Option 
+                          key={option.value} 
+                          value={option.value} 
+                          label={option.label}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{option.label}</span>
+                            <span style={{ fontSize: '12px', color: '#999', marginLeft: '8px' }}>{option.site}</span>
                           </div>
                         </Option>
                       ))}
@@ -2064,7 +2070,7 @@ const ShippingPage: React.FC = () => {
               </Row>
 
               <Row gutter={16}>
-                <Col span={8}>
+                <Col span={12}>
                   <Form.Item
                     name="sheetName"
                     label="Sheet页名称"
@@ -2073,7 +2079,7 @@ const ShippingPage: React.FC = () => {
                     <Input placeholder="例如：Create workflow – template" />
                   </Form.Item>
                 </Col>
-                <Col span={4}>
+                <Col span={6}>
                   <Form.Item
                     name="merchantSkuColumn"
                     label="Merchant SKU列"
@@ -2082,7 +2088,7 @@ const ShippingPage: React.FC = () => {
                     <Input placeholder="例如：A" />
                   </Form.Item>
                 </Col>
-                <Col span={4}>
+                <Col span={6}>
                   <Form.Item
                     name="quantityColumn"
                     label="Quantity列"
@@ -2091,7 +2097,10 @@ const ShippingPage: React.FC = () => {
                     <Input placeholder="例如：B" />
                   </Form.Item>
                 </Col>
-                <Col span={8}>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={6}>
                   <Form.Item
                     name="startRow"
                     label="开始填写行号"
