@@ -32,7 +32,8 @@ import {
   UploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  FileExcelOutlined
+  FileExcelOutlined,
+  BarChartOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
@@ -211,6 +212,9 @@ const ShippingPage: React.FC = () => {
   const [shippingData, setShippingData] = useState<ShippingConfirmData[]>([]);
   const [boxCounter, setBoxCounter] = useState(1);
   const [nextBoxNumber, setNextBoxNumber] = useState(1);
+  // 存储确认的发货数据，用于最终的出库记录
+  const [confirmedMixedBoxes, setConfirmedMixedBoxes] = useState<MixedBoxItem[]>([]);
+  const [confirmedWholeBoxes, setConfirmedWholeBoxes] = useState<WholeBoxConfirmData[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false); // 新增：发货加载状态
   
   // 未映射库存相关状态
@@ -313,8 +317,19 @@ const ShippingPage: React.FC = () => {
     }
 
     // 使用已确认的发货数据，如果没有则使用所有待发货的数据
-    let dataToGenerate = shippingData;
-    if (!dataToGenerate || dataToGenerate.length === 0) {
+    let dataToGenerate = [];
+    
+    if (shippingData && shippingData.length > 0) {
+      // 使用已确认的发货数据，需要补充country信息
+      dataToGenerate = shippingData.map(item => {
+        // 从selectedRows中找到对应的国家信息
+        const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+        return {
+          ...item,
+          country: selectedRecord?.country || '默认'
+        };
+      });
+    } else {
       // 将mergedData转换为发货数据格式
       dataToGenerate = mergedData
         .filter(item => item.status === '待发货' && item.amz_sku)
@@ -324,12 +339,14 @@ const ShippingPage: React.FC = () => {
           quantity: item.quantity,
           country: item.country
         }));
-      
-      if (dataToGenerate.length === 0) {
-        message.warning('没有可用的发货数据，请确保有待发货的商品且已映射Amazon SKU');
-        return;
-      }
     }
+    
+    if (dataToGenerate.length === 0) {
+      message.warning('没有可用的发货数据，请确保有待发货的商品且已映射Amazon SKU');
+      return;
+    }
+
+    console.log('🔍 生成亚马逊文件的数据:', dataToGenerate);
 
     setGenerateLoading(true);
     try {
@@ -353,15 +370,34 @@ const ShippingPage: React.FC = () => {
         
         // 自动下载所有文件
         data.files.forEach((file: any, index: number) => {
-          setTimeout(() => {
-            const downloadUrl = `${API_BASE_URL}${file.downloadUrl}`;
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = file.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }, index * 1000); // 每个文件间隔1秒下载，避免浏览器阻止
+          setTimeout(async () => {
+            try {
+              const downloadUrl = `${API_BASE_URL}${file.downloadUrl}`;
+              console.log(`🔗 开始下载文件: ${file.filename}, URL: ${downloadUrl}`);
+              
+              // 先检查文件是否存在
+              const checkResponse = await fetch(downloadUrl, { method: 'HEAD' });
+              if (!checkResponse.ok) {
+                console.error(`❌ 文件不存在或无法访问: ${file.filename}`);
+                message.error(`文件 ${file.filename} 下载失败：文件不存在`);
+                return;
+              }
+              
+              // 创建下载链接
+              const link = document.createElement('a');
+              link.href = downloadUrl;
+              link.download = file.filename;
+              link.target = '_blank'; // 在新标签页打开，如果直接下载失败
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              
+              console.log(`✅ 文件下载触发成功: ${file.filename}`);
+            } catch (error) {
+              console.error(`❌ 文件下载失败: ${file.filename}`, error);
+              message.error(`文件 ${file.filename} 下载失败`);
+            }
+          }, index * 1500); // 增加间隔到1.5秒，避免浏览器阻止
         });
       } else {
         message.error(result.message || '生成失败');
@@ -761,6 +797,8 @@ const ShippingPage: React.FC = () => {
         setShippingData([]);
         setBoxCounter(1);
         setNextBoxNumber(1);
+        setConfirmedMixedBoxes([]);
+        setConfirmedWholeBoxes([]);
         setShippingModalVisible(true);
         message.destroy(); // 关闭加载提示
       } else {
@@ -797,8 +835,8 @@ const ShippingPage: React.FC = () => {
         setShippingData([...shippingData, ...newShippingData]);
         setNextBoxNumber(nextBoxNumber + 1); // 递增箱号
         
-        // 记录混合箱出库信息
-        await recordOutbound(boxData, true);
+        // 保存混合箱数据用于最终出库记录
+        setConfirmedMixedBoxes([...confirmedMixedBoxes, ...boxData]);
       }
       
       if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
@@ -846,8 +884,8 @@ const ShippingPage: React.FC = () => {
         setShippingData([...shippingData, ...newShippingData]);
         setNextBoxNumber(currentBoxNum); // 更新下一个箱号
         
-        // 记录整箱出库信息
-        await recordOutbound(confirmedData, false);
+        // 保存整箱数据用于最终出库记录
+        setConfirmedWholeBoxes([...confirmedWholeBoxes, ...confirmedData]);
       }
       
       setCurrentStep(2);
@@ -1093,37 +1131,8 @@ const ShippingPage: React.FC = () => {
           size="small" 
           style={{ marginBottom: 16 }}
         >
-          <Row gutter={[16, 16]}>
-            {/* 全部国家按钮 */}
-            <Col>
-              <div
-                style={{
-                  cursor: 'pointer',
-                  padding: '8px 16px',
-                  border: `2px solid ${selectedCountry === '' ? '#1677ff' : '#d9d9d9'}`,
-                  borderRadius: '6px',
-                  backgroundColor: selectedCountry === '' ? '#f0f6ff' : '#fff',
-                  transition: 'all 0.3s',
-                  minWidth: '120px'
-                }}
-                onClick={() => {
-                  setSelectedCountry('');
-                  setFilterType(''); // 清除其他筛选
-                }}
-              >
-                <Statistic
-                  title="全部国家"
-                  value={countryInventory.reduce((sum, item) => sum + item.total_quantity, 0)}
-                  valueStyle={{ 
-                    color: selectedCountry === '' ? '#1677ff' : '#666',
-                    fontSize: '16px'
-                  }}
-                  suffix="件"
-                />
-              </div>
-            </Col>
-            
-            {/* 各国家库存卡片 */}
+                <Row gutter={[16, 16]}>
+        {/* 各国家库存卡片 */}
             {countryInventory.map((country) => (
               <Col key={country.country}>
                 <div
@@ -1137,7 +1146,9 @@ const ShippingPage: React.FC = () => {
                     minWidth: '120px'
                   }}
                   onClick={() => {
-                    setSelectedCountry(selectedCountry === country.country ? '' : country.country);
+                    // 如果点击的是当前选中的国家，则取消选中；否则选中该国家
+                    const newSelectedCountry = selectedCountry === country.country ? '' : country.country;
+                    setSelectedCountry(newSelectedCountry);
                     setFilterType(''); // 清除其他筛选
                   }}
                 >
@@ -1165,119 +1176,146 @@ const ShippingPage: React.FC = () => {
         </Card>
       )}
 
-          <Card style={{ marginBottom: 16 }}>
-            <Row gutter={16}>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'needs' ? '' : 'needs';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="发货需求数"
-                    value={mergedData.filter(item => item.quantity > 0).length}
-                    prefix={<PlusOutlined />}
-                    valueStyle={{ color: filterType === 'needs' ? '#1677ff' : undefined }}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="库存充足需求"
-                    value={mergedData.filter(item => item.quantity > 0 && item.shortage === 0).length}
-                    valueStyle={{ color: filterType === 'sufficient' ? '#1677ff' : '#3f8600' }}
-                    prefix={<CheckOutlined />}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'shortage' ? '' : 'shortage';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="库存不足需求"
-                    value={mergedData.filter(item => item.quantity > 0 && item.shortage > 0).length}
-                    valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#cf1322' }}
-                    prefix={<CloseOutlined />}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'shortage' ? '' : 'shortage';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="缺货SKU"
-                    value={mergedData.filter(item => item.quantity > 0 && item.shortage > 0).length}
-                    valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="有库存无需求"
-                    value={mergedData.filter(item => item.quantity === 0 && item.total_available > 0).length}
-                    valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
-                    setFilterType(newFilterType);
-                  }}
-                >
-                  <Statistic
-                    title="库存未映射"
-                    value={mergedData.filter(item => item.status === '库存未映射').length}
-                    valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                <div 
-                  style={{ cursor: 'pointer' }} 
-                  onClick={() => {
-                    setFilterType('');
-                  }}
-                >
-                  <Statistic
-                    title="总记录数"
-                    value={mergedData.length}
-                    valueStyle={{ color: filterType === '' ? '#1677ff' : '#666' }}
-                  />
-                </div>
-              </Col>
-              <Col span={3}>
-                {/* 空列用于保持布局对称 */}
-              </Col>
-            </Row>
+          <Card 
+            title={
+              <span>
+                <BarChartOutlined style={{ marginRight: 8 }} />
+                发货需求统计 
+                {selectedCountry && (
+                  <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                    (当前国家: {selectedCountry})
+                  </Text>
+                )}
+                {!selectedCountry && (
+                  <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                    (全部国家)
+                  </Text>
+                )}
+              </span>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            {(() => {
+              // 根据选中的国家筛选数据
+              const filteredData = selectedCountry 
+                ? mergedData.filter(item => item.country === selectedCountry)
+                : mergedData;
+              
+              return (
+                <Row gutter={16}>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'needs' ? '' : 'needs';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="发货需求数"
+                        value={filteredData.filter(item => item.quantity > 0).length}
+                        prefix={<PlusOutlined />}
+                        valueStyle={{ color: filterType === 'needs' ? '#1677ff' : undefined }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存充足需求"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage === 0).length}
+                        valueStyle={{ color: filterType === 'sufficient' ? '#1677ff' : '#3f8600' }}
+                        prefix={<CheckOutlined />}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存不足需求"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#cf1322' }}
+                        prefix={<CloseOutlined />}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="缺货SKU"
+                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="有库存无需求"
+                        value={filteredData.filter(item => item.quantity === 0 && item.total_available > 0).length}
+                        valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="库存未映射"
+                        value={filteredData.filter(item => item.status === '库存未映射').length}
+                        valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
+                        setFilterType('');
+                      }}
+                    >
+                      <Statistic
+                        title="总记录数"
+                        value={filteredData.length}
+                        valueStyle={{ color: filterType === '' ? '#1677ff' : '#666' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    {/* 空列用于保持布局对称 */}
+                  </Col>
+                </Row>
+              );
+            })()}
           </Card>
 
           <Card size="small" style={{ marginBottom: 8 }}>
@@ -1683,10 +1721,40 @@ const ShippingPage: React.FC = () => {
                   导出Excel
                 </Button>
                 <Button type="primary" onClick={async () => {
+                  // 统一处理出库记录
+                  if (confirmedMixedBoxes.length > 0 || confirmedWholeBoxes.length > 0) {
+                    try {
+                      message.loading('正在记录出库信息...', 0);
+                      
+                      // 处理混合箱出库记录
+                      if (confirmedMixedBoxes.length > 0) {
+                        await recordOutbound(confirmedMixedBoxes, true);
+                      }
+                      
+                      // 处理整箱出库记录
+                      if (confirmedWholeBoxes.length > 0) {
+                        await recordOutbound(confirmedWholeBoxes, false);
+                      }
+                      
+                      message.destroy();
+                      message.success('出库记录创建成功！');
+                    } catch (error) {
+                      message.destroy();
+                      message.error('出库记录失败，请检查后重试');
+                      console.error('出库记录失败:', error);
+                      return; // 如果出库记录失败，不继续执行
+                    }
+                  }
+                  
+                  // 关闭对话框并清理状态
                   setShippingModalVisible(false);
                   setSelectedRowKeys([]);
                   setSelectedRows([]);
+                  setConfirmedMixedBoxes([]);
+                  setConfirmedWholeBoxes([]);
+                  
                   message.success('发货流程完成！');
+                  
                   // 刷新数据
                   message.loading('正在刷新发货需求数据...', 0);
                   try {
