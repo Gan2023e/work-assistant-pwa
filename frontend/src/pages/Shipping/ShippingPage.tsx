@@ -589,7 +589,7 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 上传装箱表
+  // 上传装箱表（自动分析）
   const handleUploadPackingList = async (values: any) => {
     setPackingListLoading(true);
     try {
@@ -609,11 +609,7 @@ const ShippingPage: React.FC = () => {
 
       const formData = new FormData();
       formData.append('packingList', file);
-      formData.append('sheetName', values.sheetName);
-      formData.append('headerRow', values.headerRow.toString());
-      formData.append('skuStartRow', values.skuStartRow.toString());
-      formData.append('boxStartColumn', values.boxStartColumn);
-      formData.append('boxCount', values.boxCount.toString());
+      // 不再需要手动添加配置参数，后端会自动分析
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
         method: 'POST',
@@ -623,10 +619,28 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        message.success('装箱表上传成功！');
+        message.success('装箱表上传成功！系统已自动识别表格格式。');
         setPackingListConfig(result.data);
-        setPackingListModalVisible(false);
+        // 不立即关闭对话框，让用户可以查看解析结果和下载
         packingListForm.resetFields();
+        
+        // 显示成功提示，提醒用户可以下载
+        Modal.success({
+          title: '装箱表解析成功',
+          content: (
+            <div>
+              <p>已成功解析装箱表，共 {result.data.items?.length || 0} 条装箱记录。</p>
+              <p>您可以：</p>
+              <ul>
+                <li>查看解析后的装箱明细</li>
+                <li>下载填写好的装箱表</li>
+                <li>应用到发货清单</li>
+              </ul>
+            </div>
+          ),
+          width: 450,
+          okText: '知道了'
+        });
       } else {
         message.error(result.message || '上传失败');
       }
@@ -654,6 +668,58 @@ const ShippingPage: React.FC = () => {
 
     setShippingData(newShippingData);
     message.success(`已应用装箱表数据，共 ${newShippingData.length} 条记录`);
+  };
+
+  // 下载填写好的装箱表
+  const downloadPackingList = async () => {
+    if (!packingListConfig) {
+      message.warning('没有可用的装箱表数据');
+      return;
+    }
+
+    setPackingListLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/download`, {
+        method: 'GET',
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '下载失败');
+      }
+
+      // 获取文件名（从响应头或者使用默认名）
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = '装箱表_已填写.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+
+      // 下载文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      message.success('装箱表下载成功！');
+    } catch (error) {
+      console.error('下载装箱表失败:', error);
+      message.error(`下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setPackingListLoading(false);
+    }
   };
 
 
@@ -2491,6 +2557,13 @@ const ShippingPage: React.FC = () => {
                   关闭
                 </Button>
                 <Button 
+                  icon={<DownloadOutlined />}
+                  onClick={downloadPackingList}
+                  loading={packingListLoading}
+                >
+                  下载装箱表
+                </Button>
+                <Button 
                   type="primary" 
                   onClick={() => {
                     applyPackingListToShipping();
@@ -2504,24 +2577,17 @@ const ShippingPage: React.FC = () => {
           </div>
         ) : (
           <div>
-            <Alert
-              message="上传装箱表"
-              description="请上传亚马逊后台下载的装箱表Excel文件，系统将根据箱号列和SKU自动解析每箱的装箱SKU及数量"
-              type="info"
-              style={{ marginBottom: 16 }}
-            />
+                          <Alert
+                message="智能上传装箱表"
+                description="请上传亚马逊后台下载的装箱表Excel文件。系统将自动识别表格格式，解析后您可以下载填写好的装箱表或应用到发货清单。"
+                type="info"
+                style={{ marginBottom: 16 }}
+              />
             
             <Form
               form={packingListForm}
               layout="vertical"
               onFinish={handleUploadPackingList}
-              initialValues={{
-                sheetName: 'Sheet1',
-                headerRow: 5,
-                skuStartRow: 6,
-                boxStartColumn: 'L',
-                boxCount: 5
-              }}
             >
               <Form.Item
                 name="packingList"
@@ -2544,62 +2610,11 @@ const ShippingPage: React.FC = () => {
               </Form.Item>
 
               <Alert
-                message="亚马逊装箱表格式说明"
-                description="A列为SKU列，第5行为标题行(Box 1 quantity等)，第6行开始为SKU数据。系统将自动解析每个SKU在各个箱子中的数量。"
+                message="智能识别装箱表"
+                description="系统将自动识别Excel表格格式，解析装箱数据。上传成功后，您可以直接下载填写好的装箱表Excel文件。"
                 type="info"
                 style={{ marginBottom: 16 }}
               />
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="sheetName"
-                    label="Sheet页名称"
-                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
-                  >
-                    <Input placeholder="Sheet1" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="headerRow"
-                    label="标题行号(Box 1 quantity所在行)"
-                    rules={[{ required: true, message: '请输入标题行号' }]}
-                  >
-                    <InputNumber min={1} placeholder="5" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Form.Item
-                    name="skuStartRow"
-                    label="SKU开始行号"
-                    rules={[{ required: true, message: '请输入SKU开始行号' }]}
-                  >
-                    <InputNumber min={1} placeholder="6" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name="boxStartColumn"
-                    label="第一个箱子列(Box 1 quantity)"
-                    rules={[{ required: true, message: '请输入第一个箱子列' }]}
-                  >
-                    <Input placeholder="L" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name="boxCount"
-                    label="箱子总数"
-                    rules={[{ required: true, message: '请输入箱子总数' }]}
-                  >
-                    <InputNumber min={1} max={20} placeholder="5" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
 
               <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
                 <Space>
