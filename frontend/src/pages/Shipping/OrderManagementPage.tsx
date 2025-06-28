@@ -453,7 +453,7 @@ const OrderManagementPage: React.FC = () => {
       width: 80,
       align: 'center',
       render: (status: string) => (
-        <Tag color={getStatusColor(status)} size="small">
+        <Tag color={getStatusColor(status)}>
           {status}
         </Tag>
       )
