@@ -4,6 +4,10 @@ const { WarehouseProductsNeed, LocalBox, AmzSkuMapping, sequelize, ShipmentRecor
 const { Sequelize, Op } = require('sequelize');
 const axios = require('axios');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const XLSX = require('xlsx');
 
 // 钉钉通知函数
 async function sendDingTalkNotification(message, atMobiles = []) {
@@ -1755,6 +1759,422 @@ router.post('/create-mapping', async (req, res) => {
       code: 1,
       message: '创建SKU映射失败',
       error: error.message
+    });
+  }
+});
+
+// 创建uploads目录（如果不存在）
+const uploadsDir = path.join(__dirname, '../uploads/amazon-templates');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// 配置multer用于文件上传
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    // 使用时间戳和随机数生成唯一文件名
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'amazon-template-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    // 只允许Excel文件
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+        file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传Excel文件'), false);
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB限制
+  }
+});
+
+// 亚马逊模板配置存储
+const templateConfigPath = path.join(__dirname, '../uploads/amazon-templates/template-config.json');
+
+// 获取当前模板配置
+router.get('/amazon-template/config', async (req, res) => {
+  try {
+    const { country } = req.query;
+    
+    if (fs.existsSync(templateConfigPath)) {
+      const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
+      
+      if (country) {
+        // 获取特定国家的模板配置
+        const countryConfig = allConfigs[country];
+        if (countryConfig) {
+          res.json({
+            success: true,
+            data: {
+              hasTemplate: true,
+              country: country,
+              ...countryConfig
+            }
+          });
+        } else {
+          res.json({
+            success: true,
+            data: {
+              hasTemplate: false,
+              country: country,
+              message: `尚未上传 ${country} 的亚马逊模板`
+            }
+          });
+        }
+      } else {
+        // 获取所有国家的模板配置
+        const hasAnyTemplate = Object.keys(allConfigs).length > 0;
+        res.json({
+          success: true,
+          data: {
+            hasTemplate: hasAnyTemplate,
+            templates: allConfigs,
+            countries: Object.keys(allConfigs),
+            message: hasAnyTemplate ? '已配置模板' : '尚未上传任何亚马逊模板'
+          }
+        });
+      }
+    } else {
+      res.json({
+        success: true,
+        data: {
+          hasTemplate: false,
+          templates: {},
+          countries: [],
+          message: '尚未上传任何亚马逊模板'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ 获取模板配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取模板配置失败'
+    });
+  }
+});
+
+// 上传亚马逊模板
+router.post('/amazon-template/upload', upload.single('template'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: '请选择要上传的Excel文件'
+      });
+    }
+
+    const { sheetName, merchantSkuColumn, quantityColumn, startRow, country, countryName } = req.body;
+
+    if (!sheetName || !merchantSkuColumn || !quantityColumn || !startRow || !country) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供完整的模板配置信息，包括适用国家'
+      });
+    }
+
+    // 验证Excel文件并获取sheet信息
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetNames = workbook.SheetNames;
+    
+    if (!sheetNames.includes(sheetName)) {
+      return res.status(400).json({
+        success: false,
+        message: `模板中不存在sheet页: ${sheetName}。可用的sheet页: ${sheetNames.join(', ')}`
+      });
+    }
+
+    // 读取现有配置或创建新配置
+    let allConfigs = {};
+    if (fs.existsSync(templateConfigPath)) {
+      try {
+        allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
+      } catch (err) {
+        console.warn('读取现有配置失败，将创建新配置:', err.message);
+        allConfigs = {};
+      }
+    }
+
+    // 保存该国家的模板配置
+    const config = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      filePath: req.file.path,
+      uploadTime: new Date().toISOString(),
+      sheetName: sheetName,
+      merchantSkuColumn: merchantSkuColumn.toUpperCase(),
+      quantityColumn: quantityColumn.toUpperCase(),
+      startRow: parseInt(startRow),
+      sheetNames: sheetNames, // 保存所有可用的sheet名称
+      country: country,
+      countryName: countryName || country
+    };
+
+    // 如果该国家已有模板，删除旧的模板文件
+    if (allConfigs[country] && allConfigs[country].filePath && fs.existsSync(allConfigs[country].filePath)) {
+      try {
+        fs.unlinkSync(allConfigs[country].filePath);
+        console.log(`✅ 已删除 ${country} 的旧模板文件`);
+      } catch (err) {
+        console.warn(`⚠️ 删除 ${country} 旧模板文件失败:`, err.message);
+      }
+    }
+
+    allConfigs[country] = config;
+    fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
+
+    res.json({
+      success: true,
+      message: `${countryName || country} 亚马逊模板上传成功`,
+      data: {
+        hasTemplate: true,
+        country: country,
+        ...config
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 上传亚马逊模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '上传模板失败: ' + error.message
+    });
+  }
+});
+
+// 生成亚马逊发货文件
+router.post('/amazon-template/generate', async (req, res) => {
+  try {
+    const { shippingData, country } = req.body;
+
+    if (!shippingData || !Array.isArray(shippingData)) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供发货数据'
+      });
+    }
+
+    // 获取模板配置
+    if (!fs.existsSync(templateConfigPath)) {
+      return res.status(400).json({
+        success: false,
+        message: '尚未配置亚马逊模板，请先上传模板'
+      });
+    }
+
+    const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
+    
+    // 按国家分组发货数据
+    const dataByCountry = {};
+    shippingData.forEach(item => {
+      // 从发货数据中获取国家信息，优先使用传入的country参数
+      const itemCountry = country || item.country || '默认';
+      if (!dataByCountry[itemCountry]) {
+        dataByCountry[itemCountry] = [];
+      }
+      dataByCountry[itemCountry].push(item);
+    });
+
+    const generatedFiles = [];
+
+    // 为每个国家生成对应的文件
+    for (const [itemCountry, countryData] of Object.entries(dataByCountry)) {
+      const config = allConfigs[itemCountry];
+      
+      if (!config) {
+        console.warn(`⚠️ 未找到 ${itemCountry} 的模板配置，跳过生成`);
+        continue;
+      }
+      
+      if (!fs.existsSync(config.filePath)) {
+        console.warn(`⚠️ ${itemCountry} 的模板文件不存在: ${config.filePath}`);
+        continue;
+      }
+
+      // 按Amazon SKU汇总该国家的数量
+      const amazonSkuSummary = {};
+      countryData.forEach(item => {
+        if (amazonSkuSummary[item.amz_sku]) {
+          amazonSkuSummary[item.amz_sku] += item.quantity;
+        } else {
+          amazonSkuSummary[item.amz_sku] = item.quantity;
+        }
+      });
+
+      // 读取模板文件
+      const workbook = XLSX.readFile(config.filePath);
+      const worksheet = workbook.Sheets[config.sheetName];
+
+      // 填写数据到模板
+      let currentRow = config.startRow;
+      Object.entries(amazonSkuSummary).forEach(([amzSku, quantity]) => {
+        // 设置Merchant SKU列
+        const skuCell = config.merchantSkuColumn + currentRow;
+        XLSX.utils.sheet_add_aoa(worksheet, [[amzSku]], { origin: skuCell });
+
+        // 设置Quantity列
+        const quantityCell = config.quantityColumn + currentRow;
+        XLSX.utils.sheet_add_aoa(worksheet, [[quantity]], { origin: quantityCell });
+
+        currentRow++;
+      });
+
+      // 生成新的文件名
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const countryCode = itemCountry.replace(/[^a-zA-Z0-9]/g, '');
+      const outputFilename = `amazon-upload-${countryCode}-${timestamp}.xlsx`;
+      const outputPath = path.join(uploadsDir, outputFilename);
+
+      // 保存填写后的文件
+      XLSX.writeFile(workbook, outputPath);
+
+      generatedFiles.push({
+        country: itemCountry,
+        countryName: config.countryName || itemCountry,
+        filename: outputFilename,
+        downloadUrl: `/api/shipping/amazon-template/download/${outputFilename}`,
+        itemCount: Object.keys(amazonSkuSummary).length,
+        totalQuantity: Object.values(amazonSkuSummary).reduce((sum, qty) => sum + qty, 0),
+        summary: amazonSkuSummary
+      });
+    }
+
+    if (generatedFiles.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '没有找到对应国家的模板配置，无法生成文件'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `成功生成 ${generatedFiles.length} 个国家的亚马逊发货文件`,
+      data: {
+        files: generatedFiles,
+        totalCountries: generatedFiles.length,
+        totalItems: generatedFiles.reduce((sum, file) => sum + file.itemCount, 0),
+        totalQuantity: generatedFiles.reduce((sum, file) => sum + file.totalQuantity, 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 生成亚马逊发货文件失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '生成发货文件失败: ' + error.message
+    });
+  }
+});
+
+// 下载生成的亚马逊文件
+router.get('/amazon-template/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadsDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: '文件不存在'
+      });
+    }
+
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error('❌ 文件下载失败:', err);
+        res.status(500).json({
+          success: false,
+          message: '文件下载失败'
+        });
+      }
+    });
+  } catch (error) {
+    console.error('❌ 下载文件失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '下载失败'
+    });
+  }
+});
+
+// 删除模板配置
+router.delete('/amazon-template/config', async (req, res) => {
+  try {
+    const { country } = req.query;
+
+    if (!fs.existsSync(templateConfigPath)) {
+      return res.json({
+        success: true,
+        message: '没有模板配置需要删除'
+      });
+    }
+
+    const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
+
+    if (country) {
+      // 删除特定国家的模板配置
+      if (allConfigs[country]) {
+        const config = allConfigs[country];
+        
+        // 删除模板文件
+        if (config.filePath && fs.existsSync(config.filePath)) {
+          fs.unlinkSync(config.filePath);
+        }
+        
+        // 从配置中删除该国家
+        delete allConfigs[country];
+        
+        // 更新配置文件
+        if (Object.keys(allConfigs).length > 0) {
+          fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
+        } else {
+          fs.unlinkSync(templateConfigPath);
+        }
+
+        res.json({
+          success: true,
+          message: `${config.countryName || country} 模板配置已删除`
+        });
+      } else {
+        res.json({
+          success: true,
+          message: `${country} 没有模板配置需要删除`
+        });
+      }
+    } else {
+      // 删除所有模板配置
+      Object.values(allConfigs).forEach(config => {
+        if (config.filePath && fs.existsSync(config.filePath)) {
+          try {
+            fs.unlinkSync(config.filePath);
+          } catch (err) {
+            console.warn(`删除文件失败: ${config.filePath}`, err.message);
+          }
+        }
+      });
+      
+      // 删除配置文件
+      fs.unlinkSync(templateConfigPath);
+
+      res.json({
+        success: true,
+        message: '所有模板配置已删除'
+      });
+    }
+  } catch (error) {
+    console.error('❌ 删除模板配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除模板配置失败'
     });
   }
 });

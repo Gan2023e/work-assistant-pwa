@@ -17,7 +17,9 @@ import {
   Typography,
   Divider,
   Steps,
-  Alert
+  Alert,
+  Upload,
+  Descriptions
 } from 'antd';
 import { 
   PlusOutlined,
@@ -25,9 +27,15 @@ import {
   CloseOutlined,
   SendOutlined,
   ExportOutlined,
-  GlobalOutlined
+  GlobalOutlined,
+  SettingOutlined,
+  UploadOutlined,
+  DownloadOutlined,
+  DeleteOutlined,
+  FileExcelOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import type { UploadProps } from 'antd';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -150,6 +158,38 @@ interface CountryInventory {
   total_quantity: number;
 }
 
+interface AmazonTemplateConfig {
+  hasTemplate: boolean;
+  templates?: Record<string, CountryTemplateConfig>;
+  countries?: string[];
+  filename?: string;
+  originalName?: string;
+  filePath?: string;
+  uploadTime?: string;
+  sheetName?: string;
+  merchantSkuColumn?: string;
+  quantityColumn?: string;
+  startRow?: number;
+  sheetNames?: string[];
+  country?: string;
+  countryName?: string;
+  message?: string;
+}
+
+interface CountryTemplateConfig {
+  filename: string;
+  originalName: string;
+  filePath: string;
+  uploadTime: string;
+  sheetName: string;
+  merchantSkuColumn: string;
+  quantityColumn: string;
+  startRow: number;
+  sheetNames: string[];
+  country: string;
+  countryName: string;
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
@@ -181,6 +221,166 @@ const ShippingPage: React.FC = () => {
   // 国家库存相关状态
   const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>(''); // 选中的国家
+
+  // 亚马逊模板相关状态
+  const [amazonTemplateConfig, setAmazonTemplateConfig] = useState<AmazonTemplateConfig>({ hasTemplate: false });
+  const [templateModalVisible, setTemplateModalVisible] = useState(false);
+  const [templateForm] = Form.useForm();
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [selectedTemplateCountry, setSelectedTemplateCountry] = useState<string>('');
+
+  // 国家选项配置
+  const countryTemplateOptions = [
+    { value: '美国', label: '美国 (US)', site: 'amazon.com' },
+    { value: '英国', label: '英国 (UK)', site: 'amazon.co.uk' },
+    { value: '德国', label: '德国 (DE)', site: 'amazon.de' },
+    { value: '法国', label: '法国 (FR)', site: 'amazon.fr' },
+    { value: '意大利', label: '意大利 (IT)', site: 'amazon.it' },
+    { value: '西班牙', label: '西班牙 (ES)', site: 'amazon.es' },
+    { value: '加拿大', label: '加拿大 (CA)', site: 'amazon.ca' },
+    { value: '日本', label: '日本 (JP)', site: 'amazon.co.jp' },
+    { value: '澳大利亚', label: '澳大利亚 (AU)', site: 'amazon.com.au' },
+    { value: '新加坡', label: '新加坡 (SG)', site: 'amazon.sg' },
+    { value: '阿联酋', label: '阿联酋 (AE)', site: 'amazon.ae' },
+  ];
+
+  // 获取亚马逊模板配置
+  const fetchAmazonTemplateConfig = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/config`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setAmazonTemplateConfig(result.data);
+      } else {
+        console.error('获取模板配置失败:', result.message);
+      }
+    } catch (error) {
+      console.error('获取模板配置失败:', error);
+    }
+  };
+
+  // 上传亚马逊模板
+  const handleUploadTemplate = async (values: any) => {
+    setUploadLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('template', values.template.file);
+      formData.append('sheetName', values.sheetName);
+      formData.append('merchantSkuColumn', values.merchantSkuColumn);
+      formData.append('quantityColumn', values.quantityColumn);
+      formData.append('startRow', values.startRow.toString());
+      formData.append('country', values.country);
+      
+      // 找到对应的国家名称
+      const countryOption = countryTemplateOptions.find(opt => opt.value === values.country);
+      if (countryOption) {
+        formData.append('countryName', countryOption.label);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success(`${result.data.countryName || result.data.country} 模板上传成功！`);
+        
+        // 重新获取所有模板配置
+        await fetchAmazonTemplateConfig();
+        setTemplateModalVisible(false);
+        templateForm.resetFields();
+        setSelectedTemplateCountry('');
+      } else {
+        message.error(result.message || '上传失败');
+      }
+    } catch (error) {
+      console.error('上传模板失败:', error);
+      message.error('上传失败');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  // 生成亚马逊发货文件
+  const generateAmazonFile = async () => {
+    if (!amazonTemplateConfig.hasTemplate) {
+      message.warning('请先上传亚马逊模板');
+      return;
+    }
+
+    setGenerateLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shippingData: shippingData
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        const data = result.data;
+        message.success(
+          `亚马逊发货文件生成成功！生成了 ${data.totalCountries} 个国家的文件，包含 ${data.totalItems} 个SKU，总数量 ${data.totalQuantity}`
+        );
+        
+        // 自动下载所有文件
+        data.files.forEach((file: any, index: number) => {
+          setTimeout(() => {
+            const downloadUrl = `${API_BASE_URL}${file.downloadUrl}`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = file.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }, index * 1000); // 每个文件间隔1秒下载，避免浏览器阻止
+        });
+      } else {
+        message.error(result.message || '生成失败');
+      }
+    } catch (error) {
+      console.error('生成亚马逊文件失败:', error);
+      message.error('生成失败');
+    } finally {
+      setGenerateLoading(false);
+    }
+  };
+
+  // 删除模板配置
+  const deleteTemplateConfig = async (country?: string) => {
+    try {
+      const url = country 
+        ? `${API_BASE_URL}/api/shipping/amazon-template/config?country=${encodeURIComponent(country)}`
+        : `${API_BASE_URL}/api/shipping/amazon-template/config`;
+        
+      const response = await fetch(url, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success(result.message || '模板配置已删除');
+        
+        // 重新获取模板配置
+        await fetchAmazonTemplateConfig();
+      } else {
+        message.error(result.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除模板配置失败:', error);
+      message.error('删除失败');
+    }
+  };
 
 
 
@@ -264,6 +464,7 @@ const ShippingPage: React.FC = () => {
   useEffect(() => {
     fetchMergedData(); // 默认获取待发货数据
     fetchCountryInventory(); // 同时获取国家库存数据
+    fetchAmazonTemplateConfig(); // 获取亚马逊模板配置
   }, []);
 
   // 状态颜色映射
@@ -813,8 +1014,16 @@ const ShippingPage: React.FC = () => {
             创建SKU映射 ({selectedRows.filter(row => row.status === '库存未映射').length})
           </Button>
         </Col>
-
-
+        <Col>
+          <Button
+            type="default"
+            icon={<SettingOutlined />}
+            onClick={() => setTemplateModalVisible(true)}
+          >
+            管理亚马逊发货上传模板
+            {amazonTemplateConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+          </Button>
+        </Col>
       </Row>
 
       {/* 国家库存卡片栏 */}
@@ -1299,6 +1508,103 @@ const ShippingPage: React.FC = () => {
         {currentStep === 2 && (
           <div>
             <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
+            
+            {/* 亚马逊模板状态 */}
+            <Card 
+              title={
+                <Space>
+                  <FileExcelOutlined />
+                  <span>亚马逊发货文件</span>
+                </Space>
+              }
+              size="small" 
+              style={{ marginBottom: 16 }}
+            >
+              {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 ? (
+                <div>
+                  <Alert 
+                    message={`已配置 ${amazonTemplateConfig.countries.length} 个国家的模板`}
+                    description={`配置的国家：${amazonTemplateConfig.countries.join('、')}`}
+                    type="success" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  
+                  {/* 显示各国家模板配置 */}
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {amazonTemplateConfig.countries.map(country => {
+                      const template = amazonTemplateConfig.templates?.[country];
+                      if (!template) return null;
+                      
+                      return (
+                        <Card key={country} size="small" style={{ marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1 }}>
+                              <Descriptions size="small" column={2}>
+                                <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                                <Descriptions.Item label="模板文件">{template.originalName}</Descriptions.Item>
+                                <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                                <Descriptions.Item label="SKU列">{template.merchantSkuColumn}</Descriptions.Item>
+                                <Descriptions.Item label="数量列">{template.quantityColumn}</Descriptions.Item>
+                                <Descriptions.Item label="开始行">{template.startRow}</Descriptions.Item>
+                              </Descriptions>
+                            </div>
+                            <Button 
+                              size="small"
+                              danger
+                              onClick={() => {
+                                Modal.confirm({
+                                  title: '确认删除',
+                                  content: `确定要删除 ${template.countryName} 的模板配置吗？`,
+                                  onOk: () => deleteTemplateConfig(country),
+                                });
+                              }}
+                            >
+                              删除
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  
+                  <div style={{ marginTop: 16 }}>
+                    <Space>
+                      <Button 
+                        type="primary" 
+                        icon={<DownloadOutlined />} 
+                        onClick={generateAmazonFile}
+                        loading={generateLoading}
+                      >
+                        生成亚马逊发货文件
+                      </Button>
+                      <Button 
+                        icon={<SettingOutlined />} 
+                        onClick={() => setTemplateModalVisible(true)}
+                      >
+                        管理模板
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Alert 
+                    message="尚未配置亚马逊模板" 
+                    description="请先上传亚马逊批量上传产品表模板，以便自动生成发货文件。"
+                    type="warning" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Button 
+                    type="primary" 
+                    icon={<UploadOutlined />} 
+                    onClick={() => setTemplateModalVisible(true)}
+                  >
+                    上传亚马逊模板
+                  </Button>
+                </div>
+              )}
+            </Card>
+
             <Table
               dataSource={shippingData}
               columns={[
@@ -1435,6 +1741,257 @@ const ShippingPage: React.FC = () => {
             </Space>
           </div>
         </Form>
+      </Modal>
+
+      {/* 亚马逊模板管理对话框 */}
+      <Modal
+        title="管理亚马逊发货上传模板"
+        open={templateModalVisible}
+        onCancel={() => {
+          setTemplateModalVisible(false);
+          setSelectedTemplateCountry('');
+          templateForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 ? (
+          <div>
+            {/* 已配置的模板列表 */}
+            <Alert
+              message={`已配置 ${amazonTemplateConfig.countries.length} 个国家的亚马逊模板`}
+              description={`配置的国家：${amazonTemplateConfig.countries.join('、')}`}
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            {/* 模板列表 */}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: 16 }}>
+              {amazonTemplateConfig.countries.map(country => {
+                const template = amazonTemplateConfig.templates?.[country];
+                if (!template) return null;
+                
+                return (
+                  <Card key={country} size="small" style={{ marginBottom: 8 }}>
+                    <Row>
+                      <Col span={20}>
+                        <Descriptions size="small" column={2}>
+                          <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                          <Descriptions.Item label="文件名">{template.originalName}</Descriptions.Item>
+                          <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                          <Descriptions.Item label="SKU列">{template.merchantSkuColumn}</Descriptions.Item>
+                          <Descriptions.Item label="数量列">{template.quantityColumn}</Descriptions.Item>
+                          <Descriptions.Item label="开始行">{template.startRow}</Descriptions.Item>
+                          <Descriptions.Item label="上传时间" span={2}>
+                            {new Date(template.uploadTime).toLocaleString('zh-CN')}
+                          </Descriptions.Item>
+                        </Descriptions>
+                      </Col>
+                      <Col span={4} style={{ textAlign: 'right' }}>
+                        <Space direction="vertical" size="small">
+                          <Button 
+                            size="small"
+                            onClick={() => setSelectedTemplateCountry(country)}
+                          >
+                            更新
+                          </Button>
+                          <Button 
+                            size="small"
+                            danger
+                            onClick={() => {
+                              Modal.confirm({
+                                title: '确认删除',
+                                content: `确定要删除 ${template.countryName} 的模板配置吗？此操作不可恢复。`,
+                                onOk: () => deleteTemplateConfig(country),
+                              });
+                            }}
+                          >
+                            删除
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+                );
+              })}
+            </div>
+            
+            <Space style={{ marginBottom: 16 }}>
+              <Button 
+                type="primary" 
+                icon={<UploadOutlined />} 
+                onClick={() => setSelectedTemplateCountry('new')}
+              >
+                添加新国家模板
+              </Button>
+              <Button 
+                danger 
+                icon={<DeleteOutlined />} 
+                onClick={() => {
+                  Modal.confirm({
+                    title: '确认删除',
+                    content: '确定要删除所有模板配置吗？此操作不可恢复。',
+                    onOk: () => deleteTemplateConfig(),
+                  });
+                }}
+              >
+                删除所有模板
+              </Button>
+            </Space>
+          </div>
+        )}
+
+        {/* 上传/更新模板表单 */}
+        {(selectedTemplateCountry === 'new' || (selectedTemplateCountry && selectedTemplateCountry !== '')) && (
+          <div>
+            <Alert
+              message={selectedTemplateCountry === 'new' ? "添加新国家模板" : `更新 ${amazonTemplateConfig.templates?.[selectedTemplateCountry]?.countryName} 模板`}
+              description={
+                <div>
+                  <p>请上传亚马逊的Excel模板文件，并配置以下信息：</p>
+                  <ul>
+                    <li><strong>适用国家：</strong>该模板适用的亚马逊站点国家</li>
+                    <li><strong>Sheet页名称：</strong>需要填写数据的工作表名称（如：Create workflow – template）</li>
+                    <li><strong>Merchant SKU列：</strong>Merchant SKU所在的列（如：A）</li>
+                    <li><strong>Quantity列：</strong>Quantity所在的列（如：B）</li>
+                    <li><strong>开始行：</strong>开始填写数据的行号（如：9）</li>
+                  </ul>
+                </div>
+              }
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+
+            <Form
+              form={templateForm}
+              layout="vertical"
+              onFinish={handleUploadTemplate}
+              initialValues={selectedTemplateCountry !== 'new' && amazonTemplateConfig.templates?.[selectedTemplateCountry] ? {
+                country: selectedTemplateCountry,
+                sheetName: amazonTemplateConfig.templates[selectedTemplateCountry].sheetName,
+                merchantSkuColumn: amazonTemplateConfig.templates[selectedTemplateCountry].merchantSkuColumn,
+                quantityColumn: amazonTemplateConfig.templates[selectedTemplateCountry].quantityColumn,
+                startRow: amazonTemplateConfig.templates[selectedTemplateCountry].startRow,
+              } : undefined}
+            >
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="country"
+                    label="适用国家"
+                    rules={[{ required: true, message: '请选择适用国家' }]}
+                  >
+                    <Select 
+                      placeholder="选择亚马逊站点国家"
+                      disabled={selectedTemplateCountry !== 'new'}
+                      showSearch
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    >
+                      {countryTemplateOptions.map(option => (
+                        <Option key={option.value} value={option.value} label={option.label}>
+                          <div>
+                            <div>{option.label}</div>
+                            <div style={{ fontSize: '12px', color: '#999' }}>{option.site}</div>
+                          </div>
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="template"
+                    label="Excel模板文件"
+                    rules={[{ required: true, message: '请选择模板文件' }]}
+                  >
+                    <Upload
+                      accept=".xlsx,.xls"
+                      beforeUpload={() => false}
+                      maxCount={1}
+                    >
+                      <Button icon={<UploadOutlined />}>选择Excel文件</Button>
+                    </Upload>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="sheetName"
+                    label="Sheet页名称"
+                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                  >
+                    <Input placeholder="例如：Create workflow – template" />
+                  </Form.Item>
+                </Col>
+                <Col span={4}>
+                  <Form.Item
+                    name="merchantSkuColumn"
+                    label="Merchant SKU列"
+                    rules={[{ required: true, message: '请输入列标识' }]}
+                  >
+                    <Input placeholder="例如：A" />
+                  </Form.Item>
+                </Col>
+                <Col span={4}>
+                  <Form.Item
+                    name="quantityColumn"
+                    label="Quantity列"
+                    rules={[{ required: true, message: '请输入列标识' }]}
+                  >
+                    <Input placeholder="例如：B" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="startRow"
+                    label="开始填写行号"
+                    rules={[{ required: true, message: '请输入开始行号' }]}
+                  >
+                    <InputNumber min={1} placeholder="例如：9" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div style={{ textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={() => {
+                    setSelectedTemplateCountry('');
+                    templateForm.resetFields();
+                  }}>
+                    取消
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={uploadLoading}>
+                    {selectedTemplateCountry === 'new' ? '上传并配置' : '更新配置'}
+                  </Button>
+                </Space>
+              </div>
+            </Form>
+          </div>
+        )}
+
+        {/* 没有配置任何模板时显示 */}
+        {!amazonTemplateConfig.hasTemplate && selectedTemplateCountry === '' && (
+          <div>
+            <Alert
+              message="尚未配置任何亚马逊模板"
+              description="请添加至少一个国家的亚马逊批量上传产品表模板，以便在发货时自动生成对应文件。"
+              type="warning"
+              style={{ marginBottom: 16 }}
+            />
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={() => setSelectedTemplateCountry('new')}
+            >
+              添加第一个模板
+            </Button>
+          </div>
+        )}
       </Modal>
 
     </div>
