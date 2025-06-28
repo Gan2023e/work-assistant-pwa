@@ -298,10 +298,29 @@ const ShippingPage: React.FC = () => {
 
   // 上传亚马逊模板
   const handleUploadTemplate = async (values: any) => {
+    console.log('🔍 开始上传模板，提交的values:', values);
     setUploadLoading(true);
     try {
+      // 检查文件是否存在
+      if (!values.template || !values.template.fileList || values.template.fileList.length === 0) {
+        console.error('❌ 文件检查失败:', values.template);
+        message.error('请选择要上传的模板文件');
+        setUploadLoading(false);
+        return;
+      }
+
+      const file = values.template.fileList[0].originFileObj;
+      if (!file) {
+        console.error('❌ 文件对象获取失败:', values.template.fileList[0]);
+        message.error('文件获取失败，请重新选择');
+        setUploadLoading(false);
+        return;
+      }
+
+      console.log('📁 获取到文件:', { name: file.name, size: file.size, type: file.type });
+
       const formData = new FormData();
-      formData.append('template', values.template.file);
+      formData.append('template', file);
       formData.append('sheetName', values.sheetName);
       formData.append('merchantSkuColumn', values.merchantSkuColumn);
       formData.append('quantityColumn', values.quantityColumn);
@@ -314,12 +333,17 @@ const ShippingPage: React.FC = () => {
         formData.append('countryName', countryOption.label);
       }
 
+      console.log('🚀 发送上传请求到:', `${API_BASE_URL}/api/shipping/amazon-template/upload`);
+      
       const response = await fetch(`${API_BASE_URL}/api/shipping/amazon-template/upload`, {
         method: 'POST',
         body: formData,
       });
 
+      console.log('📡 服务器响应状态:', response.status);
+      
       const result = await response.json();
+      console.log('📊 服务器响应结果:', result);
       
       if (result.success) {
         message.success(`${result.data.countryName || result.data.country} 模板上传成功！`);
@@ -330,11 +354,12 @@ const ShippingPage: React.FC = () => {
         templateForm.resetFields();
         setSelectedTemplateCountry('');
       } else {
+        console.error('❌ 服务器返回错误:', result.message);
         message.error(result.message || '上传失败');
       }
     } catch (error) {
-      console.error('上传模板失败:', error);
-      message.error('上传失败');
+      console.error('❌ 上传模板失败:', error);
+      message.error('网络错误或服务器异常');
     } finally {
       setUploadLoading(false);
     }
@@ -490,8 +515,22 @@ const ShippingPage: React.FC = () => {
   const handleUploadPackingList = async (values: any) => {
     setPackingListLoading(true);
     try {
+      // 检查文件是否存在
+      if (!values.packingList || !values.packingList.fileList || values.packingList.fileList.length === 0) {
+        message.error('请选择要上传的装箱表文件');
+        setPackingListLoading(false);
+        return;
+      }
+
+      const file = values.packingList.fileList[0].originFileObj;
+      if (!file) {
+        message.error('文件获取失败，请重新选择');
+        setPackingListLoading(false);
+        return;
+      }
+
       const formData = new FormData();
-      formData.append('packingList', values.packingList.file);
+      formData.append('packingList', file);
       formData.append('sheetName', values.sheetName);
       formData.append('headerRow', values.headerRow.toString());
       formData.append('skuStartRow', values.skuStartRow.toString());
@@ -2171,6 +2210,12 @@ const ShippingPage: React.FC = () => {
                     name="template"
                     label="Excel模板文件"
                     rules={[{ required: true, message: '请选择模板文件' }]}
+                    getValueFromEvent={(e) => {
+                      if (Array.isArray(e)) {
+                        return e;
+                      }
+                      return e && e.fileList;
+                    }}
                   >
                     <Upload
                       accept=".xlsx,.xls"
@@ -2370,6 +2415,12 @@ const ShippingPage: React.FC = () => {
                 name="packingList"
                 label="装箱表文件"
                 rules={[{ required: true, message: '请选择装箱表文件' }]}
+                getValueFromEvent={(e) => {
+                  if (Array.isArray(e)) {
+                    return e;
+                  }
+                  return e && e.fileList;
+                }}
               >
                 <Upload
                   beforeUpload={() => false}
