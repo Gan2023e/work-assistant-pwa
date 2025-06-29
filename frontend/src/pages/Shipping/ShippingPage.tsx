@@ -593,32 +593,70 @@ const ShippingPage: React.FC = () => {
 
   // 上传装箱表（自动分析）
   const handleUploadPackingList = async (values: any) => {
+    console.log('🔍 开始上传装箱表，表单值:', values);
+    console.log('📋 values.packingList详细结构:', JSON.stringify(values.packingList, null, 2));
     setPackingListLoading(true);
     try {
-      // 检查文件是否存在
-      if (!values.packingList || !values.packingList.fileList || values.packingList.fileList.length === 0) {
+      // 检查文件是否存在 - 改进文件检查逻辑
+      if (!values.packingList) {
+        console.error('❌ values.packingList为空:', values.packingList);
         message.error('请选择要上传的装箱表文件');
         setPackingListLoading(false);
         return;
       }
 
-      const file = values.packingList.fileList[0].originFileObj;
-      if (!file) {
-        message.error('文件获取失败，请重新选择');
+      let file = null;
+      
+      // 处理不同的文件对象结构
+      if (Array.isArray(values.packingList)) {
+        // 如果是数组形式
+        if (values.packingList.length === 0) {
+          console.error('❌ 文件数组为空:', values.packingList);
+          message.error('请选择要上传的装箱表文件');
+          setPackingListLoading(false);
+          return;
+        }
+        
+        // 尝试不同的文件获取路径
+        const fileItem = values.packingList[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else if (values.packingList.fileList && values.packingList.fileList.length > 0) {
+        // 如果是fileList形式
+        const fileItem = values.packingList.fileList[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else {
+        // 直接是文件对象
+        file = values.packingList;
+      }
+
+      if (!file || !file.name) {
+        console.error('❌ 文件对象获取失败，values.packingList结构:', values.packingList);
+        message.error('文件获取失败，请重新选择文件');
         setPackingListLoading(false);
         return;
       }
 
+      console.log('📁 文件信息:', { name: file.name, size: file.size, type: file.type });
+
       const formData = new FormData();
       formData.append('packingList', file);
-      // 不再需要手动添加配置参数，后端会自动分析
+      console.log('📤 准备上传文件');
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
         method: 'POST',
         body: formData,
       });
 
+      console.log('📡 上传响应状态:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ 上传HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
       const result = await response.json();
+      console.log('📊 上传响应结果:', result);
       
       if (result.success) {
         message.success('装箱表上传成功！系统已自动识别表格格式。');
@@ -674,30 +712,49 @@ const ShippingPage: React.FC = () => {
 
   // 自动填写装箱表（根据发货清单数据）
   const fillPackingListWithShippingData = async () => {
+    console.log('🔍 开始自动填写装箱表');
+    console.log('📋 装箱表配置:', packingListConfig);
+    console.log('📦 发货清单数据:', shippingData);
+    
     if (!packingListConfig) {
+      console.error('❌ 没有装箱表配置');
       message.warning('请先上传装箱表模板');
       return;
     }
 
     if (!shippingData || shippingData.length === 0) {
+      console.error('❌ 没有发货清单数据');
       message.warning('没有发货清单数据，请先确认发货');
       return;
     }
 
+    console.log('✅ 开始调用API填写装箱表');
     setPackingListLoading(true);
     try {
+      const requestData = {
+        shippingData: shippingData
+      };
+      console.log('📤 请求数据:', requestData);
+      
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
         },
-        body: JSON.stringify({
-          shippingData: shippingData
-        }),
+        body: JSON.stringify(requestData),
       });
 
+      console.log('📡 服务器响应状态:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
       const result = await response.json();
+      console.log('📊 服务器响应结果:', result);
       
       if (result.success) {
         message.success(result.message);
@@ -746,16 +803,18 @@ const ShippingPage: React.FC = () => {
              };
            });
          }
-      } else {
-        message.error(result.message || '填写失败');
-      }
-    } catch (error) {
-      console.error('填写装箱表失败:', error);
-      message.error(`填写失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setPackingListLoading(false);
-    }
-  };
+             } else {
+         console.error('❌ 服务器返回失败:', result);
+         message.error(result.message || '填写失败');
+       }
+     } catch (error) {
+       console.error('❌ 填写装箱表异常:', error);
+       message.error(`填写失败: ${error instanceof Error ? error.message : '未知错误'}`);
+     } finally {
+       console.log('⚙️ 填写装箱表操作结束');
+       setPackingListLoading(false);
+     }
+   };
 
   // 下载已填写的装箱表
   const downloadFilledPackingList = async () => {

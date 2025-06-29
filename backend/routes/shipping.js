@@ -2490,6 +2490,27 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const sheetNames = workbook.SheetNames;
     
     console.log('\x1b[33m%s\x1b[0m', '📊 可用Sheet页:', sheetNames);
+    
+    // 显示每个Sheet页的详细信息
+    console.log('\x1b[36m%s\x1b[0m', '📊 Sheet页详细信息:');
+    sheetNames.forEach((name, index) => {
+      const sheet = workbook.Sheets[name];
+      const range = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
+      const rowCount = range.e.r + 1;
+      const colCount = range.e.c + 1;
+      console.log('\x1b[36m%s\x1b[0m', `  Sheet ${index + 1}: "${name}"`);
+      console.log('\x1b[36m%s\x1b[0m', `    - 范围: ${sheet['!ref'] || 'A1:A1'}`);
+      console.log('\x1b[36m%s\x1b[0m', `    - 行数: ${rowCount}, 列数: ${colCount}`);
+      
+      // 显示前3行的内容作为预览
+      const sheetData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      console.log('\x1b[36m%s\x1b[0m', `    - 前3行预览:`);
+      for (let i = 0; i < Math.min(3, sheetData.length); i++) {
+        const row = sheetData[i] || [];
+        const rowPreview = row.slice(0, 10).map(cell => `"${String(cell || '').trim()}"`).join(', ');
+        console.log('\x1b[36m%s\x1b[0m', `      第${i + 1}行: [${rowPreview}${row.length > 10 ? '...' : ''}]`);
+      }
+    });
 
     // 优先查找"Box packing information"页面
     let targetSheetName = null;
@@ -2517,6 +2538,35 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
     console.log('\x1b[33m%s\x1b[0m', '📊 Excel数据行数:', data.length);
+    console.log('\x1b[32m%s\x1b[0m', `📋 选择的Sheet页: "${targetSheetName}"`);
+    
+    // 显示选择Sheet页的详细内容
+    console.log('\x1b[35m%s\x1b[0m', '📊 Sheet页完整内容:');
+    console.log('\x1b[35m%s\x1b[0m', `总行数: ${data.length}, 前20行详细内容:`);
+    
+    for (let i = 0; i < Math.min(20, data.length); i++) {
+      const row = data[i] || [];
+      console.log('\x1b[35m%s\x1b[0m', `第${i + 1}行 (${row.length}列):`);
+      
+      // 显示每列的内容，限制每行显示前15列
+      for (let j = 0; j < Math.min(15, row.length); j++) {
+        const cellValue = String(row[j] || '').trim();
+        const columnLetter = String.fromCharCode(65 + (j % 26));
+        if (cellValue !== '') {
+          console.log('\x1b[35m%s\x1b[0m', `  列${columnLetter}(${j}): "${cellValue}"`);
+        }
+      }
+      
+      if (row.length > 15) {
+        console.log('\x1b[35m%s\x1b[0m', `  ... 还有 ${row.length - 15} 列`);
+      }
+      
+      console.log('\x1b[35m%s\x1b[0m', '  ---');
+    }
+    
+    if (data.length > 20) {
+      console.log('\x1b[35m%s\x1b[0m', `... 还有 ${data.length - 20} 行数据`);
+    }
 
     // 自动分析"Box packing information"格式
     const autoConfig = {
@@ -2552,20 +2602,90 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       return letter;
     };
 
-    // 查找箱号标题行（第5行）
-    const headerRowIndex = 4; // 第5行，0基索引为4
-    const headerRowData = data[headerRowIndex] || [];
+    // 自动查找箱号标题行（在前10行中搜索）
+    let headerRowIndex = -1;
+    let headerRowData = [];
     
-    console.log('\x1b[33m%s\x1b[0m', '📊 标题行数据:', headerRowData);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 开始在前10行中搜索标题行...');
+    
+    for (let rowIndex = 0; rowIndex < Math.min(10, data.length); rowIndex++) {
+      const rowData = data[rowIndex] || [];
+      console.log('\x1b[33m%s\x1b[0m', `🔍 检查第${rowIndex + 1}行:`, rowData.slice(0, 15).map(cell => `"${String(cell || '').trim()}"`));
+      
+      // 检查这一行是否包含箱号标题
+      let foundBoxHeaders = 0;
+      for (let colIndex = 0; colIndex < rowData.length; colIndex++) {
+        const cellValue = String(rowData[colIndex] || '').trim();
+        const patterns = [
+          /Box\s*(\d+)\s*quantity/i,
+          /Box(\d+)\s*quantity/i,
+          /Box\s*(\d+)/i,
+          /(\d+).*box.*quantity/i,
+          /quantity.*box\s*(\d+)/i,
+          /箱子?\s*(\d+)/i,
+          /第\s*(\d+)\s*箱/i
+        ];
+        
+        for (const pattern of patterns) {
+          if (cellValue.match(pattern)) {
+            foundBoxHeaders++;
+            break;
+          }
+        }
+      }
+      
+      console.log('\x1b[33m%s\x1b[0m', `第${rowIndex + 1}行找到 ${foundBoxHeaders} 个箱号标题`);
+      
+      // 如果找到至少1个箱号标题，就认为这是标题行
+      if (foundBoxHeaders > 0) {
+        headerRowIndex = rowIndex;
+        headerRowData = rowData;
+        console.log('\x1b[32m%s\x1b[0m', `✅ 确定标题行为第${rowIndex + 1}行`);
+        break;
+      }
+    }
+    
+    if (headerRowIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: '未能在前10行中找到箱号标题行。请确保Excel文件包含"Box X quantity"格式的标题。\n\n支持的格式示例：\n- "Box 1 quantity"\n- "Box 2 quantity"\n- "Box1 quantity"\n- "箱子1"\n- "第1箱"'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '📊 最终选择的标题行数据:', headerRowData);
 
     // 查找所有包含"Box"和"quantity"的列
     const boxColumns = [];
     const boxNumbers = [];
     
+    console.log('\x1b[33m%s\x1b[0m', '🔍 开始分析第5行标题，共', headerRowData.length, '列');
+    
     for (let colIndex = 0; colIndex < headerRowData.length; colIndex++) {
       const cellValue = String(headerRowData[colIndex] || '').trim();
-      // 匹配 "Box 1 quantity", "Box 2 quantity" 等
-      const boxMatch = cellValue.match(/Box\s*(\d+)\s*quantity/i);
+      console.log('\x1b[33m%s\x1b[0m', `🔍 列${getColumnLetter(colIndex)}(${colIndex}): "${cellValue}"`);
+      
+      // 更灵活的匹配模式：支持多种格式
+      let boxMatch = null;
+      
+      // 尝试多种匹配模式
+      const patterns = [
+        /Box\s*(\d+)\s*quantity/i,           // "Box 1 quantity"
+        /Box(\d+)\s*quantity/i,              // "Box1 quantity"  
+        /Box\s*(\d+)/i,                      // "Box 1"
+        /(\d+).*box.*quantity/i,             // "1 box quantity"
+        /quantity.*box\s*(\d+)/i,            // "quantity box 1"
+        /箱子?\s*(\d+)/i,                    // "箱子1" 或 "箱1"
+        /第\s*(\d+)\s*箱/i                   // "第1箱"
+      ];
+      
+      for (const pattern of patterns) {
+        boxMatch = cellValue.match(pattern);
+        if (boxMatch) {
+          console.log('\x1b[32m%s\x1b[0m', `✅ 匹配成功，模式: ${pattern.source}, 结果: ${boxMatch[0]}`);
+          break;
+        }
+      }
+      
       if (boxMatch) {
         const boxNumber = boxMatch[1];
         const colLetter = getColumnLetter(colIndex);
@@ -2573,7 +2693,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         boxColumns.push(colLetter);
         boxNumbers.push(boxNumber);
         
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到箱子${boxNumber}，列${colLetter}`);
+        console.log('\x1b[32m%s\x1b[0m', `✅ 找到箱子${boxNumber}，列${colLetter}，内容: "${cellValue}"`);
         
         // 记录第一个箱子的列作为起始列
         if (boxColumns.length === 1) {
@@ -2593,15 +2713,23 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     });
 
     if (boxColumns.length === 0) {
+      // 提供更详细的错误信息
+      const availableHeaders = headerRowData
+        .map((header, index) => `列${getColumnLetter(index)}: "${String(header || '').trim()}"`)
+        .filter(h => h.includes('"') && !h.includes('""'))
+        .slice(0, 10); // 只显示前10个非空列
+        
       return res.status(400).json({
         success: false,
-        message: '未能在第5行找到"Box X quantity"格式的标题，请确认文件格式正确'
+        message: `未能在前10行中找到"Box X quantity"格式的标题，请确认文件格式正确。\n\n搜索的标题行范围：第1行到第${Math.min(10, data.length)}行\n\n最终确定的标题行（第${headerRowIndex + 1}行）内容：\n${availableHeaders.join('\n')}\n\n期望格式示例：\n- "Box 1 quantity"\n- "Box 2 quantity"\n- "Box1 quantity"\n- "箱子1"\n- "第1箱"`
       });
     }
 
-    // 查找SKU开始行（从A6开始）
-    let skuStartRowIndex = 5; // 第6行，0基索引为5
+    // 查找SKU开始行（从标题行的下一行开始）
+    let skuStartRowIndex = headerRowIndex + 1; // 从标题行的下一行开始
     let skuEndRowIndex = skuStartRowIndex;
+    
+    console.log('\x1b[33m%s\x1b[0m', `📊 SKU数据从第${skuStartRowIndex + 1}行开始搜索`);
 
     // 向下查找，直到遇到空的SKU单元格或包含"Box"关键字的行
     for (let rowIndex = skuStartRowIndex; rowIndex < data.length; rowIndex++) {
@@ -2723,8 +2851,8 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       uploadTime: new Date().toISOString(),
       filePath: req.file.path, // 保存文件路径用于后续填写
       sheetName: targetSheetName,
-      headerRow: 5,
-      skuStartRow: 6,
+      headerRow: headerRowIndex + 1, // 转换为1基索引
+      skuStartRow: skuStartRowIndex + 1,
       skuEndRow: skuEndRowIndex + 1,
       boxColumns: autoConfig.boxColumns,
       boxNumbers: autoConfig.boxNumbers,
@@ -2766,11 +2894,13 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
 // 填写装箱表数据（根据发货清单数据）
 router.post('/packing-list/fill', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到装箱表填写请求');
+  console.log('\x1b[33m%s\x1b[0m', '📋 请求体:', JSON.stringify(req.body, null, 2));
   
   try {
     const { shippingData } = req.body;
     
     if (!shippingData || !Array.isArray(shippingData) || shippingData.length === 0) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ 无效的发货清单数据:', shippingData);
       return res.status(400).json({
         success: false,
         message: '请提供发货清单数据'
@@ -2778,6 +2908,7 @@ router.post('/packing-list/fill', async (req, res) => {
     }
 
     console.log('\x1b[33m%s\x1b[0m', '📦 发货清单数据:', shippingData.length, '条');
+    console.log('\x1b[33m%s\x1b[0m', '📦 发货清单详情:', JSON.stringify(shippingData.slice(0, 3), null, 2));
 
     // 获取装箱表配置
     const configPath = path.join(__dirname, '../uploads/packing-lists/config.json');
