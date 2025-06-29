@@ -593,9 +593,6 @@ const ShippingPage: React.FC = () => {
 
   // 上传装箱表（自动分析）
   const handleUploadPackingList = async (values: any) => {
-    console.warn('🔍 【生产模式调试】开始上传装箱表，表单值:', values);
-    console.warn('📋 values.packingList详细结构:', JSON.stringify(values.packingList, null, 2));
-    console.warn('🚀 【生产模式调试】装箱表上传流程开始');
     setPackingListLoading(true);
     try {
       // 检查文件是否存在 - 改进文件检查逻辑
@@ -631,8 +628,6 @@ const ShippingPage: React.FC = () => {
         return;
       }
 
-      console.log('📁 文件信息:', { name: file.name, size: file.size, type: file.type });
-
       // 读取Excel文件，获取sheetNames，自动选择第二个sheet
       let sheetNameToUse = undefined;
       try {
@@ -640,70 +635,10 @@ const ShippingPage: React.FC = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         if (workbook.SheetNames && workbook.SheetNames.length > 1) {
           sheetNameToUse = workbook.SheetNames[1]; // 第二个sheet
-          console.warn('⚡ 自动选择第二个Sheet页:', sheetNameToUse);
         } else if (workbook.SheetNames && workbook.SheetNames.length > 0) {
           sheetNameToUse = workbook.SheetNames[0]; // 只有一个sheet时选第一个
-          console.warn('⚡ 仅有一个Sheet页，自动选择:', sheetNameToUse);
-        } else {
-          console.error('❌ Excel文件未检测到任何Sheet页');
         }
-        // ====== 新增调试：输出自动选择sheet的第5行内容 ======
-        if (sheetNameToUse) {
-          const ws = workbook.Sheets[sheetNameToUse];
-          const sheetJson = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-          if (sheetJson.length >= 5) {
-            console.warn('🐞 [调试] Excel自动选择的Sheet页第5行内容（标题行，不可修改）:', sheetJson[4]);
-            
-            // 获取M3单元格的值（M列是第13列，索引为12；第3行索引为2）
-            let m3Value = 0;
-            const row3 = sheetJson[2] as any[] | undefined;
-            if (sheetJson.length >= 3 && row3 && row3.length > 12) {
-              m3Value = parseInt(String(row3[12])) || 0;
-            }
-            console.warn('🐞 [调试] M3单元格的值（箱子数量）:', m3Value);
-            
-            // 根据M3的值动态生成箱子列标题
-            if (m3Value > 0) {
-              const dynamicBoxColumns = [];
-              for (let i = 1; i <= m3Value; i++) {
-                const columnLetter = String.fromCharCode(77 + i - 1); // M=77, N=78, O=79...
-                const boxTitle = `Box ${i} quantity`;
-                dynamicBoxColumns.push({ column: columnLetter, title: boxTitle });
-              }
-              console.warn('🐞 [调试] 根据M3值动态生成的箱子列:', dynamicBoxColumns);
-              
-              // 验证第5行（标题行）对应位置的实际内容
-              console.warn('🐞 [调试] 第5行（标题行）从M列开始的标题内容:');
-              const row5 = sheetJson[4] as any[] | undefined;
-              for (let i = 0; i < m3Value; i++) {
-                const columnIndex = 12 + i; // M列开始（索引12）
-                const cellValue = row5 && row5.length > columnIndex ? row5[columnIndex] : undefined;
-                const expectedTitle = `Box ${i + 1} quantity`;
-                console.warn(`   列${String.fromCharCode(77 + i)}(索引${columnIndex}): "${cellValue}" (期望: "${expectedTitle}")`);
-              }
-              
-              // 显示第6行（第一行数据，可编辑区域）的内容
-              if (sheetJson.length >= 6) {
-                console.warn('🐞 [调试] 第6行（第一行数据，可编辑区域）内容:', sheetJson[5]);
-                console.warn('🐞 [调试] 第6行从M列开始的数据内容（箱子数量数据）:');
-                const row6 = sheetJson[5] as any[] | undefined;
-                for (let i = 0; i < m3Value; i++) {
-                  const columnIndex = 12 + i;
-                  const cellValue = row6 && row6.length > columnIndex ? row6[columnIndex] : undefined;
-                  console.warn(`   列${String.fromCharCode(77 + i)}(索引${columnIndex}): "${cellValue}"`);
-                }
-              } else {
-                console.warn('🐞 [调试] Excel文件不足6行，无第6行数据');
-              }
-            } else {
-              console.warn('🐞 [调试] M3值为0或无效，无法生成箱子列');
-            }
-          } else {
-            console.warn('🐞 [调试] Excel自动选择的Sheet页不足5行，实际行数:', sheetJson.length);
-          }
-        }
-        // ====== END ======
-        } catch (e) {
+      } catch (e) {
         console.error('❌ 解析Excel文件获取Sheet页失败:', e);
       }
 
@@ -712,172 +647,18 @@ const ShippingPage: React.FC = () => {
       if (sheetNameToUse) {
         formData.append('sheetName', sheetNameToUse);
       }
-      console.log('📤 准备上传文件');
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
         method: 'POST',
         body: formData,
       });
 
-      console.log('📡 上传响应状态:', response.status, response.statusText);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ 上传HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
-        
-        // 🔥 优先显示：即使失败也要显示可能的调试信息
-        console.log('🔍 【优先调试】服务器错误响应:', errorText);
-        try {
-          const errorJson = JSON.parse(errorText);
-          if (errorJson.message) {
-            console.log('🔍 【优先调试】错误消息:', errorJson.message);
-          }
-        } catch (e) {
-          // 忽略JSON解析错误
-        }
-        
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
-      
-      // 🔥 【最优先显示】立即在控制台显示关键信息
-      console.log('====================================================================================================');  
-      console.log('🔥 【最优先调试信息】装箱表上传结果分析');
-      console.log('====================================================================================================');
-      
-      // 强制显示调试信息，即使在生产模式下
-      console.warn('🔥 【生产模式调试】开始分析装箱表上传结果');
-      console.info('📊 完整响应数据结构:', JSON.stringify(result, null, 2));
-      
-      // 详细显示所有Sheet页信息
-      if (result.data && result.data.sheetNames) {
-        console.warn('📊 【关键信息1】Excel文件中所有Sheet页名称:');
-        console.warn(`   📋 总共发现 ${result.data.sheetNames.length} 个Sheet页:`);
-        result.data.sheetNames.forEach((name: string, index: number) => {
-          const isTarget = name === 'Box packing information';
-          const isSelected = name === result.data.sheetName;
-          console.warn(`   ${index + 1}. "${name}" ${isTarget ? '⭐ 目标Sheet页' : ''} ${isSelected ? '✅ 当前选择' : ''}`);
-        });
-        
-        // 检查目标Sheet页是否存在
-        const hasTargetSheet = result.data.sheetNames.includes('Box packing information');
-        console.warn(`📋 【目标Sheet页检查】"Box packing information"页 ${hasTargetSheet ? '✅ 存在' : '❌ 不存在'}`);
-        
-        if (!hasTargetSheet) {
-          console.error('❌ 【严重问题】未找到目标Sheet页"Box packing information"');
-          console.error('📋 请检查Excel文件是否包含正确的Sheet页名称');
-        }
-      } else {
-        console.error('❌ 未找到 sheetNames 数据');
-      }
-      
-      // 显示程序选择的Sheet页
-      if (result.data && result.data.sheetName) {
-        console.warn('📋 【关键信息2】程序选择的Sheet页:', `"${result.data.sheetName}"`);
-        console.warn('📋 【关键信息3】是否为目标Sheet页:', result.data.sheetName === 'Box packing information' ? '✅ 是' : '❌ 否');
-        
-        if (result.data.sheetName !== 'Box packing information') {
-          console.warn('⚠️ 【注意】程序选择了非目标Sheet页，可能导致解析错误');
-        }
-      } else {
-        console.error('❌ 未找到 sheetName 数据');
-      }
-      
-      // 显示标题行信息
-      if (result.data && result.data.headerRow) {
-        console.warn('📋 【关键信息4】标题行位置:', `第${result.data.headerRow}行`);
-      } else {
-        console.error('❌ 未找到 headerRow 数据');
-      }
-      
-      // 显示SKU开始行信息
-      if (result.data && result.data.skuStartRow) {
-        console.warn('📋 【关键信息5】SKU数据开始行:', `第${result.data.skuStartRow}行`);
-      } else {
-        console.error('❌ 未找到 skuStartRow 数据');
-      }
-      
-      // 详细显示箱子列信息
-      if (result.data && result.data.boxColumns) {
-        console.warn('📦 【关键信息6】找到的箱子列:');
-        console.warn(`   📦 总共发现 ${result.data.boxColumns.length} 个箱子列:`);
-        result.data.boxColumns.forEach((col: string, index: number) => {
-          const boxNum = result.data.boxNumbers?.[index] || '?';
-          console.warn(`   列${col}: Box ${boxNum} quantity`);
-        });
-        
-        // 显示箱号信息
-        if (result.data.boxNumbers) {
-          console.warn('📦 【箱号列表】:', result.data.boxNumbers.join(', '));
-        }
-      } else {
-        console.error('❌ 未找到 boxColumns 数据');
-      }
-      
-      // 详细显示解析到的装箱数据
-      if (result.data && result.data.items) {
-        console.warn('📦 【关键信息7】解析到的装箱数据:', `${result.data.items.length}条`);
-        if (result.data.items.length > 0) {
-          console.warn('📦 【前10条数据详细预览】:');
-          result.data.items.slice(0, 10).forEach((item: any, index: number) => {
-            console.warn(`   ${index + 1}. 箱号:${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
-          });
-          
-          if (result.data.items.length > 10) {
-            console.warn(`   ... 还有 ${result.data.items.length - 10} 条数据`);
-          }
-          
-          // 统计信息
-          const uniqueBoxes = Array.from(new Set(result.data.items.map((item: any) => item.box_num)));
-          const uniqueSkus = Array.from(new Set(result.data.items.map((item: any) => item.sku)));
-          const totalQuantity = result.data.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
-          
-          console.warn('📊 【统计信息】:');
-          console.warn(`   📦 总箱数: ${uniqueBoxes.length}`);
-          console.warn(`   📋 总SKU数: ${uniqueSkus.length}`);
-          console.warn(`   📈 总数量: ${totalQuantity}`);
-          console.warn(`   📦 箱号列表: ${uniqueBoxes.join(', ')}`);
-        } else {
-          console.error('❌ 【严重问题】没有解析到任何装箱数据');
-        }
-      } else {
-        console.error('❌ 未找到 items 数据');
-      }
-      
-      // 显示箱子信息
-      if (result.data && result.data.boxes) {
-        console.warn('📦 【关键信息8】箱子尺寸重量信息:', `${result.data.boxes.length}个箱子`);
-        if (result.data.boxes.length > 0) {
-          console.warn('📦 【箱子信息详情】:');
-          result.data.boxes.slice(0, 10).forEach((box: any, index: number) => {
-            console.warn(`   ${index + 1}. 箱号:${box.box_num} - 重量:${box.weight || '未设置'} - 尺寸:${box.length || '?'}×${box.width || '?'}×${box.height || '?'}`);
-          });
-        }
-      } else {
-        console.warn('⚠️ 未找到 boxes 数据（这可能是正常的，如果Excel中没有箱子尺寸信息）');
-      }
-      
-      // 显示原始Excel数据（如果有）
-      if (result.data && result.data.rawData) {
-        console.warn('📋 【原始Excel数据】前10行:');
-        result.data.rawData.slice(0, 10).forEach((row: any, index: number) => {
-          console.warn(`   第${index + 1}行:`, row);
-        });
-      } else {
-        console.warn('⚠️ 未返回原始Excel数据');
-      }
-      
-      // 显示错误信息
-      if (!result.success) {
-        console.error('❌ 【错误信息】:', result.message);
-        if (result.data && result.data.error) {
-          console.error('❌ 【详细错误】:', result.data.error);
-        }
-      }
-      
-      console.log('====================================================================================================');
-      console.warn('📊 完整响应结果（再次确认）:', result);
       
       if (result.success) {
         message.success('装箱表上传成功！系统已自动识别表格格式。');
@@ -933,29 +714,21 @@ const ShippingPage: React.FC = () => {
 
   // 自动填写装箱表（根据发货清单数据）
   const fillPackingListWithShippingData = async () => {
-    console.log('🔍 开始自动填写装箱表');
-    console.log('📋 装箱表配置:', packingListConfig);
-    console.log('📦 发货清单数据:', shippingData);
     
     if (!packingListConfig) {
-      console.error('❌ 没有装箱表配置');
       message.warning('请先上传装箱表模板');
       return;
     }
 
     if (!shippingData || shippingData.length === 0) {
-      console.error('❌ 没有发货清单数据');
       message.warning('没有发货清单数据，请先确认发货');
       return;
     }
-
-    console.log('✅ 开始调用API填写装箱表');
     setPackingListLoading(true);
     try {
       const requestData = {
         shippingData: shippingData
       };
-      console.log('📤 请求数据:', requestData);
       
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
         method: 'POST',
@@ -965,20 +738,57 @@ const ShippingPage: React.FC = () => {
         },
         body: JSON.stringify(requestData),
       });
-
-      console.log('📡 服务器响应状态:', response.status, response.statusText);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('📊 服务器响应结果:', result);
       
       if (result.success) {
         message.success(result.message);
+        
+        // 保存下载链接以供使用
+        if (result.data.downloadUrl) {
+          setPackingListConfig(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              filledDownloadUrl: result.data.downloadUrl,
+              filledFileName: result.data.outputFileName
+            };
+          });
+          
+          // 自动下载填写完成的装箱表
+          setTimeout(async () => {
+            try {
+              const downloadResponse = await fetch(`${API_BASE_URL}${result.data.downloadUrl}`, {
+                method: 'GET',
+                headers: {
+                  ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                },
+              });
+
+              if (downloadResponse.ok) {
+                const blob = await downloadResponse.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = result.data.outputFileName || '装箱表_已填写.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                message.success('装箱表已自动下载！');
+              }
+            } catch (error) {
+              console.error('自动下载失败:', error);
+              message.warning('自动下载失败，请手动点击下载按钮');
+            }
+          }, 1000); // 延迟1秒自动下载
+        }
         
         // 显示填写结果的详细信息
         Modal.success({
@@ -989,50 +799,31 @@ const ShippingPage: React.FC = () => {
               {result.data.unmatchedSkus && result.data.unmatchedSkus.length > 0 && (
                 <div>
                   <p style={{ color: '#fa8c16' }}>⚠️ 以下 {result.data.unmatchedSkus.length} 个SKU在装箱表中未找到对应行：</p>
-                                     <ul style={{ fontSize: '12px', marginTop: '8px' }}>
-                     {result.data.unmatchedSkus.slice(0, 10).map((sku: string, index: number) => (
-                       <li key={index}>{sku}</li>
-                     ))}
-                     {result.data.unmatchedSkus.length > 10 && (
-                       <li>...等 {result.data.unmatchedSkus.length - 10} 个</li>
-                     )}
-                   </ul>
+                  <ul style={{ fontSize: '12px', marginTop: '8px' }}>
+                    {result.data.unmatchedSkus.slice(0, 10).map((sku: string, index: number) => (
+                      <li key={index}>{sku}</li>
+                    ))}
+                    {result.data.unmatchedSkus.length > 10 && (
+                      <li>...等 {result.data.unmatchedSkus.length - 10} 个</li>
+                    )}
+                  </ul>
                 </div>
               )}
               <p style={{ marginTop: '16px' }}>
-                <strong>您可以：</strong>
+                <strong>装箱表已自动下载！</strong>您可以直接提交给物流商进行发货。
               </p>
-              <ul>
-                <li>点击下方"下载填写好的装箱表"按钮</li>
-                <li>将文件提交给物流商进行发货</li>
-              </ul>
             </div>
           ),
           width: 500,
           okText: '知道了'
         });
-        
-                 // 保存下载链接以供使用
-         if (result.data.downloadUrl) {
-           // 可以保存到state中用于下载按钮
-           setPackingListConfig(prev => {
-             if (!prev) return prev;
-             return {
-               ...prev,
-               filledDownloadUrl: result.data.downloadUrl,
-               filledFileName: result.data.outputFileName
-             };
-           });
-         }
              } else {
-         console.error('❌ 服务器返回失败:', result);
          message.error(result.message || '填写失败');
        }
      } catch (error) {
-       console.error('❌ 填写装箱表异常:', error);
+       console.error('填写装箱表失败:', error);
        message.error(`填写失败: ${error instanceof Error ? error.message : '未知错误'}`);
      } finally {
-       console.log('⚙️ 填写装箱表操作结束');
        setPackingListLoading(false);
      }
    };
