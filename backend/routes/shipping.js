@@ -3311,8 +3311,29 @@ router.post('/packing-list/fill', async (req, res) => {
 
     // 填写默认的箱子信息（如果没有的话）- 直接修改原始工作表
     console.log('\x1b[33m%s\x1b[0m', '📏 开始填写默认箱子信息...');
-    const defaultBoxWeight = 5; // 默认重量5kg
-    const defaultBoxDimensions = { width: 40, length: 30, height: 25 }; // 默认尺寸cm
+    
+    // 根据发货数据中的国家信息确定默认箱子参数
+    const countriesInShipment = [...new Set(shippingData.map(item => item.country || '默认'))];
+    console.log('\x1b[33m%s\x1b[0m', '📍 发货涉及的国家:', countriesInShipment);
+    
+    // 判断是否包含美国
+    const isUSShipment = countriesInShipment.some(country => 
+      country === 'US' || country === '美国' || country.toLowerCase().includes('us')
+    );
+    
+    // 根据国家设置默认参数
+    let defaultBoxWeight, defaultBoxDimensions;
+    if (isUSShipment) {
+      // 美国：箱重45kg，长宽高23、17、13cm
+      defaultBoxWeight = 45;
+      defaultBoxDimensions = { width: 17, length: 23, height: 13 };
+      console.log('\x1b[36m%s\x1b[0m', '🇺🇸 检测到美国发货，使用美国箱子规格: 重量45kg, 尺寸17x23x13cm');
+    } else {
+      // 其他国家：箱重18kg，长宽高60、45、35cm
+      defaultBoxWeight = 18;
+      defaultBoxDimensions = { width: 45, length: 60, height: 35 };
+      console.log('\x1b[36m%s\x1b[0m', '🌍 使用默认箱子规格: 重量18kg, 尺寸45x60x35cm');
+    } // 默认尺寸cm
 
     for (let i = 0; i < config.boxColumns.length; i++) {
       const colIndex = getColumnIndex(config.boxColumns[i]);

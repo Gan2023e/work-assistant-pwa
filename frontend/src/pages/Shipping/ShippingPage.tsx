@@ -684,16 +684,25 @@ const ShippingPage: React.FC = () => {
         if (shippingData && shippingData.length > 0) {
           message.loading('正在自动填写装箱表...', 0);
           
-          // 自动填写装箱表
-          try {
-            const fillResponse = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-              },
-              body: JSON.stringify({ shippingData }),
-            });
+                       // 自动填写装箱表
+             try {
+               // 为发货数据添加国家信息
+               const shippingDataWithCountry = shippingData.map(item => {
+                 const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+                 return {
+                   ...item,
+                   country: selectedRecord?.country || '默认'
+                 };
+               });
+               
+               const fillResponse = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
+                 method: 'POST',
+                 headers: {
+                   'Content-Type': 'application/json',
+                   ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                 },
+                 body: JSON.stringify({ shippingData: shippingDataWithCountry }),
+               });
             
             const fillResult = await fillResponse.json();
             
