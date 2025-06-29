@@ -2730,11 +2730,11 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const boxColumns = [];
     const boxNumbers = [];
     
-    console.log('\x1b[33m%s\x1b[0m', '🔍 开始分析第5行标题，共', headerRowData.length, '列');
+    console.log('\x1b[33m%s\x1b[0m', `🔍 开始分析标题行（第${headerRowIndex + 1}行），共`, headerRowData.length, '列');
     
     for (let colIndex = 0; colIndex < headerRowData.length; colIndex++) {
       const cellValue = String(headerRowData[colIndex] || '').trim();
-      console.log('\x1b[33m%s\x1b[0m', `🔍 列${getColumnLetter(colIndex)}(${colIndex}): "${cellValue}"`);
+      console.log('\x1b[33m%s\x1b[0m', `🔍 检查列${getColumnLetter(colIndex)}(索引${colIndex}): "${cellValue}"`);
       
       // 更灵活的匹配模式：支持多种格式
       let boxMatch = null;
@@ -2750,11 +2750,16 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         /第\s*(\d+)\s*箱/i                   // "第1箱"
       ];
       
+      console.log('\x1b[35m%s\x1b[0m', `   测试列"${cellValue}"是否匹配箱号模式...`);
+      
       for (const pattern of patterns) {
-        boxMatch = cellValue.match(pattern);
-        if (boxMatch) {
-          console.log('\x1b[32m%s\x1b[0m', `✅ 匹配成功，模式: ${pattern.source}, 结果: ${boxMatch[0]}`);
+        const testMatch = cellValue.match(pattern);
+        if (testMatch) {
+          boxMatch = testMatch;
+          console.log('\x1b[32m%s\x1b[0m', `   ✅ 匹配成功！模式: ${pattern.source}, 匹配结果: "${boxMatch[0]}", 提取箱号: "${boxMatch[1]}"`);
           break;
+        } else {
+          console.log('\x1b[35m%s\x1b[0m', `   ❌ 模式 ${pattern.source} 不匹配`);
         }
       }
       
@@ -2765,12 +2770,15 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         boxColumns.push(colLetter);
         boxNumbers.push(boxNumber);
         
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到箱子${boxNumber}，列${colLetter}，内容: "${cellValue}"`);
+        console.log('\x1b[32m%s\x1b[0m', `✅ 确认找到箱子${boxNumber}，位于列${colLetter}，原始内容: "${cellValue}"`);
         
         // 记录第一个箱子的列作为起始列
         if (boxColumns.length === 1) {
           autoConfig.boxStartColumn = colLetter;
+          console.log('\x1b[32m%s\x1b[0m', `   设置起始列为: ${colLetter}`);
         }
+      } else {
+        console.log('\x1b[33m%s\x1b[0m', `   ⚠️ 列"${cellValue}"不匹配任何箱号模式`);
       }
     }
 
@@ -2778,11 +2786,17 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     autoConfig.boxNumbers = boxNumbers;
     autoConfig.boxCount = boxNumbers.length;
 
-    console.log('\x1b[32m%s\x1b[0m', '📦 检测到箱子配置:', { 
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[32m%s\x1b[0m', '📦 箱子配置分析完成！');
+    console.log('\x1b[32m%s\x1b[0m', `📦 找到 ${autoConfig.boxCount} 个箱子`);
+    console.log('\x1b[32m%s\x1b[0m', '📦 详细配置:', JSON.stringify({ 
       boxCount: autoConfig.boxCount, 
       boxColumns: autoConfig.boxColumns, 
-      boxNumbers: autoConfig.boxNumbers 
-    });
+      boxNumbers: autoConfig.boxNumbers,
+      headerRow: headerRowIndex + 1,
+      boxStartColumn: autoConfig.boxStartColumn
+    }, null, 2));
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
 
     if (boxColumns.length === 0) {
       // 提供更详细的错误信息
