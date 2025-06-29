@@ -811,6 +811,7 @@ const ShippingPage: React.FC = () => {
           content: (
             <div>
               <p>✅ 成功填写 {result.data.filledCount} 条数据</p>
+              <p style={{ color: '#52c41a', fontSize: '14px' }}>🎨 <strong>已保持原始格式</strong>：样式、公式、格式完全不变</p>
               {result.data.unmatchedSkus && result.data.unmatchedSkus.length > 0 && (
                 <div>
                   <p style={{ color: '#fa8c16' }}>⚠️ 以下 {result.data.unmatchedSkus.length} 个SKU在装箱表中未找到对应行：</p>
@@ -2834,10 +2835,10 @@ const ShippingPage: React.FC = () => {
                 message="智能装箱表管理"
                 description={
                   <div>
-                    <p><strong>文件要求：</strong>Excel文件中必须包含名为"Box packing information"的工作表（sheet页）。</p>
-                    <p><strong>格式要求：</strong>该工作表应包含"Box 1 quantity"、"Box 2 quantity"等列标题，用于标识各个箱子的装箱数量。</p>
-                    <p><strong>自动填写：</strong>上传成功后，系统可根据发货确认页面的数据自动填写装箱表中的SKU和数量信息。</p>
-                    <p><strong>下载使用：</strong>填写完成后可直接下载Excel文件，提交给物流商进行发货。</p>
+                    <p><strong>🎨 保持原始格式：</strong>填写时完全保持原Excel文件的样式、公式、格式不变。</p>
+                    <p><strong>📋 智能解析：</strong>自动从M3获取箱数，从M列开始处理，第6行开始填写数据。</p>
+                    <p><strong>🚀 自动填写：</strong>上传成功后，系统可根据发货确认页面的数据自动填写装箱表中的SKU和数量信息。</p>
+                    <p><strong>📤 即用下载：</strong>填写完成后可直接下载原格式Excel文件，提交给物流商进行发货。</p>
                   </div>
                 }
                 type="info"

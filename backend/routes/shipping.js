@@ -3194,6 +3194,16 @@ router.post('/packing-list/fill', async (req, res) => {
     const worksheet = workbook.Sheets[config.sheetName];
     console.log('\x1b[32m%s\x1b[0m', `✅ 成功读取Sheet页: "${config.sheetName}"`);
     
+    // 列字母转换函数
+    const getColumnLetter = (index) => {
+      let letter = '';
+      while (index >= 0) {
+        letter = String.fromCharCode(65 + (index % 26)) + letter;
+        index = Math.floor(index / 26) - 1;
+      }
+      return letter;
+    };
+
     // 解析列索引函数
     const getColumnIndex = (columnLetter) => {
       let result = 0;
@@ -3203,7 +3213,12 @@ router.post('/packing-list/fill', async (req, res) => {
       return result - 1;
     };
 
-    // 获取Excel数据
+    // 获取单元格引用 (如: A1, B2)
+    const getCellRef = (row, col) => {
+      return getColumnLetter(col) + (row + 1);
+    };
+
+    // 获取Excel数据用于读取SKU列表，但不用于重写整个工作表
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
     
     // 按箱号和SKU组织发货数据
@@ -3248,42 +3263,11 @@ router.post('/packing-list/fill', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '📦 可用SKU列表:', availableSkus.length, '个');
 
-    // 清空所有箱子列的数据（先清零）
-    for (let i = 0; i < config.boxColumns.length; i++) {
-      const colIndex = getColumnIndex(config.boxColumns[i]);
-      
-      // 清空SKU行的数量
-      for (const skuInfo of availableSkus) {
-        if (!data[skuInfo.rowIndex]) {
-          data[skuInfo.rowIndex] = [];
-        }
-        data[skuInfo.rowIndex][colIndex] = '';
-      }
-      
-      // 清空箱子信息行
-      if (config.boxWeightRow) {
-        const weightRowIndex = config.boxWeightRow - 1;
-        if (!data[weightRowIndex]) data[weightRowIndex] = [];
-        data[weightRowIndex][colIndex] = '';
-      }
-      if (config.boxWidthRow) {
-        const widthRowIndex = config.boxWidthRow - 1;
-        if (!data[widthRowIndex]) data[widthRowIndex] = [];
-        data[widthRowIndex][colIndex] = '';
-      }
-      if (config.boxLengthRow) {
-        const lengthRowIndex = config.boxLengthRow - 1;
-        if (!data[lengthRowIndex]) data[lengthRowIndex] = [];
-        data[lengthRowIndex][colIndex] = '';
-      }
-      if (config.boxHeightRow) {
-        const heightRowIndex = config.boxHeightRow - 1;
-        if (!data[heightRowIndex]) data[heightRowIndex] = [];
-        data[heightRowIndex][colIndex] = '';
-      }
-    }
+    // 上传的装箱表箱子列本来就是空的，无需清空
+    console.log('\x1b[33m%s\x1b[0m', '📋 装箱表已准备就绪，箱子列本来就是空的，直接开始填写');
 
-    // 填写发货数据
+    // 填写发货数据 - 直接修改原始工作表
+    console.log('\x1b[33m%s\x1b[0m', '📝 开始填写发货数据...');
     let filledCount = 0;
     let unmatchedSkus = [];
     
@@ -3305,19 +3289,28 @@ router.post('/packing-list/fill', async (req, res) => {
         return;
       }
       
-      // 确保行数据存在
-      if (!data[skuInfo.rowIndex]) {
-        data[skuInfo.rowIndex] = [];
+      // 直接修改工作表单元格，保持原始格式
+      const cellRef = getCellRef(skuInfo.rowIndex, colIndex);
+      if (worksheet[cellRef]) {
+        // 如果单元格已存在，只修改值，保持格式
+        worksheet[cellRef].v = shippingItem.quantity;
+        worksheet[cellRef].t = 'n'; // 标记为数字类型
+      } else {
+        // 如果单元格不存在，创建新的单元格
+        worksheet[cellRef] = {
+          v: shippingItem.quantity,
+          t: 'n'
+        };
       }
       
-      // 填写数量
-      data[skuInfo.rowIndex][colIndex] = shippingItem.quantity;
       filledCount++;
-      
-      console.log('\x1b[32m%s\x1b[0m', `✅ 填写: 箱号${shippingItem.box_num} SKU${shippingItem.amz_sku} 数量${shippingItem.quantity}`);
+      console.log('\x1b[32m%s\x1b[0m', `✅ 填写: 箱号${shippingItem.box_num} SKU${shippingItem.amz_sku} 数量${shippingItem.quantity} 位置${cellRef}`);
     });
+    
+    console.log('\x1b[32m%s\x1b[0m', `✅ 发货数据填写完成，共填写 ${filledCount} 条`);
 
-    // 填写默认的箱子信息（如果没有的话）
+    // 填写默认的箱子信息（如果没有的话）- 直接修改原始工作表
+    console.log('\x1b[33m%s\x1b[0m', '📏 开始填写默认箱子信息...');
     const defaultBoxWeight = 5; // 默认重量5kg
     const defaultBoxDimensions = { width: 40, length: 30, height: 25 }; // 默认尺寸cm
 
@@ -3330,41 +3323,63 @@ router.post('/packing-list/fill', async (req, res) => {
       );
       
       if (hasItems) {
-        // 只为有装货的箱子填写默认信息
+        console.log('\x1b[33m%s\x1b[0m', `📦 为箱子 ${config.boxNumbers[i]} (列${config.boxColumns[i]}) 填写默认信息`);
+        
+        // 只为有装货的箱子填写默认信息 - 直接修改工作表单元格
         if (config.boxWeightRow) {
-          const weightRowIndex = config.boxWeightRow - 1;
-          if (!data[weightRowIndex]) data[weightRowIndex] = [];
-          if (!data[weightRowIndex][colIndex] || data[weightRowIndex][colIndex] === '') {
-            data[weightRowIndex][colIndex] = defaultBoxWeight;
+          const cellRef = getCellRef(config.boxWeightRow - 1, colIndex);
+          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
+            worksheet[cellRef] = worksheet[cellRef] || {};
+            worksheet[cellRef].v = defaultBoxWeight;
+            worksheet[cellRef].t = 'n';
           }
         }
         if (config.boxWidthRow) {
-          const widthRowIndex = config.boxWidthRow - 1;
-          if (!data[widthRowIndex]) data[widthRowIndex] = [];
-          if (!data[widthRowIndex][colIndex] || data[widthRowIndex][colIndex] === '') {
-            data[widthRowIndex][colIndex] = defaultBoxDimensions.width;
+          const cellRef = getCellRef(config.boxWidthRow - 1, colIndex);
+          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
+            worksheet[cellRef] = worksheet[cellRef] || {};
+            worksheet[cellRef].v = defaultBoxDimensions.width;
+            worksheet[cellRef].t = 'n';
           }
         }
         if (config.boxLengthRow) {
-          const lengthRowIndex = config.boxLengthRow - 1;
-          if (!data[lengthRowIndex]) data[lengthRowIndex] = [];
-          if (!data[lengthRowIndex][colIndex] || data[lengthRowIndex][colIndex] === '') {
-            data[lengthRowIndex][colIndex] = defaultBoxDimensions.length;
+          const cellRef = getCellRef(config.boxLengthRow - 1, colIndex);
+          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
+            worksheet[cellRef] = worksheet[cellRef] || {};
+            worksheet[cellRef].v = defaultBoxDimensions.length;
+            worksheet[cellRef].t = 'n';
           }
         }
         if (config.boxHeightRow) {
-          const heightRowIndex = config.boxHeightRow - 1;
-          if (!data[heightRowIndex]) data[heightRowIndex] = [];
-          if (!data[heightRowIndex][colIndex] || data[heightRowIndex][colIndex] === '') {
-            data[heightRowIndex][colIndex] = defaultBoxDimensions.height;
+          const cellRef = getCellRef(config.boxHeightRow - 1, colIndex);
+          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
+            worksheet[cellRef] = worksheet[cellRef] || {};
+            worksheet[cellRef].v = defaultBoxDimensions.height;
+            worksheet[cellRef].t = 'n';
           }
         }
       }
     }
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 默认箱子信息填写完成');
 
-    // 将修改后的数据写回工作表
-    const newWorksheet = XLSX.utils.aoa_to_sheet(data);
-    workbook.Sheets[config.sheetName] = newWorksheet;
+    // 更新工作表范围（确保新添加的单元格被包含在范围内）
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    // 扩展范围以包含所有可能的新单元格
+    for (let i = 0; i < config.boxColumns.length; i++) {
+      const colIndex = getColumnIndex(config.boxColumns[i]);
+      range.e.c = Math.max(range.e.c, colIndex);
+    }
+    // 扩展到最大可能的行
+    const maxRow = Math.max(
+      skuStartRowIndex + availableSkus.length - 1,
+      config.boxWeightRow ? config.boxWeightRow - 1 : 0,
+      config.boxWidthRow ? config.boxWidthRow - 1 : 0,
+      config.boxLengthRow ? config.boxLengthRow - 1 : 0,
+      config.boxHeightRow ? config.boxHeightRow - 1 : 0
+    );
+    range.e.r = Math.max(range.e.r, maxRow);
+    worksheet['!ref'] = XLSX.utils.encode_range(range);
 
     // 保存到新文件
     const timestamp = Date.now();
@@ -3397,7 +3412,7 @@ router.post('/packing-list/fill', async (req, res) => {
 
     res.json({
       success: true,
-      message: `装箱表填写完成，成功填写 ${filledCount} 条数据${unmatchedSkus.length > 0 ? `，${unmatchedSkus.length} 个SKU未匹配` : ''}`,
+      message: `装箱表填写完成！保持原始格式，成功填写 ${filledCount} 条数据${unmatchedSkus.length > 0 ? `，${unmatchedSkus.length} 个SKU未匹配` : ''}`,
       data: {
         filledCount,
         totalItems: Object.keys(shippingByBoxAndSku).length,
