@@ -652,13 +652,58 @@ const ShippingPage: React.FC = () => {
           const ws = workbook.Sheets[sheetNameToUse];
           const sheetJson = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
           if (sheetJson.length >= 5) {
-            console.warn('🐞 [调试] Excel自动选择的Sheet页第5行内容:', sheetJson[4]);
+            console.warn('🐞 [调试] Excel自动选择的Sheet页第5行内容（标题行，不可修改）:', sheetJson[4]);
+            
+            // 获取M3单元格的值（M列是第13列，索引为12；第3行索引为2）
+            let m3Value = 0;
+            const row3 = sheetJson[2] as any[] | undefined;
+            if (sheetJson.length >= 3 && row3 && row3.length > 12) {
+              m3Value = parseInt(String(row3[12])) || 0;
+            }
+            console.warn('🐞 [调试] M3单元格的值（箱子数量）:', m3Value);
+            
+            // 根据M3的值动态生成箱子列标题
+            if (m3Value > 0) {
+              const dynamicBoxColumns = [];
+              for (let i = 1; i <= m3Value; i++) {
+                const columnLetter = String.fromCharCode(77 + i - 1); // M=77, N=78, O=79...
+                const boxTitle = `Box ${i} quantity`;
+                dynamicBoxColumns.push({ column: columnLetter, title: boxTitle });
+              }
+              console.warn('🐞 [调试] 根据M3值动态生成的箱子列:', dynamicBoxColumns);
+              
+              // 验证第5行（标题行）对应位置的实际内容
+              console.warn('🐞 [调试] 第5行（标题行）从M列开始的标题内容:');
+              const row5 = sheetJson[4] as any[] | undefined;
+              for (let i = 0; i < m3Value; i++) {
+                const columnIndex = 12 + i; // M列开始（索引12）
+                const cellValue = row5 && row5.length > columnIndex ? row5[columnIndex] : undefined;
+                const expectedTitle = `Box ${i + 1} quantity`;
+                console.warn(`   列${String.fromCharCode(77 + i)}(索引${columnIndex}): "${cellValue}" (期望: "${expectedTitle}")`);
+              }
+              
+              // 显示第6行（第一行数据，可编辑区域）的内容
+              if (sheetJson.length >= 6) {
+                console.warn('🐞 [调试] 第6行（第一行数据，可编辑区域）内容:', sheetJson[5]);
+                console.warn('🐞 [调试] 第6行从M列开始的数据内容（箱子数量数据）:');
+                const row6 = sheetJson[5] as any[] | undefined;
+                for (let i = 0; i < m3Value; i++) {
+                  const columnIndex = 12 + i;
+                  const cellValue = row6 && row6.length > columnIndex ? row6[columnIndex] : undefined;
+                  console.warn(`   列${String.fromCharCode(77 + i)}(索引${columnIndex}): "${cellValue}"`);
+                }
+              } else {
+                console.warn('🐞 [调试] Excel文件不足6行，无第6行数据');
+              }
+            } else {
+              console.warn('🐞 [调试] M3值为0或无效，无法生成箱子列');
+            }
           } else {
             console.warn('🐞 [调试] Excel自动选择的Sheet页不足5行，实际行数:', sheetJson.length);
           }
         }
         // ====== END ======
-      } catch (e) {
+        } catch (e) {
         console.error('❌ 解析Excel文件获取Sheet页失败:', e);
       }
 
