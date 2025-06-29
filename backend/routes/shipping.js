@@ -2708,6 +2708,15 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
     
+    // --- 新增：无论是否找到标题行，先输出sheet页名称和前几行内容 ---
+    console.log('\x1b[36m%s\x1b[0m', '【调试】当前Excel所有Sheet页名称：', JSON.stringify(sheetNames));
+    console.log('\x1b[36m%s\x1b[0m', `【调试】选中Sheet页 "${targetSheetName}" 前10行内容：`);
+    for (let i = 0; i < Math.min(10, data.length); i++) {
+      const row = data[i] || [];
+      console.log('\x1b[36m%s\x1b[0m', `第${i + 1}行:`, row.map(cell => `"${String(cell || '').trim()}"`).join(', '));
+    }
+    // --- 新增END ---
+
     if (headerRowIndex === -1) {
       return res.status(400).json({
         success: false,
