@@ -2489,7 +2489,14 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const workbook = XLSX.readFile(req.file.path);
     const sheetNames = workbook.SheetNames;
     
-    console.log('\x1b[33m%s\x1b[0m', '📊 可用Sheet页:', sheetNames);
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[36m%s\x1b[0m', '📊 Excel文件分析开始');
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[33m%s\x1b[0m', '📊 Excel文件路径:', req.file.path);
+    console.log('\x1b[33m%s\x1b[0m', '📊 原始文件名:', req.file.originalname);
+    console.log('\x1b[33m%s\x1b[0m', '📊 文件大小:', req.file.size, 'bytes');
+    console.log('\x1b[33m%s\x1b[0m', '📊 总共发现Sheet页数量:', sheetNames.length);
+    console.log('\x1b[33m%s\x1b[0m', '📊 所有Sheet页名称:', JSON.stringify(sheetNames, null, 2));
     
     // 显示每个Sheet页的详细信息
     console.log('\x1b[36m%s\x1b[0m', '📊 Sheet页详细信息:');
@@ -2513,31 +2520,88 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     });
 
     // 严格要求使用"Box packing information"页面
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找目标Sheet页');
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    
     let targetSheetName = null;
+    console.log('\x1b[33m%s\x1b[0m', '🔍 正在查找名为"Box packing information"的Sheet页...');
+    
+    // 详细检查每个sheet页名称
+    for (let i = 0; i < sheetNames.length; i++) {
+      const sheetName = sheetNames[i];
+      console.log('\x1b[33m%s\x1b[0m', `🔍 检查Sheet页 ${i + 1}: "${sheetName}"`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 长度: ${sheetName.length} 字符`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 字符编码: ${JSON.stringify(sheetName)}`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 是否完全匹配"Box packing information": ${sheetName === 'Box packing information'}`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 小写匹配: ${sheetName.toLowerCase() === 'box packing information'}`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 包含"box": ${sheetName.toLowerCase().includes('box')}`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 包含"packing": ${sheetName.toLowerCase().includes('packing')}`);
+      console.log('\x1b[33m%s\x1b[0m', `   - 包含"information": ${sheetName.toLowerCase().includes('information')}`);
+    }
+    
     if (sheetNames.includes('Box packing information')) {
       targetSheetName = 'Box packing information';
-      console.log('\x1b[32m%s\x1b[0m', '✅ 找到"Box packing information"页面');
+      console.log('\x1b[32m%s\x1b[0m', '✅ 精确找到"Box packing information"页面');
     } else {
-      // 显示所有可用的sheet页名称
-      console.log('\x1b[31m%s\x1b[0m', '❌ 未找到"Box packing information"页面');
-      console.log('\x1b[33m%s\x1b[0m', '📊 可用的Sheet页名称:', sheetNames);
+      console.log('\x1b[31m%s\x1b[0m', '❌ 未找到精确匹配的"Box packing information"页面');
       
-      // 删除临时文件
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+      // 尝试模糊匹配
+      console.log('\x1b[33m%s\x1b[0m', '🔍 尝试模糊匹配...');
+      const possibleMatches = sheetNames.filter(name => {
+        const lowerName = name.toLowerCase();
+        return lowerName.includes('box') && lowerName.includes('packing') && lowerName.includes('information');
+      });
+      
+      if (possibleMatches.length > 0) {
+        console.log('\x1b[33m%s\x1b[0m', '🔍 找到可能的匹配项:', possibleMatches);
+        targetSheetName = possibleMatches[0];
+        console.log('\x1b[33m%s\x1b[0m', `🔍 使用第一个匹配项: "${targetSheetName}"`);
+      } else {
+        console.log('\x1b[31m%s\x1b[0m', '❌ 未找到任何匹配的Sheet页');
+        
+        // 删除临时文件
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        
+        return res.status(400).json({
+          success: false,
+          message: `Excel文件中必须包含名为"Box packing information"的sheet页。\n\n当前文件包含的sheet页：\n${sheetNames.map((name, index) => `${index + 1}. "${name}" (长度: ${name.length}字符)`).join('\n')}\n\n请确保：\n1. Excel文件中有名为"Box packing information"的工作表\n2. 该工作表包含正确的装箱信息格式\n3. 工作表名称完全匹配（区分大小写）\n4. 注意可能的隐藏字符或空格`
+        });
       }
-      
+    }
+    
+    console.log('\x1b[32m%s\x1b[0m', `✅ 最终选择的Sheet页: "${targetSheetName}"`);
+
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[36m%s\x1b[0m', '📊 开始分析Sheet页内容');
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    
+    const worksheet = workbook.Sheets[targetSheetName];
+    console.log('\x1b[33m%s\x1b[0m', `📋 正在读取Sheet页: "${targetSheetName}"`);
+    
+    if (!worksheet) {
+      console.log('\x1b[31m%s\x1b[0m', `❌ 无法读取Sheet页: "${targetSheetName}"`);
       return res.status(400).json({
         success: false,
-        message: `Excel文件中必须包含名为"Box packing information"的sheet页。\n\n当前文件包含的sheet页：\n${sheetNames.map((name, index) => `${index + 1}. "${name}"`).join('\n')}\n\n请确保：\n1. Excel文件中有名为"Box packing information"的工作表\n2. 该工作表包含正确的装箱信息格式\n3. 工作表名称完全匹配（区分大小写）`
+        message: `无法读取指定的Sheet页: "${targetSheetName}"`
       });
     }
-
-    const worksheet = workbook.Sheets[targetSheetName];
+    
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-
-    console.log('\x1b[33m%s\x1b[0m', '📊 Excel数据行数:', data.length);
-    console.log('\x1b[32m%s\x1b[0m', `📋 选择的Sheet页: "${targetSheetName}"`);
+    console.log('\x1b[33m%s\x1b[0m', '📊 Sheet页基本信息:');
+    console.log('\x1b[33m%s\x1b[0m', `   - Sheet页名称: "${targetSheetName}"`);
+    console.log('\x1b[33m%s\x1b[0m', `   - 数据行数: ${data.length}`);
+    console.log('\x1b[33m%s\x1b[0m', `   - Sheet范围: ${worksheet['!ref'] || '未定义'}`);
+    
+    if (data.length === 0) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ Sheet页数据为空');
+      return res.status(400).json({
+        success: false,
+        message: `Sheet页 "${targetSheetName}" 中没有数据`
+      });
+    }
     
     // 显示选择Sheet页的详细内容
     console.log('\x1b[35m%s\x1b[0m', '📊 Sheet页完整内容:');
@@ -2935,8 +2999,25 @@ router.post('/packing-list/fill', async (req, res) => {
     });
 
     // 读取原始Excel文件
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[36m%s\x1b[0m', '📊 开始填写装箱表');
+    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+    console.log('\x1b[33m%s\x1b[0m', '📋 读取配置文件路径:', config.filePath);
+    console.log('\x1b[33m%s\x1b[0m', '📋 目标Sheet页名称:', config.sheetName);
+    
     const workbook = XLSX.readFile(config.filePath);
+    console.log('\x1b[33m%s\x1b[0m', '📊 Excel文件可用Sheet页:', workbook.SheetNames);
+    
+    if (!workbook.Sheets[config.sheetName]) {
+      console.log('\x1b[31m%s\x1b[0m', `❌ 无法找到Sheet页: "${config.sheetName}"`);
+      return res.status(400).json({
+        success: false,
+        message: `配置的Sheet页 "${config.sheetName}" 不存在于Excel文件中`
+      });
+    }
+    
     const worksheet = workbook.Sheets[config.sheetName];
+    console.log('\x1b[32m%s\x1b[0m', `✅ 成功读取Sheet页: "${config.sheetName}"`);
     
     // 解析列索引函数
     const getColumnIndex = (columnLetter) => {
