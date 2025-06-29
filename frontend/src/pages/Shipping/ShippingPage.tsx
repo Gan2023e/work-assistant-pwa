@@ -607,26 +607,20 @@ const ShippingPage: React.FC = () => {
       }
 
       let file = null;
-      
       // 处理不同的文件对象结构
       if (Array.isArray(values.packingList)) {
-        // 如果是数组形式
         if (values.packingList.length === 0) {
           console.error('❌ 文件数组为空:', values.packingList);
           message.error('请选择要上传的装箱表文件');
           setPackingListLoading(false);
           return;
         }
-        
-        // 尝试不同的文件获取路径
         const fileItem = values.packingList[0];
         file = fileItem.originFileObj || fileItem.file || fileItem;
       } else if (values.packingList.fileList && values.packingList.fileList.length > 0) {
-        // 如果是fileList形式
         const fileItem = values.packingList.fileList[0];
         file = fileItem.originFileObj || fileItem.file || fileItem;
       } else {
-        // 直接是文件对象
         file = values.packingList;
       }
 
@@ -639,8 +633,29 @@ const ShippingPage: React.FC = () => {
 
       console.log('📁 文件信息:', { name: file.name, size: file.size, type: file.type });
 
+      // 读取Excel文件，获取sheetNames，自动选择第二个sheet
+      let sheetNameToUse = undefined;
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        if (workbook.SheetNames && workbook.SheetNames.length > 1) {
+          sheetNameToUse = workbook.SheetNames[1]; // 第二个sheet
+          console.warn('⚡ 自动选择第二个Sheet页:', sheetNameToUse);
+        } else if (workbook.SheetNames && workbook.SheetNames.length > 0) {
+          sheetNameToUse = workbook.SheetNames[0]; // 只有一个sheet时选第一个
+          console.warn('⚡ 仅有一个Sheet页，自动选择:', sheetNameToUse);
+        } else {
+          console.error('❌ Excel文件未检测到任何Sheet页');
+        }
+      } catch (e) {
+        console.error('❌ 解析Excel文件获取Sheet页失败:', e);
+      }
+
       const formData = new FormData();
       formData.append('packingList', file);
+      if (sheetNameToUse) {
+        formData.append('sheetName', sheetNameToUse);
+      }
       console.log('📤 准备上传文件');
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
