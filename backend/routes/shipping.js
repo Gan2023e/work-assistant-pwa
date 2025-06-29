@@ -2291,10 +2291,10 @@ const packingListStorage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
+    // 保持原始文件名，只在前面加时间戳避免冲突
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(7);
-    const ext = path.extname(file.originalname);
-    cb(null, `packing-list-${timestamp}-${random}${ext}`);
+    const originalName = file.originalname;
+    cb(null, `${timestamp}_${originalName}`);
   }
 });
 
@@ -3381,9 +3381,10 @@ router.post('/packing-list/fill', async (req, res) => {
     range.e.r = Math.max(range.e.r, maxRow);
     worksheet['!ref'] = XLSX.utils.encode_range(range);
 
-    // 保存到新文件
+    // 保存到新文件，保持原始文件名
     const timestamp = Date.now();
-    const outputFileName = `装箱表_已填写_${timestamp}.xlsx`;
+    const originalNameWithoutExt = path.basename(config.originalName, path.extname(config.originalName));
+    const outputFileName = `${timestamp}_${originalNameWithoutExt}_已填写.xlsx`;
     const outputPath = path.join(__dirname, '../uploads/packing-lists', outputFileName);
     
     XLSX.writeFile(workbook, outputPath);

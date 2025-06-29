@@ -676,28 +676,70 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        message.success('装箱表上传成功！系统已自动识别表格格式。');
+        message.success('装箱表上传成功！');
         setPackingListConfig(result.data);
-        // 不立即关闭对话框，让用户可以查看解析结果和下载
         packingListForm.resetFields();
         
-        // 显示成功提示，提醒用户可以下载
-        Modal.success({
-          title: '装箱表解析成功',
-          content: (
-            <div>
-              <p>已成功解析装箱表，共 {result.data.items?.length || 0} 条装箱记录。</p>
-              <p>您可以：</p>
-              <ul>
-                <li>查看解析后的装箱明细</li>
-                <li>下载填写好的装箱表</li>
-                <li>应用到发货清单</li>
-              </ul>
-            </div>
-          ),
-          width: 450,
-          okText: '知道了'
-        });
+        // 检查是否有发货数据，如果有则自动填写并下载
+        if (shippingData && shippingData.length > 0) {
+          message.loading('正在自动填写装箱表...', 0);
+          
+          // 自动填写装箱表
+          try {
+            const fillResponse = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+              },
+              body: JSON.stringify({ shippingData }),
+            });
+            
+            const fillResult = await fillResponse.json();
+            
+            if (fillResult.success) {
+              message.destroy();
+              message.success('装箱表已自动填写完成！');
+              
+              // 自动下载
+              setTimeout(async () => {
+                try {
+                  const downloadResponse = await fetch(`${API_BASE_URL}${fillResult.data.downloadUrl}`);
+                  if (downloadResponse.ok) {
+                    const blob = await downloadResponse.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = fillResult.data.outputFileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    message.success(`装箱表已自动下载：${fillResult.data.outputFileName}`);
+                  }
+                } catch (error) {
+                  console.error('自动下载失败:', error);
+                  message.warning('自动下载失败');
+                }
+              }, 500);
+              
+              // 关闭对话框
+              setPackingListModalVisible(false);
+            } else {
+              message.destroy();
+              message.error('自动填写失败：' + fillResult.message);
+            }
+          } catch (error) {
+            message.destroy();
+            message.error('自动填写失败');
+            console.error('自动填写失败:', error);
+          }
+        } else {
+          // 没有发货数据时的简单提示
+          message.success('装箱表已上传，请先确认发货清单后再来填写');
+          setPackingListModalVisible(false);
+        }
       } else {
         message.error(result.message || '上传失败');
       }
@@ -709,233 +751,7 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 应用装箱表数据到发货清单
-  const applyPackingListToShipping = () => {
-    if (!packingListConfig || !packingListConfig.items) {
-      message.warning('没有可用的装箱表数据');
-      return;
-    }
 
-    // 将装箱表数据转换为发货数据格式
-    const newShippingData = packingListConfig.items.map(item => ({
-      box_num: item.box_num,
-      amz_sku: item.sku, // 这里使用装箱表中的SKU作为Amazon SKU
-      quantity: item.quantity
-    }));
-
-    setShippingData(newShippingData);
-    message.success(`已应用装箱表数据，共 ${newShippingData.length} 条记录`);
-  };
-
-  // 自动填写装箱表（根据发货清单数据）
-  const fillPackingListWithShippingData = async () => {
-    
-    if (!packingListConfig) {
-      message.warning('请先上传装箱表模板');
-      return;
-    }
-
-    if (!shippingData || shippingData.length === 0) {
-      message.warning('没有发货清单数据，请先确认发货');
-      return;
-    }
-    setPackingListLoading(true);
-    try {
-      const requestData = {
-        shippingData: shippingData
-      };
-      
-      const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/fill`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-        body: JSON.stringify(requestData),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        message.success(result.message);
-        
-        // 保存下载链接以供使用
-        if (result.data.downloadUrl) {
-          setPackingListConfig(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              filledDownloadUrl: result.data.downloadUrl,
-              filledFileName: result.data.outputFileName
-            };
-          });
-          
-          // 自动下载填写完成的装箱表
-          setTimeout(async () => {
-            try {
-              const downloadResponse = await fetch(`${API_BASE_URL}${result.data.downloadUrl}`, {
-                method: 'GET',
-                headers: {
-                  ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-                },
-              });
-
-              if (downloadResponse.ok) {
-                const blob = await downloadResponse.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = result.data.outputFileName || '装箱表_已填写.xlsx';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                message.success('装箱表已自动下载！');
-              }
-            } catch (error) {
-              console.error('自动下载失败:', error);
-              message.warning('自动下载失败，请手动点击下载按钮');
-            }
-          }, 1000); // 延迟1秒自动下载
-        }
-        
-        // 显示填写结果的详细信息
-        Modal.success({
-          title: '装箱表填写完成',
-          content: (
-            <div>
-              <p>✅ 成功填写 {result.data.filledCount} 条数据</p>
-              <p style={{ color: '#52c41a', fontSize: '14px' }}>🎨 <strong>已保持原始格式</strong>：样式、公式、格式完全不变</p>
-              {result.data.unmatchedSkus && result.data.unmatchedSkus.length > 0 && (
-                <div>
-                  <p style={{ color: '#fa8c16' }}>⚠️ 以下 {result.data.unmatchedSkus.length} 个SKU在装箱表中未找到对应行：</p>
-                  <ul style={{ fontSize: '12px', marginTop: '8px' }}>
-                    {result.data.unmatchedSkus.slice(0, 10).map((sku: string, index: number) => (
-                      <li key={index}>{sku}</li>
-                    ))}
-                    {result.data.unmatchedSkus.length > 10 && (
-                      <li>...等 {result.data.unmatchedSkus.length - 10} 个</li>
-                    )}
-                  </ul>
-                </div>
-              )}
-              <p style={{ marginTop: '16px' }}>
-                <strong>装箱表已自动下载！</strong>您可以直接提交给物流商进行发货。
-              </p>
-            </div>
-          ),
-          width: 500,
-          okText: '知道了'
-        });
-             } else {
-         message.error(result.message || '填写失败');
-       }
-     } catch (error) {
-       console.error('填写装箱表失败:', error);
-       message.error(`填写失败: ${error instanceof Error ? error.message : '未知错误'}`);
-     } finally {
-       setPackingListLoading(false);
-     }
-   };
-
-  // 下载已填写的装箱表
-  const downloadFilledPackingList = async () => {
-    if (!packingListConfig?.filledDownloadUrl) {
-      message.warning('没有可下载的已填写装箱表');
-      return;
-    }
-
-    setPackingListLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}${packingListConfig.filledDownloadUrl}`, {
-        method: 'GET',
-        headers: {
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('下载失败');
-      }
-
-      // 下载文件
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = packingListConfig.filledFileName || '装箱表_已填写.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      message.success('已填写装箱表下载成功！');
-    } catch (error) {
-      console.error('下载已填写装箱表失败:', error);
-      message.error('下载失败');
-    } finally {
-      setPackingListLoading(false);
-    }
-  };
-
-  // 下载填写好的装箱表
-  const downloadPackingList = async () => {
-    if (!packingListConfig) {
-      message.warning('没有可用的装箱表数据');
-      return;
-    }
-
-    setPackingListLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/download`, {
-        method: 'GET',
-        headers: {
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '下载失败');
-      }
-
-      // 获取文件名（从响应头或者使用默认名）
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = '装箱表_已填写.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
-        if (filenameMatch) {
-          filename = decodeURIComponent(filenameMatch[1]);
-        }
-      }
-
-      // 下载文件
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      message.success('装箱表下载成功！');
-    } catch (error) {
-      console.error('下载装箱表失败:', error);
-      message.error(`下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setPackingListLoading(false);
-    }
-  };
 
 
 
@@ -2199,13 +2015,6 @@ const ShippingPage: React.FC = () => {
                       >
                         管理模板
                       </Button>
-                      <Button 
-                        icon={<FileExcelOutlined />} 
-                        onClick={() => setPackingListModalVisible(true)}
-                      >
-                        填写装箱表
-                        {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
-                      </Button>
                       {/* 新增物流商下拉 */}
                       <Select
                         style={{ width: 140 }}
@@ -2233,13 +2042,6 @@ const ShippingPage: React.FC = () => {
                     >
                       上传亚马逊模板
                     </Button>
-                    <Button 
-                      icon={<FileExcelOutlined />} 
-                      onClick={() => setPackingListModalVisible(true)}
-                    >
-                      填写装箱表
-                      {packingListConfig && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
-                    </Button>
                   </Space>
                 </div>
               )}
@@ -2261,35 +2063,13 @@ const ShippingPage: React.FC = () => {
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
                   导出Excel
                 </Button>
-                {packingListConfig && (
-                  <Button 
-                    icon={<FileExcelOutlined />} 
-                    onClick={applyPackingListToShipping}
-                    type="dashed"
-                  >
-                    应用装箱表数据 ({packingListConfig.items?.length || 0}条)
-                  </Button>
-                )}
-                {packingListConfig && (
-                  <Button 
-                    icon={<FileExcelOutlined />} 
-                    onClick={fillPackingListWithShippingData}
-                    type="default"
-                    loading={packingListLoading}
-                  >
-                    自动填写装箱表
-                  </Button>
-                )}
-                {packingListConfig?.filledDownloadUrl && (
-                  <Button 
-                    icon={<DownloadOutlined />} 
-                    onClick={downloadFilledPackingList}
-                    type="primary"
-                    loading={packingListLoading}
-                  >
-                    下载已填写装箱表
-                  </Button>
-                )}
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => setPackingListModalVisible(true)}
+                  type="default"
+                >
+                  上传装箱表
+                </Button>
                 <Button type="primary" onClick={async () => {
                   // 统一处理出库记录
                   if (confirmedMixedBoxes.length > 0 || confirmedWholeBoxes.length > 0) {
@@ -2722,174 +2502,84 @@ const ShippingPage: React.FC = () => {
 
       {/* 装箱表管理对话框 */}
       <Modal
-        title="填写装箱表"
+        title="上传装箱表"
         open={packingListModalVisible}
         onCancel={() => {
           setPackingListModalVisible(false);
           packingListForm.resetFields();
+          setPackingListConfig(null);
         }}
         footer={null}
-        width={800}
+        width={600}
         destroyOnClose
       >
-        {packingListConfig ? (
-          <div>
-            <Alert
-              message="装箱表已上传"
-              description={`文件名：${packingListConfig.originalName}，共 ${packingListConfig.items?.length || 0} 条记录`}
-              type="success"
-              style={{ marginBottom: 16 }}
-              action={
-                <Button 
-                  size="small" 
-                  onClick={() => setPackingListConfig(null)}
-                >
-                  重新上传
-                </Button>
-              }
-            />
-            
+        <Alert
+          message="智能装箱表处理"
+          description={
             <div>
-              <Text strong>装箱明细:</Text>
-              <Table
-                dataSource={packingListConfig.items}
-                columns={[
-                  { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
-                  { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 150 },
-                  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
-                ]}
-                pagination={false}
-                size="small"
-                rowKey={(record, index) => `${record.box_num}_${record.sku}_${index}`}
-                scroll={{ y: 200 }}
-                style={{ marginBottom: 16 }}
-              />
-              
-              {packingListConfig.boxes && packingListConfig.boxes.length > 0 && (
-                <div>
-                  <Text strong>箱子信息:</Text>
-                  <Table
-                    dataSource={packingListConfig.boxes}
-                    columns={[
-                      { title: '箱号', dataIndex: 'box_num', key: 'box_num', width: 80 },
-                      { title: '重量(kg)', dataIndex: 'weight', key: 'weight', width: 100, align: 'center', render: (val) => val || '-' },
-                      { title: '宽度(cm)', dataIndex: 'width', key: 'width', width: 100, align: 'center', render: (val) => val || '-' },
-                      { title: '长度(cm)', dataIndex: 'length', key: 'length', width: 100, align: 'center', render: (val) => val || '-' },
-                      { title: '高度(cm)', dataIndex: 'height', key: 'height', width: 100, align: 'center', render: (val) => val || '-' },
-                    ]}
-                    pagination={false}
-                    size="small"
-                    rowKey="box_num"
-                    scroll={{ y: 150 }}
-                  />
-                </div>
-              )}
+              <p><strong>🎨 保持原始格式：</strong>填写时完全保持原Excel文件的样式、公式、格式不变。</p>
+              <p><strong>📋 智能解析：</strong>自动从M3获取箱数，从M列开始处理，第6行开始填写数据。</p>
+              <p><strong>🚀 一键完成：</strong>上传后自动填写并下载，无需额外操作。</p>
             </div>
-            
-            <div style={{ marginTop: 16, textAlign: 'right' }}>
-              <Space>
-                <Button onClick={() => setPackingListModalVisible(false)}>
-                  关闭
-                </Button>
-                <Button 
-                  icon={<DownloadOutlined />}
-                  onClick={downloadPackingList}
-                  loading={packingListLoading}
-                >
-                  下载装箱表
-                </Button>
-                <Button 
-                  type="default"
-                  icon={<FileExcelOutlined />}
-                  onClick={fillPackingListWithShippingData}
-                  loading={packingListLoading}
-                  disabled={!shippingData || shippingData.length === 0}
-                >
-                  自动填写装箱表
-                </Button>
-                {packingListConfig.filledDownloadUrl && (
-                  <Button 
-                    type="primary"
-                    icon={<DownloadOutlined />}
-                    onClick={downloadFilledPackingList}
-                    loading={packingListLoading}
-                  >
-                    下载已填写装箱表
-                  </Button>
-                )}
-                <Button 
-                  type="dashed" 
-                  onClick={() => {
-                    applyPackingListToShipping();
-                    setPackingListModalVisible(false);
-                  }}
-                >
-                  应用到发货清单
-                </Button>
-              </Space>
-            </div>
-          </div>
-        ) : (
-          <div>
-                          <Alert
-                message="智能装箱表管理"
-                description={
-                  <div>
-                    <p><strong>🎨 保持原始格式：</strong>填写时完全保持原Excel文件的样式、公式、格式不变。</p>
-                    <p><strong>📋 智能解析：</strong>自动从M3获取箱数，从M列开始处理，第6行开始填写数据。</p>
-                    <p><strong>🚀 自动填写：</strong>上传成功后，系统可根据发货确认页面的数据自动填写装箱表中的SKU和数量信息。</p>
-                    <p><strong>📤 即用下载：</strong>填写完成后可直接下载原格式Excel文件，提交给物流商进行发货。</p>
-                  </div>
-                }
-                type="info"
-                style={{ marginBottom: 16 }}
-              />
-            
-            <Form
-              form={packingListForm}
-              layout="vertical"
-              onFinish={handleUploadPackingList}
+          }
+          type="info"
+          style={{ marginBottom: 16 }}
+        />
+        
+        <Form
+          form={packingListForm}
+          layout="vertical"
+          onFinish={handleUploadPackingList}
+        >
+          <Form.Item
+            name="packingList"
+            label="装箱表Excel文件"
+            rules={[{ required: true, message: '请选择装箱表文件' }]}
+            getValueFromEvent={(e) => {
+              if (Array.isArray(e)) {
+                return e;
+              }
+              return e && e.fileList;
+            }}
+          >
+            <Upload
+              beforeUpload={() => false}
+              accept=".xlsx,.xls"
+              maxCount={1}
             >
-              <Form.Item
-                name="packingList"
-                label="装箱表文件"
-                rules={[{ required: true, message: '请选择装箱表文件' }]}
-                getValueFromEvent={(e) => {
-                  if (Array.isArray(e)) {
-                    return e;
-                  }
-                  return e && e.fileList;
-                }}
+              <Button icon={<UploadOutlined />} size="large" style={{ width: '100%', height: '60px' }}>
+                <div>
+                  <div>选择Excel文件</div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    {shippingData && shippingData.length > 0 
+                      ? '上传后将自动填写并下载' 
+                      : '请先确认发货清单'}
+                  </div>
+                </div>
+              </Button>
+            </Upload>
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setPackingListModalVisible(false);
+                packingListForm.resetFields();
+                setPackingListConfig(null);
+              }}>
+                取消
+              </Button>
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                loading={packingListLoading}
+                disabled={!shippingData || shippingData.length === 0}
               >
-                <Upload
-                  beforeUpload={() => false}
-                  accept=".xlsx,.xls"
-                  maxCount={1}
-                >
-                  <Button icon={<UploadOutlined />}>选择Excel文件</Button>
-                </Upload>
-              </Form.Item>
-
-              <Alert
-                message="重要提示"
-                description="请确保Excel文件中包含名为'Box packing information'的工作表，且该工作表包含正确的装箱信息格式（如'Box 1 quantity'、'Box 2 quantity'等列标题）。系统将严格按照此格式解析装箱数据。"
-                type="warning"
-                style={{ marginBottom: 16 }}
-              />
-
-              <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                <Space>
-                  <Button onClick={() => setPackingListModalVisible(false)}>
-                    取消
-                  </Button>
-                  <Button type="primary" htmlType="submit" loading={packingListLoading}>
-                    上传并解析
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
-          </div>
-        )}
+                {shippingData && shippingData.length > 0 ? '上传并自动填写' : '上传（需先确认发货）'}
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* 删除确认对话框 */}
