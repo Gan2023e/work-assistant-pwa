@@ -2807,7 +2807,8 @@ const ShippingPage: React.FC = () => {
                 message="智能装箱表管理"
                 description={
                   <div>
-                    <p><strong>上传功能：</strong>请上传"Box packing information"格式的装箱表Excel文件，系统将自动识别表格格式。</p>
+                    <p><strong>文件要求：</strong>Excel文件中必须包含名为"Box packing information"的工作表（sheet页）。</p>
+                    <p><strong>格式要求：</strong>该工作表应包含"Box 1 quantity"、"Box 2 quantity"等列标题，用于标识各个箱子的装箱数量。</p>
                     <p><strong>自动填写：</strong>上传成功后，系统可根据发货确认页面的数据自动填写装箱表中的SKU和数量信息。</p>
                     <p><strong>下载使用：</strong>填写完成后可直接下载Excel文件，提交给物流商进行发货。</p>
                   </div>
@@ -2842,9 +2843,9 @@ const ShippingPage: React.FC = () => {
               </Form.Item>
 
               <Alert
-                message="智能识别装箱表"
-                description="系统将自动识别Excel表格格式，解析装箱数据。上传成功后，您可以直接下载填写好的装箱表Excel文件。"
-                type="info"
+                message="重要提示"
+                description="请确保Excel文件中包含名为'Box packing information'的工作表，且该工作表包含正确的装箱信息格式（如'Box 1 quantity'、'Box 2 quantity'等列标题）。系统将严格按照此格式解析装箱数据。"
+                type="warning"
                 style={{ marginBottom: 16 }}
               />
 

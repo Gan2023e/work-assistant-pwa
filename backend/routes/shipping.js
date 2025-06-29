@@ -2512,26 +2512,25 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     });
 
-    // 优先查找"Box packing information"页面
+    // 严格要求使用"Box packing information"页面
     let targetSheetName = null;
     if (sheetNames.includes('Box packing information')) {
       targetSheetName = 'Box packing information';
       console.log('\x1b[32m%s\x1b[0m', '✅ 找到"Box packing information"页面');
     } else {
-      // 如果没有找到，尝试其他可能的名称
-      const possibleNames = ['packing', 'box', 'information', 'pack'];
-      for (const sheetName of sheetNames) {
-        if (possibleNames.some(name => sheetName.toLowerCase().includes(name))) {
-          targetSheetName = sheetName;
-          console.log('\x1b[33m%s\x1b[0m', '🔍 使用相似的Sheet页:', sheetName);
-          break;
-        }
+      // 显示所有可用的sheet页名称
+      console.log('\x1b[31m%s\x1b[0m', '❌ 未找到"Box packing information"页面');
+      console.log('\x1b[33m%s\x1b[0m', '📊 可用的Sheet页名称:', sheetNames);
+      
+      // 删除临时文件
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
       
-      if (!targetSheetName) {
-        targetSheetName = sheetNames[0];
-        console.log('\x1b[33m%s\x1b[0m', '🔍 使用第一个Sheet页:', targetSheetName);
-      }
+      return res.status(400).json({
+        success: false,
+        message: `Excel文件中必须包含名为"Box packing information"的sheet页。\n\n当前文件包含的sheet页：\n${sheetNames.map((name, index) => `${index + 1}. "${name}"`).join('\n')}\n\n请确保：\n1. Excel文件中有名为"Box packing information"的工作表\n2. 该工作表包含正确的装箱信息格式\n3. 工作表名称完全匹配（区分大小写）`
+      });
     }
 
     const worksheet = workbook.Sheets[targetSheetName];
