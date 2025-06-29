@@ -2673,10 +2673,22 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     
     for (let rowIndex = 0; rowIndex < Math.min(10, data.length); rowIndex++) {
       const rowData = data[rowIndex] || [];
-      console.log('\x1b[33m%s\x1b[0m', `🔍 检查第${rowIndex + 1}行:`, rowData.slice(0, 15).map(cell => `"${String(cell || '').trim()}"`));
+      console.log('\x1b[33m%s\x1b[0m', `🔍 检查第${rowIndex + 1}行 (共${rowData.length}列):`, rowData.slice(0, 15).map(cell => `"${String(cell || '').trim()}"`));
+      
+      // 特别标注第5行和M列（索引12）
+      if (rowIndex === 4) { // 第5行（0基索引为4）
+        console.log('\x1b[35m%s\x1b[0m', `   ⭐ 这是第5行，重点检查M列(索引12)及之后的列...`);
+        if (rowData.length > 12) {
+          console.log('\x1b[35m%s\x1b[0m', `   M列内容: "${String(rowData[12] || '').trim()}"`);
+          console.log('\x1b[35m%s\x1b[0m', `   N列内容: "${String(rowData[13] || '').trim()}"`);
+          console.log('\x1b[35m%s\x1b[0m', `   O列内容: "${String(rowData[14] || '').trim()}"`);
+        }
+      }
       
       // 检查这一行是否包含箱号标题
       let foundBoxHeaders = 0;
+      let foundBoxPositions = [];
+      
       for (let colIndex = 0; colIndex < rowData.length; colIndex++) {
         const cellValue = String(rowData[colIndex] || '').trim();
         const patterns = [
@@ -2692,12 +2704,20 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         for (const pattern of patterns) {
           if (cellValue.match(pattern)) {
             foundBoxHeaders++;
+            foundBoxPositions.push({
+              col: getColumnLetter(colIndex),
+              index: colIndex,
+              content: cellValue
+            });
             break;
           }
         }
       }
       
       console.log('\x1b[33m%s\x1b[0m', `第${rowIndex + 1}行找到 ${foundBoxHeaders} 个箱号标题`);
+      if (foundBoxPositions.length > 0) {
+        console.log('\x1b[32m%s\x1b[0m', `   找到的箱号位置:`, foundBoxPositions.map(p => `${p.col}列:"${p.content}"`).join(', '));
+      }
       
       // 如果找到至少1个箱号标题，就认为这是标题行
       if (foundBoxHeaders > 0) {
