@@ -630,6 +630,7 @@ const ShippingPage: React.FC = () => {
 
       // 读取Excel文件，获取sheetNames，自动选择第二个sheet
       let sheetNameToUse = undefined;
+      let boxCount = 0;
       try {
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data, { type: 'array' });
@@ -637,6 +638,16 @@ const ShippingPage: React.FC = () => {
           sheetNameToUse = workbook.SheetNames[1]; // 第二个sheet
         } else if (workbook.SheetNames && workbook.SheetNames.length > 0) {
           sheetNameToUse = workbook.SheetNames[0]; // 只有一个sheet时选第一个
+        }
+        
+        // 直接获取M3单元格的值作为总箱数
+        if (sheetNameToUse) {
+          const ws = workbook.Sheets[sheetNameToUse];
+          const sheetJson = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          const row3 = sheetJson[2] as any[] | undefined; // 第3行，索引为2
+          if (row3 && row3.length > 12) { // M列索引为12
+            boxCount = parseInt(String(row3[12])) || 0;
+          }
         }
       } catch (e) {
         console.error('❌ 解析Excel文件获取Sheet页失败:', e);
@@ -647,6 +658,10 @@ const ShippingPage: React.FC = () => {
       if (sheetNameToUse) {
         formData.append('sheetName', sheetNameToUse);
       }
+      // 传递新的处理参数
+      formData.append('boxCount', boxCount.toString());
+      formData.append('startColumn', 'M'); // 从M列开始
+      formData.append('dataStartRow', '6'); // 从第6行开始填写数据
 
       const response = await fetch(`${API_BASE_URL}/api/shipping/packing-list/upload`, {
         method: 'POST',

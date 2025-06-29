@@ -2631,20 +2631,18 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       console.log('\x1b[35m%s\x1b[0m', `... 还有 ${data.length - 20} 行数据`);
     }
 
-    // 自动分析"Box packing information"格式
-    const autoConfig = {
-      sheetName: targetSheetName,
-      headerRow: 5,  // 第5行是箱号标题行
-      skuStartRow: 6, // 第6行开始是SKU
-      boxStartColumn: 'L', // 默认L列开始
-      boxCount: 5, // 默认5个箱子
-      boxColumns: [],
-      boxNumbers: [],
-      foundBoxWeightRow: null,
-      foundBoxWidthRow: null,
-      foundBoxLengthRow: null,
-      foundBoxHeightRow: null
-    };
+    // 检查是否使用新的简化流程
+    const { boxCount, startColumn, dataStartRow } = req.body;
+    const useNewFlow = boxCount && startColumn && dataStartRow;
+    
+    console.log('\x1b[33m%s\x1b[0m', '🔍 流程选择:', useNewFlow ? '使用新的简化流程' : '使用传统自动分析流程');
+    if (useNewFlow) {
+      console.log('\x1b[33m%s\x1b[0m', '📋 新流程参数:', {
+        boxCount: parseInt(boxCount),
+        startColumn,
+        dataStartRow: parseInt(dataStartRow)
+      });
+    }
 
     // 解析列索引（A=0, B=1, C=2...）
     const getColumnIndex = (columnLetter) => {
@@ -2665,11 +2663,79 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       return letter;
     };
 
-    // 自动查找箱号标题行（在前10行中搜索）
+    let autoConfig;
     let headerRowIndex = -1;
     let headerRowData = [];
     
-    console.log('\x1b[33m%s\x1b[0m', '🔍 开始在前10行中搜索标题行...');
+    // 定义所有流程共用的变量
+    let skuStartRowIndex = -1;
+    let skuEndRowIndex = -1;
+    let boxColumns = [];
+    let boxNumbers = [];
+
+    if (useNewFlow) {
+      // 新的简化流程：直接根据参数配置
+      console.log('\x1b[32m%s\x1b[0m', '🚀 使用新的简化流程');
+      
+      const numBoxes = parseInt(boxCount);
+      const startColIndex = getColumnIndex(startColumn);
+      const startRow = parseInt(dataStartRow);
+      
+      // 直接生成箱子配置
+      const boxColumns = [];
+      const boxNumbers = [];
+      
+      for (let i = 0; i < numBoxes; i++) {
+        const colIndex = startColIndex + i;
+        const colLetter = getColumnLetter(colIndex);
+        const boxNumber = String(i + 1);
+        
+        boxColumns.push(colLetter);
+        boxNumbers.push(boxNumber);
+      }
+      
+      autoConfig = {
+        sheetName: targetSheetName,
+        headerRow: null, // 新流程不需要标题行
+        skuStartRow: startRow, // 从指定行开始
+        boxStartColumn: startColumn,
+        boxCount: numBoxes,
+        boxColumns: boxColumns,
+        boxNumbers: boxNumbers,
+        foundBoxWeightRow: null,
+        foundBoxWidthRow: null,
+        foundBoxLengthRow: null,
+        foundBoxHeightRow: null
+      };
+      
+      headerRowIndex = startRow - 2; // 设置一个虚拟的标题行索引，实际不使用
+      
+      console.log('\x1b[32m%s\x1b[0m', '✅ 新流程配置完成:', {
+        箱子数量: numBoxes,
+        起始列: startColumn,
+        数据开始行: startRow,
+        箱子列: boxColumns,
+        箱子编号: boxNumbers
+      });
+      
+    } else {
+      // 传统的自动分析流程
+      autoConfig = {
+        sheetName: targetSheetName,
+        headerRow: 5,  // 第5行是箱号标题行
+        skuStartRow: 6, // 第6行开始是SKU
+        boxStartColumn: 'L', // 默认L列开始
+        boxCount: 5, // 默认5个箱子
+        boxColumns: [],
+        boxNumbers: [],
+        foundBoxWeightRow: null,
+        foundBoxWidthRow: null,
+        foundBoxLengthRow: null,
+        foundBoxHeightRow: null
+      };
+      
+      // 自动查找箱号标题行（在前10行中搜索）
+      console.log('\x1b[33m%s\x1b[0m', '🔍 开始在前10行中搜索标题行...');
     
     for (let rowIndex = 0; rowIndex < Math.min(10, data.length); rowIndex++) {
       const rowData = data[rowIndex] || [];
@@ -2747,8 +2813,8 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     console.log('\x1b[33m%s\x1b[0m', '📊 最终选择的标题行数据:', headerRowData);
 
     // 查找所有包含"Box"和"quantity"的列
-    const boxColumns = [];
-    const boxNumbers = [];
+    boxColumns = [];
+    boxNumbers = [];
     
     console.log('\x1b[33m%s\x1b[0m', `🔍 开始分析标题行（第${headerRowIndex + 1}行），共`, headerRowData.length, '列');
     
@@ -2832,8 +2898,8 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     }
 
     // 查找SKU开始行（从标题行的下一行开始）
-    let skuStartRowIndex = headerRowIndex + 1; // 从标题行的下一行开始
-    let skuEndRowIndex = skuStartRowIndex;
+    skuStartRowIndex = headerRowIndex + 1; // 从标题行的下一行开始
+    skuEndRowIndex = skuStartRowIndex;
     
     console.log('\x1b[33m%s\x1b[0m', `📊 SKU数据从第${skuStartRowIndex + 1}行开始搜索`);
 
@@ -2876,9 +2942,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     }
 
     // 解析装箱数据
-    const packingItems = [];
-    const boxes = [];
-    
     // 创建箱子信息
     for (let i = 0; i < boxNumbers.length; i++) {
       const boxNumber = boxNumbers[i];
@@ -2950,6 +3013,68 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     console.log('\x1b[32m%s\x1b[0m', '📦 解析到箱子信息:', boxes.length, '个');
     console.log('\x1b[33m%s\x1b[0m', '📦 装箱明细预览:', packingItems.slice(0, 5));
 
+    } // 结束传统流程的else块
+
+    // 通用的数据解析部分（对两种流程都适用）
+    const packingItems = [];
+    const boxes = [];
+
+    if (useNewFlow) {
+      // 新流程：直接从指定位置解析数据
+      console.log('\x1b[33m%s\x1b[0m', '📊 新流程：开始解析装箱数据');
+      
+      const startRowIndex = parseInt(dataStartRow) - 1; // 转换为0基索引
+      
+      // 查找SKU数据范围（从指定行开始，直到遇到空行）
+      let skuEndRowIndex = startRowIndex;
+      for (let rowIndex = startRowIndex; rowIndex < data.length; rowIndex++) {
+        const row = data[rowIndex] || [];
+        const skuCell = String(row[0] || '').trim();
+        
+        if (!skuCell || skuCell === '') {
+          break;
+        }
+        skuEndRowIndex = rowIndex;
+      }
+      
+      console.log('\x1b[33m%s\x1b[0m', `📊 新流程SKU数据范围: 第${startRowIndex + 1}行到第${skuEndRowIndex + 1}行`);
+      
+      // 创建箱子信息（新流程中暂时不解析尺寸信息）
+      for (let i = 0; i < autoConfig.boxNumbers.length; i++) {
+        boxes.push({
+          box_num: autoConfig.boxNumbers[i],
+          weight: null,
+          width: null,
+          length: null,
+          height: null
+        });
+      }
+      
+      // 解析SKU装箱数据
+      for (let rowIndex = startRowIndex; rowIndex <= skuEndRowIndex; rowIndex++) {
+        const row = data[rowIndex] || [];
+        const sku = String(row[0] || '').trim();
+        
+        if (!sku || sku === '') continue;
+        
+        // 解析每个箱子中的数量
+        for (let i = 0; i < autoConfig.boxColumns.length; i++) {
+          const colIndex = getColumnIndex(autoConfig.boxColumns[i]);
+          const quantity = parseInt(row[colIndex]);
+          
+          if (!isNaN(quantity) && quantity > 0) {
+            packingItems.push({
+              box_num: autoConfig.boxNumbers[i],
+              sku: sku,
+              quantity: quantity
+            });
+          }
+        }
+      }
+      
+      console.log('\x1b[32m%s\x1b[0m', '📦 新流程解析完成：装箱数据', packingItems.length, '条，箱子信息', boxes.length, '个');
+    }
+
     // 保存配置到文件
     const configData = {
       filename: req.file.filename,
@@ -2957,9 +3082,9 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       uploadTime: new Date().toISOString(),
       filePath: req.file.path, // 保存文件路径用于后续填写
       sheetName: targetSheetName,
-      headerRow: headerRowIndex + 1, // 转换为1基索引
-      skuStartRow: skuStartRowIndex + 1,
-      skuEndRow: skuEndRowIndex + 1,
+      headerRow: useNewFlow ? null : (headerRowIndex + 1), // 新流程不需要标题行
+      skuStartRow: useNewFlow ? parseInt(dataStartRow) : (skuStartRowIndex + 1),
+      skuEndRow: useNewFlow ? null : (skuEndRowIndex + 1), // 新流程动态确定结束行
       boxColumns: autoConfig.boxColumns,
       boxNumbers: autoConfig.boxNumbers,
       boxWeightRow: autoConfig.foundBoxWeightRow ? autoConfig.foundBoxWeightRow + 1 : null,
@@ -2968,7 +3093,14 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       boxHeightRow: autoConfig.foundBoxHeightRow ? autoConfig.foundBoxHeightRow + 1 : null,
       sheetNames: workbook.SheetNames,
       items: packingItems,
-      boxes: boxes
+      boxes: boxes,
+      // 新增：标记是否使用新流程
+      useNewFlow: useNewFlow,
+      newFlowParams: useNewFlow ? {
+        boxCount: parseInt(boxCount),
+        startColumn: startColumn,
+        dataStartRow: parseInt(dataStartRow)
+      } : null
     };
 
     const configPath = path.join(__dirname, '../uploads/packing-lists/config.json');
