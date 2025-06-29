@@ -593,8 +593,9 @@ const ShippingPage: React.FC = () => {
 
   // 上传装箱表（自动分析）
   const handleUploadPackingList = async (values: any) => {
-    console.log('🔍 开始上传装箱表，表单值:', values);
-    console.log('📋 values.packingList详细结构:', JSON.stringify(values.packingList, null, 2));
+    console.warn('🔍 【生产模式调试】开始上传装箱表，表单值:', values);
+    console.warn('📋 values.packingList详细结构:', JSON.stringify(values.packingList, null, 2));
+    console.warn('🚀 【生产模式调试】装箱表上传流程开始');
     setPackingListLoading(true);
     try {
       // 检查文件是否存在 - 改进文件检查逻辑
@@ -670,50 +671,64 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       // 🔥 【最优先显示】立即在控制台显示关键信息
-      console.log('='.repeat(100));
+      console.log('====================================================================================================');
       console.log('🔥 【最优先调试信息】装箱表上传结果分析');
-      console.log('='.repeat(100));
+      console.log('====================================================================================================');
+      
+      // 强制显示调试信息，即使在生产模式下
+      console.warn('🔥 【生产模式调试】开始分析装箱表上传结果');
+      console.info('📊 响应数据结构:', JSON.stringify(result, null, 2));
       
       if (result.data && result.data.sheetNames) {
-        console.log('📊 【关键信息1】Excel文件中所有Sheet页名称:');
+        console.warn('📊 【关键信息1】Excel文件中所有Sheet页名称:');
         result.data.sheetNames.forEach((name: string, index: number) => {
-          console.log(`   ${index + 1}. "${name}" ${name === 'Box packing information' ? '⭐ 目标Sheet页' : ''}`);
+          console.warn(`   ${index + 1}. "${name}" ${name === 'Box packing information' ? '⭐ 目标Sheet页' : ''}`);
         });
+      } else {
+        console.error('❌ 未找到 sheetNames 数据');
       }
       
       if (result.data && result.data.sheetName) {
-        console.log('📋 【关键信息2】程序选择的Sheet页:', `"${result.data.sheetName}"`);
-        console.log('📋 【关键信息3】是否为目标Sheet页:', result.data.sheetName === 'Box packing information' ? '✅ 是' : '❌ 否');
+        console.warn('📋 【关键信息2】程序选择的Sheet页:', `"${result.data.sheetName}"`);
+        console.warn('📋 【关键信息3】是否为目标Sheet页:', result.data.sheetName === 'Box packing information' ? '✅ 是' : '❌ 否');
+      } else {
+        console.error('❌ 未找到 sheetName 数据');
       }
       
       if (result.data && result.data.headerRow) {
-        console.log('📋 【关键信息4】标题行位置:', `第${result.data.headerRow}行`);
+        console.warn('📋 【关键信息4】标题行位置:', `第${result.data.headerRow}行`);
+      } else {
+        console.error('❌ 未找到 headerRow 数据');
       }
       
       if (result.data && result.data.boxColumns) {
-        console.log('📦 【关键信息5】找到的箱子列:');
+        console.warn('📦 【关键信息5】找到的箱子列:');
         result.data.boxColumns.forEach((col: string, index: number) => {
           const boxNum = result.data.boxNumbers?.[index] || '?';
-          console.log(`   列${col}: Box ${boxNum} quantity`);
+          console.warn(`   列${col}: Box ${boxNum} quantity`);
         });
+      } else {
+        console.error('❌ 未找到 boxColumns 数据');
       }
       
       if (result.data && result.data.items) {
-        console.log('📦 【关键信息6】解析到的装箱数据:', `${result.data.items.length}条`);
+        console.warn('📦 【关键信息6】解析到的装箱数据:', `${result.data.items.length}条`);
         if (result.data.items.length > 0) {
-          console.log('📦 【前5条数据预览】:');
+          console.warn('📦 【前5条数据预览】:');
           result.data.items.slice(0, 5).forEach((item: any, index: number) => {
-            console.log(`   ${index + 1}. 箱号${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
+            console.warn(`   ${index + 1}. 箱号${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
           });
         }
+      } else {
+        console.error('❌ 未找到 items 数据');
       }
       
       if (!result.success) {
-        console.log('❌ 【错误信息】:', result.message);
+        console.error('❌ 【错误信息】:', result.message);
       }
       
-      console.log('='.repeat(100));
-      console.log('📊 完整响应结果:', result);
+      console.log('====================================================================================================');
+      console.warn('📊 完整响应结果:', result);
       
       if (result.success) {
         message.success('装箱表上传成功！系统已自动识别表格格式。');
