@@ -647,6 +647,17 @@ const ShippingPage: React.FC = () => {
         } else {
           console.error('❌ Excel文件未检测到任何Sheet页');
         }
+        // ====== 新增调试：输出自动选择sheet的第5行内容 ======
+        if (sheetNameToUse) {
+          const ws = workbook.Sheets[sheetNameToUse];
+          const sheetJson = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          if (sheetJson.length >= 5) {
+            console.warn('🐞 [调试] Excel自动选择的Sheet页第5行内容:', sheetJson[4]);
+          } else {
+            console.warn('🐞 [调试] Excel自动选择的Sheet页不足5行，实际行数:', sheetJson.length);
+          }
+        }
+        // ====== END ======
       } catch (e) {
         console.error('❌ 解析Excel文件获取Sheet页失败:', e);
       }
