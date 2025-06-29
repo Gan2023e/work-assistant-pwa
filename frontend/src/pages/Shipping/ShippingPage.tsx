@@ -652,11 +652,68 @@ const ShippingPage: React.FC = () => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ 上传HTTP错误:', { status: response.status, statusText: response.statusText, body: errorText });
+        
+        // 🔥 优先显示：即使失败也要显示可能的调试信息
+        console.log('🔍 【优先调试】服务器错误响应:', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.message) {
+            console.log('🔍 【优先调试】错误消息:', errorJson.message);
+          }
+        } catch (e) {
+          // 忽略JSON解析错误
+        }
+        
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('📊 上传响应结果:', result);
+      
+      // 🔥 【最优先显示】立即在控制台显示关键信息
+      console.log('='.repeat(100));
+      console.log('🔥 【最优先调试信息】装箱表上传结果分析');
+      console.log('='.repeat(100));
+      
+      if (result.data && result.data.sheetNames) {
+        console.log('📊 【关键信息1】Excel文件中所有Sheet页名称:');
+        result.data.sheetNames.forEach((name: string, index: number) => {
+          console.log(`   ${index + 1}. "${name}" ${name === 'Box packing information' ? '⭐ 目标Sheet页' : ''}`);
+        });
+      }
+      
+      if (result.data && result.data.sheetName) {
+        console.log('📋 【关键信息2】程序选择的Sheet页:', `"${result.data.sheetName}"`);
+        console.log('📋 【关键信息3】是否为目标Sheet页:', result.data.sheetName === 'Box packing information' ? '✅ 是' : '❌ 否');
+      }
+      
+      if (result.data && result.data.headerRow) {
+        console.log('📋 【关键信息4】标题行位置:', `第${result.data.headerRow}行`);
+      }
+      
+      if (result.data && result.data.boxColumns) {
+        console.log('📦 【关键信息5】找到的箱子列:');
+        result.data.boxColumns.forEach((col: string, index: number) => {
+          const boxNum = result.data.boxNumbers?.[index] || '?';
+          console.log(`   列${col}: Box ${boxNum} quantity`);
+        });
+      }
+      
+      if (result.data && result.data.items) {
+        console.log('📦 【关键信息6】解析到的装箱数据:', `${result.data.items.length}条`);
+        if (result.data.items.length > 0) {
+          console.log('📦 【前5条数据预览】:');
+          result.data.items.slice(0, 5).forEach((item: any, index: number) => {
+            console.log(`   ${index + 1}. 箱号${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
+          });
+        }
+      }
+      
+      if (!result.success) {
+        console.log('❌ 【错误信息】:', result.message);
+      }
+      
+      console.log('='.repeat(100));
+      console.log('📊 完整响应结果:', result);
       
       if (result.success) {
         message.success('装箱表上传成功！系统已自动识别表格格式。');
