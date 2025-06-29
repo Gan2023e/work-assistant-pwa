@@ -671,64 +671,142 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       // 🔥 【最优先显示】立即在控制台显示关键信息
-      console.log('====================================================================================================');
+      console.log('====================================================================================================');  
       console.log('🔥 【最优先调试信息】装箱表上传结果分析');
       console.log('====================================================================================================');
       
       // 强制显示调试信息，即使在生产模式下
       console.warn('🔥 【生产模式调试】开始分析装箱表上传结果');
-      console.info('📊 响应数据结构:', JSON.stringify(result, null, 2));
+      console.info('📊 完整响应数据结构:', JSON.stringify(result, null, 2));
       
+      // 详细显示所有Sheet页信息
       if (result.data && result.data.sheetNames) {
         console.warn('📊 【关键信息1】Excel文件中所有Sheet页名称:');
+        console.warn(`   📋 总共发现 ${result.data.sheetNames.length} 个Sheet页:`);
         result.data.sheetNames.forEach((name: string, index: number) => {
-          console.warn(`   ${index + 1}. "${name}" ${name === 'Box packing information' ? '⭐ 目标Sheet页' : ''}`);
+          const isTarget = name === 'Box packing information';
+          const isSelected = name === result.data.sheetName;
+          console.warn(`   ${index + 1}. "${name}" ${isTarget ? '⭐ 目标Sheet页' : ''} ${isSelected ? '✅ 当前选择' : ''}`);
         });
+        
+        // 检查目标Sheet页是否存在
+        const hasTargetSheet = result.data.sheetNames.includes('Box packing information');
+        console.warn(`📋 【目标Sheet页检查】"Box packing information"页 ${hasTargetSheet ? '✅ 存在' : '❌ 不存在'}`);
+        
+        if (!hasTargetSheet) {
+          console.error('❌ 【严重问题】未找到目标Sheet页"Box packing information"');
+          console.error('📋 请检查Excel文件是否包含正确的Sheet页名称');
+        }
       } else {
         console.error('❌ 未找到 sheetNames 数据');
       }
       
+      // 显示程序选择的Sheet页
       if (result.data && result.data.sheetName) {
         console.warn('📋 【关键信息2】程序选择的Sheet页:', `"${result.data.sheetName}"`);
         console.warn('📋 【关键信息3】是否为目标Sheet页:', result.data.sheetName === 'Box packing information' ? '✅ 是' : '❌ 否');
+        
+        if (result.data.sheetName !== 'Box packing information') {
+          console.warn('⚠️ 【注意】程序选择了非目标Sheet页，可能导致解析错误');
+        }
       } else {
         console.error('❌ 未找到 sheetName 数据');
       }
       
+      // 显示标题行信息
       if (result.data && result.data.headerRow) {
         console.warn('📋 【关键信息4】标题行位置:', `第${result.data.headerRow}行`);
       } else {
         console.error('❌ 未找到 headerRow 数据');
       }
       
+      // 显示SKU开始行信息
+      if (result.data && result.data.skuStartRow) {
+        console.warn('📋 【关键信息5】SKU数据开始行:', `第${result.data.skuStartRow}行`);
+      } else {
+        console.error('❌ 未找到 skuStartRow 数据');
+      }
+      
+      // 详细显示箱子列信息
       if (result.data && result.data.boxColumns) {
-        console.warn('📦 【关键信息5】找到的箱子列:');
+        console.warn('📦 【关键信息6】找到的箱子列:');
+        console.warn(`   📦 总共发现 ${result.data.boxColumns.length} 个箱子列:`);
         result.data.boxColumns.forEach((col: string, index: number) => {
           const boxNum = result.data.boxNumbers?.[index] || '?';
           console.warn(`   列${col}: Box ${boxNum} quantity`);
         });
+        
+        // 显示箱号信息
+        if (result.data.boxNumbers) {
+          console.warn('📦 【箱号列表】:', result.data.boxNumbers.join(', '));
+        }
       } else {
         console.error('❌ 未找到 boxColumns 数据');
       }
       
+      // 详细显示解析到的装箱数据
       if (result.data && result.data.items) {
-        console.warn('📦 【关键信息6】解析到的装箱数据:', `${result.data.items.length}条`);
+        console.warn('📦 【关键信息7】解析到的装箱数据:', `${result.data.items.length}条`);
         if (result.data.items.length > 0) {
-          console.warn('📦 【前5条数据预览】:');
-          result.data.items.slice(0, 5).forEach((item: any, index: number) => {
-            console.warn(`   ${index + 1}. 箱号${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
+          console.warn('📦 【前10条数据详细预览】:');
+          result.data.items.slice(0, 10).forEach((item: any, index: number) => {
+            console.warn(`   ${index + 1}. 箱号:${item.box_num} - SKU:${item.sku} - 数量:${item.quantity}`);
           });
+          
+          if (result.data.items.length > 10) {
+            console.warn(`   ... 还有 ${result.data.items.length - 10} 条数据`);
+          }
+          
+          // 统计信息
+          const uniqueBoxes = Array.from(new Set(result.data.items.map((item: any) => item.box_num)));
+          const uniqueSkus = Array.from(new Set(result.data.items.map((item: any) => item.sku)));
+          const totalQuantity = result.data.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+          
+          console.warn('📊 【统计信息】:');
+          console.warn(`   📦 总箱数: ${uniqueBoxes.length}`);
+          console.warn(`   📋 总SKU数: ${uniqueSkus.length}`);
+          console.warn(`   📈 总数量: ${totalQuantity}`);
+          console.warn(`   📦 箱号列表: ${uniqueBoxes.join(', ')}`);
+        } else {
+          console.error('❌ 【严重问题】没有解析到任何装箱数据');
         }
       } else {
         console.error('❌ 未找到 items 数据');
       }
       
+      // 显示箱子信息
+      if (result.data && result.data.boxes) {
+        console.warn('📦 【关键信息8】箱子尺寸重量信息:', `${result.data.boxes.length}个箱子`);
+        if (result.data.boxes.length > 0) {
+          console.warn('📦 【箱子信息详情】:');
+          result.data.boxes.slice(0, 10).forEach((box: any, index: number) => {
+            console.warn(`   ${index + 1}. 箱号:${box.box_num} - 重量:${box.weight || '未设置'} - 尺寸:${box.length || '?'}×${box.width || '?'}×${box.height || '?'}`);
+          });
+        }
+      } else {
+        console.warn('⚠️ 未找到 boxes 数据（这可能是正常的，如果Excel中没有箱子尺寸信息）');
+      }
+      
+      // 显示原始Excel数据（如果有）
+      if (result.data && result.data.rawData) {
+        console.warn('📋 【原始Excel数据】前10行:');
+        result.data.rawData.slice(0, 10).forEach((row: any, index: number) => {
+          console.warn(`   第${index + 1}行:`, row);
+        });
+      } else {
+        console.warn('⚠️ 未返回原始Excel数据');
+      }
+      
+      // 显示错误信息
       if (!result.success) {
         console.error('❌ 【错误信息】:', result.message);
+        if (result.data && result.data.error) {
+          console.error('❌ 【详细错误】:', result.data.error);
+        }
       }
       
       console.log('====================================================================================================');
-      console.warn('📊 完整响应结果:', result);
+      console.warn('📊 完整响应结果（再次确认）:', result);
       
       if (result.success) {
         message.success('装箱表上传成功！系统已自动识别表格格式。');
