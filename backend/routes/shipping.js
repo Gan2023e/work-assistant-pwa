@@ -2489,76 +2489,27 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const workbook = XLSX.readFile(req.file.path);
     const sheetNames = workbook.SheetNames;
     
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[36m%s\x1b[0m', '📊 Excel文件分析开始');
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[33m%s\x1b[0m', '📊 Excel文件路径:', req.file.path);
-    console.log('\x1b[33m%s\x1b[0m', '📊 原始文件名:', req.file.originalname);
-    console.log('\x1b[33m%s\x1b[0m', '📊 文件大小:', req.file.size, 'bytes');
-    console.log('\x1b[33m%s\x1b[0m', '📊 总共发现Sheet页数量:', sheetNames.length);
-    console.log('\x1b[33m%s\x1b[0m', '📊 所有Sheet页名称:', JSON.stringify(sheetNames, null, 2));
-    
-    // 显示每个Sheet页的详细信息
-    console.log('\x1b[36m%s\x1b[0m', '📊 Sheet页详细信息:');
-    sheetNames.forEach((name, index) => {
-      const sheet = workbook.Sheets[name];
-      const range = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
-      const rowCount = range.e.r + 1;
-      const colCount = range.e.c + 1;
-      console.log('\x1b[36m%s\x1b[0m', `  Sheet ${index + 1}: "${name}"`);
-      console.log('\x1b[36m%s\x1b[0m', `    - 范围: ${sheet['!ref'] || 'A1:A1'}`);
-      console.log('\x1b[36m%s\x1b[0m', `    - 行数: ${rowCount}, 列数: ${colCount}`);
-      
-      // 显示前3行的内容作为预览
-      const sheetData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      console.log('\x1b[36m%s\x1b[0m', `    - 前3行预览:`);
-      for (let i = 0; i < Math.min(3, sheetData.length); i++) {
-        const row = sheetData[i] || [];
-        const rowPreview = row.slice(0, 10).map(cell => `"${String(cell || '').trim()}"`).join(', ');
-        console.log('\x1b[36m%s\x1b[0m', `      第${i + 1}行: [${rowPreview}${row.length > 10 ? '...' : ''}]`);
-      }
-    });
 
-    // 严格要求使用"Box packing information"页面
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找目标Sheet页');
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
+
+
+
+    
+    // 查找目标Sheet页
     
     let targetSheetName = null;
-    console.log('\x1b[33m%s\x1b[0m', '🔍 正在查找名为"Box packing information"的Sheet页...');
-    
-    // 详细检查每个sheet页名称
-    for (let i = 0; i < sheetNames.length; i++) {
-      const sheetName = sheetNames[i];
-      console.log('\x1b[33m%s\x1b[0m', `🔍 检查Sheet页 ${i + 1}: "${sheetName}"`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 长度: ${sheetName.length} 字符`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 字符编码: ${JSON.stringify(sheetName)}`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 是否完全匹配"Box packing information": ${sheetName === 'Box packing information'}`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 小写匹配: ${sheetName.toLowerCase() === 'box packing information'}`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 包含"box": ${sheetName.toLowerCase().includes('box')}`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 包含"packing": ${sheetName.toLowerCase().includes('packing')}`);
-      console.log('\x1b[33m%s\x1b[0m', `   - 包含"information": ${sheetName.toLowerCase().includes('information')}`);
-    }
     
     if (sheetNames.includes('Box packing information')) {
       targetSheetName = 'Box packing information';
-      console.log('\x1b[32m%s\x1b[0m', '✅ 精确找到"Box packing information"页面');
     } else {
-      console.log('\x1b[31m%s\x1b[0m', '❌ 未找到精确匹配的"Box packing information"页面');
-      
       // 尝试模糊匹配
-      console.log('\x1b[33m%s\x1b[0m', '🔍 尝试模糊匹配...');
       const possibleMatches = sheetNames.filter(name => {
         const lowerName = name.toLowerCase();
         return lowerName.includes('box') && lowerName.includes('packing') && lowerName.includes('information');
       });
       
       if (possibleMatches.length > 0) {
-        console.log('\x1b[33m%s\x1b[0m', '🔍 找到可能的匹配项:', possibleMatches);
         targetSheetName = possibleMatches[0];
-        console.log('\x1b[33m%s\x1b[0m', `🔍 使用第一个匹配项: "${targetSheetName}"`);
       } else {
-        console.log('\x1b[31m%s\x1b[0m', '❌ 未找到任何匹配的Sheet页');
         
         // 删除临时文件
         if (fs.existsSync(req.file.path)) {
@@ -2572,17 +2523,9 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
     
-    console.log('\x1b[32m%s\x1b[0m', `✅ 最终选择的Sheet页: "${targetSheetName}"`);
-
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[36m%s\x1b[0m', '📊 开始分析Sheet页内容');
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    
     const worksheet = workbook.Sheets[targetSheetName];
-    console.log('\x1b[33m%s\x1b[0m', `📋 正在读取Sheet页: "${targetSheetName}"`);
     
     if (!worksheet) {
-      console.log('\x1b[31m%s\x1b[0m', `❌ 无法读取Sheet页: "${targetSheetName}"`);
       return res.status(400).json({
         success: false,
         message: `无法读取指定的Sheet页: "${targetSheetName}"`
@@ -2590,59 +2533,17 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     }
     
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-    console.log('\x1b[33m%s\x1b[0m', '📊 Sheet页基本信息:');
-    console.log('\x1b[33m%s\x1b[0m', `   - Sheet页名称: "${targetSheetName}"`);
-    console.log('\x1b[33m%s\x1b[0m', `   - 数据行数: ${data.length}`);
-    console.log('\x1b[33m%s\x1b[0m', `   - Sheet范围: ${worksheet['!ref'] || '未定义'}`);
     
     if (data.length === 0) {
-      console.log('\x1b[31m%s\x1b[0m', '❌ Sheet页数据为空');
       return res.status(400).json({
         success: false,
         message: `Sheet页 "${targetSheetName}" 中没有数据`
       });
     }
-    
-    // 显示选择Sheet页的详细内容
-    console.log('\x1b[35m%s\x1b[0m', '📊 Sheet页完整内容:');
-    console.log('\x1b[35m%s\x1b[0m', `总行数: ${data.length}, 前20行详细内容:`);
-    
-    for (let i = 0; i < Math.min(20, data.length); i++) {
-      const row = data[i] || [];
-      console.log('\x1b[35m%s\x1b[0m', `第${i + 1}行 (${row.length}列):`);
-      
-      // 显示每列的内容，限制每行显示前15列
-      for (let j = 0; j < Math.min(15, row.length); j++) {
-        const cellValue = String(row[j] || '').trim();
-        const columnLetter = String.fromCharCode(65 + (j % 26));
-        if (cellValue !== '') {
-          console.log('\x1b[35m%s\x1b[0m', `  列${columnLetter}(${j}): "${cellValue}"`);
-        }
-      }
-      
-      if (row.length > 15) {
-        console.log('\x1b[35m%s\x1b[0m', `  ... 还有 ${row.length - 15} 列`);
-      }
-      
-      console.log('\x1b[35m%s\x1b[0m', '  ---');
-    }
-    
-    if (data.length > 20) {
-      console.log('\x1b[35m%s\x1b[0m', `... 还有 ${data.length - 20} 行数据`);
-    }
 
     // 检查是否使用新的简化流程
     const { boxCount, startColumn, dataStartRow } = req.body;
     const useNewFlow = boxCount && startColumn && dataStartRow;
-    
-    console.log('\x1b[33m%s\x1b[0m', '🔍 流程选择:', useNewFlow ? '使用新的简化流程' : '使用传统自动分析流程');
-    if (useNewFlow) {
-      console.log('\x1b[33m%s\x1b[0m', '📋 新流程参数:', {
-        boxCount: parseInt(boxCount),
-        startColumn,
-        dataStartRow: parseInt(dataStartRow)
-      });
-    }
 
     // 解析列索引（A=0, B=1, C=2...）
     const getColumnIndex = (columnLetter) => {
@@ -2675,8 +2576,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
 
     if (useNewFlow) {
       // 新的简化流程：直接根据参数配置
-      console.log('\x1b[32m%s\x1b[0m', '🚀 使用新的简化流程');
-      
       const numBoxes = parseInt(boxCount);
       const startColIndex = getColumnIndex(startColumn);
       const startRow = parseInt(dataStartRow);
@@ -2710,14 +2609,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       
       headerRowIndex = startRow - 2; // 设置一个虚拟的标题行索引，实际不使用
       
-      console.log('\x1b[32m%s\x1b[0m', '✅ 新流程配置完成:', {
-        箱子数量: numBoxes,
-        起始列: startColumn,
-        数据开始行: startRow,
-        箱子列: boxColumns,
-        箱子编号: boxNumbers
-      });
-      
     } else {
       // 传统的自动分析流程
       autoConfig = {
@@ -2735,25 +2626,12 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       };
       
       // 自动查找箱号标题行（在前10行中搜索）
-      console.log('\x1b[33m%s\x1b[0m', '🔍 开始在前10行中搜索标题行...');
     
     for (let rowIndex = 0; rowIndex < Math.min(10, data.length); rowIndex++) {
       const rowData = data[rowIndex] || [];
-      console.log('\x1b[33m%s\x1b[0m', `🔍 检查第${rowIndex + 1}行 (共${rowData.length}列):`, rowData.slice(0, 15).map(cell => `"${String(cell || '').trim()}"`));
-      
-      // 特别标注第5行和M列（索引12）
-      if (rowIndex === 4) { // 第5行（0基索引为4）
-        console.log('\x1b[35m%s\x1b[0m', `   ⭐ 这是第5行，重点检查M列(索引12)及之后的列...`);
-        if (rowData.length > 12) {
-          console.log('\x1b[35m%s\x1b[0m', `   M列内容: "${String(rowData[12] || '').trim()}"`);
-          console.log('\x1b[35m%s\x1b[0m', `   N列内容: "${String(rowData[13] || '').trim()}"`);
-          console.log('\x1b[35m%s\x1b[0m', `   O列内容: "${String(rowData[14] || '').trim()}"`);
-        }
-      }
       
       // 检查这一行是否包含箱号标题
       let foundBoxHeaders = 0;
-      let foundBoxPositions = [];
       
       for (let colIndex = 0; colIndex < rowData.length; colIndex++) {
         const cellValue = String(rowData[colIndex] || '').trim();
@@ -2770,38 +2648,20 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         for (const pattern of patterns) {
           if (cellValue.match(pattern)) {
             foundBoxHeaders++;
-            foundBoxPositions.push({
-              col: getColumnLetter(colIndex),
-              index: colIndex,
-              content: cellValue
-            });
             break;
           }
         }
-      }
-      
-      console.log('\x1b[33m%s\x1b[0m', `第${rowIndex + 1}行找到 ${foundBoxHeaders} 个箱号标题`);
-      if (foundBoxPositions.length > 0) {
-        console.log('\x1b[32m%s\x1b[0m', `   找到的箱号位置:`, foundBoxPositions.map(p => `${p.col}列:"${p.content}"`).join(', '));
       }
       
       // 如果找到至少1个箱号标题，就认为这是标题行
       if (foundBoxHeaders > 0) {
         headerRowIndex = rowIndex;
         headerRowData = rowData;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 确定标题行为第${rowIndex + 1}行`);
         break;
       }
     }
     
-    // --- 新增：无论是否找到标题行，先输出sheet页名称和前几行内容 ---
-    console.log('\x1b[36m%s\x1b[0m', '【调试】当前Excel所有Sheet页名称：', JSON.stringify(sheetNames));
-    console.log('\x1b[36m%s\x1b[0m', `【调试】选中Sheet页 "${targetSheetName}" 前10行内容：`);
-    for (let i = 0; i < Math.min(10, data.length); i++) {
-      const row = data[i] || [];
-      console.log('\x1b[36m%s\x1b[0m', `第${i + 1}行:`, row.map(cell => `"${String(cell || '').trim()}"`).join(', '));
-    }
-    // --- 新增END ---
+
 
     if (headerRowIndex === -1) {
       return res.status(400).json({
@@ -2810,17 +2670,12 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       });
     }
     
-    console.log('\x1b[33m%s\x1b[0m', '📊 最终选择的标题行数据:', headerRowData);
-
     // 查找所有包含"Box"和"quantity"的列
     boxColumns = [];
     boxNumbers = [];
     
-    console.log('\x1b[33m%s\x1b[0m', `🔍 开始分析标题行（第${headerRowIndex + 1}行），共`, headerRowData.length, '列');
-    
     for (let colIndex = 0; colIndex < headerRowData.length; colIndex++) {
       const cellValue = String(headerRowData[colIndex] || '').trim();
-      console.log('\x1b[33m%s\x1b[0m', `🔍 检查列${getColumnLetter(colIndex)}(索引${colIndex}): "${cellValue}"`);
       
       // 更灵活的匹配模式：支持多种格式
       let boxMatch = null;
@@ -2836,16 +2691,11 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         /第\s*(\d+)\s*箱/i                   // "第1箱"
       ];
       
-      console.log('\x1b[35m%s\x1b[0m', `   测试列"${cellValue}"是否匹配箱号模式...`);
-      
       for (const pattern of patterns) {
         const testMatch = cellValue.match(pattern);
         if (testMatch) {
           boxMatch = testMatch;
-          console.log('\x1b[32m%s\x1b[0m', `   ✅ 匹配成功！模式: ${pattern.source}, 匹配结果: "${boxMatch[0]}", 提取箱号: "${boxMatch[1]}"`);
           break;
-        } else {
-          console.log('\x1b[35m%s\x1b[0m', `   ❌ 模式 ${pattern.source} 不匹配`);
         }
       }
       
@@ -2856,33 +2706,16 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         boxColumns.push(colLetter);
         boxNumbers.push(boxNumber);
         
-        console.log('\x1b[32m%s\x1b[0m', `✅ 确认找到箱子${boxNumber}，位于列${colLetter}，原始内容: "${cellValue}"`);
-        
         // 记录第一个箱子的列作为起始列
         if (boxColumns.length === 1) {
           autoConfig.boxStartColumn = colLetter;
-          console.log('\x1b[32m%s\x1b[0m', `   设置起始列为: ${colLetter}`);
         }
-      } else {
-        console.log('\x1b[33m%s\x1b[0m', `   ⚠️ 列"${cellValue}"不匹配任何箱号模式`);
       }
     }
 
     autoConfig.boxColumns = boxColumns;
     autoConfig.boxNumbers = boxNumbers;
     autoConfig.boxCount = boxNumbers.length;
-
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[32m%s\x1b[0m', '📦 箱子配置分析完成！');
-    console.log('\x1b[32m%s\x1b[0m', `📦 找到 ${autoConfig.boxCount} 个箱子`);
-    console.log('\x1b[32m%s\x1b[0m', '📦 详细配置:', JSON.stringify({ 
-      boxCount: autoConfig.boxCount, 
-      boxColumns: autoConfig.boxColumns, 
-      boxNumbers: autoConfig.boxNumbers,
-      headerRow: headerRowIndex + 1,
-      boxStartColumn: autoConfig.boxStartColumn
-    }, null, 2));
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
 
     if (boxColumns.length === 0) {
       // 提供更详细的错误信息
@@ -2900,8 +2733,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     // 查找SKU开始行（从标题行的下一行开始）
     skuStartRowIndex = headerRowIndex + 1; // 从标题行的下一行开始
     skuEndRowIndex = skuStartRowIndex;
-    
-    console.log('\x1b[33m%s\x1b[0m', `📊 SKU数据从第${skuStartRowIndex + 1}行开始搜索`);
 
     // 向下查找，直到遇到空的SKU单元格或包含"Box"关键字的行
     for (let rowIndex = skuStartRowIndex; rowIndex < data.length; rowIndex++) {
@@ -2919,8 +2750,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       skuEndRowIndex = rowIndex;
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `📊 SKU数据范围: 第${skuStartRowIndex + 1}行到第${skuEndRowIndex + 1}行`);
-
     // 查找箱子信息行（Box weight, Box width, Box length, Box height）
     for (let rowIndex = skuEndRowIndex + 1; rowIndex < data.length; rowIndex++) {
       const row = data[rowIndex] || [];
@@ -2928,16 +2757,12 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       
       if (firstCell.includes('box') && firstCell.includes('weight')) {
         autoConfig.foundBoxWeightRow = rowIndex;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到Box weight行: 第${rowIndex + 1}行`);
       } else if (firstCell.includes('box') && firstCell.includes('width')) {
         autoConfig.foundBoxWidthRow = rowIndex;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到Box width行: 第${rowIndex + 1}行`);
       } else if (firstCell.includes('box') && firstCell.includes('length')) {
         autoConfig.foundBoxLengthRow = rowIndex;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到Box length行: 第${rowIndex + 1}行`);
       } else if (firstCell.includes('box') && firstCell.includes('height')) {
         autoConfig.foundBoxHeightRow = rowIndex;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到Box height行: 第${rowIndex + 1}行`);
       }
     }
 
@@ -3009,9 +2834,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
 
-    console.log('\x1b[32m%s\x1b[0m', '📦 解析到装箱数据:', packingItems.length, '条');
-    console.log('\x1b[32m%s\x1b[0m', '📦 解析到箱子信息:', boxes.length, '个');
-    console.log('\x1b[33m%s\x1b[0m', '📦 装箱明细预览:', packingItems.slice(0, 5));
+
 
     } // 结束传统流程的else块
 
@@ -3021,8 +2844,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
 
     if (useNewFlow) {
       // 新流程：直接从指定位置解析数据
-      console.log('\x1b[33m%s\x1b[0m', '📊 新流程：开始解析装箱数据');
-      
       const startRowIndex = parseInt(dataStartRow) - 1; // 转换为0基索引
       
       // 查找SKU数据范围（从指定行开始，直到遇到空行）
@@ -3037,26 +2858,19 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         skuEndRowIndex = rowIndex;
       }
       
-      console.log('\x1b[33m%s\x1b[0m', `📊 新流程SKU数据范围: 第${startRowIndex + 1}行到第${skuEndRowIndex + 1}行`);
-      
       // 新流程中也查找箱子信息行（Box weight, Box width, Box length, Box height）
-      console.log('\x1b[33m%s\x1b[0m', '🔍 新流程：开始查找箱子信息行...');
       for (let rowIndex = skuEndRowIndex + 1; rowIndex < data.length; rowIndex++) {
         const row = data[rowIndex] || [];
         const firstCell = String(row[0] || '').toLowerCase().trim();
         
         if (firstCell.includes('box') && firstCell.includes('weight')) {
           autoConfig.foundBoxWeightRow = rowIndex;
-          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box weight行: 第${rowIndex + 1}行`);
         } else if (firstCell.includes('box') && firstCell.includes('width')) {
           autoConfig.foundBoxWidthRow = rowIndex;
-          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box width行: 第${rowIndex + 1}行`);
         } else if (firstCell.includes('box') && firstCell.includes('length')) {
           autoConfig.foundBoxLengthRow = rowIndex;
-          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box length行: 第${rowIndex + 1}行`);
         } else if (firstCell.includes('box') && firstCell.includes('height')) {
           autoConfig.foundBoxHeightRow = rowIndex;
-          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box height行: 第${rowIndex + 1}行`);
         }
       }
       
@@ -3127,7 +2941,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         }
       }
       
-      console.log('\x1b[32m%s\x1b[0m', '📦 新流程解析完成：装箱数据', packingItems.length, '条，箱子信息', boxes.length, '个');
+
     }
 
     // 保存配置到文件
@@ -3161,7 +2975,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     const configPath = path.join(__dirname, '../uploads/packing-lists/config.json');
     fs.writeFileSync(configPath, JSON.stringify(configData, null, 2));
 
-    console.log('\x1b[32m%s\x1b[0m', '✅ 装箱表上传成功');
+
 
     res.json({
       success: true,
@@ -3229,17 +3043,12 @@ router.post('/packing-list/fill', async (req, res) => {
     });
 
     // 读取原始Excel文件
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[36m%s\x1b[0m', '📊 开始填写装箱表');
-    console.log('\x1b[36m%s\x1b[0m', '='.repeat(80));
-    console.log('\x1b[33m%s\x1b[0m', '📋 读取配置文件路径:', config.filePath);
-    console.log('\x1b[33m%s\x1b[0m', '📋 目标Sheet页名称:', config.sheetName);
+
+
     
     const workbook = XLSX.readFile(config.filePath);
-    console.log('\x1b[33m%s\x1b[0m', '📊 Excel文件可用Sheet页:', workbook.SheetNames);
     
     if (!workbook.Sheets[config.sheetName]) {
-      console.log('\x1b[31m%s\x1b[0m', `❌ 无法找到Sheet页: "${config.sheetName}"`);
       return res.status(400).json({
         success: false,
         message: `配置的Sheet页 "${config.sheetName}" 不存在于Excel文件中`
@@ -3247,7 +3056,6 @@ router.post('/packing-list/fill', async (req, res) => {
     }
     
     const worksheet = workbook.Sheets[config.sheetName];
-    console.log('\x1b[32m%s\x1b[0m', `✅ 成功读取Sheet页: "${config.sheetName}"`);
     
     // 列字母转换函数
     const getColumnLetter = (index) => {
@@ -3291,8 +3099,6 @@ router.post('/packing-list/fill', async (req, res) => {
       }
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '📦 按箱号SKU组织的数据:', Object.keys(shippingByBoxAndSku).length, '条');
-
     // 获取所有SKU列表（从A6开始直到空单元格）
     const skuStartRowIndex = config.skuStartRow - 1; // 转换为0基索引
     const availableSkus = [];
@@ -3316,13 +3122,7 @@ router.post('/packing-list/fill', async (req, res) => {
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', '📦 可用SKU列表:', availableSkus.length, '个');
-
-    // 上传的装箱表箱子列本来就是空的，无需清空
-    console.log('\x1b[33m%s\x1b[0m', '📋 装箱表已准备就绪，箱子列本来就是空的，直接开始填写');
-
     // 填写发货数据 - 直接修改原始工作表
-    console.log('\x1b[33m%s\x1b[0m', '📝 开始填写发货数据...');
     let filledCount = 0;
     let unmatchedSkus = [];
     
@@ -3330,7 +3130,6 @@ router.post('/packing-list/fill', async (req, res) => {
       // 找到对应的箱号列
       const boxIndex = config.boxNumbers.indexOf(shippingItem.box_num);
       if (boxIndex === -1) {
-        console.log('\x1b[31m%s\x1b[0m', `❌ 未找到箱号 ${shippingItem.box_num} 对应的列`);
         return;
       }
       
@@ -3340,7 +3139,6 @@ router.post('/packing-list/fill', async (req, res) => {
       const skuInfo = availableSkus.find(s => s.sku === shippingItem.amz_sku);
       if (!skuInfo) {
         unmatchedSkus.push(shippingItem.amz_sku);
-        console.log('\x1b[33m%s\x1b[0m', `⚠️ 未找到SKU ${shippingItem.amz_sku} 对应的行，可能需要手动添加`);
         return;
       }
       
@@ -3359,17 +3157,12 @@ router.post('/packing-list/fill', async (req, res) => {
       }
       
       filledCount++;
-      console.log('\x1b[32m%s\x1b[0m', `✅ 填写: 箱号${shippingItem.box_num} SKU${shippingItem.amz_sku} 数量${shippingItem.quantity} 位置${cellRef}`);
     });
-    
-    console.log('\x1b[32m%s\x1b[0m', `✅ 发货数据填写完成，共填写 ${filledCount} 条`);
 
     // 填写默认的箱子信息（如果没有的话）- 直接修改原始工作表
-    console.log('\x1b[33m%s\x1b[0m', '📏 开始填写默认箱子信息...');
     
     // 根据发货数据中的国家信息确定默认箱子参数
     const countriesInShipment = [...new Set(shippingData.map(item => item.country || '默认'))];
-    console.log('\x1b[33m%s\x1b[0m', '📍 发货涉及的国家:', countriesInShipment);
     
     // 判断是否包含美国
     const isUSShipment = countriesInShipment.some(country => 
@@ -3382,13 +3175,11 @@ router.post('/packing-list/fill', async (req, res) => {
       // 美国：箱重45kg，长宽高23、17、13cm
       defaultBoxWeight = 45;
       defaultBoxDimensions = { width: 17, length: 23, height: 13 };
-      console.log('\x1b[36m%s\x1b[0m', '🇺🇸 检测到美国发货，使用美国箱子规格: 重量45kg, 尺寸17x23x13cm');
     } else {
       // 其他国家：箱重18kg，长宽高60、45、35cm
       defaultBoxWeight = 18;
       defaultBoxDimensions = { width: 45, length: 60, height: 35 };
-      console.log('\x1b[36m%s\x1b[0m', '🌍 使用默认箱子规格: 重量18kg, 尺寸45x60x35cm');
-    } // 默认尺寸cm
+    }
 
     for (let i = 0; i < config.boxColumns.length; i++) {
       const colIndex = getColumnIndex(config.boxColumns[i]);
@@ -3399,42 +3190,34 @@ router.post('/packing-list/fill', async (req, res) => {
       );
       
       if (hasItems) {
-        console.log('\x1b[33m%s\x1b[0m', `📦 为箱子 ${config.boxNumbers[i]} (列${config.boxColumns[i]}) 填写默认信息`);
-        
         // 只为有装货的箱子填写默认信息 - 直接修改工作表单元格
         if (config.boxWeightRow) {
           const cellRef = getCellRef(config.boxWeightRow - 1, colIndex);
           worksheet[cellRef] = worksheet[cellRef] || {};
           worksheet[cellRef].v = defaultBoxWeight;
           worksheet[cellRef].t = 'n';
-          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱重 ${cellRef}: ${defaultBoxWeight}kg`);
         }
         if (config.boxWidthRow) {
           const cellRef = getCellRef(config.boxWidthRow - 1, colIndex);
           worksheet[cellRef] = worksheet[cellRef] || {};
           worksheet[cellRef].v = defaultBoxDimensions.width;
           worksheet[cellRef].t = 'n';
-          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱宽 ${cellRef}: ${defaultBoxDimensions.width}cm`);
         }
         if (config.boxLengthRow) {
           const cellRef = getCellRef(config.boxLengthRow - 1, colIndex);
           worksheet[cellRef] = worksheet[cellRef] || {};
           worksheet[cellRef].v = defaultBoxDimensions.length;
           worksheet[cellRef].t = 'n';
-          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱长 ${cellRef}: ${defaultBoxDimensions.length}cm`);
         }
         if (config.boxHeightRow) {
           const cellRef = getCellRef(config.boxHeightRow - 1, colIndex);
           worksheet[cellRef] = worksheet[cellRef] || {};
           worksheet[cellRef].v = defaultBoxDimensions.height;
           worksheet[cellRef].t = 'n';
-          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱高 ${cellRef}: ${defaultBoxDimensions.height}cm`);
         }
       }
     }
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ 默认箱子信息填写完成');
-
     // 更新工作表范围（确保新添加的单元格被包含在范围内）
     const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
     // 扩展范围以包含所有可能的新单元格
@@ -3460,13 +3243,6 @@ router.post('/packing-list/fill', async (req, res) => {
     const outputPath = path.join(__dirname, '../uploads/packing-lists', outputFileName);
     
     XLSX.writeFile(workbook, outputPath);
-
-    console.log('\x1b[32m%s\x1b[0m', '✅ 装箱表填写完成:', {
-      filledCount,
-      totalShippingItems: Object.keys(shippingByBoxAndSku).length,
-      unmatchedSkus: unmatchedSkus.length,
-      outputFile: outputFileName
-    });
 
     // 更新配置文件，记录填写结果
     const updatedConfig = {
@@ -3496,7 +3272,7 @@ router.post('/packing-list/fill', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 装箱表填写失败:', error);
+    console.error('装箱表填写失败:', error);
     res.status(500).json({
       success: false,
       message: '装箱表填写失败: ' + error.message
@@ -3533,7 +3309,7 @@ router.get('/packing-list/download-filled', async (req, res) => {
     res.sendFile(filePath);
     
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 下载填写好的装箱表失败:', error);
+    console.error('下载填写好的装箱表失败:', error);
     res.status(500).json({
       success: false,
       message: '下载失败',
@@ -3544,8 +3320,6 @@ router.get('/packing-list/download-filled', async (req, res) => {
 
 // 获取装箱表配置
 router.get('/packing-list/config', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取装箱表配置请求');
-  
   try {
     const configPath = path.join(__dirname, '../uploads/packing-lists/config.json');
     
@@ -3558,11 +3332,6 @@ router.get('/packing-list/config', async (req, res) => {
     }
 
     const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    
-    console.log('\x1b[32m%s\x1b[0m', '📋 装箱表配置:', {
-      filename: configData.filename,
-      itemCount: configData.items?.length || 0
-    });
 
     res.json({
       success: true,
@@ -3570,7 +3339,7 @@ router.get('/packing-list/config', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 获取装箱表配置失败:', error);
+    console.error('获取装箱表配置失败:', error);
     res.status(500).json({
       success: false,
       message: '获取装箱表配置失败'
@@ -3580,7 +3349,6 @@ router.get('/packing-list/config', async (req, res) => {
 
 // 下载填写好的装箱表
 router.get('/packing-list/download', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到下载装箱表请求');
   
   try {
     const configPath = path.join(__dirname, '../uploads/packing-lists/config.json');
