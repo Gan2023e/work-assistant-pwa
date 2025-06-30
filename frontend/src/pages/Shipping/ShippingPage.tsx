@@ -213,6 +213,29 @@ interface PackingListConfig {
   filledFileName?: string; // 已填写装箱表的文件名
 }
 
+// 物流商发票模板接口
+interface LogisticsInvoiceTemplate {
+  filename: string;
+  originalName: string;
+  filePath: string;
+  uploadTime: string;
+  sheetName: string;
+  logisticsProvider: string; // 物流商
+  country: string; // 国家
+  countryName: string; // 国家显示名
+  templateFields: {
+    [key: string]: string; // 模板字段映射
+  };
+  sheetNames: string[];
+}
+
+interface LogisticsInvoiceConfig {
+  hasTemplate: boolean;
+  templates?: Record<string, Record<string, LogisticsInvoiceTemplate>>; // 按物流商和国家分组
+  logisticsProviders?: string[];
+  countries?: string[];
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -262,6 +285,15 @@ const ShippingPage: React.FC = () => {
   const [packingListModalVisible, setPackingListModalVisible] = useState(false);
   const [packingListForm] = Form.useForm();
   const [packingListLoading, setPackingListLoading] = useState(false);
+  
+  // 物流商发票管理相关状态
+  const [logisticsInvoiceConfig, setLogisticsInvoiceConfig] = useState<LogisticsInvoiceConfig>({ hasTemplate: false });
+  const [invoiceTemplateModalVisible, setInvoiceTemplateModalVisible] = useState(false);
+  const [invoiceTemplateForm] = Form.useForm();
+  const [invoiceUploadLoading, setInvoiceUploadLoading] = useState(false);
+  const [selectedInvoiceProvider, setSelectedInvoiceProvider] = useState<string>('');
+  const [selectedInvoiceCountry, setSelectedInvoiceCountry] = useState<string>('');
+  const [generateInvoiceLoading, setGenerateInvoiceLoading] = useState(false);
   
   // 删除确认对话框状态
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -591,6 +623,177 @@ const ShippingPage: React.FC = () => {
     }
   };
 
+  // 获取物流商发票模板配置
+  const fetchLogisticsInvoiceConfig = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/logistics-invoice/config`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setLogisticsInvoiceConfig(result.data);
+      } else {
+        console.error('获取发票模板配置失败:', result.message);
+      }
+    } catch (error) {
+      console.error('获取发票模板配置失败:', error);
+    }
+  };
+
+  // 上传物流商发票模板
+  const handleUploadInvoiceTemplate = async (values: any) => {
+    setInvoiceUploadLoading(true);
+    try {
+      // 获取文件对象
+      let file = null;
+      if (Array.isArray(values.template)) {
+        const fileItem = values.template[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else if (values.template.fileList && values.template.fileList.length > 0) {
+        const fileItem = values.template.fileList[0];
+        file = fileItem.originFileObj || fileItem.file || fileItem;
+      } else {
+        file = values.template;
+      }
+
+      if (!file || !file.name) {
+        message.error('文件获取失败，请重新选择文件');
+        setInvoiceUploadLoading(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('template', file);
+      formData.append('sheetName', values.sheetName);
+      formData.append('logisticsProvider', values.logisticsProvider);
+      formData.append('country', values.country);
+      
+      // 找到对应的国家名称
+      const countryOption = countryTemplateOptions.find(opt => opt.value === values.country);
+      if (countryOption) {
+        formData.append('countryName', countryOption.label);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/shipping/logistics-invoice/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success(`${values.logisticsProvider} - ${countryOption?.label || values.country} 发票模板上传成功！`);
+        await fetchLogisticsInvoiceConfig();
+        setInvoiceTemplateModalVisible(false);
+        invoiceTemplateForm.resetFields();
+        setSelectedInvoiceProvider('');
+        setSelectedInvoiceCountry('');
+      } else {
+        message.error(result.message || '上传失败');
+      }
+    } catch (error) {
+      console.error('上传发票模板失败:', error);
+      message.error(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setInvoiceUploadLoading(false);
+    }
+  };
+
+  // 删除物流商发票模板配置
+  const deleteInvoiceTemplateConfig = async (logisticsProvider?: string, country?: string) => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (logisticsProvider) queryParams.append('logisticsProvider', logisticsProvider);
+      if (country) queryParams.append('country', country);
+      
+      const url = `${API_BASE_URL}/api/shipping/logistics-invoice/config?${queryParams.toString()}`;
+        
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success(result.message || '发票模板配置已删除');
+        await fetchLogisticsInvoiceConfig();
+      } else {
+        message.error(result.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除发票模板配置失败:', error);
+      message.error('删除失败');
+    }
+  };
+
+  // 生成发票
+  const generateInvoice = async () => {
+    if (!logisticsInvoiceConfig.hasTemplate) {
+      message.warning('请先上传物流商发票模板');
+      return;
+    }
+
+    if (shippingData.length === 0) {
+      message.warning('没有可用的发货数据，请确保已生成发货清单');
+      return;
+    }
+
+    setGenerateInvoiceLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/logistics-invoice/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shippingData: shippingData.map(item => {
+            const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+            return {
+              ...item,
+              country: selectedRecord?.country || '默认',
+              logisticsProvider: logisticsProvider
+            };
+          })
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success('发票生成成功！');
+        
+        // 自动下载发票文件
+        result.data.files?.forEach((file: any, index: number) => {
+          setTimeout(async () => {
+            try {
+              const downloadUrl = `${API_BASE_URL}${file.downloadUrl}`;
+              const link = document.createElement('a');
+              link.href = downloadUrl;
+              link.download = file.filename;
+              link.target = '_blank';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            } catch (error) {
+              console.error(`发票文件下载失败: ${file.filename}`, error);
+              message.error(`文件 ${file.filename} 下载失败`);
+            }
+          }, index * 1000);
+        });
+      } else {
+        message.error(result.message || '生成失败');
+      }
+    } catch (error) {
+      console.error('生成发票失败:', error);
+      message.error('生成失败');
+    } finally {
+      setGenerateInvoiceLoading(false);
+    }
+  };
+
   // 上传装箱表（自动分析）
   const handleUploadPackingList = async (values: any) => {
     setPackingListLoading(true);
@@ -846,6 +1049,7 @@ const ShippingPage: React.FC = () => {
     fetchCountryInventory(); // 同时获取国家库存数据
     fetchAmazonTemplateConfig(); // 获取亚马逊模板配置
     fetchPackingListConfig(); // 获取装箱表配置
+    fetchLogisticsInvoiceConfig(); // 获取物流商发票模板配置
   }, []);
 
   // 状态颜色映射
@@ -1458,6 +1662,16 @@ const ShippingPage: React.FC = () => {
             {amazonTemplateConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
           </Button>
         </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<SettingOutlined />}
+            onClick={() => setInvoiceTemplateModalVisible(true)}
+          >
+            管理物流商发票模板
+            {logisticsInvoiceConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+          </Button>
+        </Col>
       </Row>
 
       {/* 国家库存卡片栏 */}
@@ -1952,7 +2166,48 @@ const ShippingPage: React.FC = () => {
           <div>
             <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
             
-            {/* 亚马逊模板状态 */}
+            {/* 物流商选择和装箱表上传 */}
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Text strong>物流商：</Text>
+                <Select
+                  style={{ width: 140 }}
+                  value={logisticsProvider}
+                  onChange={setLogisticsProvider}
+                  options={logisticsProviderOptions}
+                  placeholder="选择物流商"
+                />
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => setPackingListModalVisible(true)}
+                  type="default"
+                >
+                  上传装箱表
+                </Button>
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={generateInvoice}
+                  loading={generateInvoiceLoading}
+                  type="default"
+                >
+                  生成发票
+                </Button>
+              </Space>
+            </div>
+
+            <Table
+              dataSource={shippingData}
+              columns={[
+                { title: '箱号', dataIndex: 'box_num', key: 'box_num' },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+                { title: '发货数量', dataIndex: 'quantity', key: 'quantity' },
+              ]}
+              pagination={false}
+              size="small"
+              rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
+            />
+
+            {/* 亚马逊发货文件 */}
             <Card 
               title={
                 <Space>
@@ -2048,38 +2303,102 @@ const ShippingPage: React.FC = () => {
               )}
             </Card>
 
-            {/* 物流商选择和装箱表上传 */}
-            <div style={{ marginBottom: 16 }}>
-              <Space>
-                <Text strong>物流商：</Text>
-                <Select
-                  style={{ width: 140 }}
-                  value={logisticsProvider}
-                  onChange={setLogisticsProvider}
-                  options={logisticsProviderOptions}
-                  placeholder="选择物流商"
-                />
-                <Button 
-                  icon={<FileExcelOutlined />} 
-                  onClick={() => setPackingListModalVisible(true)}
-                  type="default"
-                >
-                  上传装箱表
-                </Button>
-              </Space>
-            </div>
-
-            <Table
-              dataSource={shippingData}
-              columns={[
-                { title: '箱号', dataIndex: 'box_num', key: 'box_num' },
-                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
-                { title: '发货数量', dataIndex: 'quantity', key: 'quantity' },
-              ]}
-              pagination={false}
-              size="small"
-              rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
-            />
+            {/* 物流商发票管理 */}
+            <Card 
+              title={
+                <Space>
+                  <FileExcelOutlined />
+                  <span>物流商发票管理</span>
+                </Space>
+              }
+              size="small" 
+              style={{ marginBottom: 16 }}
+            >
+              {logisticsInvoiceConfig.hasTemplate && logisticsInvoiceConfig.logisticsProviders && logisticsInvoiceConfig.logisticsProviders.length > 0 ? (
+                <div>
+                  <Alert 
+                    message={`已配置 ${logisticsInvoiceConfig.logisticsProviders.length} 个物流商的发票模板`}
+                    description={`配置的物流商：${logisticsInvoiceConfig.logisticsProviders.join('、')}`}
+                    type="success" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  
+                  {/* 显示各物流商发票模板配置 */}
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {logisticsInvoiceConfig.logisticsProviders.map(provider => {
+                      const providerTemplates = logisticsInvoiceConfig.templates?.[provider];
+                      if (!providerTemplates) return null;
+                      
+                      return (
+                        <div key={provider} style={{ marginBottom: 16 }}>
+                          <Text strong>{provider}</Text>
+                          {Object.entries(providerTemplates).map(([country, template]) => (
+                            <Card key={`${provider}-${country}`} size="small" style={{ marginTop: 8, marginLeft: 16 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ flex: 1 }}>
+                                  <Descriptions size="small" column={2}>
+                                    <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                                    <Descriptions.Item label="模板文件">{template.originalName}</Descriptions.Item>
+                                    <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                                    <Descriptions.Item label="上传时间" span={2}>
+                                      {new Date(template.uploadTime).toLocaleString('zh-CN')}
+                                    </Descriptions.Item>
+                                  </Descriptions>
+                                </div>
+                                <Button 
+                                  size="small"
+                                  danger
+                                  onClick={() => deleteInvoiceTemplateConfig(provider, country)}
+                                >
+                                  删除
+                                </Button>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div style={{ marginTop: 16 }}>
+                    <Space>
+                      <Button 
+                        type="primary" 
+                        icon={<DownloadOutlined />} 
+                        onClick={generateInvoice}
+                        loading={generateInvoiceLoading}
+                      >
+                        生成发票
+                      </Button>
+                      <Button 
+                        icon={<SettingOutlined />} 
+                        onClick={() => setInvoiceTemplateModalVisible(true)}
+                      >
+                        管理发票模板
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Alert 
+                    message="尚未配置发票模板" 
+                    description="请先上传物流商发票模板，以便自动生成发票文件。"
+                    type="warning" 
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Space>
+                    <Button 
+                      type="primary" 
+                      icon={<UploadOutlined />} 
+                      onClick={() => setInvoiceTemplateModalVisible(true)}
+                    >
+                      上传发票模板
+                    </Button>
+                  </Space>
+                </div>
+              )}
+            </Card>
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
@@ -2664,6 +2983,248 @@ const ShippingPage: React.FC = () => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* 物流商发票模板管理对话框 */}
+      <Modal
+        title="管理物流商发票模板"
+        open={invoiceTemplateModalVisible}
+        onCancel={() => {
+          setInvoiceTemplateModalVisible(false);
+          setSelectedInvoiceProvider('');
+          setSelectedInvoiceCountry('');
+          invoiceTemplateForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {logisticsInvoiceConfig.hasTemplate && logisticsInvoiceConfig.logisticsProviders && logisticsInvoiceConfig.logisticsProviders.length > 0 && (
+          <div>
+            {/* 已配置的发票模板列表 */}
+            <Alert
+              message={`已配置 ${logisticsInvoiceConfig.logisticsProviders.length} 个物流商的发票模板`}
+              description={`配置的物流商：${logisticsInvoiceConfig.logisticsProviders.join('、')}`}
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            {/* 模板列表 */}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: 16 }}>
+              {logisticsInvoiceConfig.logisticsProviders.map(provider => {
+                const providerTemplates = logisticsInvoiceConfig.templates?.[provider];
+                if (!providerTemplates) return null;
+                
+                return (
+                  <div key={provider} style={{ marginBottom: 16 }}>
+                    <Text strong style={{ fontSize: '16px' }}>{provider}</Text>
+                    {Object.entries(providerTemplates).map(([country, template]) => (
+                      <Card key={`${provider}-${country}`} size="small" style={{ marginTop: 8, marginLeft: 16 }}>
+                        <Row>
+                          <Col span={20}>
+                            <Descriptions size="small" column={2}>
+                              <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
+                              <Descriptions.Item label="文件名">{template.originalName}</Descriptions.Item>
+                              <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
+                              <Descriptions.Item label="上传时间" span={2}>
+                                {new Date(template.uploadTime).toLocaleString('zh-CN')}
+                              </Descriptions.Item>
+                            </Descriptions>
+                          </Col>
+                          <Col span={4} style={{ textAlign: 'right' }}>
+                            <Space direction="vertical" size="small">
+                              <Button 
+                                size="small"
+                                onClick={() => {
+                                  setSelectedInvoiceProvider(provider);
+                                  setSelectedInvoiceCountry(country);
+                                }}
+                              >
+                                更新
+                              </Button>
+                              <Button 
+                                size="small"
+                                danger
+                                onClick={() => deleteInvoiceTemplateConfig(provider, country)}
+                              >
+                                删除
+                              </Button>
+                            </Space>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <Button 
+                type="primary" 
+                icon={<UploadOutlined />} 
+                onClick={() => {
+                  setSelectedInvoiceProvider('new');
+                  setSelectedInvoiceCountry('new');
+                }}
+              >
+                添加新物流商发票模板
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 上传/更新发票模板表单 */}
+        {((selectedInvoiceProvider === 'new' && selectedInvoiceCountry === 'new') || 
+          (selectedInvoiceProvider && selectedInvoiceCountry && selectedInvoiceProvider !== '' && selectedInvoiceCountry !== '')) && (
+          <div>
+            <Alert
+              message={selectedInvoiceProvider === 'new' ? "添加新物流商发票模板" : `更新 ${selectedInvoiceProvider} - ${logisticsInvoiceConfig.templates?.[selectedInvoiceProvider]?.[selectedInvoiceCountry]?.countryName} 发票模板`}
+              description={
+                <div>
+                  <p>请上传物流商的Excel发票模板文件，并配置以下信息：</p>
+                  <ul>
+                    <li><strong>物流商：</strong>该模板适用的物流商</li>
+                    <li><strong>适用国家：</strong>该模板适用的国家</li>
+                    <li><strong>Sheet页名称：</strong>需要填写数据的工作表名称</li>
+                  </ul>
+                </div>
+              }
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+
+            <Form
+              form={invoiceTemplateForm}
+              layout="vertical"
+              onFinish={handleUploadInvoiceTemplate}
+              initialValues={selectedInvoiceProvider !== 'new' && logisticsInvoiceConfig.templates?.[selectedInvoiceProvider]?.[selectedInvoiceCountry] ? {
+                logisticsProvider: selectedInvoiceProvider,
+                country: selectedInvoiceCountry,
+                sheetName: logisticsInvoiceConfig.templates[selectedInvoiceProvider][selectedInvoiceCountry].sheetName,
+              } : {
+                // 新建模板时的默认值
+                sheetName: 'Sheet1',
+              }}
+            >
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="logisticsProvider"
+                    label="物流商"
+                    rules={[{ required: true, message: '请选择物流商' }]}
+                  >
+                    <Select 
+                      placeholder="选择物流商"
+                      disabled={selectedInvoiceProvider !== 'new'}
+                      options={logisticsProviderOptions}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="country"
+                    label="适用国家"
+                    rules={[{ required: true, message: '请选择适用国家' }]}
+                  >
+                    <Select 
+                      placeholder="选择国家"
+                      disabled={selectedInvoiceProvider !== 'new'}
+                      showSearch
+                      optionLabelProp="label"
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                    >
+                      {countryTemplateOptions.map(option => (
+                        <Option 
+                          key={option.value} 
+                          value={option.value} 
+                          label={option.label}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{option.label}</span>
+                            <span style={{ fontSize: '12px', color: '#999', marginLeft: '8px' }}>{option.site}</span>
+                          </div>
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="template"
+                    label="Excel发票模板文件"
+                    rules={[{ required: true, message: '请选择模板文件' }]}
+                    getValueFromEvent={(e) => {
+                      if (Array.isArray(e)) {
+                        return e;
+                      }
+                      return e && e.fileList;
+                    }}
+                  >
+                    <Upload
+                      accept=".xlsx,.xls"
+                      beforeUpload={() => false}
+                      maxCount={1}
+                    >
+                      <Button icon={<UploadOutlined />}>选择Excel文件</Button>
+                    </Upload>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="sheetName"
+                    label="Sheet页名称"
+                    rules={[{ required: true, message: '请输入Sheet页名称' }]}
+                  >
+                    <Input placeholder="例如：Sheet1" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div style={{ textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={() => {
+                    setSelectedInvoiceProvider('');
+                    setSelectedInvoiceCountry('');
+                    invoiceTemplateForm.resetFields();
+                  }}>
+                    取消
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={invoiceUploadLoading}>
+                    {selectedInvoiceProvider === 'new' ? '上传并配置' : '更新配置'}
+                  </Button>
+                </Space>
+              </div>
+            </Form>
+          </div>
+        )}
+
+        {/* 没有配置任何发票模板时显示 */}
+        {!logisticsInvoiceConfig.hasTemplate && selectedInvoiceProvider === '' && selectedInvoiceCountry === '' && (
+          <div>
+            <Alert
+              message="尚未配置任何物流商发票模板"
+              description="请添加至少一个物流商的发票模板，以便在发货时自动生成对应发票文件。"
+              type="warning"
+              style={{ marginBottom: 16 }}
+            />
+            <Button 
+              type="primary" 
+              icon={<UploadOutlined />} 
+              onClick={() => {
+                setSelectedInvoiceProvider('new');
+                setSelectedInvoiceCountry('new');
+              }}
+            >
+              添加第一个发票模板
+            </Button>
+          </div>
+        )}
       </Modal>
 
       {/* 需求单管理弹窗 */}
