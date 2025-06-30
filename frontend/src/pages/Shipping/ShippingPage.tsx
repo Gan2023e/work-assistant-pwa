@@ -2024,14 +2024,6 @@ const ShippingPage: React.FC = () => {
                       >
                         管理模板
                       </Button>
-                      {/* 新增物流商下拉 */}
-                      <Select
-                        style={{ width: 140 }}
-                        value={logisticsProvider}
-                        onChange={setLogisticsProvider}
-                        options={logisticsProviderOptions}
-                        placeholder="选择物流商"
-                      />
                     </Space>
                   </div>
                 </div>
@@ -2056,6 +2048,27 @@ const ShippingPage: React.FC = () => {
               )}
             </Card>
 
+            {/* 物流商选择和装箱表上传 */}
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Text strong>物流商：</Text>
+                <Select
+                  style={{ width: 140 }}
+                  value={logisticsProvider}
+                  onChange={setLogisticsProvider}
+                  options={logisticsProviderOptions}
+                  placeholder="选择物流商"
+                />
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => setPackingListModalVisible(true)}
+                  type="default"
+                >
+                  上传装箱表
+                </Button>
+              </Space>
+            </div>
+
             <Table
               dataSource={shippingData}
               columns={[
@@ -2072,27 +2085,35 @@ const ShippingPage: React.FC = () => {
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
                   导出Excel
                 </Button>
-                <Button 
-                  icon={<FileExcelOutlined />} 
-                  onClick={() => setPackingListModalVisible(true)}
-                  type="default"
-                >
-                  上传装箱表
-                </Button>
                 <Button type="primary" onClick={async () => {
                   // 统一处理出库记录
-                  if (confirmedMixedBoxes.length > 0 || confirmedWholeBoxes.length > 0) {
+                  if (shippingData.length > 0) {
                     try {
                       message.loading('正在记录出库信息...', 0);
                       
-                      // 处理混合箱出库记录
+                      // 如果有确认的混合箱数据，优先使用
                       if (confirmedMixedBoxes.length > 0) {
                         await recordOutbound(confirmedMixedBoxes, true, logisticsProvider);
                       }
                       
-                      // 处理整箱出库记录
+                      // 如果有确认的整箱数据，使用整箱方式记录
                       if (confirmedWholeBoxes.length > 0) {
                         await recordOutbound(confirmedWholeBoxes, false, logisticsProvider);
+                      }
+                      
+                      // 如果没有确认的箱数据，但有发货数据，则使用发货数据创建出库记录
+                      if (confirmedMixedBoxes.length === 0 && confirmedWholeBoxes.length === 0) {
+                        // 将shippingData转换为出库记录格式
+                        const outboundItems = shippingData.map(item => {
+                          const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+                          return {
+                            box_num: item.box_num,
+                            sku: selectedRecord?.local_sku || item.amz_sku,
+                            amz_sku: item.amz_sku,
+                            quantity: item.quantity
+                          };
+                        });
+                        await recordOutbound(outboundItems, true, logisticsProvider);
                       }
                       
                       message.destroy();
@@ -2103,6 +2124,8 @@ const ShippingPage: React.FC = () => {
                       console.error('出库记录失败:', error);
                       return; // 如果出库记录失败，不继续执行
                     }
+                  } else {
+                    message.warning('没有发货数据，无需记录出库信息');
                   }
                   
                   // 关闭对话框并清理状态
