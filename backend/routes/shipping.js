@@ -3039,15 +3039,70 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       
       console.log('\x1b[33m%s\x1b[0m', `📊 新流程SKU数据范围: 第${startRowIndex + 1}行到第${skuEndRowIndex + 1}行`);
       
-      // 创建箱子信息（新流程中暂时不解析尺寸信息）
+      // 新流程中也查找箱子信息行（Box weight, Box width, Box length, Box height）
+      console.log('\x1b[33m%s\x1b[0m', '🔍 新流程：开始查找箱子信息行...');
+      for (let rowIndex = skuEndRowIndex + 1; rowIndex < data.length; rowIndex++) {
+        const row = data[rowIndex] || [];
+        const firstCell = String(row[0] || '').toLowerCase().trim();
+        
+        if (firstCell.includes('box') && firstCell.includes('weight')) {
+          autoConfig.foundBoxWeightRow = rowIndex;
+          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box weight行: 第${rowIndex + 1}行`);
+        } else if (firstCell.includes('box') && firstCell.includes('width')) {
+          autoConfig.foundBoxWidthRow = rowIndex;
+          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box width行: 第${rowIndex + 1}行`);
+        } else if (firstCell.includes('box') && firstCell.includes('length')) {
+          autoConfig.foundBoxLengthRow = rowIndex;
+          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box length行: 第${rowIndex + 1}行`);
+        } else if (firstCell.includes('box') && firstCell.includes('height')) {
+          autoConfig.foundBoxHeightRow = rowIndex;
+          console.log('\x1b[32m%s\x1b[0m', `✅ 新流程找到Box height行: 第${rowIndex + 1}行`);
+        }
+      }
+      
+      // 创建箱子信息
       for (let i = 0; i < autoConfig.boxNumbers.length; i++) {
-        boxes.push({
-          box_num: autoConfig.boxNumbers[i],
+        const boxNumber = autoConfig.boxNumbers[i];
+        const colIndex = getColumnIndex(autoConfig.boxColumns[i]);
+        
+        const boxInfo = {
+          box_num: boxNumber,
           weight: null,
           width: null,
           length: null,
           height: null
-        });
+        };
+
+        // 解析箱子尺寸信息
+        if (autoConfig.foundBoxWeightRow !== null) {
+          const weightValue = parseFloat(data[autoConfig.foundBoxWeightRow][colIndex]);
+          if (!isNaN(weightValue) && weightValue > 0) {
+            boxInfo.weight = weightValue;
+          }
+        }
+        
+        if (autoConfig.foundBoxWidthRow !== null) {
+          const widthValue = parseFloat(data[autoConfig.foundBoxWidthRow][colIndex]);
+          if (!isNaN(widthValue) && widthValue > 0) {
+            boxInfo.width = widthValue;
+          }
+        }
+        
+        if (autoConfig.foundBoxLengthRow !== null) {
+          const lengthValue = parseFloat(data[autoConfig.foundBoxLengthRow][colIndex]);
+          if (!isNaN(lengthValue) && lengthValue > 0) {
+            boxInfo.length = lengthValue;
+          }
+        }
+        
+        if (autoConfig.foundBoxHeightRow !== null) {
+          const heightValue = parseFloat(data[autoConfig.foundBoxHeightRow][colIndex]);
+          if (!isNaN(heightValue) && heightValue > 0) {
+            boxInfo.height = heightValue;
+          }
+        }
+
+        boxes.push(boxInfo);
       }
       
       // 解析SKU装箱数据
@@ -3087,10 +3142,10 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       skuEndRow: useNewFlow ? null : (skuEndRowIndex + 1), // 新流程动态确定结束行
       boxColumns: autoConfig.boxColumns,
       boxNumbers: autoConfig.boxNumbers,
-      boxWeightRow: autoConfig.foundBoxWeightRow ? autoConfig.foundBoxWeightRow + 1 : null,
-      boxWidthRow: autoConfig.foundBoxWidthRow ? autoConfig.foundBoxWidthRow + 1 : null,
-      boxLengthRow: autoConfig.foundBoxLengthRow ? autoConfig.foundBoxLengthRow + 1 : null,
-      boxHeightRow: autoConfig.foundBoxHeightRow ? autoConfig.foundBoxHeightRow + 1 : null,
+      boxWeightRow: autoConfig.foundBoxWeightRow !== null ? autoConfig.foundBoxWeightRow + 1 : null,
+      boxWidthRow: autoConfig.foundBoxWidthRow !== null ? autoConfig.foundBoxWidthRow + 1 : null,
+      boxLengthRow: autoConfig.foundBoxLengthRow !== null ? autoConfig.foundBoxLengthRow + 1 : null,
+      boxHeightRow: autoConfig.foundBoxHeightRow !== null ? autoConfig.foundBoxHeightRow + 1 : null,
       sheetNames: workbook.SheetNames,
       items: packingItems,
       boxes: boxes,
@@ -3349,35 +3404,31 @@ router.post('/packing-list/fill', async (req, res) => {
         // 只为有装货的箱子填写默认信息 - 直接修改工作表单元格
         if (config.boxWeightRow) {
           const cellRef = getCellRef(config.boxWeightRow - 1, colIndex);
-          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
-            worksheet[cellRef] = worksheet[cellRef] || {};
-            worksheet[cellRef].v = defaultBoxWeight;
-            worksheet[cellRef].t = 'n';
-          }
+          worksheet[cellRef] = worksheet[cellRef] || {};
+          worksheet[cellRef].v = defaultBoxWeight;
+          worksheet[cellRef].t = 'n';
+          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱重 ${cellRef}: ${defaultBoxWeight}kg`);
         }
         if (config.boxWidthRow) {
           const cellRef = getCellRef(config.boxWidthRow - 1, colIndex);
-          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
-            worksheet[cellRef] = worksheet[cellRef] || {};
-            worksheet[cellRef].v = defaultBoxDimensions.width;
-            worksheet[cellRef].t = 'n';
-          }
+          worksheet[cellRef] = worksheet[cellRef] || {};
+          worksheet[cellRef].v = defaultBoxDimensions.width;
+          worksheet[cellRef].t = 'n';
+          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱宽 ${cellRef}: ${defaultBoxDimensions.width}cm`);
         }
         if (config.boxLengthRow) {
           const cellRef = getCellRef(config.boxLengthRow - 1, colIndex);
-          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
-            worksheet[cellRef] = worksheet[cellRef] || {};
-            worksheet[cellRef].v = defaultBoxDimensions.length;
-            worksheet[cellRef].t = 'n';
-          }
+          worksheet[cellRef] = worksheet[cellRef] || {};
+          worksheet[cellRef].v = defaultBoxDimensions.length;
+          worksheet[cellRef].t = 'n';
+          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱长 ${cellRef}: ${defaultBoxDimensions.length}cm`);
         }
         if (config.boxHeightRow) {
           const cellRef = getCellRef(config.boxHeightRow - 1, colIndex);
-          if (!worksheet[cellRef] || !worksheet[cellRef].v || worksheet[cellRef].v === '') {
-            worksheet[cellRef] = worksheet[cellRef] || {};
-            worksheet[cellRef].v = defaultBoxDimensions.height;
-            worksheet[cellRef].t = 'n';
-          }
+          worksheet[cellRef] = worksheet[cellRef] || {};
+          worksheet[cellRef].v = defaultBoxDimensions.height;
+          worksheet[cellRef].t = 'n';
+          console.log('\x1b[32m%s\x1b[0m', `✅ 填写箱高 ${cellRef}: ${defaultBoxDimensions.height}cm`);
         }
       }
     }
