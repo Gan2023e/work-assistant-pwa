@@ -15,9 +15,10 @@ import ShippingPage from './pages/Shipping/ShippingPage';
 import OrderManagementPage from './pages/Shipping/OrderManagementPage';
 import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
 import LogisticsPage from './pages/Logistics/LogisticsPage';
-import SkuMapping from './pages/Season/SkuMapping';
-import Summary from './pages/Season/Summary';
-import Supplier from './pages/Season/Supplier';
+import SkuMapping from './pages/Inventory/SkuMapping';
+import Summary from './pages/Inventory/Summary';
+import Supplier from './pages/Inventory/Supplier';
+import FbaInventory from './pages/Inventory/FbaInventory';
 import SalaryPage from './pages/Salary/SalaryPage';
 import ProfitPage from './pages/Profit/ProfitPage';
 import UserManagePage from './pages/User/UserManagePage';
@@ -59,12 +60,13 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
     },
     { key: '/logistics', label: <Link to="/logistics">头程物流管理</Link> },
     {
-      key: 'season',
-      label: '亚马逊旺季备货',
+      key: 'inventory',
+      label: '库存管理',
       children: [
-        { key: '/season/sku-mapping', label: <Link to="/season/sku-mapping">SKU映射管理</Link> },
-        { key: '/season/summary', label: <Link to="/season/summary">旺季备货汇总</Link> },
-        { key: '/season/supplier', label: <Link to="/season/supplier">厂家发货与付款</Link> },
+        { key: '/inventory/sku-mapping', label: <Link to="/inventory/sku-mapping">SKU映射管理</Link> },
+        { key: '/inventory/summary', label: <Link to="/inventory/summary">旺季备货汇总</Link> },
+        { key: '/inventory/supplier', label: <Link to="/inventory/supplier">厂家发货与付款</Link> },
+        { key: '/inventory/fba-inventory', label: <Link to="/inventory/fba-inventory">FBA库存</Link> },
       ],
     },
     { key: '/salary', label: <Link to="/salary">临工工资结算</Link> },
@@ -170,7 +172,7 @@ const AppContent: React.FC = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings"].includes(path)) return [path];
     if (["/shipping/orders", "/shipping/management", "/shipping/history"].includes(path)) return [path];
-    if (["/season/sku-mapping", "/season/summary", "/season/supplier"].includes(path)) return [path];
+    if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
   };
@@ -197,12 +199,13 @@ const AppContent: React.FC = () => {
     },
     { label: <Link to="/logistics">头程物流管理</Link>, key: '/logistics' },
     {
-      label: getMenuLabel('亚马逊旺季备货', openKeys.includes('season')),
-      key: 'season',
+      label: getMenuLabel('库存管理', openKeys.includes('inventory')),
+      key: 'inventory',
       children: [
-        { label: <Link to="/season/sku-mapping">SKU映射管理</Link>, key: '/season/sku-mapping' },
-        { label: <Link to="/season/summary">旺季备货汇总</Link>, key: '/season/summary' },
-        { label: <Link to="/season/supplier">厂家发货与付款</Link>, key: '/season/supplier' },
+        { label: <Link to="/inventory/sku-mapping">SKU映射管理</Link>, key: '/inventory/sku-mapping' },
+        { label: <Link to="/inventory/summary">旺季备货汇总</Link>, key: '/inventory/summary' },
+        { label: <Link to="/inventory/supplier">厂家发货与付款</Link>, key: '/inventory/supplier' },
+        { label: <Link to="/inventory/fba-inventory">FBA库存</Link>, key: '/inventory/fba-inventory' },
       ],
     },
     { label: <Link to="/salary">临工工资结算</Link>, key: '/salary' },
@@ -299,19 +302,24 @@ const AppContent: React.FC = () => {
               <LogisticsPage />
             </ProtectedRoute>
           } />
-          <Route path="/season/sku-mapping" element={
+          <Route path="/inventory/sku-mapping" element={
             <ProtectedRoute>
               <SkuMapping />
             </ProtectedRoute>
           } />
-          <Route path="/season/summary" element={
+          <Route path="/inventory/summary" element={
             <ProtectedRoute>
               <Summary />
             </ProtectedRoute>
           } />
-          <Route path="/season/supplier" element={
+          <Route path="/inventory/supplier" element={
             <ProtectedRoute>
               <Supplier />
+            </ProtectedRoute>
+          } />
+          <Route path="/inventory/fba-inventory" element={
+            <ProtectedRoute>
+              <FbaInventory />
             </ProtectedRoute>
           } />
           <Route path="/salary" element={

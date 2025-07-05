@@ -11,6 +11,7 @@ const hsCodeRouter = require('./routes/hscode');
 const shipmentRouter = require('./routes/shipment');
 const shippingRouter = require('./routes/shipping');
 const orderManagementRouter = require('./routes/orderManagement');
+const fbaInventoryRouter = require('./routes/fbaInventory');
 const { router: authRouter } = require('./routes/auth');
 
 // 触发Railway重新部署 - 2024-06-21
@@ -83,7 +84,8 @@ app.use('/api/hscode', hsCodeRouter);
 app.use('/api/shipments', shipmentRouter);
 app.use('/api/shipping', shippingRouter);
 app.use('/api/order-management', orderManagementRouter);
-console.log('✅ API routes registered including /api/shipping and /api/order-management');
+app.use('/api/fba-inventory', fbaInventoryRouter);
+console.log('✅ API routes registered including /api/shipping, /api/order-management, and /api/fba-inventory');
 
 // 静态文件服务 - 用于图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

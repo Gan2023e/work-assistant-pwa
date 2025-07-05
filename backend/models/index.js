@@ -15,6 +15,7 @@ const AmzSkuMapping = require('./AmzSkuMapping');
 const ShipmentRecord = require('./ShipmentRecord');
 const ShipmentItem = require('./ShipmentItem');
 const OrderShipmentRelation = require('./OrderShipmentRelation');
+const FbaInventory = require('./FbaInventory');
 
 // 设置模型关联关系
 
@@ -67,5 +68,6 @@ module.exports = {
   AmzSkuMapping,
   ShipmentRecord,
   ShipmentItem,
-  OrderShipmentRelation
+  OrderShipmentRelation,
+  FbaInventory
 };
