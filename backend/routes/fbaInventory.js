@@ -415,28 +415,40 @@ router.get('/generate-shein-sync', async (req, res) => {
     // 使用一个复合SQL查询来完成所有操作（性能优化）
     console.log('\x1b[33m%s\x1b[0m', '⚡ 开始执行复合SQL查询...');
     
+    // 参考用户提供的SQL语句结构，添加必要的过滤条件
+    const country = '美国';
+    const precode = ''; // 可以根据需要设置排除的前缀
+    
+    console.log('\x1b[36m%s\x1b[0m', `🔧 查询条件: country="${country}", 排除FBAXB362%, ${precode ? `排除${precode}%` : '无额外前缀排除'}`);
+    
     const sqlQuery = `
       SELECT 
-        s.SKU as shein_sku,
-        s.卖家SKU as seller_sku,
+        c.SKU as shein_sku, 
+        COALESCE(d.\`afn-fulfillable-quantity\`, 0) AS afn_quantity,
+        c.amz_sku,
+        c.卖家SKU as seller_sku,
         CASE 
-          WHEN s.卖家SKU LIKE 'US%' THEN SUBSTRING(s.卖家SKU, 3)
-          ELSE s.卖家SKU
-        END as processed_sku,
-        m.amz_sku,
-        COALESCE(f.\`afn-fulfillable-quantity\`, 0) as afn_quantity,
-        CASE 
-          WHEN m.amz_sku IS NULL THEN '未找到AMZ SKU映射'
-          WHEN f.sku IS NULL THEN '未找到FBA库存'
+          WHEN c.amz_sku IS NULL THEN '未找到AMZ SKU映射'
+          WHEN d.sku IS NULL THEN '未找到FBA库存'
           ELSE '正常同步'
         END as remark
-      FROM \`shein产品信息\` s
-      LEFT JOIN \`pbi_amzsku_sku\` m ON m.local_sku = CASE 
-          WHEN s.卖家SKU LIKE 'US%' THEN SUBSTRING(s.卖家SKU, 3)
-          ELSE s.卖家SKU
-        END AND m.country = '美国'
-      LEFT JOIN \`fba_inventory\` f ON f.sku = m.amz_sku
-      ORDER BY s.SKU
+      FROM (
+        SELECT 
+          a.SKU, 
+          a.卖家SKU, 
+          b.amz_sku 
+        FROM \`shein产品信息\` a 
+        LEFT JOIN (
+          SELECT * 
+          FROM \`pbi_amzsku_sku\` 
+          WHERE \`country\` = '${country}' 
+            AND \`amz_sku\` NOT LIKE 'FBAXB362%'
+            ${precode ? `AND \`amz_sku\` NOT LIKE '${precode}%'` : ''}
+        ) b ON SUBSTRING(a.\`卖家SKU\`, 3) = b.\`local_sku\` 
+        ORDER BY a.\`卖家SKU\` ASC
+      ) c 
+      LEFT JOIN \`fba_inventory\` d ON c.\`amz_sku\` = d.\`sku\`  
+      ORDER BY d.\`afn-fulfillable-quantity\` ASC
     `;
 
     const [results] = await sequelize.query(sqlQuery);
@@ -450,22 +462,19 @@ router.get('/generate-shein-sync', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', `🔍 一次性查询到${results.length}条完整数据`);
 
-    // 统计信息
-    let mappedCount = 0;
-    let inventoryFoundCount = 0;
-
     // 直接转换为同步数据格式
     const syncData = results.map(row => {
-      if (row.amz_sku) mappedCount++;
-      if (row.afn_quantity > 0) inventoryFoundCount++;
-
       return {
         SKU: row.shein_sku,
         可售库存: parseInt(row.afn_quantity) || 0,
-        FBASKU: row.amz_sku || row.processed_sku,
+        FBASKU: row.amz_sku || '无映射',
         备注: row.remark
       };
     });
+
+    // 统计信息
+    const mappedCount = results.filter(row => row.amz_sku !== null).length;
+    const inventoryFoundCount = results.filter(row => row.amz_sku !== null && parseInt(row.afn_quantity) > 0).length;
 
     // 第三步：生成Excel文件
     const worksheet = XLSX.utils.json_to_sheet(syncData);
@@ -481,9 +490,10 @@ router.get('/generate-shein-sync', async (req, res) => {
       总产品数: results.length,
       映射成功数: mappedCount,
       找到库存数: inventoryFoundCount,
+      有库存产品数: results.filter(row => parseInt(row.afn_quantity) > 0).length,
       同步文件记录数: syncData.length,
       处理时间: `${processingTime}ms (${(processingTime / 1000).toFixed(2)}s)`,
-      性能提升: '使用单一SQL查询替代多次查询'
+      查询优化: '参考用户SQL，排除FBAXB362%前缀，按库存升序排列'
     };
 
     console.log('\x1b[33m%s\x1b[0m', '📊 SHEIN库存同步统计:', stats);
