@@ -638,16 +638,41 @@ const FbaInventory: React.FC = () => {
 
   // 生成SHEIN库存同步文件
   const handleGenerateSheinSync = async () => {
+    // 创建一个可控制的加载提示
+    const hideLoading = message.loading('正在查询SHEIN产品信息...', 0);
+    
     try {
-      message.loading('正在生成SHEIN库存同步文件...', 0);
+      // 设置超时控制器
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 120000); // 2分钟超时
+
+      // 更新加载状态
+      setTimeout(() => {
+        hideLoading();
+        message.loading('正在处理SKU映射关系...', 0);
+      }, 1000);
+
+      setTimeout(() => {
+        message.destroy();
+        message.loading('正在查询FBA库存数据...', 0);
+      }, 3000);
+
+      setTimeout(() => {
+        message.destroy();
+        message.loading('正在生成Excel文件...', 0);
+      }, 5000);
       
       const response = await fetch(`${API_BASE_URL}/api/fba-inventory/generate-shein-sync`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        },
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       message.destroy();
 
       if (!response.ok) {
@@ -677,11 +702,23 @@ const FbaInventory: React.FC = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      message.success('SHEIN库存同步文件生成成功');
+      message.success('SHEIN库存同步文件生成并下载完成！');
     } catch (error) {
       message.destroy();
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          message.error('生成超时，请稍后重试。如果数据量很大，这个过程可能需要较长时间。');
+        } else if (error.message.includes('fetch')) {
+          message.error('网络连接错误，请检查网络后重试');
+        } else {
+          message.error(`生成失败: ${error.message}`);
+        }
+      } else {
+        message.error('生成失败: 未知错误');
+      }
+      
       console.error('生成SHEIN库存同步文件失败:', error);
-      message.error(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -773,14 +810,16 @@ const FbaInventory: React.FC = () => {
           </Button>
         </Col>
         <Col>
-          <Button
-            type="primary"
-            icon={<FileExcelOutlined />}
-            onClick={handleGenerateSheinSync}
-            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-          >
-            生成SHEIN库存同步文件
-          </Button>
+          <Tooltip title="根据SHEIN产品信息与FBA库存进行同步，生成Excel文件。数据量大时可能需要1-2分钟处理时间。">
+            <Button
+              type="primary"
+              icon={<FileExcelOutlined />}
+              onClick={handleGenerateSheinSync}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              生成SHEIN库存同步文件
+            </Button>
+          </Tooltip>
         </Col>
       </Row>
 

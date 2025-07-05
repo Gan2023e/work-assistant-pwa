@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { FbaInventory, SheinProduct, AmzSkuMapping } = require('../models');
+const { FbaInventory, SheinProduct, AmzSkuMapping, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
 
@@ -408,104 +408,64 @@ router.post('/batch-import', async (req, res) => {
 
 // 生成SHEIN库存同步文件
 router.get('/generate-shein-sync', async (req, res) => {
+  const startTime = Date.now();
   console.log('\x1b[32m%s\x1b[0m', '📊 收到生成SHEIN库存同步文件请求');
   
   try {
-    // 第一步：获取所有SHEIN产品信息
-    const sheinProducts = await SheinProduct.findAll({
-      attributes: ['SKU', '卖家SKU'],
-      raw: true
-    });
+    // 使用一个复合SQL查询来完成所有操作（性能优化）
+    console.log('\x1b[33m%s\x1b[0m', '⚡ 开始执行复合SQL查询...');
+    
+    const sqlQuery = `
+      SELECT 
+        s.SKU as shein_sku,
+        s.卖家SKU as seller_sku,
+        CASE 
+          WHEN s.卖家SKU LIKE 'US%' THEN SUBSTRING(s.卖家SKU, 3)
+          ELSE s.卖家SKU
+        END as processed_sku,
+        m.amz_sku,
+        COALESCE(f.\`afn-fulfillable-quantity\`, 0) as afn_quantity,
+        CASE 
+          WHEN m.amz_sku IS NULL THEN '未找到AMZ SKU映射'
+          WHEN f.sku IS NULL THEN '未找到FBA库存'
+          ELSE '正常同步'
+        END as remark
+      FROM \`shein产品信息\` s
+      LEFT JOIN \`pbi_amzsku_sku\` m ON m.local_sku = CASE 
+          WHEN s.卖家SKU LIKE 'US%' THEN SUBSTRING(s.卖家SKU, 3)
+          ELSE s.卖家SKU
+        END AND m.country = '美国'
+      LEFT JOIN \`fba_inventory\` f ON f.sku = m.amz_sku
+      ORDER BY s.SKU
+    `;
 
-    if (sheinProducts.length === 0) {
+    const [results] = await sequelize.query(sqlQuery);
+
+    if (results.length === 0) {
       return res.status(404).json({
         code: 1,
         message: '没有找到SHEIN产品信息'
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `🔍 找到${sheinProducts.length}个SHEIN产品`);
+    console.log('\x1b[33m%s\x1b[0m', `🔍 一次性查询到${results.length}条完整数据`);
 
-    // 第二步：处理每个SHEIN产品的库存同步
-    const syncData = [];
-    let processedCount = 0;
+    // 统计信息
     let mappedCount = 0;
     let inventoryFoundCount = 0;
 
-    for (const sheinProduct of sheinProducts) {
-      try {
-        processedCount++;
-        
-        // 删除"卖家SKU"字段的"US"前缀
-        const sellerSku = sheinProduct['卖家SKU'] || '';
-        const processedSku = sellerSku.startsWith('US') ? sellerSku.substring(2) : sellerSku;
-        
-        console.log('\x1b[36m%s\x1b[0m', `🔍 处理SHEIN产品: ${sheinProduct.SKU}, 卖家SKU: ${sellerSku} → ${processedSku}`);
+    // 直接转换为同步数据格式
+    const syncData = results.map(row => {
+      if (row.amz_sku) mappedCount++;
+      if (row.afn_quantity > 0) inventoryFoundCount++;
 
-        // 查找对应的AMZ SKU映射（country固定为"美国"）
-        const amzSkuMapping = await AmzSkuMapping.findOne({
-          where: {
-            local_sku: processedSku,
-            country: '美国'
-          },
-          raw: true
-        });
-
-        if (!amzSkuMapping) {
-          console.log('\x1b[33m%s\x1b[0m', `⚠️ 未找到映射: ${processedSku} → 美国`);
-          // 即使没有映射，也添加到同步数据中，库存设为0
-          syncData.push({
-            SKU: sheinProduct.SKU,
-            可售库存: 0,
-            FBASKU: processedSku, // 使用处理后的SKU作为FBASKU
-            备注: '未找到AMZ SKU映射'
-          });
-          continue;
-        }
-
-        mappedCount++;
-        console.log('\x1b[32m%s\x1b[0m', `✅ 找到映射: ${processedSku} → ${amzSkuMapping.amz_sku}`);
-
-        // 查找FBA库存中对应的AFN可售数量
-        const fbaInventory = await FbaInventory.findOne({
-          where: {
-            sku: amzSkuMapping.amz_sku
-          },
-          attributes: ['sku', 'afn-fulfillable-quantity'],
-          raw: true
-        });
-
-        let afnFulfillableQuantity = 0;
-        let remark = '正常同步';
-
-        if (fbaInventory && fbaInventory['afn-fulfillable-quantity'] !== null) {
-          afnFulfillableQuantity = parseInt(fbaInventory['afn-fulfillable-quantity']) || 0;
-          inventoryFoundCount++;
-          console.log('\x1b[32m%s\x1b[0m', `✅ 找到FBA库存: ${amzSkuMapping.amz_sku} → ${afnFulfillableQuantity}`);
-        } else {
-          console.log('\x1b[33m%s\x1b[0m', `⚠️ 未找到FBA库存: ${amzSkuMapping.amz_sku}`);
-          remark = '未找到FBA库存';
-        }
-
-        // 添加到同步数据
-        syncData.push({
-          SKU: sheinProduct.SKU,
-          可售库存: afnFulfillableQuantity,
-          FBASKU: amzSkuMapping.amz_sku,
-          备注: remark
-        });
-
-      } catch (error) {
-        console.error('\x1b[31m%s\x1b[0m', `❌ 处理SHEIN产品失败: ${sheinProduct.SKU}`, error);
-        // 添加错误记录
-        syncData.push({
-          SKU: sheinProduct.SKU,
-          可售库存: 0,
-          FBASKU: '',
-          备注: `处理失败: ${error.message}`
-        });
-      }
-    }
+      return {
+        SKU: row.shein_sku,
+        可售库存: parseInt(row.afn_quantity) || 0,
+        FBASKU: row.amz_sku || row.processed_sku,
+        备注: row.remark
+      };
+    });
 
     // 第三步：生成Excel文件
     const worksheet = XLSX.utils.json_to_sheet(syncData);
@@ -516,11 +476,14 @@ router.get('/generate-shein-sync', async (req, res) => {
     const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     // 统计信息
+    const processingTime = Date.now() - startTime;
     const stats = {
-      总产品数: processedCount,
+      总产品数: results.length,
       映射成功数: mappedCount,
       找到库存数: inventoryFoundCount,
-      同步文件记录数: syncData.length
+      同步文件记录数: syncData.length,
+      处理时间: `${processingTime}ms (${(processingTime / 1000).toFixed(2)}s)`,
+      性能提升: '使用单一SQL查询替代多次查询'
     };
 
     console.log('\x1b[33m%s\x1b[0m', '📊 SHEIN库存同步统计:', stats);
