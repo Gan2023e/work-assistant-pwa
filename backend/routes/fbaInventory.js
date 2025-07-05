@@ -12,9 +12,9 @@ router.get('/', async (req, res) => {
       page = 1, 
       limit = 20, 
       sku, 
-      marketplace, 
-      country,
-      snapshot_date,
+      site, 
+      store,
+      condition,
       sort_by = 'updated_at',
       sort_order = 'DESC'
     } = req.query;
@@ -26,16 +26,16 @@ router.get('/', async (req, res) => {
       whereCondition.sku = { [Op.like]: `%${sku}%` };
     }
     
-    if (marketplace) {
-      whereCondition.marketplace = marketplace;
+    if (site) {
+      whereCondition.site = site;
     }
     
-    if (country) {
-      whereCondition.country = country;
+    if (store) {
+      whereCondition.store = store;
     }
     
-    if (snapshot_date) {
-      whereCondition.snapshot_date = snapshot_date;
+    if (condition) {
+      whereCondition.condition = condition;
     }
 
     // 分页查询
@@ -75,62 +75,37 @@ router.get('/stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA库存统计查询请求');
   
   try {
-    const { country, marketplace } = req.query;
+    const { site, store } = req.query;
     
     const whereCondition = {};
-    if (country) whereCondition.country = country;
-    if (marketplace) whereCondition.marketplace = marketplace;
+    if (site) whereCondition.site = site;
+    if (store) whereCondition.store = store;
 
-    // 获取最新快照的统计数据
-    const latestSnapshot = await FbaInventory.findOne({
-      attributes: ['snapshot_date'],
-      where: whereCondition,
-      order: [['snapshot_date', 'DESC']],
-      limit: 1
-    });
-
-    if (!latestSnapshot) {
-      return res.json({
-        code: 0,
-        message: '暂无数据',
-        data: {
-          total_skus: 0,
-          total_available: 0,
-          total_reserved: 0,
-          total_inbound: 0,
-          by_marketplace: [],
-          by_country: []
-        }
-      });
-    }
-
-    whereCondition.snapshot_date = latestSnapshot.snapshot_date;
-
-    // 按市场站点统计
-    const marketplaceStats = await FbaInventory.findAll({
+    // 按站点统计
+    const siteStats = await FbaInventory.findAll({
       attributes: [
-        'marketplace',
+        'site',
         [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'sku_count'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('available_quantity')), 'total_available'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('reserved_quantity')), 'total_reserved'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('inbound_working_quantity')), 'total_inbound']
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
       ],
       where: whereCondition,
-      group: ['marketplace'],
+      group: ['site'],
       raw: true
     });
 
-    // 按国家统计
-    const countryStats = await FbaInventory.findAll({
+    // 按店铺统计
+    const storeStats = await FbaInventory.findAll({
       attributes: [
-        'country',
+        'store',
         [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'sku_count'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('available_quantity')), 'total_available'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('reserved_quantity')), 'total_reserved'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('inbound_working_quantity')), 'total_inbound']
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
       ],
       where: whereCondition,
-      group: ['country'],
+      group: ['store'],
       raw: true
     });
 
@@ -138,9 +113,9 @@ router.get('/stats', async (req, res) => {
     const totalStats = await FbaInventory.findOne({
       attributes: [
         [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'total_skus'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('available_quantity')), 'total_available'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('reserved_quantity')), 'total_reserved'],
-        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('inbound_working_quantity')), 'total_inbound']
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
       ],
       where: whereCondition,
       raw: true
@@ -150,10 +125,9 @@ router.get('/stats', async (req, res) => {
       code: 0,
       message: '获取成功',
       data: {
-        snapshot_date: latestSnapshot.snapshot_date,
         ...totalStats,
-        by_marketplace: marketplaceStats,
-        by_country: countryStats
+        by_site: siteStats,
+        by_store: storeStats
       }
     });
   } catch (error) {
@@ -161,6 +135,48 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取统计失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取站点和店铺列表
+router.get('/sites-stores', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到站点和店铺列表查询请求');
+  
+  try {
+    // 获取所有站点
+    const sites = await FbaInventory.findAll({
+      attributes: ['site'],
+      group: ['site'],
+      raw: true
+    });
+
+    // 获取所有店铺
+    const stores = await FbaInventory.findAll({
+      attributes: ['store'],
+      where: {
+        store: {
+          [Op.ne]: null
+        }
+      },
+      group: ['store'],
+      raw: true
+    });
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        sites: sites.map(item => item.site),
+        stores: stores.map(item => item.store)
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取站点和店铺列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
       error: error.message
     });
   }
@@ -174,7 +190,7 @@ router.post('/', async (req, res) => {
     const inventoryData = req.body;
     
     // 验证必填字段
-    const requiredFields = ['sku', 'marketplace', 'country', 'snapshot_date'];
+    const requiredFields = ['sku', 'site'];
     for (const field of requiredFields) {
       if (!inventoryData[field]) {
         return res.status(400).json({
@@ -188,21 +204,21 @@ router.post('/', async (req, res) => {
     const existingRecord = await FbaInventory.findOne({
       where: {
         sku: inventoryData.sku,
-        marketplace: inventoryData.marketplace,
-        snapshot_date: inventoryData.snapshot_date
+        site: inventoryData.site
       }
     });
 
     if (existingRecord) {
       return res.status(400).json({
         code: 1,
-        message: '该SKU在指定市场和快照日期的记录已存在'
+        message: '该SKU在指定站点的记录已存在'
       });
     }
 
+    // 创建新记录
     const newRecord = await FbaInventory.create(inventoryData);
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ FBA库存记录创建成功:', newRecord.id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 创建FBA库存记录成功:', newRecord.id);
     
     res.json({
       code: 0,
@@ -210,7 +226,7 @@ router.post('/', async (req, res) => {
       data: newRecord
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 创建FBA库存记录失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建FBA库存失败:', error);
     res.status(500).json({
       code: 1,
       message: '创建失败',
@@ -221,13 +237,15 @@ router.post('/', async (req, res) => {
 
 // 更新FBA库存记录
 router.put('/:id', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '📝 收到更新FBA库存请求:', req.params.id);
+  console.log('\x1b[32m%s\x1b[0m', '📝 收到更新FBA库存请求');
   
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const inventoryData = req.body;
     
+    // 查找要更新的记录
     const record = await FbaInventory.findByPk(id);
+    
     if (!record) {
       return res.status(404).json({
         code: 1,
@@ -235,9 +253,31 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    await record.update(updateData);
+    // 如果更新了SKU或站点，检查是否与其他记录冲突
+    if ((inventoryData.sku && inventoryData.sku !== record.sku) || 
+        (inventoryData.site && inventoryData.site !== record.site)) {
+      const existingRecord = await FbaInventory.findOne({
+        where: {
+          sku: inventoryData.sku || record.sku,
+          site: inventoryData.site || record.site,
+          id: {
+            [Op.ne]: id
+          }
+        }
+      });
+
+      if (existingRecord) {
+        return res.status(400).json({
+          code: 1,
+          message: '该SKU在指定站点的记录已存在'
+        });
+      }
+    }
+
+    // 更新记录
+    await record.update(inventoryData);
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ FBA库存记录更新成功:', id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 更新FBA库存记录成功:', id);
     
     res.json({
       code: 0,
@@ -245,7 +285,7 @@ router.put('/:id', async (req, res) => {
       data: record
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 更新FBA库存记录失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 更新FBA库存失败:', error);
     res.status(500).json({
       code: 1,
       message: '更新失败',
@@ -256,12 +296,14 @@ router.put('/:id', async (req, res) => {
 
 // 删除FBA库存记录
 router.delete('/:id', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到删除FBA库存请求:', req.params.id);
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到删除FBA库存请求');
   
   try {
     const { id } = req.params;
     
+    // 查找要删除的记录
     const record = await FbaInventory.findByPk(id);
+    
     if (!record) {
       return res.status(404).json({
         code: 1,
@@ -269,16 +311,17 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
+    // 删除记录
     await record.destroy();
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ FBA库存记录删除成功:', id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 删除FBA库存记录成功:', id);
     
     res.json({
       code: 0,
       message: '删除成功'
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 删除FBA库存记录失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 删除FBA库存失败:', error);
     res.status(500).json({
       code: 1,
       message: '删除失败',
@@ -287,12 +330,12 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// 批量导入FBA库存数据
+// 批量导入FBA库存
 router.post('/batch-import', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '📥 收到批量导入FBA库存请求');
   
   try {
-    const { records, snapshot_date } = req.body;
+    const { records } = req.body;
     
     if (!records || !Array.isArray(records) || records.length === 0) {
       return res.status(400).json({
@@ -301,76 +344,59 @@ router.post('/batch-import', async (req, res) => {
       });
     }
 
-    const transaction = await FbaInventory.sequelize.transaction();
-    
-    try {
-      // 为每条记录添加快照日期
-      const recordsWithSnapshot = records.map(record => ({
-        ...record,
-        snapshot_date: snapshot_date || new Date().toISOString().split('T')[0]
-      }));
+    let imported_count = 0;
+    let updated_count = 0;
+    let error_count = 0;
 
-      // 批量创建记录
-      const createdRecords = await FbaInventory.bulkCreate(recordsWithSnapshot, {
-        transaction,
-        updateOnDuplicate: [
-          'available_quantity',
-          'inbound_working_quantity', 
-          'inbound_shipped_quantity',
-          'inbound_receiving_quantity',
-          'reserved_quantity',
-          'unfulfillable_quantity',
-          'total_quantity',
-          'last_updated',
-          'updated_at'
-        ]
-      });
-
-      await transaction.commit();
-      
-      console.log('\x1b[32m%s\x1b[0m', `✅ 批量导入FBA库存成功: ${createdRecords.length} 条记录`);
-      
-      res.json({
-        code: 0,
-        message: `批量导入成功，共处理 ${createdRecords.length} 条记录`,
-        data: {
-          imported_count: createdRecords.length
+    // 逐条处理记录
+    for (const record of records) {
+      try {
+        // 验证必填字段
+        if (!record.sku || !record.site) {
+          error_count++;
+          continue;
         }
-      });
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
+
+        // 查找是否已存在
+        const existingRecord = await FbaInventory.findOne({
+          where: {
+            sku: record.sku,
+            site: record.site
+          }
+        });
+
+        if (existingRecord) {
+          // 更新现有记录
+          await existingRecord.update(record);
+          updated_count++;
+        } else {
+          // 创建新记录
+          await FbaInventory.create(record);
+          imported_count++;
+        }
+      } catch (error) {
+        console.error('处理记录失败:', error);
+        error_count++;
+      }
     }
+
+    console.log('\x1b[33m%s\x1b[0m', `✅ 批量导入完成: 新增${imported_count}条, 更新${updated_count}条, 失败${error_count}条`);
+    
+    res.json({
+      code: 0,
+      message: '批量导入完成',
+      data: {
+        imported_count,
+        updated_count,
+        error_count,
+        total_processed: imported_count + updated_count + error_count
+      }
+    });
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', '❌ 批量导入FBA库存失败:', error);
     res.status(500).json({
       code: 1,
       message: '批量导入失败',
-      error: error.message
-    });
-  }
-});
-
-// 获取可用的快照日期列表
-router.get('/snapshot-dates', async (req, res) => {
-  try {
-    const dates = await FbaInventory.findAll({
-      attributes: ['snapshot_date'],
-      group: ['snapshot_date'],
-      order: [['snapshot_date', 'DESC']],
-      raw: true
-    });
-
-    res.json({
-      code: 0,
-      message: '获取成功',
-      data: dates.map(item => item.snapshot_date)
-    });
-  } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 获取快照日期失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '获取失败',
       error: error.message
     });
   }

@@ -42,47 +42,56 @@ const { Option } = Select;
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
+// 根据实际数据库表结构定义接口
 interface FbaInventoryRecord {
-  id: number;
+  id?: number;
   sku: string;
-  asin?: string;
   fnsku?: string;
-  product_name?: string;
-  marketplace: string;
-  country: string;
-  fulfillment_center?: string;
-  available_quantity: number;
-  inbound_working_quantity: number;
-  inbound_shipped_quantity: number;
-  inbound_receiving_quantity: number;
-  reserved_quantity: number;
-  unfulfillable_quantity: number;
-  total_quantity: number;
-  last_updated?: string;
-  snapshot_date: string;
-  created_at: string;
-  updated_at: string;
+  asin?: string;
+  'product-name'?: string;
+  condition?: string;
+  'your-price'?: number;
+  'mfn-listing-exists'?: string;
+  'mfn-fulfillable-quantity'?: string;
+  'afn-listing-exists'?: string;
+  'afn-warehouse-quantity'?: number;
+  'afn-fulfillable-quantity'?: number;
+  'afn-unsellable-quantity'?: number;
+  'afn-reserved-quantity'?: number;
+  'afn-total-quantity'?: number;
+  'per-unit-volume'?: number;
+  'afn-inbound-working-quantity'?: number;
+  'afn-inbound-shipped-quantity'?: number;
+  'afn-inbound-receiving-quantity'?: number;
+  'afn-researching-quantity'?: number;
+  'afn-reserved-future-supply'?: number;
+  'afn-future-supply-buyable'?: number;
+  site: string;
+  'afn-fulfillable-quantity-local'?: number;
+  'afn-fulfillable-quantity-remote'?: number;
+  store?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface FbaInventoryStats {
-  snapshot_date: string;
   total_skus: number;
-  total_available: number;
-  total_reserved: number;
-  total_inbound: number;
-  by_marketplace: Array<{
-    marketplace: string;
+  total_afn_fulfillable: number;
+  total_afn_reserved: number;
+  total_afn_inbound: number;
+  by_site: Array<{
+    site: string;
     sku_count: number;
-    total_available: number;
-    total_reserved: number;
-    total_inbound: number;
+    total_afn_fulfillable: number;
+    total_afn_reserved: number;
+    total_afn_inbound: number;
   }>;
-  by_country: Array<{
-    country: string;
+  by_store: Array<{
+    store: string;
     sku_count: number;
-    total_available: number;
-    total_reserved: number;
-    total_inbound: number;
+    total_afn_fulfillable: number;
+    total_afn_reserved: number;
+    total_afn_inbound: number;
   }>;
 }
 
@@ -100,9 +109,9 @@ const FbaInventory: React.FC = () => {
   // 搜索和筛选状态
   const [searchFilters, setSearchFilters] = useState({
     sku: '',
-    marketplace: '',
-    country: '',
-    snapshot_date: ''
+    site: '',
+    store: '',
+    condition: ''
   });
 
   // 分页状态
@@ -112,8 +121,9 @@ const FbaInventory: React.FC = () => {
     total: 0
   });
 
-  // 快照日期列表
-  const [snapshotDates, setSnapshotDates] = useState<string[]>([]);
+  // 站点列表
+  const [sites, setSites] = useState<string[]>([]);
+  const [stores, setStores] = useState<string[]>([]);
 
   // 加载数据
   const fetchData = async (page: number = 1, pageSize: number = 20) => {
@@ -178,10 +188,10 @@ const FbaInventory: React.FC = () => {
     }
   };
 
-  // 加载快照日期列表
-  const fetchSnapshotDates = async () => {
+  // 加载站点和店铺列表
+  const fetchSitesAndStores = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/snapshot-dates`, {
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/sites-stores`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -194,18 +204,228 @@ const FbaInventory: React.FC = () => {
       const result = await response.json();
       
       if (result.code === 0) {
-        setSnapshotDates(result.data);
+        setSites(result.data.sites || []);
+        setStores(result.data.stores || []);
       }
     } catch (error) {
-      console.error('获取快照日期失败:', error);
+      console.error('获取站点和店铺列表失败:', error);
     }
   };
 
+  // 初始化数据
   useEffect(() => {
     fetchData();
     fetchStats();
-    fetchSnapshotDates();
-  }, [searchFilters]);
+    fetchSitesAndStores();
+  }, []);
+
+  // 表格列定义 - 根据实际数据库字段重新设计
+  const columns: ColumnsType<FbaInventoryRecord> = [
+    {
+      title: 'SKU',
+      dataIndex: 'sku',
+      key: 'sku',
+      width: 120,
+      fixed: 'left',
+      sorter: true,
+      render: (text) => <Text strong>{text}</Text>
+    },
+    {
+      title: 'FNSKU',
+      dataIndex: 'fnsku',
+      key: 'fnsku',
+      width: 120,
+      render: (text) => text || '-'
+    },
+    {
+      title: 'ASIN',
+      dataIndex: 'asin',
+      key: 'asin',
+      width: 120,
+      render: (text) => text || '-'
+    },
+    {
+      title: '产品名称',
+      dataIndex: 'product-name',
+      key: 'product-name',
+      width: 200,
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (text) => (
+        <Tooltip placement="topLeft" title={text}>
+          {text || '-'}
+        </Tooltip>
+      )
+    },
+    {
+      title: '商品状态',
+      dataIndex: 'condition',
+      key: 'condition',
+      width: 100,
+      render: (text) => {
+        const colorMap: { [key: string]: string } = {
+          'New': 'green',
+          'Used': 'orange',
+          'Refurbished': 'blue'
+        };
+        return text ? <Tag color={colorMap[text] || 'default'}>{text}</Tag> : '-';
+      }
+    },
+    {
+      title: '售价',
+      dataIndex: 'your-price',
+      key: 'your-price',
+      width: 100,
+      align: 'right',
+      render: (value) => value ? `$${value.toFixed(2)}` : '-'
+    },
+    {
+      title: '站点',
+      dataIndex: 'site',
+      key: 'site',
+      width: 80,
+      render: (text) => <Tag color="blue">{text}</Tag>
+    },
+    {
+      title: '店铺',
+      dataIndex: 'store',
+      key: 'store',
+      width: 120,
+      render: (text) => text || '-'
+    },
+    {
+      title: 'AFN可售数量',
+      dataIndex: 'afn-fulfillable-quantity',
+      key: 'afn-fulfillable-quantity',
+      width: 120,
+      align: 'right',
+      render: (value) => (
+        <Badge 
+          count={value || 0} 
+          overflowCount={9999}
+          style={{ backgroundColor: value > 0 ? '#52c41a' : '#f5222d' }}
+        />
+      )
+    },
+    {
+      title: 'AFN仓库数量',
+      dataIndex: 'afn-warehouse-quantity',
+      key: 'afn-warehouse-quantity',
+      width: 120,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: 'AFN预留数量',
+      dataIndex: 'afn-reserved-quantity',
+      key: 'afn-reserved-quantity',
+      width: 120,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: 'AFN不可售数量',
+      dataIndex: 'afn-unsellable-quantity',
+      key: 'afn-unsellable-quantity',
+      width: 130,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: 'AFN总数量',
+      dataIndex: 'afn-total-quantity',
+      key: 'afn-total-quantity',
+      width: 100,
+      align: 'right',
+      render: (value) => <Text strong>{value || 0}</Text>
+    },
+    {
+      title: '入库处理中',
+      dataIndex: 'afn-inbound-working-quantity',
+      key: 'afn-inbound-working-quantity',
+      width: 100,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: '入库运输中',
+      dataIndex: 'afn-inbound-shipped-quantity',
+      key: 'afn-inbound-shipped-quantity',
+      width: 100,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: '入库接收中',
+      dataIndex: 'afn-inbound-receiving-quantity',
+      key: 'afn-inbound-receiving-quantity',
+      width: 100,
+      align: 'right',
+      render: (value) => value || 0
+    },
+    {
+      title: '单位体积',
+      dataIndex: 'per-unit-volume',
+      key: 'per-unit-volume',
+      width: 100,
+      align: 'right',
+      render: (value) => value ? `${value.toFixed(2)}` : '-'
+    },
+    {
+      title: 'MFN Listing',
+      dataIndex: 'mfn-listing-exists',
+      key: 'mfn-listing-exists',
+      width: 100,
+      render: (text) => {
+        const color = text === 'Yes' ? 'green' : text === 'No' ? 'red' : 'default';
+        return text ? <Tag color={color}>{text}</Tag> : '-';
+      }
+    },
+    {
+      title: 'AFN Listing',
+      dataIndex: 'afn-listing-exists',
+      key: 'afn-listing-exists',
+      width: 100,
+      render: (text) => {
+        const color = text === 'Yes' ? 'green' : text === 'No' ? 'red' : 'default';
+        return text ? <Tag color={color}>{text}</Tag> : '-';
+      }
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      fixed: 'right',
+      render: (_, record) => (
+        <Space size="small">
+          <Button 
+            type="link" 
+            size="small" 
+            icon={<EditOutlined />}
+            onClick={() => openModal(record)}
+          >
+            编辑
+          </Button>
+          <Popconfirm
+            title="确定要删除这条记录吗？"
+            onConfirm={() => handleDelete(record.id!)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button 
+              type="link" 
+              size="small" 
+              danger
+              icon={<DeleteOutlined />}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ];
 
   // 处理表格分页
   const handleTableChange = (pag: any) => {
@@ -224,26 +444,15 @@ const FbaInventory: React.FC = () => {
     setModalVisible(true);
     
     if (record) {
-      form.setFieldsValue({
-        ...record,
-        snapshot_date: dayjs(record.snapshot_date)
-      });
+      form.setFieldsValue(record);
     } else {
       form.resetFields();
-      form.setFieldsValue({
-        snapshot_date: dayjs()
-      });
     }
   };
 
   // 保存记录
   const handleSave = async (values: any) => {
     try {
-      const formData = {
-        ...values,
-        snapshot_date: values.snapshot_date.format('YYYY-MM-DD')
-      };
-
       const url = editingRecord 
         ? `${API_BASE_URL}/api/fba-inventory/${editingRecord.id}`
         : `${API_BASE_URL}/api/fba-inventory`;
@@ -256,7 +465,7 @@ const FbaInventory: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(values)
       });
 
       if (!response.ok) {
@@ -271,7 +480,6 @@ const FbaInventory: React.FC = () => {
         form.resetFields();
         fetchData(pagination.current, pagination.pageSize);
         fetchStats();
-        fetchSnapshotDates();
       } else {
         message.error(result.message);
       }
@@ -313,7 +521,7 @@ const FbaInventory: React.FC = () => {
   // 处理Excel导入
   const handleImport = async (values: any) => {
     try {
-      const { file, snapshot_date } = values;
+      const { file } = values;
       
       if (!file || !file.fileList || file.fileList.length === 0) {
         message.error('请选择要导入的Excel文件');
@@ -336,17 +544,22 @@ const FbaInventory: React.FC = () => {
             sku: row['SKU'] || row['sku'],
             asin: row['ASIN'] || row['asin'],
             fnsku: row['FNSKU'] || row['fnsku'],
-            product_name: row['Product Name'] || row['product_name'] || row['商品名称'],
-            marketplace: row['Marketplace'] || row['marketplace'] || row['市场站点'],
-            country: row['Country'] || row['country'] || row['国家'],
-            fulfillment_center: row['Fulfillment Center'] || row['fulfillment_center'] || row['履约中心'],
-            available_quantity: parseInt(row['Available'] || row['available_quantity'] || 0),
-            inbound_working_quantity: parseInt(row['Inbound Working'] || row['inbound_working_quantity'] || 0),
-            inbound_shipped_quantity: parseInt(row['Inbound Shipped'] || row['inbound_shipped_quantity'] || 0),
-            inbound_receiving_quantity: parseInt(row['Inbound Receiving'] || row['inbound_receiving_quantity'] || 0),
-            reserved_quantity: parseInt(row['Reserved'] || row['reserved_quantity'] || 0),
-            unfulfillable_quantity: parseInt(row['Unfulfillable'] || row['unfulfillable_quantity'] || 0),
-            total_quantity: parseInt(row['Total'] || row['total_quantity'] || 0)
+            'product-name': row['Product Name'] || row['product-name'] || row['商品名称'],
+            condition: row['Condition'] || row['condition'] || row['商品状态'],
+            'your-price': parseFloat(row['Your Price'] || row['your-price'] || 0),
+            site: row['Site'] || row['site'] || row['站点'],
+            store: row['Store'] || row['store'] || row['店铺'],
+            'afn-fulfillable-quantity': parseInt(row['AFN Fulfillable'] || row['afn-fulfillable-quantity'] || 0),
+            'afn-warehouse-quantity': parseInt(row['AFN Warehouse'] || row['afn-warehouse-quantity'] || 0),
+            'afn-reserved-quantity': parseInt(row['AFN Reserved'] || row['afn-reserved-quantity'] || 0),
+            'afn-unsellable-quantity': parseInt(row['AFN Unsellable'] || row['afn-unsellable-quantity'] || 0),
+            'afn-total-quantity': parseInt(row['AFN Total'] || row['afn-total-quantity'] || 0),
+            'afn-inbound-working-quantity': parseInt(row['AFN Inbound Working'] || row['afn-inbound-working-quantity'] || 0),
+            'afn-inbound-shipped-quantity': parseInt(row['AFN Inbound Shipped'] || row['afn-inbound-shipped-quantity'] || 0),
+            'afn-inbound-receiving-quantity': parseInt(row['AFN Inbound Receiving'] || row['afn-inbound-receiving-quantity'] || 0),
+            'per-unit-volume': parseFloat(row['Per Unit Volume'] || row['per-unit-volume'] || 0),
+            'mfn-listing-exists': row['MFN Listing Exists'] || row['mfn-listing-exists'],
+            'afn-listing-exists': row['AFN Listing Exists'] || row['afn-listing-exists']
           }));
 
           // 批量导入
@@ -356,10 +569,7 @@ const FbaInventory: React.FC = () => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({
-              records,
-              snapshot_date: snapshot_date.format('YYYY-MM-DD')
-            })
+            body: JSON.stringify({ records })
           });
 
           if (!response.ok) {
@@ -374,7 +584,6 @@ const FbaInventory: React.FC = () => {
             importForm.resetFields();
             fetchData();
             fetchStats();
-            fetchSnapshotDates();
           } else {
             message.error(result.message);
           }
@@ -398,19 +607,24 @@ const FbaInventory: React.FC = () => {
         'SKU': record.sku,
         'ASIN': record.asin,
         'FNSKU': record.fnsku,
-        '商品名称': record.product_name,
-        '市场站点': record.marketplace,
-        '国家': record.country,
-        '履约中心': record.fulfillment_center,
-        '可用数量': record.available_quantity,
-        '入库处理中': record.inbound_working_quantity,
-        '入库运输中': record.inbound_shipped_quantity,
-        '入库接收中': record.inbound_receiving_quantity,
-        '预留数量': record.reserved_quantity,
-        '不可售数量': record.unfulfillable_quantity,
-        '总数量': record.total_quantity,
-        '快照日期': record.snapshot_date,
-        '最后更新': record.last_updated
+        '商品名称': record['product-name'],
+        '商品状态': record.condition,
+        '售价': record['your-price'],
+        '站点': record.site,
+        '店铺': record.store,
+        'AFN可售数量': record['afn-fulfillable-quantity'],
+        'AFN仓库数量': record['afn-warehouse-quantity'],
+        'AFN预留数量': record['afn-reserved-quantity'],
+        'AFN不可售数量': record['afn-unsellable-quantity'],
+        'AFN总数量': record['afn-total-quantity'],
+        '入库处理中': record['afn-inbound-working-quantity'],
+        '入库运输中': record['afn-inbound-shipped-quantity'],
+        '入库接收中': record['afn-inbound-receiving-quantity'],
+        '单位体积': record['per-unit-volume'],
+        'MFN Listing': record['mfn-listing-exists'],
+        'AFN Listing': record['afn-listing-exists'],
+        '创建时间': record.created_at,
+        '更新时间': record.updated_at
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -426,144 +640,6 @@ const FbaInventory: React.FC = () => {
       message.error('导出失败');
     }
   };
-
-  // 表格列定义
-  const columns: ColumnsType<FbaInventoryRecord> = [
-    {
-      title: 'SKU',
-      dataIndex: 'sku',
-      key: 'sku',
-      width: 120,
-      fixed: 'left'
-    },
-    {
-      title: 'ASIN',
-      dataIndex: 'asin',
-      key: 'asin',
-      width: 100
-    },
-    {
-      title: '商品名称',
-      dataIndex: 'product_name',
-      key: 'product_name',
-      width: 200,
-      ellipsis: true
-    },
-    {
-      title: '市场站点',
-      dataIndex: 'marketplace',
-      key: 'marketplace',
-      width: 100
-    },
-    {
-      title: '国家',
-      dataIndex: 'country',
-      key: 'country',
-      width: 80
-    },
-    {
-      title: '履约中心',
-      dataIndex: 'fulfillment_center',
-      key: 'fulfillment_center',
-      width: 100
-    },
-    {
-      title: '可用数量',
-      dataIndex: 'available_quantity',
-      key: 'available_quantity',
-      width: 100,
-      render: (value: number) => (
-        <Badge count={value} showZero style={{ backgroundColor: '#52c41a' }} />
-      )
-    },
-    {
-      title: '入库中',
-      key: 'inbound',
-      width: 100,
-      render: (record: FbaInventoryRecord) => {
-        const total = record.inbound_working_quantity + record.inbound_shipped_quantity + record.inbound_receiving_quantity;
-        return total > 0 ? (
-          <Tooltip title={`处理中: ${record.inbound_working_quantity}, 运输中: ${record.inbound_shipped_quantity}, 接收中: ${record.inbound_receiving_quantity}`}>
-            <Badge count={total} showZero style={{ backgroundColor: '#1890ff' }} />
-          </Tooltip>
-        ) : (
-          <Badge count={0} showZero style={{ backgroundColor: '#d9d9d9' }} />
-        );
-      }
-    },
-    {
-      title: '预留数量',
-      dataIndex: 'reserved_quantity',
-      key: 'reserved_quantity',
-      width: 100,
-      render: (value: number) => (
-        <Badge count={value} showZero style={{ backgroundColor: '#faad14' }} />
-      )
-    },
-    {
-      title: '不可售',
-      dataIndex: 'unfulfillable_quantity',
-      key: 'unfulfillable_quantity',
-      width: 100,
-      render: (value: number) => (
-        <Badge count={value} showZero style={{ backgroundColor: '#ff4d4f' }} />
-      )
-    },
-    {
-      title: '总数量',
-      dataIndex: 'total_quantity',
-      key: 'total_quantity',
-      width: 100,
-      render: (value: number) => (
-        <Badge count={value} showZero style={{ backgroundColor: '#722ed1' }} />
-      )
-    },
-    {
-      title: '快照日期',
-      dataIndex: 'snapshot_date',
-      key: 'snapshot_date',
-      width: 100
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="编辑">
-            <Button 
-              type="link" 
-              icon={<EditOutlined />} 
-              onClick={() => openModal(record)}
-              size="small"
-            />
-          </Tooltip>
-          <Popconfirm
-            title="确定要删除这条记录吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Tooltip title="删除">
-              <Button 
-                type="link" 
-                danger 
-                icon={<DeleteOutlined />}
-                size="small"
-              />
-            </Tooltip>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ];
-
-  // 市场站点选项
-  const marketplaceOptions = ['Amazon US', 'Amazon UK', 'Amazon DE', 'Amazon FR', 'Amazon IT', 'Amazon ES', 'Amazon CA', 'Amazon AU', 'Amazon JP'];
-  
-  // 国家选项
-  const countryOptions = ['US', 'UK', 'DE', 'FR', 'IT', 'ES', 'CA', 'AU', 'JP'];
 
   return (
     <div style={{ padding: '24px' }}>
@@ -587,7 +663,7 @@ const FbaInventory: React.FC = () => {
             <Card>
               <Statistic
                 title="可用库存"
-                value={stats.total_available}
+                value={stats.total_afn_fulfillable}
                 valueStyle={{ color: '#3f8600' }}
               />
             </Card>
@@ -596,7 +672,7 @@ const FbaInventory: React.FC = () => {
             <Card>
               <Statistic
                 title="预留库存"
-                value={stats.total_reserved}
+                value={stats.total_afn_reserved}
                 valueStyle={{ color: '#cf1322' }}
               />
             </Card>
@@ -605,7 +681,7 @@ const FbaInventory: React.FC = () => {
             <Card>
               <Statistic
                 title="入库中库存"
-                value={stats.total_inbound}
+                value={stats.total_afn_inbound}
                 valueStyle={{ color: '#1890ff' }}
               />
             </Card>
@@ -664,37 +740,37 @@ const FbaInventory: React.FC = () => {
               style={{ width: 150 }}
             />
           </Form.Item>
-          <Form.Item name="marketplace" label="市场站点">
+          <Form.Item name="site" label="站点">
             <Select 
-              placeholder="选择市场站点" 
+              placeholder="选择站点" 
               allowClear
               style={{ width: 150 }}
             >
-              {marketplaceOptions.map(option => (
+              {sites.map(option => (
                 <Option key={option} value={option}>{option}</Option>
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="country" label="国家">
+          <Form.Item name="store" label="店铺">
             <Select 
-              placeholder="选择国家" 
+              placeholder="选择店铺" 
               allowClear
               style={{ width: 120 }}
             >
-              {countryOptions.map(option => (
+              {stores.map(option => (
                 <Option key={option} value={option}>{option}</Option>
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="snapshot_date" label="快照日期">
+          <Form.Item name="condition" label="商品状态">
             <Select 
-              placeholder="选择快照日期" 
+              placeholder="选择商品状态" 
               allowClear
               style={{ width: 150 }}
             >
-              {snapshotDates.map(date => (
-                <Option key={date} value={date}>{date}</Option>
-              ))}
+              <Option value="New">New</Option>
+              <Option value="Used">Used</Option>
+              <Option value="Refurbished">Refurbished</Option>
             </Select>
           </Form.Item>
         </Form>
@@ -757,38 +833,38 @@ const FbaInventory: React.FC = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="fulfillment_center" label="履约中心">
-                <Input placeholder="输入履约中心" />
+              <Form.Item name="condition" label="商品状态">
+                <Select placeholder="选择商品状态">
+                  <Option value="New">New</Option>
+                  <Option value="Used">Used</Option>
+                  <Option value="Refurbished">Refurbished</Option>
+                </Select>
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item name="product_name" label="商品名称">
+          <Form.Item name="product-name" label="商品名称">
             <Input placeholder="输入商品名称" />
           </Form.Item>
 
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                name="marketplace"
-                label="市场站点"
-                rules={[{ required: true, message: '请选择市场站点' }]}
+                name="site"
+                label="站点"
+                rules={[{ required: true, message: '请选择站点' }]}
               >
-                <Select placeholder="选择市场站点">
-                  {marketplaceOptions.map(option => (
+                <Select placeholder="选择站点">
+                  {sites.map(option => (
                     <Option key={option} value={option}>{option}</Option>
                   ))}
                 </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item
-                name="country"
-                label="国家"
-                rules={[{ required: true, message: '请选择国家' }]}
-              >
-                <Select placeholder="选择国家">
-                  {countryOptions.map(option => (
+              <Form.Item name="store" label="店铺">
+                <Select placeholder="选择店铺" allowClear>
+                  {stores.map(option => (
                     <Option key={option} value={option}>{option}</Option>
                   ))}
                 </Select>
@@ -798,52 +874,68 @@ const FbaInventory: React.FC = () => {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-                name="available_quantity"
-                label="可用数量"
-                rules={[{ required: true, message: '请输入可用数量' }]}
-              >
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="your-price" label="售价">
+                <InputNumber min={0} step={0.01} placeholder="售价" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="reserved_quantity" label="预留数量">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="per-unit-volume" label="单位体积">
+                <InputNumber min={0} step={0.01} placeholder="单位体积" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={16}>
             <Col span={8}>
-              <Form.Item name="inbound_working_quantity" label="入库处理中">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="afn-fulfillable-quantity" label="AFN可售数量">
+                <InputNumber min={0} placeholder="AFN可售数量" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="inbound_shipped_quantity" label="入库运输中">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="afn-warehouse-quantity" label="AFN仓库数量">
+                <InputNumber min={0} placeholder="AFN仓库数量" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="inbound_receiving_quantity" label="入库接收中">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="afn-reserved-quantity" label="AFN预留数量">
+                <InputNumber min={0} placeholder="AFN预留数量" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="afn-inbound-working-quantity" label="入库处理中">
+                <InputNumber min={0} placeholder="入库处理中" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="afn-inbound-shipped-quantity" label="入库运输中">
+                <InputNumber min={0} placeholder="入库运输中" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="afn-inbound-receiving-quantity" label="入库接收中">
+                <InputNumber min={0} placeholder="入库接收中" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="unfulfillable_quantity" label="不可售数量">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item name="mfn-listing-exists" label="MFN Listing">
+                <Select placeholder="选择MFN Listing状态">
+                  <Option value="Yes">Yes</Option>
+                  <Option value="No">No</Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item
-                name="snapshot_date"
-                label="快照日期"
-                rules={[{ required: true, message: '请选择快照日期' }]}
-              >
-                <DatePicker style={{ width: '100%' }} />
+              <Form.Item name="afn-listing-exists" label="AFN Listing">
+                <Select placeholder="选择AFN Listing状态">
+                  <Option value="Yes">Yes</Option>
+                  <Option value="No">No</Option>
+                </Select>
               </Form.Item>
             </Col>
           </Row>
@@ -878,14 +970,6 @@ const FbaInventory: React.FC = () => {
           onFinish={handleImport}
         >
           <Form.Item
-            name="snapshot_date"
-            label="快照日期"
-            rules={[{ required: true, message: '请选择快照日期' }]}
-          >
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-
-          <Form.Item
             name="file"
             label="Excel文件"
             rules={[{ required: true, message: '请选择Excel文件' }]}
@@ -901,9 +985,10 @@ const FbaInventory: React.FC = () => {
 
           <Form.Item>
             <Text type="secondary">
-              Excel文件应包含以下列：SKU, ASIN, FNSKU, Product Name, Marketplace, Country, 
-              Fulfillment Center, Available, Inbound Working, Inbound Shipped, Inbound Receiving, 
-              Reserved, Unfulfillable, Total
+              Excel文件应包含以下列：SKU, ASIN, FNSKU, Product Name, Condition, Your Price, 
+              Site, Store, AFN Fulfillable, AFN Warehouse, AFN Reserved, AFN Unsellable, AFN Total, 
+              AFN Inbound Working, AFN Inbound Shipped, AFN Inbound Receiving, Per Unit Volume, 
+              MFN Listing Exists, AFN Listing Exists
             </Text>
           </Form.Item>
 

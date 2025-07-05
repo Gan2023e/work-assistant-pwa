@@ -97,10 +97,10 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
     }
   });
 } else {
-  // 兜底配置
-  console.log('⚠️ No database configuration found, using defaults');
+  // 兜底配置 - 连接到first_database
+  console.log('⚠️ No database configuration found, using defaults for first_database');
   sequelize = new Sequelize(
-    'work_assistant',
+    'first_database',
     'root',
     '',
     {

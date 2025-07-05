@@ -9,91 +9,142 @@ const FbaInventory = sequelize.define('FbaInventory', {
     comment: 'FBA库存ID'
   },
   sku: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(32),
     allowNull: false,
     comment: 'SKU编码'
   },
-  asin: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: 'ASIN编码'
-  },
   fnsku: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(32),
     allowNull: true,
     comment: 'FNSKU编码'
   },
-  product_name: {
-    type: DataTypes.STRING,
+  asin: {
+    type: DataTypes.STRING(32),
+    allowNull: true,
+    comment: 'ASIN编码'
+  },
+  'product-name': {
+    type: DataTypes.STRING(200),
     allowNull: true,
     comment: '产品名称'
   },
-  marketplace: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: '市场站点'
-  },
-  country: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: '国家'
-  },
-  fulfillment_center: {
-    type: DataTypes.STRING,
+  condition: {
+    type: DataTypes.STRING(32),
     allowNull: true,
-    comment: '履约中心'
+    comment: '商品状态'
   },
-  available_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '可用数量'
-  },
-  inbound_working_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '入库处理中数量'
-  },
-  inbound_shipped_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '入库运输中数量'
-  },
-  inbound_receiving_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '入库接收中数量'
-  },
-  reserved_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '预留数量'
-  },
-  unfulfillable_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '不可售数量'
-  },
-  total_quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: '总数量'
-  },
-  last_updated: {
-    type: DataTypes.DATE,
+  'your-price': {
+    type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
-    comment: '最后更新时间'
+    comment: '售价'
   },
-  snapshot_date: {
-    type: DataTypes.DATEONLY,
+  'mfn-listing-exists': {
+    type: DataTypes.STRING(32),
+    allowNull: true,
+    comment: 'MFN Listing是否存在'
+  },
+  'mfn-fulfillable-quantity': {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'MFN可售数量'
+  },
+  'afn-listing-exists': {
+    type: DataTypes.STRING(32),
+    allowNull: true,
+    comment: 'AFN Listing是否存在'
+  },
+  'afn-warehouse-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN仓库数量'
+  },
+  'afn-fulfillable-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN可售数量'
+  },
+  'afn-unsellable-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN不可售数量'
+  },
+  'afn-reserved-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN预留数量'
+  },
+  'afn-total-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN总数量'
+  },
+  'per-unit-volume': {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: '单位体积'
+  },
+  'afn-inbound-working-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN入库处理中数量'
+  },
+  'afn-inbound-shipped-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN入库运输中数量'
+  },
+  'afn-inbound-receiving-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN入库接收中数量'
+  },
+  'afn-researching-quantity': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN研究中数量'
+  },
+  'afn-reserved-future-supply': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN预留未来供应'
+  },
+  'afn-future-supply-buyable': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN未来供应可购买'
+  },
+  site: {
+    type: DataTypes.STRING(32),
     allowNull: false,
-    comment: '快照日期'
+    comment: '站点'
+  },
+  'afn-fulfillable-quantity-local': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN本地可售数量'
+  },
+  'afn-fulfillable-quantity-remote': {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'AFN远程可售数量'
+  },
+  store: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    comment: '店铺'
   },
   created_at: {
     type: DataTypes.DATE,
@@ -117,20 +168,16 @@ const FbaInventory = sequelize.define('FbaInventory', {
     },
     {
       unique: false,
-      fields: ['marketplace']
+      fields: ['site']
     },
     {
       unique: false,
-      fields: ['country']
-    },
-    {
-      unique: false,
-      fields: ['snapshot_date']
+      fields: ['store']
     },
     {
       unique: true,
-      fields: ['sku', 'marketplace', 'snapshot_date'],
-      name: 'unique_sku_marketplace_snapshot'
+      fields: ['sku', 'site'],
+      name: 'unique_sku_site'
     }
   ]
 });
