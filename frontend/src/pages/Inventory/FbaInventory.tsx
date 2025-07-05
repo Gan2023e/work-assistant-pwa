@@ -44,7 +44,6 @@ const { RangePicker } = DatePicker;
 
 // 根据实际数据库表结构定义接口
 interface FbaInventoryRecord {
-  id?: number;
   sku: string;
   fnsku?: string;
   asin?: string;
@@ -70,8 +69,6 @@ interface FbaInventoryRecord {
   'afn-fulfillable-quantity-local'?: number;
   'afn-fulfillable-quantity-remote'?: number;
   store?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 interface FbaInventoryStats {
@@ -409,7 +406,7 @@ const FbaInventory: React.FC = () => {
           </Button>
           <Popconfirm
             title="确定要删除这条记录吗？"
-            onConfirm={() => handleDelete(record.id!)}
+                          onConfirm={() => handleDelete(record)}
             okText="确定"
             cancelText="取消"
           >
@@ -453,9 +450,9 @@ const FbaInventory: React.FC = () => {
   // 保存记录
   const handleSave = async (values: any) => {
     try {
-      const url = editingRecord 
-        ? `${API_BASE_URL}/api/fba-inventory/${editingRecord.id}`
-        : `${API_BASE_URL}/api/fba-inventory`;
+              const url = editingRecord 
+          ? `${API_BASE_URL}/api/fba-inventory/${editingRecord.sku}/${editingRecord.site}`
+          : `${API_BASE_URL}/api/fba-inventory`;
       
       const method = editingRecord ? 'PUT' : 'POST';
 
@@ -489,10 +486,10 @@ const FbaInventory: React.FC = () => {
     }
   };
 
-  // 删除记录
-  const handleDelete = async (id: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/${id}`, {
+      // 删除记录
+    const handleDelete = async (record: FbaInventoryRecord) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/fba-inventory/${record.sku}/${record.site}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -622,9 +619,7 @@ const FbaInventory: React.FC = () => {
         '入库接收中': record['afn-inbound-receiving-quantity'],
         '单位体积': record['per-unit-volume'],
         'MFN Listing': record['mfn-listing-exists'],
-        'AFN Listing': record['afn-listing-exists'],
-        '创建时间': record.created_at,
-        '更新时间': record.updated_at
+        'AFN Listing': record['afn-listing-exists']
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -780,7 +775,7 @@ const FbaInventory: React.FC = () => {
       <Table
         columns={columns}
         dataSource={records}
-        rowKey="id"
+        rowKey="sku"
         loading={loading}
         pagination={{
           ...pagination,

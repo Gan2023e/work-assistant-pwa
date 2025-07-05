@@ -3,6 +3,61 @@ const router = express.Router();
 const { FbaInventory } = require('../models');
 const { Op } = require('sequelize');
 
+// 测试端点 - 检查数据库连接和表结构
+router.get('/test', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 测试FBA库存数据库连接');
+  
+  try {
+    // 测试数据库连接
+    await FbaInventory.sequelize.authenticate();
+    console.log('\x1b[32m%s\x1b[0m', '✅ 数据库连接成功');
+    
+    // 检查表是否存在
+    const tableExists = await FbaInventory.sequelize.getQueryInterface().showAllTables();
+    console.log('\x1b[33m%s\x1b[0m', '📋 数据库中的表:', tableExists);
+    
+    // 检查fba_inventory表结构
+    let tableInfo = null;
+    try {
+      tableInfo = await FbaInventory.sequelize.getQueryInterface().describeTable('fba_inventory');
+      console.log('\x1b[33m%s\x1b[0m', '📊 fba_inventory表结构:', Object.keys(tableInfo));
+    } catch (error) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ fba_inventory表不存在:', error.message);
+    }
+    
+    // 尝试查询记录数量
+    let count = 0;
+    let sampleData = [];
+    try {
+      count = await FbaInventory.count();
+      sampleData = await FbaInventory.findAll({ limit: 3, raw: true });
+      console.log('\x1b[33m%s\x1b[0m', `📦 表中记录数量: ${count}`);
+      console.log('\x1b[33m%s\x1b[0m', '📋 示例数据:', sampleData);
+    } catch (error) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ 查询数据失败:', error.message);
+    }
+    
+    res.json({
+      success: true,
+      message: '数据库连接测试完成',
+      data: {
+        connection: 'success',
+        tables: tableExists,
+        fba_inventory_structure: tableInfo,
+        record_count: count,
+        sample_data: sampleData
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 数据库连接测试失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '数据库连接失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取FBA库存列表
 router.get('/', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA库存查询请求');
@@ -15,8 +70,8 @@ router.get('/', async (req, res) => {
       site, 
       store,
       condition,
-      sort_by = 'updated_at',
-      sort_order = 'DESC'
+      sort_by = 'sku',
+      sort_order = 'ASC'
     } = req.query;
 
     // 构建查询条件
@@ -85,7 +140,7 @@ router.get('/stats', async (req, res) => {
     const siteStats = await FbaInventory.findAll({
       attributes: [
         'site',
-        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'sku_count'],
+        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('sku')), 'sku_count'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
@@ -99,7 +154,7 @@ router.get('/stats', async (req, res) => {
     const storeStats = await FbaInventory.findAll({
       attributes: [
         'store',
-        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'sku_count'],
+        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('sku')), 'sku_count'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
@@ -112,7 +167,7 @@ router.get('/stats', async (req, res) => {
     // 总体统计
     const totalStats = await FbaInventory.findOne({
       attributes: [
-        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('id')), 'total_skus'],
+        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('sku')), 'total_skus'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
         [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
@@ -157,7 +212,8 @@ router.get('/sites-stores', async (req, res) => {
       attributes: ['store'],
       where: {
         store: {
-          [Op.ne]: null
+          [Op.ne]: null,
+          [Op.ne]: ''
         }
       },
       group: ['store'],
@@ -218,7 +274,7 @@ router.post('/', async (req, res) => {
     // 创建新记录
     const newRecord = await FbaInventory.create(inventoryData);
     
-    console.log('\x1b[33m%s\x1b[0m', '✅ 创建FBA库存记录成功:', newRecord.id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 创建FBA库存记录成功:', `${newRecord.sku}-${newRecord.site}`);
     
     res.json({
       code: 0,
@@ -235,16 +291,18 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 更新FBA库存记录
-router.put('/:id', async (req, res) => {
+// 更新FBA库存记录 - 使用复合主键
+router.put('/:sku/:site', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '📝 收到更新FBA库存请求');
   
   try {
-    const { id } = req.params;
+    const { sku, site } = req.params;
     const inventoryData = req.body;
     
     // 查找要更新的记录
-    const record = await FbaInventory.findByPk(id);
+    const record = await FbaInventory.findOne({
+      where: { sku, site }
+    });
     
     if (!record) {
       return res.status(404).json({
@@ -254,15 +312,13 @@ router.put('/:id', async (req, res) => {
     }
 
     // 如果更新了SKU或站点，检查是否与其他记录冲突
-    if ((inventoryData.sku && inventoryData.sku !== record.sku) || 
-        (inventoryData.site && inventoryData.site !== record.site)) {
+    if ((inventoryData.sku && inventoryData.sku !== sku) || 
+        (inventoryData.site && inventoryData.site !== site)) {
       const existingRecord = await FbaInventory.findOne({
         where: {
-          sku: inventoryData.sku || record.sku,
-          site: inventoryData.site || record.site,
-          id: {
-            [Op.ne]: id
-          }
+          sku: inventoryData.sku || sku,
+          site: inventoryData.site || site,
+          [Op.not]: { sku, site }
         }
       });
 
@@ -277,7 +333,7 @@ router.put('/:id', async (req, res) => {
     // 更新记录
     await record.update(inventoryData);
     
-    console.log('\x1b[33m%s\x1b[0m', '✅ 更新FBA库存记录成功:', id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 更新FBA库存记录成功:', `${sku}-${site}`);
     
     res.json({
       code: 0,
@@ -294,15 +350,17 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// 删除FBA库存记录
-router.delete('/:id', async (req, res) => {
+// 删除FBA库存记录 - 使用复合主键
+router.delete('/:sku/:site', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到删除FBA库存请求');
   
   try {
-    const { id } = req.params;
+    const { sku, site } = req.params;
     
     // 查找要删除的记录
-    const record = await FbaInventory.findByPk(id);
+    const record = await FbaInventory.findOne({
+      where: { sku, site }
+    });
     
     if (!record) {
       return res.status(404).json({
@@ -314,7 +372,7 @@ router.delete('/:id', async (req, res) => {
     // 删除记录
     await record.destroy();
     
-    console.log('\x1b[33m%s\x1b[0m', '✅ 删除FBA库存记录成功:', id);
+    console.log('\x1b[33m%s\x1b[0m', '✅ 删除FBA库存记录成功:', `${sku}-${site}`);
     
     res.json({
       code: 0,
