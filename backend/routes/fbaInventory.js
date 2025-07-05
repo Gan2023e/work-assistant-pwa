@@ -420,35 +420,50 @@ router.get('/generate-shein-sync', async (req, res) => {
     const precode = ''; // 可以根据需要设置排除的前缀
     
     console.log('\x1b[36m%s\x1b[0m', `🔧 查询条件: country="${country}", 排除FBAXB362%, ${precode ? `排除${precode}%` : '无额外前缀排除'}`);
+    console.log('\x1b[36m%s\x1b[0m', '🎯 优化逻辑: 保证SHEIN SKU全显示，一对多映射时优先选择有FBA库存的记录');
     
     const sqlQuery = `
       SELECT 
-        c.SKU as shein_sku, 
-        COALESCE(d.\`afn-fulfillable-quantity\`, 0) AS afn_quantity,
-        c.amz_sku,
-        c.卖家SKU as seller_sku,
+        final.SKU as shein_sku, 
+        COALESCE(final.\`afn-fulfillable-quantity\`, 0) AS afn_quantity,
+        final.amz_sku,
+        final.卖家SKU as seller_sku,
         CASE 
-          WHEN c.amz_sku IS NULL THEN '未找到AMZ SKU映射'
-          WHEN d.sku IS NULL THEN '未找到FBA库存'
+          WHEN final.amz_sku IS NULL THEN '未找到AMZ SKU映射'
+          WHEN final.\`afn-fulfillable-quantity\` IS NULL THEN '未找到FBA库存'
           ELSE '正常同步'
         END as remark
       FROM (
         SELECT 
-          a.SKU, 
-          a.卖家SKU, 
-          b.amz_sku 
-        FROM \`shein产品信息\` a 
-        LEFT JOIN (
-          SELECT * 
-          FROM \`pbi_amzsku_sku\` 
-          WHERE \`country\` = '${country}' 
-            AND \`amz_sku\` NOT LIKE 'FBAXB362%'
-            ${precode ? `AND \`amz_sku\` NOT LIKE '${precode}%'` : ''}
-        ) b ON SUBSTRING(a.\`卖家SKU\`, 3) = b.\`local_sku\` 
-        ORDER BY a.\`卖家SKU\` ASC
-      ) c 
-      LEFT JOIN \`fba_inventory\` d ON c.\`amz_sku\` = d.\`sku\`  
-      ORDER BY d.\`afn-fulfillable-quantity\` ASC
+          ranked.SKU,
+          ranked.卖家SKU,
+          ranked.amz_sku,
+          ranked.\`afn-fulfillable-quantity\`,
+          ROW_NUMBER() OVER (
+            PARTITION BY ranked.SKU 
+            ORDER BY 
+              CASE WHEN ranked.\`afn-fulfillable-quantity\` IS NOT NULL THEN 1 ELSE 2 END,
+              ranked.\`afn-fulfillable-quantity\` DESC
+          ) as rn
+        FROM (
+          SELECT 
+            a.SKU, 
+            a.卖家SKU, 
+            b.amz_sku,
+            f.\`afn-fulfillable-quantity\`
+          FROM \`shein产品信息\` a 
+          LEFT JOIN (
+            SELECT * 
+            FROM \`pbi_amzsku_sku\` 
+            WHERE \`country\` = '${country}' 
+              AND \`amz_sku\` NOT LIKE 'FBAXB362%'
+              ${precode ? `AND \`amz_sku\` NOT LIKE '${precode}%'` : ''}
+          ) b ON SUBSTRING(a.\`卖家SKU\`, 3) = b.\`local_sku\`
+          LEFT JOIN \`fba_inventory\` f ON b.\`amz_sku\` = f.\`sku\`
+        ) ranked
+      ) final
+      WHERE final.rn = 1
+      ORDER BY final.\`afn-fulfillable-quantity\` ASC
     `;
 
     const [results] = await sequelize.query(sqlQuery);
@@ -493,7 +508,7 @@ router.get('/generate-shein-sync', async (req, res) => {
       有库存产品数: results.filter(row => parseInt(row.afn_quantity) > 0).length,
       同步文件记录数: syncData.length,
       处理时间: `${processingTime}ms (${(processingTime / 1000).toFixed(2)}s)`,
-      查询优化: '参考用户SQL，排除FBAXB362%前缀，按库存升序排列'
+      查询优化: '窗口函数ROW_NUMBER()处理一对多映射，优先选择有FBA库存的记录'
     };
 
     console.log('\x1b[33m%s\x1b[0m', '📊 SHEIN库存同步统计:', stats);
