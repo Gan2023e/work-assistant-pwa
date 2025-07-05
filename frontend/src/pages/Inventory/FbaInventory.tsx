@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, 
   Button, 
@@ -123,7 +123,7 @@ const FbaInventory: React.FC = () => {
   const [stores, setStores] = useState<string[]>([]);
 
   // 加载数据
-  const fetchData = async (page: number = 1, pageSize: number = 20) => {
+  const fetchData = useCallback(async (page: number = 1, pageSize: number = 20) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -160,10 +160,10 @@ const FbaInventory: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchFilters]);
 
   // 加载统计数据
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/fba-inventory/stats`, {
         headers: {
@@ -183,10 +183,10 @@ const FbaInventory: React.FC = () => {
     } catch (error) {
       console.error('获取统计数据失败:', error);
     }
-  };
+  }, []);
 
   // 加载站点和店铺列表
-  const fetchSitesAndStores = async () => {
+  const fetchSitesAndStores = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/fba-inventory/sites-stores`, {
         headers: {
@@ -207,14 +207,14 @@ const FbaInventory: React.FC = () => {
     } catch (error) {
       console.error('获取站点和店铺列表失败:', error);
     }
-  };
+  }, []);
 
   // 初始化数据
   useEffect(() => {
     fetchData();
     fetchStats();
     fetchSitesAndStores();
-  }, []);
+  }, [fetchData, fetchStats, fetchSitesAndStores]);
 
   // 表格列定义 - 根据实际数据库字段重新设计
   const columns: ColumnsType<FbaInventoryRecord> = [
@@ -275,7 +275,7 @@ const FbaInventory: React.FC = () => {
       key: 'your-price',
       width: 100,
       align: 'right',
-      render: (value) => value ? `$${value.toFixed(2)}` : '-'
+      render: (value) => value ? `$${Number(value).toFixed(2)}` : '-'
     },
     {
       title: '站点',
@@ -367,7 +367,7 @@ const FbaInventory: React.FC = () => {
       key: 'per-unit-volume',
       width: 100,
       align: 'right',
-      render: (value) => value ? `${value.toFixed(2)}` : '-'
+      render: (value) => value ? `${Number(value).toFixed(2)}` : '-'
     },
     {
       title: 'MFN Listing',

@@ -3,61 +3,6 @@ const router = express.Router();
 const { FbaInventory } = require('../models');
 const { Op } = require('sequelize');
 
-// 测试端点 - 检查数据库连接和表结构
-router.get('/test', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 测试FBA库存数据库连接');
-  
-  try {
-    // 测试数据库连接
-    await FbaInventory.sequelize.authenticate();
-    console.log('\x1b[32m%s\x1b[0m', '✅ 数据库连接成功');
-    
-    // 检查表是否存在
-    const tableExists = await FbaInventory.sequelize.getQueryInterface().showAllTables();
-    console.log('\x1b[33m%s\x1b[0m', '📋 数据库中的表:', tableExists);
-    
-    // 检查fba_inventory表结构
-    let tableInfo = null;
-    try {
-      tableInfo = await FbaInventory.sequelize.getQueryInterface().describeTable('fba_inventory');
-      console.log('\x1b[33m%s\x1b[0m', '📊 fba_inventory表结构:', Object.keys(tableInfo));
-    } catch (error) {
-      console.log('\x1b[31m%s\x1b[0m', '❌ fba_inventory表不存在:', error.message);
-    }
-    
-    // 尝试查询记录数量
-    let count = 0;
-    let sampleData = [];
-    try {
-      count = await FbaInventory.count();
-      sampleData = await FbaInventory.findAll({ limit: 3, raw: true });
-      console.log('\x1b[33m%s\x1b[0m', `📦 表中记录数量: ${count}`);
-      console.log('\x1b[33m%s\x1b[0m', '📋 示例数据:', sampleData);
-    } catch (error) {
-      console.log('\x1b[31m%s\x1b[0m', '❌ 查询数据失败:', error.message);
-    }
-    
-    res.json({
-      success: true,
-      message: '数据库连接测试完成',
-      data: {
-        connection: 'success',
-        tables: tableExists,
-        fba_inventory_structure: tableInfo,
-        record_count: count,
-        sample_data: sampleData
-      }
-    });
-  } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 数据库连接测试失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '数据库连接失败',
-      error: error.message
-    });
-  }
-});
-
 // 获取FBA库存列表
 router.get('/', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA库存查询请求');
