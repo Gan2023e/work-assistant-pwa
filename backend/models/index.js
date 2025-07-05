@@ -16,6 +16,7 @@ const ShipmentRecord = require('./ShipmentRecord');
 const ShipmentItem = require('./ShipmentItem');
 const OrderShipmentRelation = require('./OrderShipmentRelation');
 const FbaInventory = require('./FbaInventory');
+const SheinProduct = require('./SheinProduct');
 
 // 设置模型关联关系
 
@@ -69,5 +70,6 @@ module.exports = {
   ShipmentRecord,
   ShipmentItem,
   OrderShipmentRelation,
-  FbaInventory
+  FbaInventory,
+  SheinProduct
 };

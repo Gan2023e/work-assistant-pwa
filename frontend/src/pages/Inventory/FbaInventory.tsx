@@ -636,6 +636,55 @@ const FbaInventory: React.FC = () => {
     }
   };
 
+  // 生成SHEIN库存同步文件
+  const handleGenerateSheinSync = async () => {
+    try {
+      message.loading('正在生成SHEIN库存同步文件...', 0);
+      
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/generate-shein-sync`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      message.destroy();
+
+      if (!response.ok) {
+        const errorResult = await response.json();
+        throw new Error(errorResult.message || `HTTP ${response.status}`);
+      }
+
+      // 获取文件名
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'SHEIN库存同步.xlsx';
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
+        }
+      }
+
+      // 下载文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      message.success('SHEIN库存同步文件生成成功');
+    } catch (error) {
+      message.destroy();
+      console.error('生成SHEIN库存同步文件失败:', error);
+      message.error(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>
@@ -721,6 +770,16 @@ const FbaInventory: React.FC = () => {
             }}
           >
             刷新
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="primary"
+            icon={<FileExcelOutlined />}
+            onClick={handleGenerateSheinSync}
+            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+          >
+            生成SHEIN库存同步文件
           </Button>
         </Col>
       </Row>
