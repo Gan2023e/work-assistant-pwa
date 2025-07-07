@@ -398,14 +398,14 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'sku',
       key: 'sku',
       width: 120,
-      render: (text: string) => <Text code>{text}</Text>
+      render: (text: string) => <Text>{text}</Text>
     },
     {
       title: 'Amazon SKU',
       dataIndex: 'amz_sku',
       key: 'amz_sku',
       width: 120,
-      render: (text: string) => <Text code>{text}</Text>
+      render: (text: string) => <Text>{text}</Text>
     },
     {
       title: '需求数量',

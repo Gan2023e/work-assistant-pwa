@@ -53,8 +53,8 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       key: 'shipping',
       label: '发货管理',
       children: [
-        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
         { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
+        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
         { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
       ],
     },
@@ -192,8 +192,8 @@ const AppContent: React.FC = () => {
       label: getMenuLabel('发货管理', openKeys.includes('shipping')),
       key: 'shipping',
       children: [
-        { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
         { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
+        { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
         { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
       ],
     },
