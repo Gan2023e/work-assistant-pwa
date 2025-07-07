@@ -236,6 +236,19 @@ interface LogisticsInvoiceConfig {
   countries?: string[];
 }
 
+// 新增：出库记录项接口
+interface OutboundItem {
+  sku: string;
+  total_quantity: number;
+  total_boxes?: number;
+  country: string;
+  marketplace: string;
+  is_mixed_box: boolean;
+  original_mix_box_num?: string;
+  order_item_id?: number;
+  need_num?: string;
+}
+
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -2447,57 +2460,110 @@ const ShippingPage: React.FC = () => {
                       return;
                     }
                     
-                    // 第一步：记录出库信息
+                    // 第一步：记录出库信息（合并混合箱和整箱数据）
                     let stepMessage = message.loading('第1步：正在记录出库信息...', 0);
                     
-                    let hasProcessedOutbound = false;
+                    // 准备合并的出库数据数组
+                    const allOutboundItems: OutboundItem[] = [];
                     
-                    // 如果有确认的混合箱数据，优先使用
+                    // 处理混合箱数据
                     if (confirmedMixedBoxes.length > 0) {
-                      console.log('📦 使用混合箱数据进行出库记录:', confirmedMixedBoxes);
-                      await recordOutbound(confirmedMixedBoxes, true, logisticsProvider);
-                      hasProcessedOutbound = true;
-                    }
-                    
-                    // 如果有确认的整箱数据，使用整箱方式记录
-                    if (confirmedWholeBoxes.length > 0) {
-                      console.log('📦 使用整箱数据进行出库记录:', confirmedWholeBoxes);
-                      await recordOutbound(confirmedWholeBoxes, false, logisticsProvider);
-                      hasProcessedOutbound = true;
-                    }
-                    
-                    // 如果没有确认的箱数据，但有发货数据，则使用发货数据创建出库记录
-                    if (!hasProcessedOutbound && confirmedMixedBoxes.length === 0 && confirmedWholeBoxes.length === 0) {
-                      console.log('📦 使用发货数据进行出库记录:', shippingData);
-                      
-                      // 将shippingData转换为出库记录格式
-                      const outboundItems = shippingData.map(item => {
-                        const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
-                        console.log(`🔍 转换发货数据 - SKU: ${item.amz_sku}, 找到的记录:`, selectedRecord);
-                        
-                        return {
-                          box_num: item.box_num,
-                          sku: selectedRecord?.local_sku || item.amz_sku,
-                          amz_sku: item.amz_sku,
-                          quantity: item.quantity
-                        };
+                      console.log('📦 添加混合箱数据到出库记录:', confirmedMixedBoxes);
+                      confirmedMixedBoxes.forEach(mixedItem => {
+                        const selectedRecord = selectedRows.find(row => row.amz_sku === mixedItem.amz_sku);
+                        allOutboundItems.push({
+                          sku: selectedRecord?.local_sku || mixedItem.sku,
+                          total_quantity: mixedItem.quantity,
+                          country: selectedRecord?.country || '美国',
+                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
+                          is_mixed_box: true,
+                          original_mix_box_num: mixedItem.box_num,
+                          order_item_id: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num
+                        });
                       });
-                      
-                      console.log('📋 转换后的出库数据:', outboundItems);
-                      await recordOutbound(outboundItems, true, logisticsProvider);
-                      hasProcessedOutbound = true;
                     }
                     
-                    message.destroy();
+                    // 处理整箱数据
+                    if (confirmedWholeBoxes.length > 0) {
+                      console.log('📦 添加整箱数据到出库记录:', confirmedWholeBoxes);
+                      confirmedWholeBoxes.forEach(wholeItem => {
+                        const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amz_sku);
+                        allOutboundItems.push({
+                          sku: selectedRecord?.local_sku || wholeItem.amz_sku,
+                          total_quantity: wholeItem.confirm_quantity,
+                          total_boxes: wholeItem.confirm_boxes,
+                          country: selectedRecord?.country || '美国',
+                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
+                          is_mixed_box: false,
+                          order_item_id: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num
+                        });
+                      });
+                    }
                     
-                    if (!hasProcessedOutbound) {
-                      console.log('⚠️ 没有执行任何出库记录操作');
+                    // 如果没有确认的箱数据，使用发货数据
+                    if (allOutboundItems.length === 0 && shippingData.length > 0) {
+                      console.log('📦 使用发货数据进行出库记录:', shippingData);
+                      shippingData.forEach(item => {
+                        const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+                        allOutboundItems.push({
+                          sku: selectedRecord?.local_sku || item.amz_sku,
+                          total_quantity: item.quantity,
+                          country: selectedRecord?.country || '美国',
+                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
+                          is_mixed_box: true, // 默认按混合箱处理
+                          original_mix_box_num: item.box_num,
+                          order_item_id: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num
+                        });
+                      });
+                    }
+                    
+                    if (allOutboundItems.length === 0) {
+                      console.log('⚠️ 没有找到需要记录的出库数据');
                       message.warning('没有找到需要记录的出库数据');
                       return;
                     }
                     
-                    console.log('✅ 出库记录处理完成');
-                    message.success('✅ 发货完成！出库记录已成功创建', 2);
+                    // 一次性创建所有出库记录
+                    console.log('📋 准备创建出库记录，总计:', allOutboundItems.length);
+                    const requestBody = {
+                      shipments: allOutboundItems,
+                      operator: '申报出库',
+                      shipping_method: selectedRows[0]?.shipping_method || '',
+                      logistics_provider: logisticsProvider || '',
+                      remark: `批量发货 - ${new Date().toLocaleString('zh-CN')}`
+                    };
+                    
+                    console.log('📋 完整的请求体:', requestBody);
+
+                    const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                      },
+                      body: JSON.stringify(requestBody),
+                    });
+
+                    const result = await response.json();
+                    console.log('📋 后端返回的结果:', result);
+                    
+                    message.destroy();
+                    
+                    if (result.code === 0) {
+                      console.log('✅ 出库记录创建成功:', result.data);
+                      if (result.data && result.data.shipment_number) {
+                        message.success(`✅ 发货完成！发货单号: ${result.data.shipment_number}`, 3);
+                      } else {
+                        message.success('✅ 发货完成！出库记录已成功创建', 3);
+                      }
+                    } else {
+                      console.error('❌ 出库记录失败:', result.message);
+                      message.error(`出库记录失败: ${result.message}`);
+                      return;
+                    }
                     
                     // 清理状态并关闭对话框
                     console.log('🔄 清理状态并关闭对话框');

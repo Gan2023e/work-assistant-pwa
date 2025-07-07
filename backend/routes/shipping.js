@@ -970,7 +970,7 @@ router.get('/merged-data', async (req, res) => {
     });
 
     // 5. 处理发货需求，与库存信息合并
-    const mergedFromNeeds = needsData.map(need => {
+    const mergedFromNeeds = await Promise.all(needsData.map(async need => {
       const key = `${need.sku}_${need.country}`;
       const inventoryInfo = inventoryMap.get(key) || {
         local_sku: '',
@@ -980,27 +980,37 @@ router.get('/merged-data', async (req, res) => {
         total_available: 0
       };
 
+      // 查询已发货数量
+      const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
+        where: { order_item_id: need.record_num }
+      }) || 0;
+
+      // 计算剩余需求数量
+      const remainingQuantity = (need.ori_quantity || 0) - shippedQuantity;
+
       return {
         record_num: need.record_num,
         need_num: need.need_num || '',
         amz_sku: need.sku || '',
         local_sku: inventoryInfo.local_sku,
-        quantity: need.ori_quantity || 0,
+        quantity: remainingQuantity, // 修改：使用剩余数量而不是原始数量
+        original_quantity: need.ori_quantity || 0, // 新增：保留原始数量用于显示
+        shipped_quantity: shippedQuantity, // 新增：已发货数量
         shipping_method: need.shipping_method || '',
         marketplace: need.marketplace || '',
         country: need.country || '',
-        status: need.status || '待发货',
+        status: remainingQuantity <= 0 ? '已发货' : (need.status || '待发货'), // 修改：根据剩余数量更新状态
         created_at: need.create_date || new Date().toISOString(),
         // 库存信息
         whole_box_quantity: inventoryInfo.whole_box_quantity,
         whole_box_count: inventoryInfo.whole_box_count,
         mixed_box_quantity: inventoryInfo.mixed_box_quantity,
         total_available: inventoryInfo.total_available,
-        // 计算缺货情况
-        shortage: Math.max(0, (need.ori_quantity || 0) - inventoryInfo.total_available),
+        // 计算缺货情况（基于剩余需求数量）
+        shortage: Math.max(0, remainingQuantity - inventoryInfo.total_available),
         data_source: 'need' // 标记数据来源
       };
-    });
+    }));
 
     // 6. 处理有库存但无需求的记录
     const needsAmzSkuSet = new Set(needsData.map(need => `${need.sku}_${need.country}`));
