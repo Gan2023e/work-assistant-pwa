@@ -14,7 +14,8 @@ import {
   DatePicker,
   Popconfirm,
   Typography,
-  Tooltip
+  Tooltip,
+  Statistic
 } from 'antd';
 import type { TableProps } from 'antd';
 import { 
@@ -79,6 +80,12 @@ const ShipmentHistoryPage: React.FC = () => {
     operator: '',
     date_range: null
   });
+
+  // 发货详情相关状态
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [selectedShipmentId, setSelectedShipmentId] = useState<number | null>(null);
+  const [shipmentDetails, setShipmentDetails] = useState<any>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   // 获取发货历史数据
   const fetchShipmentHistory = async (page = 1, pageSize = 20) => {
@@ -327,8 +334,9 @@ const ShipmentHistoryPage: React.FC = () => {
               size="small" 
               icon={<EyeOutlined />}
               onClick={() => {
-  
-                message.info('查看详情功能待实现');
+                setSelectedShipmentId(record.shipment_id);
+                setDetailsModalVisible(true);
+                fetchShipmentDetails(record.shipment_id);
               }}
             />
           </Tooltip>
@@ -348,6 +356,37 @@ const ShipmentHistoryPage: React.FC = () => {
       disabled: false,
       name: record.shipment_number,
     }),
+  };
+
+  // 获取发货详情
+  const fetchShipmentDetails = async (shipmentId: number) => {
+    setDetailsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/shipment-history/${shipmentId}/details`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setShipmentDetails(result.data);
+      } else {
+        message.error(result.message || '获取发货详情失败');
+      }
+    } catch (error) {
+      console.error('获取发货详情失败:', error);
+      message.error('获取发货详情失败，请检查网络连接');
+    } finally {
+      setDetailsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -478,6 +517,149 @@ const ShipmentHistoryPage: React.FC = () => {
           }}
         />
       </Card>
+
+             {/* 发货详情模态框 */}
+       <Modal
+         visible={detailsModalVisible}
+         onCancel={() => {
+           setDetailsModalVisible(false);
+           setShipmentDetails(null);
+           setSelectedShipmentId(null);
+         }}
+         footer={null}
+         width={1000}
+         title={`发货详情 - ${shipmentDetails?.shipment_record?.shipment_number || '加载中...'}`}
+       >
+         {detailsLoading ? (
+           <div style={{ textAlign: 'center', padding: '50px' }}>
+             <Text>正在加载发货详情...</Text>
+           </div>
+         ) : shipmentDetails ? (
+           <div>
+             {/* 基本信息 */}
+             <Card title="基本信息" size="small" style={{ marginBottom: 16 }}>
+               <Row gutter={16}>
+                 <Col span={8}>
+                   <Text strong>发货单号：</Text>
+                   <Text copyable>{shipmentDetails.shipment_record.shipment_number}</Text>
+                 </Col>
+                 <Col span={8}>
+                   <Text strong>状态：</Text>
+                   <Tag color={getStatusColor(shipmentDetails.shipment_record.status)}>
+                     {shipmentDetails.shipment_record.status}
+                   </Tag>
+                 </Col>
+                 <Col span={8}>
+                   <Text strong>物流商：</Text>
+                   <Text>{shipmentDetails.shipment_record.logistics_provider || '-'}</Text>
+                 </Col>
+               </Row>
+               <Row gutter={16} style={{ marginTop: 8 }}>
+                 <Col span={8}>
+                   <Text strong>操作员：</Text>
+                   <Text>{shipmentDetails.shipment_record.operator}</Text>
+                 </Col>
+                 <Col span={8}>
+                   <Text strong>运输方式：</Text>
+                   <Text>{shipmentDetails.shipment_record.shipping_method || '-'}</Text>
+                 </Col>
+                 <Col span={8}>
+                   <Text strong>创建时间：</Text>
+                   <Text>{new Date(shipmentDetails.shipment_record.created_at).toLocaleString('zh-CN')}</Text>
+                 </Col>
+               </Row>
+               {shipmentDetails.shipment_record.remark && (
+                 <Row style={{ marginTop: 8 }}>
+                   <Col span={24}>
+                     <Text strong>备注：</Text>
+                     <Text>{shipmentDetails.shipment_record.remark}</Text>
+                   </Col>
+                 </Row>
+               )}
+             </Card>
+             
+             {/* 统计汇总 */}
+             <Card title="发货汇总" size="small" style={{ marginBottom: 16 }}>
+               <Row gutter={16}>
+                 <Col span={6}>
+                   <Statistic title="需求单数" value={shipmentDetails.summary.total_need_orders} />
+                 </Col>
+                 <Col span={6}>
+                   <Statistic title="SKU数量" value={shipmentDetails.summary.total_sku_count} />
+                 </Col>
+                 <Col span={6}>
+                   <Statistic title="发货数量" value={`${shipmentDetails.summary.total_shipped}/${shipmentDetails.summary.total_requested}`} />
+                 </Col>
+                 <Col span={6}>
+                   <Statistic 
+                     title="完成率" 
+                     value={shipmentDetails.summary.overall_completion_rate} 
+                     suffix="%" 
+                     valueStyle={{ color: shipmentDetails.summary.overall_completion_rate === 100 ? '#3f8600' : '#faad14' }}
+                   />
+                 </Col>
+               </Row>
+             </Card>
+             
+             {/* 发货明细 */}
+             <Card title="发货明细" size="small">
+               <Table
+                 dataSource={shipmentDetails.shipment_items}
+                 columns={[
+                   { title: '需求单号', dataIndex: 'need_num', key: 'need_num', width: 120 },
+                   { title: '本地SKU', dataIndex: 'local_sku', key: 'local_sku', width: 120 },
+                   { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
+                   { title: '国家', dataIndex: 'country', key: 'country', width: 80, align: 'center' },
+                   { title: '平台', dataIndex: 'marketplace', key: 'marketplace', width: 80 },
+                   { 
+                     title: '需求数量', 
+                     dataIndex: 'requested_quantity', 
+                     key: 'requested_quantity', 
+                     width: 90, 
+                     align: 'center' 
+                   },
+                   { 
+                     title: '发货数量', 
+                     dataIndex: 'shipped_quantity', 
+                     key: 'shipped_quantity', 
+                     width: 90, 
+                     align: 'center',
+                     render: (value: number, record: any) => (
+                       <Text type={value >= record.requested_quantity ? 'success' : 'warning'}>
+                         {value}
+                       </Text>
+                     )
+                   },
+                   { 
+                     title: '整箱数', 
+                     dataIndex: 'whole_boxes', 
+                     key: 'whole_boxes', 
+                     width: 80, 
+                     align: 'center',
+                     render: (value: number) => value || '-'
+                   },
+                   { 
+                     title: '混合箱数量', 
+                     dataIndex: 'mixed_box_quantity', 
+                     key: 'mixed_box_quantity', 
+                     width: 100, 
+                     align: 'center',
+                     render: (value: number) => value || '-'
+                   }
+                 ]}
+                 pagination={false}
+                 size="small"
+                 rowKey="shipment_item_id"
+                 scroll={{ y: 300 }}
+               />
+             </Card>
+           </div>
+         ) : (
+           <div style={{ textAlign: 'center', padding: '50px' }}>
+             <Text type="secondary">暂无详情数据</Text>
+           </div>
+         )}
+       </Modal>
     </div>
   );
 };

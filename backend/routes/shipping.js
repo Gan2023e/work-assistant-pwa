@@ -3476,4 +3476,143 @@ router.get('/packing-list/download', async (req, res) => {
   }
 });
 
+// 获取发货历史详情
+router.get('/shipment-history/:shipmentId/details', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取发货历史详情请求:', req.params.shipmentId);
+  
+  try {
+    const { shipmentId } = req.params;
+    
+    // 查询发货记录主表
+    const shipmentRecord = await ShipmentRecord.findByPk(shipmentId, {
+      include: [
+        {
+          model: OrderShipmentRelation,
+          as: 'orderRelations',
+          attributes: ['need_num', 'total_requested', 'total_shipped', 'completion_status']
+        }
+      ]
+    });
+    
+    if (!shipmentRecord) {
+      return res.status(404).json({
+        code: 1,
+        message: '发货记录不存在'
+      });
+    }
+    
+    // 查询发货明细
+    const shipmentItems = await ShipmentItem.findAll({
+      where: { shipment_id: shipmentId },
+      order: [['need_num', 'ASC'], ['local_sku', 'ASC']]
+    });
+    
+    // 计算统计汇总
+    const summary = {
+      total_need_orders: new Set(shipmentItems.map(item => item.need_num)).size,
+      total_sku_count: shipmentItems.length,
+      total_requested: shipmentItems.reduce((sum, item) => sum + (item.requested_quantity || 0), 0),
+      total_shipped: shipmentItems.reduce((sum, item) => sum + (item.shipped_quantity || 0), 0),
+      overall_completion_rate: 0
+    };
+    
+    if (summary.total_requested > 0) {
+      summary.overall_completion_rate = Math.round((summary.total_shipped / summary.total_requested) * 100);
+    }
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 发货历史详情查询成功:', {
+      shipmentId,
+      itemsCount: shipmentItems.length,
+      summary
+    });
+    
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        shipment_record: shipmentRecord,
+        shipment_items: shipmentItems,
+        summary: summary
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取发货历史详情失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量删除发货记录
+router.delete('/shipment-history', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量删除发货记录请求:', JSON.stringify(req.body, null, 2));
+  
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { shipment_ids } = req.body;
+    
+    if (!shipment_ids || !Array.isArray(shipment_ids) || shipment_ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '发货记录ID不能为空'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
+    
+    // 1. 删除发货明细
+    const deletedItems = await ShipmentItem.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    // 2. 删除订单发货关联记录
+    const deletedRelations = await OrderShipmentRelation.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    // 3. 删除发货记录主表
+    const deletedRecords = await ShipmentRecord.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    await transaction.commit();
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除成功:', {
+      deletedRecords,
+      deletedItems,
+      deletedRelations
+    });
+    
+    res.json({
+      code: 0,
+      message: '批量删除成功',
+      data: {
+        deleted_records: deletedRecords,
+        deleted_items: deletedItems,
+        deleted_relations: deletedRelations
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
