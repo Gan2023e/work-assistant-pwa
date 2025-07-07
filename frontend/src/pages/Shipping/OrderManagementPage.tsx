@@ -125,15 +125,18 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     total: 0
   });
 
-  // 根据props.needNum决定加载详情还是列表
+  // 根据props.needNum或selectedOrder决定加载详情还是列表
   useEffect(() => {
     if (needNum) {
+      setSelectedOrder(needNum);
       fetchOrderDetails(needNum);
+    } else if (selectedOrder) {
+      fetchOrderDetails(selectedOrder);
     } else {
       fetchOrders();
     }
     // eslint-disable-next-line
-  }, [needNum]);
+  }, [needNum, selectedOrder]);
 
   // 获取需求单列表
   const fetchOrders = async (page = 1, pageSize = 20) => {
@@ -502,13 +505,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       
       <Row gutter={24}>
         {/* 左侧：需求单列表 */}
-        {needNum ? (
+        {(needNum || selectedOrder) ? (
           <Col span={24}>
             <Card 
               title={
                 <Space>
                   <EyeOutlined />
-                  <span>需求单详情: {selectedOrder}</span>
+                  <span>需求单详情: {needNum || selectedOrder}</span>
                   <Button 
                     type="text" 
                     size="small"

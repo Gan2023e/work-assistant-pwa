@@ -2237,7 +2237,15 @@ router.delete('/shipment-history', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
     
-    // 1. 删除发货明细
+    // 1. 删除local_boxes表中对应的出库记录
+    const deletedLocalBoxes = await LocalBox.destroy({
+      where: {
+        shipment_id: { [Op.in]: shipment_ids }
+      },
+      transaction
+    });
+    
+    // 2. 删除发货明细
     const deletedItems = await ShipmentItem.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2245,7 +2253,7 @@ router.delete('/shipment-history', async (req, res) => {
       transaction
     });
     
-    // 2. 删除订单发货关联记录
+    // 3. 删除订单发货关联记录
     const deletedRelations = await OrderShipmentRelation.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2253,7 +2261,7 @@ router.delete('/shipment-history', async (req, res) => {
       transaction
     });
     
-    // 3. 删除发货记录主表
+    // 4. 删除发货记录主表
     const deletedRecords = await ShipmentRecord.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2266,7 +2274,8 @@ router.delete('/shipment-history', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除成功:', {
       deletedRecords,
       deletedItems,
-      deletedRelations
+      deletedRelations,
+      deletedLocalBoxes
     });
     
     res.json({
@@ -2275,7 +2284,8 @@ router.delete('/shipment-history', async (req, res) => {
       data: {
         deleted_records: deletedRecords,
         deleted_items: deletedItems,
-        deleted_relations: deletedRelations
+        deleted_relations: deletedRelations,
+        deleted_local_boxes: deletedLocalBoxes
       }
     });
   } catch (error) {
@@ -3512,10 +3522,60 @@ router.get('/shipment-history/:shipmentId/details', async (req, res) => {
     }
     
     // 查询发货明细
-    const shipmentItems = await ShipmentItem.findAll({
+    const rawShipmentItems = await ShipmentItem.findAll({
       where: { shipment_id: shipmentId },
       order: [['need_num', 'ASC'], ['local_sku', 'ASC']]
     });
+    
+    // 合并同一个需求单号的同一个SKU的整箱和混合箱数量
+    const mergedItemsMap = new Map();
+    
+    rawShipmentItems.forEach(item => {
+      const key = `${item.need_num}_${item.local_sku}`;
+      
+      if (mergedItemsMap.has(key)) {
+        // 合并现有记录
+        const existingItem = mergedItemsMap.get(key);
+        existingItem.shipped_quantity += item.shipped_quantity;
+        existingItem.whole_boxes += item.whole_boxes || 0;
+        existingItem.mixed_box_quantity += item.mixed_box_quantity || 0;
+        
+        // 合并箱号列表
+        if (item.box_numbers) {
+          try {
+            const boxNumbers = JSON.parse(item.box_numbers);
+            if (Array.isArray(boxNumbers) && boxNumbers.length > 0) {
+              const existingBoxNumbers = JSON.parse(existingItem.box_numbers || '[]');
+              const mergedBoxNumbers = [...new Set([...existingBoxNumbers, ...boxNumbers])];
+              existingItem.box_numbers = JSON.stringify(mergedBoxNumbers);
+            }
+          } catch (e) {
+            console.warn('解析箱号JSON失败:', e);
+          }
+        }
+      } else {
+        // 创建新记录
+        mergedItemsMap.set(key, {
+          shipment_item_id: item.shipment_item_id,
+          shipment_id: item.shipment_id,
+          order_item_id: item.order_item_id,
+          need_num: item.need_num,
+          local_sku: item.local_sku,
+          amz_sku: item.amz_sku,
+          country: item.country,
+          marketplace: item.marketplace,
+          requested_quantity: item.requested_quantity,
+          shipped_quantity: item.shipped_quantity,
+          whole_boxes: item.whole_boxes || 0,
+          mixed_box_quantity: item.mixed_box_quantity || 0,
+          box_numbers: item.box_numbers,
+          created_at: item.created_at
+        });
+      }
+    });
+    
+    // 转换为数组
+    const shipmentItems = Array.from(mergedItemsMap.values());
     
     // 计算统计汇总
     const summary = {
@@ -3550,76 +3610,6 @@ router.get('/shipment-history/:shipmentId/details', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取失败',
-      error: error.message
-    });
-  }
-});
-
-// 批量删除发货记录
-router.delete('/shipment-history', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量删除发货记录请求:', JSON.stringify(req.body, null, 2));
-  
-  const transaction = await sequelize.transaction();
-  
-  try {
-    const { shipment_ids } = req.body;
-    
-    if (!shipment_ids || !Array.isArray(shipment_ids) || shipment_ids.length === 0) {
-      return res.status(400).json({
-        code: 1,
-        message: '发货记录ID不能为空'
-      });
-    }
-    
-    console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
-    
-    // 1. 删除发货明细
-    const deletedItems = await ShipmentItem.destroy({
-      where: {
-        shipment_id: { [Op.in]: shipment_ids }
-      },
-      transaction
-    });
-    
-    // 2. 删除订单发货关联记录
-    const deletedRelations = await OrderShipmentRelation.destroy({
-      where: {
-        shipment_id: { [Op.in]: shipment_ids }
-      },
-      transaction
-    });
-    
-    // 3. 删除发货记录主表
-    const deletedRecords = await ShipmentRecord.destroy({
-      where: {
-        shipment_id: { [Op.in]: shipment_ids }
-      },
-      transaction
-    });
-    
-    await transaction.commit();
-    
-    console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除成功:', {
-      deletedRecords,
-      deletedItems,
-      deletedRelations
-    });
-    
-    res.json({
-      code: 0,
-      message: '批量删除成功',
-      data: {
-        deleted_records: deletedRecords,
-        deleted_items: deletedItems,
-        deleted_relations: deletedRelations
-      }
-    });
-  } catch (error) {
-    await transaction.rollback();
-    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '批量删除失败',
       error: error.message
     });
   }
