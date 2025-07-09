@@ -522,8 +522,12 @@ const LogisticsPage: React.FC = () => {
         setBatchUpdateModalVisible(false);
         setBatchUpdateText('');
         setParsedBatchData([]);
-        // 刷新数据
-        refetchData();
+        // 刷新数据，强制使用当前搜索参数
+        if (currentSearchParams) {
+          fetchData(currentSearchParams);
+        } else {
+          refetchData();
+        }
         } else {
         throw new Error(result.message || '批量更新失败');
       }
@@ -563,8 +567,12 @@ const LogisticsPage: React.FC = () => {
         message.success(`成功将 ${selectedRowKeys.length} 条记录的状态修改为"${newStatus}"`);
         setSelectedRowKeys([]);
         setBatchStatusValue(undefined);
-        // 刷新数据
-        refetchData();
+        // 刷新数据，强制使用当前搜索参数
+        if (currentSearchParams) {
+          fetchData(currentSearchParams);
+        } else {
+          refetchData();
+        }
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -610,8 +618,12 @@ const LogisticsPage: React.FC = () => {
         message.success(`成功将 ${selectedRowKeys.length} 条记录的付款状态修改为"${newStatus}"`);
         setSelectedRowKeys([]);
         setBatchPaymentStatusValue(undefined);
-        // 刷新数据
-        refetchData();
+        // 刷新数据，强制使用当前搜索参数
+        if (currentSearchParams) {
+          fetchData(currentSearchParams);
+        } else {
+          refetchData();
+        }
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -657,8 +669,12 @@ const LogisticsPage: React.FC = () => {
         message.success(`成功将 ${selectedRowKeys.length} 条记录的税金状态修改为"${newStatus}"`);
         setSelectedRowKeys([]);
         setBatchTaxStatusValue(undefined);
-        // 刷新数据
-        refetchData();
+        // 刷新数据，强制使用当前搜索参数
+        if (currentSearchParams) {
+          fetchData(currentSearchParams);
+        } else {
+          refetchData();
+        }
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -1315,12 +1331,12 @@ const LogisticsPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
               <Select
                 value={editingValue}
-                onChange={(value) => setEditingValue(value)}
-                size="small"
-                style={{ width: 80 }}
-                onSelect={async (value) => {
+                onChange={async (value) => {
+                  setEditingValue(value);
                   await handleSaveEditWithValue(value);
                 }}
+                size="small"
+                style={{ width: 80 }}
               >
                 <Option value="已付">已付</Option>
                 <Option value="未付">未付</Option>
@@ -1361,12 +1377,12 @@ const LogisticsPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
               <Select
                 value={editingValue}
-                onChange={(value) => setEditingValue(value)}
-                size="small"
-                style={{ width: 80 }}
-                onSelect={async (value) => {
+                onChange={async (value) => {
+                  setEditingValue(value);
                   await handleSaveEditWithValue(value);
                 }}
+                size="small"
+                style={{ width: 80 }}
               >
                 <Option value="已付">已付</Option>
                 <Option value="未付">未付</Option>
