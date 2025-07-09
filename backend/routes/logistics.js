@@ -346,6 +346,120 @@ router.post('/batch-update-status', async (req, res) => {
   }
 });
 
+// 批量更新付款状态
+router.post('/batch-update-payment-status', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到批量更新付款状态请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shippingIds, paymentStatus } = req.body;
+    
+    // 验证参数
+    if (!Array.isArray(shippingIds) || shippingIds.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'shippingIds 必须是非空数组'
+      });
+    }
+    
+    if (!paymentStatus || !['已付', '未付'].includes(paymentStatus)) {
+      return res.status(400).json({
+        code: 400,
+        message: '付款状态必须是：已付、未付 中的一种'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', `批量更新 ${shippingIds.length} 条记录付款状态为: ${paymentStatus}`);
+
+    // 执行批量更新
+    const [affectedCount] = await Logistics.update(
+      { paymentStatus: paymentStatus },
+      {
+        where: {
+          shippingId: {
+            [Op.in]: shippingIds
+          }
+        }
+      }
+    );
+
+    console.log('\x1b[32m%s\x1b[0m', '成功更新记录数:', affectedCount);
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        affectedCount,
+        updatedPaymentStatus: paymentStatus,
+        shippingIds
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '批量更新付款状态失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
+// 批量更新税金状态
+router.post('/batch-update-tax-status', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到批量更新税金状态请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shippingIds, taxPaymentStatus } = req.body;
+    
+    // 验证参数
+    if (!Array.isArray(shippingIds) || shippingIds.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'shippingIds 必须是非空数组'
+      });
+    }
+    
+    if (!taxPaymentStatus || !['已付', '未付'].includes(taxPaymentStatus)) {
+      return res.status(400).json({
+        code: 400,
+        message: '税金状态必须是：已付、未付 中的一种'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', `批量更新 ${shippingIds.length} 条记录税金状态为: ${taxPaymentStatus}`);
+
+    // 执行批量更新
+    const [affectedCount] = await Logistics.update(
+      { taxPaymentStatus: taxPaymentStatus },
+      {
+        where: {
+          shippingId: {
+            [Op.in]: shippingIds
+          }
+        }
+      }
+    );
+
+    console.log('\x1b[32m%s\x1b[0m', '成功更新记录数:', affectedCount);
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        affectedCount,
+        updatedTaxPaymentStatus: taxPaymentStatus,
+        shippingIds
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '批量更新税金状态失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
 // 获取所有可筛选字段的唯一值
 router.get('/filters', async (req, res) => {
   try {

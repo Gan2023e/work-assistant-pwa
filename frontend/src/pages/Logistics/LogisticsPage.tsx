@@ -126,6 +126,8 @@ const LogisticsPage: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchStatusValue, setBatchStatusValue] = useState<string | undefined>(undefined);
+  const [batchPaymentStatusValue, setBatchPaymentStatusValue] = useState<string | undefined>(undefined);
+  const [batchTaxStatusValue, setBatchTaxStatusValue] = useState<string | undefined>(undefined);
   const [editingKey, setEditingKey] = useState('');
   const [editingField, setEditingField] = useState('');
   const [editingValue, setEditingValue] = useState<any>('');
@@ -164,11 +166,35 @@ const LogisticsPage: React.FC = () => {
         }
         
       const result = await response.json();
-      const sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
-        const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
-        const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
-        return dateA - dateB;
-      });
+      
+      // 根据是否有搜索的Shipping ID来决定排序方式
+      let sortedData;
+      if (params.shippingIds && params.shippingIds.length > 0) {
+        // 如果有搜索的Shipping ID，按照输入顺序排列
+        const shippingIdOrder = params.shippingIds;
+        sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
+          const indexA = shippingIdOrder.indexOf(a.shippingId);
+          const indexB = shippingIdOrder.indexOf(b.shippingId);
+          // 如果都在搜索列表中，按照输入顺序排序
+          if (indexA !== -1 && indexB !== -1) {
+            return indexA - indexB;
+          }
+          // 如果只有一个在搜索列表中，优先显示
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          // 如果都不在搜索列表中，按照预计到港日排序
+          const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
+          const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
+          return dateA - dateB;
+        });
+      } else {
+        // 如果没有搜索条件，按照预计到港日排序
+        sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
+          const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
+          const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
+          return dateA - dateB;
+        });
+      }
 
       setData(sortedData);
       
@@ -512,10 +538,106 @@ const LogisticsPage: React.FC = () => {
     handleBatchStatusUpdate(value);
   };
 
+  // 批量修改付款状态
+  const handleBatchPaymentStatusUpdate = async (newStatus: string) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要修改的记录');
+      return;
+    }
+
+    setBatchLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-payment-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingIds: selectedRowKeys,
+          paymentStatus: newStatus
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+        
+      if (result.code === 0) {
+        message.success(`成功将 ${selectedRowKeys.length} 条记录的付款状态修改为"${newStatus}"`);
+        setSelectedRowKeys([]);
+        setBatchPaymentStatusValue(undefined);
+        // 刷新数据
+        fetchData({ filters });
+        } else {
+        throw new Error(result.message || '批量更新失败');
+        }
+    } catch (error) {
+      console.error('批量更新付款状态失败:', error);
+      message.error(`批量更新付款状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // 处理批量付款状态选择
+  const handleBatchPaymentStatusChange = (value: string) => {
+    setBatchPaymentStatusValue(value);
+    handleBatchPaymentStatusUpdate(value);
+  };
+
+  // 批量修改税金状态
+  const handleBatchTaxStatusUpdate = async (newStatus: string) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要修改的记录');
+      return;
+    }
+
+    setBatchLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-tax-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingIds: selectedRowKeys,
+          taxPaymentStatus: newStatus
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+        
+      if (result.code === 0) {
+        message.success(`成功将 ${selectedRowKeys.length} 条记录的税金状态修改为"${newStatus}"`);
+        setSelectedRowKeys([]);
+        setBatchTaxStatusValue(undefined);
+        // 刷新数据
+        fetchData({ filters });
+        } else {
+        throw new Error(result.message || '批量更新失败');
+        }
+    } catch (error) {
+      console.error('批量更新税金状态失败:', error);
+      message.error(`批量更新税金状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // 处理批量税金状态选择
+  const handleBatchTaxStatusChange = (value: string) => {
+    setBatchTaxStatusValue(value);
+    handleBatchTaxStatusUpdate(value);
+  };
+
   // 取消选择
   const handleCancelSelection = () => {
     setSelectedRowKeys([]);
     setBatchStatusValue(undefined);
+    setBatchPaymentStatusValue(undefined);
+    setBatchTaxStatusValue(undefined);
   };
 
   // 初始化数据
@@ -1142,7 +1264,13 @@ const LogisticsPage: React.FC = () => {
                 onChange={(value) => setEditingValue(value)}
                 size="small"
                 style={{ width: 80 }}
-                onSelect={handleSaveEdit}
+                onSelect={(value) => {
+                  setEditingValue(value);
+                  // 使用setTimeout确保状态更新后再保存
+                  setTimeout(() => {
+                    handleSaveEdit();
+                  }, 0);
+                }}
               >
                 <Option value="已付">已付</Option>
                 <Option value="未付">未付</Option>
@@ -1186,7 +1314,13 @@ const LogisticsPage: React.FC = () => {
                 onChange={(value) => setEditingValue(value)}
                 size="small"
                 style={{ width: 80 }}
-                onSelect={handleSaveEdit}
+                onSelect={(value) => {
+                  setEditingValue(value);
+                  // 使用setTimeout确保状态更新后再保存
+                  setTimeout(() => {
+                    handleSaveEdit();
+                  }, 0);
+                }}
               >
                 <Option value="已付">已付</Option>
                 <Option value="未付">未付</Option>
@@ -1411,20 +1545,52 @@ const LogisticsPage: React.FC = () => {
       {/* 批量操作区域 */}
       {selectedRowKeys.length > 0 && (
         <Card style={{ marginBottom: 24 }}>
-          <Space>
+          <Space wrap>
             <Text strong>批量操作：</Text>
-            <Text>修改状态为：</Text>
-            <Select
-              placeholder="选择状态"
-              style={{ width: 120 }}
-              value={batchStatusValue}
-              onChange={handleBatchStatusChange}
-              loading={batchLoading}
-            >
-              <Option value="在途">在途</Option>
-              <Option value="入库中">入库中</Option>
-              <Option value="完成">完成</Option>
-            </Select>
+            
+            <Space>
+              <Text>修改状态为：</Text>
+              <Select
+                placeholder="选择状态"
+                style={{ width: 120 }}
+                value={batchStatusValue}
+                onChange={handleBatchStatusChange}
+                loading={batchLoading}
+              >
+                <Option value="在途">在途</Option>
+                <Option value="入库中">入库中</Option>
+                <Option value="完成">完成</Option>
+              </Select>
+            </Space>
+
+            <Space>
+              <Text>修改付款状态为：</Text>
+              <Select
+                placeholder="选择付款状态"
+                style={{ width: 130 }}
+                value={batchPaymentStatusValue}
+                onChange={handleBatchPaymentStatusChange}
+                loading={batchLoading}
+              >
+                <Option value="已付">已付</Option>
+                <Option value="未付">未付</Option>
+              </Select>
+            </Space>
+
+            <Space>
+              <Text>修改税金状态为：</Text>
+              <Select
+                placeholder="选择税金状态"
+                style={{ width: 130 }}
+                value={batchTaxStatusValue}
+                onChange={handleBatchTaxStatusChange}
+                loading={batchLoading}
+              >
+                <Option value="已付">已付</Option>
+                <Option value="未付">未付</Option>
+              </Select>
+            </Space>
+
             <Button 
               size="small" 
               onClick={handleCancelSelection}
@@ -1432,6 +1598,7 @@ const LogisticsPage: React.FC = () => {
             >
               取消选择
             </Button>
+            
             <Text type="secondary">
               已选择 {selectedRowKeys.length} 条记录
             </Text>
