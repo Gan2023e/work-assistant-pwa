@@ -128,6 +128,7 @@ const LogisticsPage: React.FC = () => {
   const [batchStatusValue, setBatchStatusValue] = useState<string | undefined>(undefined);
   const [batchPaymentStatusValue, setBatchPaymentStatusValue] = useState<string | undefined>(undefined);
   const [batchTaxStatusValue, setBatchTaxStatusValue] = useState<string | undefined>(undefined);
+  const [currentSearchParams, setCurrentSearchParams] = useState<SearchParams | null>(null);
   const [editingKey, setEditingKey] = useState('');
   const [editingField, setEditingField] = useState('');
   const [editingValue, setEditingValue] = useState<any>('');
@@ -155,6 +156,9 @@ const LogisticsPage: React.FC = () => {
   const fetchData = async (params: SearchParams) => {
     setLoading(true);
     try {
+      // 保存当前搜索参数
+      setCurrentSearchParams(params);
+      
       const response = await fetch(`${API_BASE_URL}/api/logistics/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -356,6 +360,46 @@ const LogisticsPage: React.FC = () => {
     }
   };
 
+  // 单元格编辑保存（直接传值版本）
+  const handleSaveEditWithValue = async (value: any) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/update`, {
+          method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingId: editingKey,
+          [editingField]: value
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('更新成功');
+        // 更新本地数据
+        setData(prevData =>
+          prevData.map(item =>
+            item.shippingId === editingKey
+              ? { ...item, [editingField]: value }
+              : item
+          )
+        );
+        setEditingKey('');
+        setEditingField('');
+        setEditingValue('');
+      } else {
+        throw new Error(result.message || '更新失败');
+      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error(`更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   // 取消编辑
   const handleCancelEdit = () => {
     setEditingKey('');
@@ -479,7 +523,7 @@ const LogisticsPage: React.FC = () => {
         setBatchUpdateText('');
         setParsedBatchData([]);
         // 刷新数据
-        fetchData({ filters });
+        refetchData();
         } else {
         throw new Error(result.message || '批量更新失败');
       }
@@ -520,7 +564,7 @@ const LogisticsPage: React.FC = () => {
         setSelectedRowKeys([]);
         setBatchStatusValue(undefined);
         // 刷新数据
-        fetchData({ filters });
+        refetchData();
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -567,7 +611,7 @@ const LogisticsPage: React.FC = () => {
         setSelectedRowKeys([]);
         setBatchPaymentStatusValue(undefined);
         // 刷新数据
-        fetchData({ filters });
+        refetchData();
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -614,7 +658,7 @@ const LogisticsPage: React.FC = () => {
         setSelectedRowKeys([]);
         setBatchTaxStatusValue(undefined);
         // 刷新数据
-        fetchData({ filters });
+        refetchData();
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -630,6 +674,16 @@ const LogisticsPage: React.FC = () => {
   const handleBatchTaxStatusChange = (value: string) => {
     setBatchTaxStatusValue(value);
     handleBatchTaxStatusUpdate(value);
+  };
+
+  // 重新获取数据（使用当前搜索参数）
+  const refetchData = () => {
+    if (currentSearchParams) {
+      fetchData(currentSearchParams);
+    } else {
+      // 如果没有保存的搜索参数，使用默认参数
+      fetchData({ filters: { status: ['not_completed'] } });
+    }
   };
 
   // 取消选择
@@ -1264,12 +1318,8 @@ const LogisticsPage: React.FC = () => {
                 onChange={(value) => setEditingValue(value)}
                 size="small"
                 style={{ width: 80 }}
-                onSelect={(value) => {
-                  setEditingValue(value);
-                  // 使用setTimeout确保状态更新后再保存
-                  setTimeout(() => {
-                    handleSaveEdit();
-                  }, 0);
+                onSelect={async (value) => {
+                  await handleSaveEditWithValue(value);
                 }}
               >
                 <Option value="已付">已付</Option>
@@ -1314,12 +1364,8 @@ const LogisticsPage: React.FC = () => {
                 onChange={(value) => setEditingValue(value)}
                 size="small"
                 style={{ width: 80 }}
-                onSelect={(value) => {
-                  setEditingValue(value);
-                  // 使用setTimeout确保状态更新后再保存
-                  setTimeout(() => {
-                    handleSaveEdit();
-                  }, 0);
+                onSelect={async (value) => {
+                  await handleSaveEditWithValue(value);
                 }}
               >
                 <Option value="已付">已付</Option>
@@ -1388,7 +1434,15 @@ const LogisticsPage: React.FC = () => {
     setFilters(newFilters);
     setSelectedRowKeys([]);
     setBatchStatusValue(undefined);
-    fetchData({ filters: newFilters });
+    setBatchPaymentStatusValue(undefined);
+    setBatchTaxStatusValue(undefined);
+    
+    // 更新搜索参数，保持原有的shippingIds
+    const updatedParams: SearchParams = {
+      filters: newFilters,
+      ...(currentSearchParams?.shippingIds && { shippingIds: currentSearchParams.shippingIds })
+    };
+    fetchData(updatedParams);
   };
 
   return (
