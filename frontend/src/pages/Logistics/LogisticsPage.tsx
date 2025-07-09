@@ -214,6 +214,8 @@ const LogisticsPage: React.FC = () => {
       
       if (params.shippingIds?.length) {
         message.success(`找到 ${sortedData.length} 条匹配记录，已按输入顺序排列`);
+      } else if (params.filters?.status?.length) {
+        message.success(`加载了 ${sortedData.length} 条未完成物流记录，按预计到港日升序排列`);
       } else {
         message.success(`加载了 ${sortedData.length} 条物流记录`);
       }
@@ -708,7 +710,7 @@ const LogisticsPage: React.FC = () => {
       fetchData(currentSearchParams);
     } else {
       // 如果没有保存的搜索参数，使用默认参数
-      fetchData({ filters: { status: ['not_completed'] } });
+      fetchData({ filters: { status: ['在途', '入库中'] } });
     }
   };
 
@@ -724,8 +726,8 @@ const LogisticsPage: React.FC = () => {
   useEffect(() => {
     fetchFilterOptions();
     fetchStatistics();
-    // 默认加载未完成的物流记录
-    fetchData({ filters: { status: ['not_completed'] } });
+    // 默认加载状态不为"完成"的物流记录，按预计到港日排序
+    fetchData({ filters: { status: ['在途', '入库中'] } });
   }, []);
 
   // 搜索处理
@@ -749,7 +751,7 @@ const LogisticsPage: React.FC = () => {
     setFilters({});
     setSelectedRowKeys([]);
     setBatchStatusValue(undefined);
-    fetchData({ filters: { status: ['not_completed'] } });
+    fetchData({ filters: { status: ['在途', '入库中'] } });
   };
 
   // 查询所有数据
@@ -1477,6 +1479,9 @@ const LogisticsPage: React.FC = () => {
         <TruckOutlined style={{ marginRight: 8 }} />
         头程物流管理
       </Title>
+      <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
+        默认显示状态为"在途"和"入库中"的物流记录，按预计到港日升序排列
+      </Text>
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
