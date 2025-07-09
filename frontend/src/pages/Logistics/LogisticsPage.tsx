@@ -736,10 +736,18 @@ const LogisticsPage: React.FC = () => {
       .split('\n')
       .map(id => id.trim())
       .filter(Boolean);
+    
+    // 去除重复项
+    const uniqueShippingIds = Array.from(new Set(shippingIds));
+    
+    // 如果去重后数量有变化，提示用户
+    if (shippingIds.length !== uniqueShippingIds.length) {
+      message.info(`已去除 ${shippingIds.length - uniqueShippingIds.length} 个重复的Shipping ID`);
+    }
 
     const params: SearchParams = { filters };
-    if (shippingIds.length > 0) {
-      params.shippingIds = shippingIds;
+    if (uniqueShippingIds.length > 0) {
+      params.shippingIds = uniqueShippingIds;
     }
 
     fetchData(params);
