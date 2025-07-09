@@ -172,25 +172,35 @@ const LogisticsPage: React.FC = () => {
       const result = await response.json();
       
       // 根据是否有搜索的Shipping ID来决定排序方式
-      let sortedData;
+      let sortedData: LogisticsRecord[];
       if (params.shippingIds && params.shippingIds.length > 0) {
-        // 如果有搜索的Shipping ID，按照输入顺序排列
+        // 如果有搜索的Shipping ID，严格按照输入顺序排列
         const shippingIdOrder = params.shippingIds;
-        sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
-          const indexA = shippingIdOrder.indexOf(a.shippingId);
-          const indexB = shippingIdOrder.indexOf(b.shippingId);
-          // 如果都在搜索列表中，按照输入顺序排序
-          if (indexA !== -1 && indexB !== -1) {
-            return indexA - indexB;
+        const dataMap = new Map<string, LogisticsRecord>();
+        
+        // 将数据按shippingId存储到Map中
+        (result.data || []).forEach((item: LogisticsRecord) => {
+          dataMap.set(item.shippingId, item);
+        });
+        
+        // 按照输入顺序重新排列数据
+        sortedData = [];
+        shippingIdOrder.forEach((shippingId: string) => {
+          if (dataMap.has(shippingId)) {
+            sortedData.push(dataMap.get(shippingId)!);
           }
-          // 如果只有一个在搜索列表中，优先显示
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          // 如果都不在搜索列表中，按照预计到港日排序
+        });
+        
+        // 添加不在搜索列表中的数据（按预计到港日排序）
+        const unmatchedData = (result.data || []).filter((item: LogisticsRecord) => 
+          !shippingIdOrder.includes(item.shippingId)
+        ).sort((a: LogisticsRecord, b: LogisticsRecord) => {
           const dateA = a.estimatedArrivalDate ? new Date(a.estimatedArrivalDate).getTime() : 0;
           const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
           return dateA - dateB;
         });
+        
+        sortedData = [...sortedData, ...unmatchedData];
       } else {
         // 如果没有搜索条件，按照预计到港日排序
         sortedData = (result.data || []).sort((a: LogisticsRecord, b: LogisticsRecord) => {
@@ -203,7 +213,7 @@ const LogisticsPage: React.FC = () => {
       setData(sortedData);
       
       if (params.shippingIds?.length) {
-        message.success(`找到 ${sortedData.length} 条匹配记录`);
+        message.success(`找到 ${sortedData.length} 条匹配记录，已按输入顺序排列`);
       } else {
         message.success(`加载了 ${sortedData.length} 条物流记录`);
       }
@@ -1131,7 +1141,6 @@ const LogisticsPage: React.FC = () => {
         const dateB = b.estimatedArrivalDate ? new Date(b.estimatedArrivalDate).getTime() : 0;
         return dateA - dateB;
       },
-      defaultSortOrder: 'descend',
       render: (date, record) => {
         const isEditing = editingKey === record.shippingId && editingField === 'estimatedArrivalDate';
         if (isEditing) {
@@ -1437,7 +1446,7 @@ const LogisticsPage: React.FC = () => {
   ];
 
   // 表格筛选变化处理
-  const handleTableChange = (pagination: any, tableFilters: any) => {
+  const handleTableChange = (pagination: any, tableFilters: any, sorter: any) => {
     const newFilters: SearchParams['filters'] = {
       logisticsProvider: tableFilters.logisticsProvider,
       channel: tableFilters.channel,
@@ -1458,6 +1467,7 @@ const LogisticsPage: React.FC = () => {
       filters: newFilters,
       ...(currentSearchParams?.shippingIds && { shippingIds: currentSearchParams.shippingIds })
     };
+    
     fetchData(updatedParams);
   };
 
@@ -1688,6 +1698,7 @@ const LogisticsPage: React.FC = () => {
           bordered
           size="small"
           onChange={handleTableChange}
+          showSorterTooltip={false}
           pagination={{
             defaultPageSize: 50,
             showSizeChanger: true,
