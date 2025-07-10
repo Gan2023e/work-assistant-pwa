@@ -729,6 +729,8 @@ const LogisticsPage: React.FC = () => {
       onOk: async () => {
         setBatchLoading(true);
         try {
+          console.log('开始批量删除操作, selectedRowKeys:', selectedRowKeys);
+          
           const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -737,9 +739,11 @@ const LogisticsPage: React.FC = () => {
             }),
           });
 
+          console.log('批量删除请求响应状态:', response.status);
           const result = await response.json();
+          console.log('批量删除响应结果:', result);
           
-          if (result.code === 0) {
+          if (response.ok && result.code === 0) {
             message.success(`成功删除 ${result.data.deletedCount} 条记录`);
             
             // 清空选择
@@ -751,11 +755,13 @@ const LogisticsPage: React.FC = () => {
             // 重新加载数据
             refetchData();
           } else {
-            message.error(result.message || '删除失败');
+            const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
+            console.error('删除失败:', errorMsg);
+            message.error(errorMsg);
           }
         } catch (error) {
-          console.error('批量删除失败:', error);
-          message.error('删除失败，请稍后重试');
+          console.error('批量删除网络错误:', error);
+          message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
         } finally {
           setBatchLoading(false);
         }
