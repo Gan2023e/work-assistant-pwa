@@ -952,10 +952,66 @@ const LogisticsPage: React.FC = () => {
           customConfirm.show({
             title: '确认批量删除',
             content: `您确定要删除选中的 ${selectedRowKeys.length} 条物流记录吗？\n\n警告：此操作不可撤销！\n\n选中的记录ID: ${selectedRowKeys.join(', ')}`,
-            onConfirm: () => {
-              console.log('✅ 自定义对话框 - 用户确认删除');
-              // 这里可以调用删除逻辑，但为了避免重复，先记录日志
-              message.info('已确认删除，但因Modal问题，需要重新点击批量删除按钮');
+            onConfirm: async () => {
+              console.log('✅ 自定义对话框 - 用户确认删除，开始执行删除操作');
+              setBatchLoading(true);
+              try {
+                const requestPayload = {
+                  shippingIds: selectedRowKeys
+                };
+                console.log('📤 自定义对话框 - 请求数据:', requestPayload);
+                
+                const token = localStorage.getItem('token');
+                if (!token) {
+                  throw new Error('未找到认证token，请重新登录');
+                }
+                
+                console.log('🔑 自定义对话框 - 使用token:', token.substring(0, 20) + '...');
+                
+                const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify(requestPayload),
+                });
+
+                console.log('📥 自定义对话框 - 响应状态:', response.status);
+                const responseText = await response.text();
+                console.log('📥 自定义对话框 - 原始响应:', responseText);
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}\n响应内容: ${responseText}`);
+                }
+                
+                const result = JSON.parse(responseText);
+                console.log('📥 自定义对话框 - 解析后响应:', result);
+                
+                if (result.code === 0) {
+                  const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
+                  message.success(`🎉 成功删除 ${deletedCount} 条记录`);
+                  
+                  // 清空选择状态
+                  setSelectedRowKeys([]);
+                  setBatchStatusValue(undefined);
+                  setBatchPaymentStatusValue(undefined);
+                  setBatchTaxStatusValue(undefined);
+                  
+                  // 刷新数据
+                  setTimeout(() => {
+                    refetchData();
+                  }, 300);
+                } else {
+                  message.error(`删除失败: ${result.message}`);
+                }
+              } catch (error) {
+                console.error('💥 自定义对话框删除异常:', error);
+                message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
+              } finally {
+                setBatchLoading(false);
+              }
             }
           });
         }
