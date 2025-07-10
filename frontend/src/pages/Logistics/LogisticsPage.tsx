@@ -757,115 +757,196 @@ const LogisticsPage: React.FC = () => {
     // 检查API地址
     console.log('🌐 API地址:', API_BASE_URL);
 
-    Modal.confirm({
-      title: '确认批量删除',
-      content: (
-        <div>
-          <p>您确定要删除选中的 <strong>{selectedRowKeys.length}</strong> 条物流记录吗？</p>
-          <p style={{ color: '#ff4d4f', fontSize: '12px' }}>
-            <strong>警告：</strong>此操作不可撤销，删除后数据将无法恢复！
-          </p>
-          <p style={{ color: '#1890ff', fontSize: '11px' }}>
-            选中的记录ID: {selectedRowKeys.join(', ')}
-          </p>
-        </div>
-      ),
-      okText: '确认删除',
-      cancelText: '取消',
-      okType: 'danger',
-      width: 500,
-      onOk: async () => {
-        setBatchLoading(true);
-        try {
-          console.log('🔥 开始批量删除操作');
-          console.log('📋 选中的记录:', selectedRowKeys);
-          console.log('🌐 API地址:', API_BASE_URL);
-          
-          const requestPayload = {
-            shippingIds: selectedRowKeys
-          };
-          console.log('📤 请求数据:', requestPayload);
-          console.log('📤 请求数据JSON:', JSON.stringify(requestPayload));
-          
-          const token = localStorage.getItem('token');
-          if (!token) {
-            throw new Error('未找到认证token，请重新登录');
-          }
-          
-          console.log('🔑 使用token:', token.substring(0, 20) + '...');
-          
-          const headers = { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          };
-          console.log('📤 请求头:', headers);
-          
-          const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(requestPayload),
-          });
-
-          console.log('📥 响应状态:', response.status);
-          console.log('📥 响应状态文本:', response.statusText);
-          console.log('📥 响应头:', Object.fromEntries(response.headers.entries()));
-          
-          // 获取响应文本，无论是否为JSON
-          const responseText = await response.text();
-          console.log('📥 原始响应文本:', responseText);
-          
-          if (!response.ok) {
-            console.error('❌ HTTP错误:', response.status, response.statusText);
-            console.error('❌ 响应内容:', responseText);
-            throw new Error(`HTTP ${response.status}: ${response.statusText}\n响应内容: ${responseText}`);
-          }
-          
-          let result;
+    // 检查Modal对象
+    console.log('🔍 Modal对象检查:', typeof Modal);
+    console.log('🔍 Modal.confirm检查:', typeof Modal.confirm);
+    
+    try {
+      console.log('🔥 准备调用Modal.confirm...');
+      
+      // 使用try-catch包装Modal.confirm调用
+      const modalResult = Modal.confirm({
+        title: '确认批量删除',
+        content: (
+          <div>
+            <p>您确定要删除选中的 <strong>{selectedRowKeys.length}</strong> 条物流记录吗？</p>
+            <p style={{ color: '#ff4d4f', fontSize: '12px' }}>
+              <strong>警告：</strong>此操作不可撤销，删除后数据将无法恢复！
+            </p>
+            <p style={{ color: '#1890ff', fontSize: '11px' }}>
+              选中的记录ID: {selectedRowKeys.join(', ')}
+            </p>
+          </div>
+        ),
+        okText: '确认删除',
+        cancelText: '取消',
+        okType: 'danger',
+        width: 500,
+        onOk: async () => {
+          setBatchLoading(true);
           try {
-            result = JSON.parse(responseText);
-          } catch (parseError) {
-            console.error('❌ JSON解析失败:', parseError);
-            console.error('❌ 原始响应:', responseText);
-            throw new Error(`服务器返回了无效的JSON格式: ${responseText}`);
-          }
-          
-          console.log('📥 解析后的响应数据:', result);
-          
-          if (result.code === 0) {
-            const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
-            message.success(`🎉 成功删除 ${deletedCount} 条记录`);
+            console.log('🔥 开始批量删除操作');
+            console.log('📋 选中的记录:', selectedRowKeys);
+            console.log('🌐 API地址:', API_BASE_URL);
             
-            // 清空选择状态
-            setSelectedRowKeys([]);
-            setBatchStatusValue(undefined);
-            setBatchPaymentStatusValue(undefined);
-            setBatchTaxStatusValue(undefined);
+            const requestPayload = {
+              shippingIds: selectedRowKeys
+            };
+            console.log('📤 请求数据:', requestPayload);
+            console.log('📤 请求数据JSON:', JSON.stringify(requestPayload));
             
-            // 延迟一下再刷新数据，确保状态更新完成
-            setTimeout(() => {
-              refetchData();
-            }, 300);
-          } else {
-            const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
-            console.error('❌ 删除失败:', errorMsg);
-            console.error('❌ 完整错误信息:', result);
-            message.error(`删除失败: ${errorMsg}`);
+            const token = localStorage.getItem('token');
+            if (!token) {
+              throw new Error('未找到认证token，请重新登录');
+            }
+            
+            console.log('🔑 使用token:', token.substring(0, 20) + '...');
+            
+            const headers = { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${token}`
+            };
+            console.log('📤 请求头:', headers);
+            
+            const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(requestPayload),
+            });
+
+            console.log('📥 响应状态:', response.status);
+            console.log('📥 响应状态文本:', response.statusText);
+            console.log('📥 响应头:', Object.fromEntries(response.headers.entries()));
+            
+            // 获取响应文本，无论是否为JSON
+            const responseText = await response.text();
+            console.log('📥 原始响应文本:', responseText);
+            
+            if (!response.ok) {
+              console.error('❌ HTTP错误:', response.status, response.statusText);
+              console.error('❌ 响应内容:', responseText);
+              throw new Error(`HTTP ${response.status}: ${response.statusText}\n响应内容: ${responseText}`);
+            }
+            
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('❌ JSON解析失败:', parseError);
+              console.error('❌ 原始响应:', responseText);
+              throw new Error(`服务器返回了无效的JSON格式: ${responseText}`);
+            }
+            
+            console.log('📥 解析后的响应数据:', result);
+            
+            if (result.code === 0) {
+              const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
+              message.success(`🎉 成功删除 ${deletedCount} 条记录`);
+              
+              // 清空选择状态
+              setSelectedRowKeys([]);
+              setBatchStatusValue(undefined);
+              setBatchPaymentStatusValue(undefined);
+              setBatchTaxStatusValue(undefined);
+              
+              // 延迟一下再刷新数据，确保状态更新完成
+              setTimeout(() => {
+                refetchData();
+              }, 300);
+            } else {
+              const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
+              console.error('❌ 删除失败:', errorMsg);
+              console.error('❌ 完整错误信息:', result);
+              message.error(`删除失败: ${errorMsg}`);
+            }
+          } catch (error) {
+            console.error('💥 批量删除异常:', error);
+            console.error('💥 错误详情:', {
+              message: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+              selectedRowKeys,
+              API_BASE_URL
+            });
+            message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
+          } finally {
+            setBatchLoading(false);
           }
-        } catch (error) {
-          console.error('💥 批量删除异常:', error);
-          console.error('💥 错误详情:', {
-            message: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-            selectedRowKeys,
-            API_BASE_URL
-          });
-          message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
-        } finally {
-          setBatchLoading(false);
         }
+      });
+      
+      console.log('✅ Modal.confirm调用成功，返回值:', modalResult);
+      
+    } catch (modalError) {
+      console.error('💥 Modal.confirm调用失败:', modalError);
+      console.error('💥 错误详情:', modalError);
+      
+      // 回退到原生确认对话框
+      console.log('🔄 回退到原生确认对话框');
+      const confirmed = window.confirm(`您确定要删除选中的 ${selectedRowKeys.length} 条物流记录吗？\n\n选中的记录ID: ${selectedRowKeys.join(', ')}\n\n警告：此操作不可撤销！`);
+      
+      if (confirmed) {
+        console.log('✅ 用户确认删除，开始执行删除操作');
+        // 在这里执行删除逻辑，但先通过message.error通知用户Modal有问题
+        message.error('Modal组件异常，请联系技术支持。当前使用备用删除方式。');
+        
+        // 手动执行删除逻辑
+        (async () => {
+          setBatchLoading(true);
+          try {
+            const requestPayload = {
+              shippingIds: selectedRowKeys
+            };
+            
+            const token = localStorage.getItem('token');
+            if (!token) {
+              throw new Error('未找到认证token，请重新登录');
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(requestPayload),
+            });
+
+            const responseText = await response.text();
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}\n响应内容: ${responseText}`);
+            }
+            
+            const result = JSON.parse(responseText);
+            
+            if (result.code === 0) {
+              const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
+              message.success(`🎉 成功删除 ${deletedCount} 条记录`);
+              
+              setSelectedRowKeys([]);
+              setBatchStatusValue(undefined);
+              setBatchPaymentStatusValue(undefined);
+              setBatchTaxStatusValue(undefined);
+              
+              setTimeout(() => {
+                refetchData();
+              }, 300);
+            } else {
+              message.error(`删除失败: ${result.message}`);
+            }
+          } catch (error) {
+            console.error('💥 备用删除方式异常:', error);
+            message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
+          } finally {
+            setBatchLoading(false);
+          }
+        })();
+      } else {
+        console.log('❌ 用户取消删除');
       }
-    });
+    }
   };
 
   // 重新获取数据（使用当前搜索参数）
