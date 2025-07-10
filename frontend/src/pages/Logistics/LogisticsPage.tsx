@@ -732,23 +732,37 @@ const LogisticsPage: React.FC = () => {
       onOk: async () => {
         setBatchLoading(true);
         try {
-          console.log('开始批量删除操作, selectedRowKeys:', selectedRowKeys);
+          console.log('🔥 开始批量删除操作');
+          console.log('📋 选中的记录:', selectedRowKeys);
+          console.log('🌐 API地址:', API_BASE_URL);
+          
+          const requestPayload = {
+            shippingIds: selectedRowKeys
+          };
+          console.log('📤 请求数据:', requestPayload);
           
           const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              shippingIds: selectedRowKeys
-            }),
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestPayload),
           });
 
-          console.log('批量删除请求响应状态:', response.status);
-          const result = await response.json();
-          console.log('批量删除响应结果:', result);
+          console.log('📥 响应状态:', response.status);
+          console.log('📥 响应头:', Object.fromEntries(response.headers.entries()));
           
-          if (response.ok && result.code === 0) {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const result = await response.json();
+          console.log('📥 响应数据:', result);
+          
+          if (result.code === 0) {
             const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
-            message.success(`成功删除 ${deletedCount} 条记录`);
+            message.success(`🎉 成功删除 ${deletedCount} 条记录`);
             
             // 清空选择状态
             setSelectedRowKeys([]);
@@ -759,14 +773,20 @@ const LogisticsPage: React.FC = () => {
             // 延迟一下再刷新数据，确保状态更新完成
             setTimeout(() => {
               refetchData();
-            }, 100);
+            }, 300);
           } else {
             const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
-            console.error('删除失败:', errorMsg);
-            message.error(errorMsg);
+            console.error('❌ 删除失败:', errorMsg);
+            message.error(`删除失败: ${errorMsg}`);
           }
         } catch (error) {
-          console.error('批量删除网络错误:', error);
+          console.error('💥 批量删除异常:', error);
+          console.error('💥 错误详情:', {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            selectedRowKeys,
+            API_BASE_URL
+          });
           message.error(`网络错误: ${error instanceof Error ? error.message : '未知错误'}`);
         } finally {
           setBatchLoading(false);
@@ -795,6 +815,13 @@ const LogisticsPage: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
+    console.log('🚀 LogisticsPage 初始化');
+    console.log('🌐 当前API地址:', API_BASE_URL);
+    console.log('🌍 环境变量:', {
+      NODE_ENV: process.env.NODE_ENV,
+      REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL
+    });
+    
     fetchFilterOptions();
     fetchStatistics();
     // 默认加载状态不为"完成"的物流记录，按预计到港日排序

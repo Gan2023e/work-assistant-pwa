@@ -1,9 +1,10 @@
 // 应用版本配置 - 所有版本号的唯一来源
-export const APP_VERSION = '2.0.3';
+export const APP_VERSION = '2.0.4';
 export const BUILD_DATE = new Date().toISOString().split('T')[0]; // 构建日期
 
 // 版本更新日志
 export const VERSION_CHANGELOG = {
+  '2.0.4': '修复生产环境批量删除功能，增强调试和错误处理',
   '2.0.3': '演示自动版本同步机制，完善版本管理流程',
   '2.0.2': '优化版本管理机制，统一版本号控制',
   '2.0.1': '添加用户管理和强制更新功能',
