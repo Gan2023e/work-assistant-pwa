@@ -154,7 +154,7 @@ const LogisticsPage: React.FC = () => {
   });
 
   // API调用函数
-  const fetchData = async (params: SearchParams) => {
+  const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
     setLoading(true);
     try {
       // 保存当前搜索参数
@@ -213,12 +213,15 @@ const LogisticsPage: React.FC = () => {
 
       setData(sortedData);
       
-      if (params.shippingIds?.length) {
-        message.success(`找到 ${sortedData.length} 条匹配记录，已按输入顺序排列`);
-      } else if (params.filters?.status?.length) {
-        message.success(`加载了 ${sortedData.length} 条未完成物流记录，按预计到港日升序排列`);
-      } else {
-        message.success(`加载了 ${sortedData.length} 条物流记录`);
+      // 只在需要时显示消息
+      if (showMessage) {
+        if (params.shippingIds?.length) {
+          message.success(`找到 ${sortedData.length} 条匹配记录，已按输入顺序排列`);
+        } else if (params.filters?.status?.length) {
+          message.success(`加载了 ${sortedData.length} 条未完成物流记录，按预计到港日升序排列`);
+        } else {
+          message.success(`加载了 ${sortedData.length} 条物流记录`);
+        }
       }
     } catch (error) {
       console.error('获取数据失败:', error);
@@ -744,16 +747,19 @@ const LogisticsPage: React.FC = () => {
           console.log('批量删除响应结果:', result);
           
           if (response.ok && result.code === 0) {
-            message.success(`成功删除 ${result.data.deletedCount} 条记录`);
+            const deletedCount = result.data?.deletedCount || selectedRowKeys.length;
+            message.success(`成功删除 ${deletedCount} 条记录`);
             
-            // 清空选择
+            // 清空选择状态
             setSelectedRowKeys([]);
             setBatchStatusValue(undefined);
             setBatchPaymentStatusValue(undefined);
             setBatchTaxStatusValue(undefined);
             
-            // 重新加载数据
-            refetchData();
+            // 延迟一下再刷新数据，确保状态更新完成
+            setTimeout(() => {
+              refetchData();
+            }, 100);
           } else {
             const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
             console.error('删除失败:', errorMsg);
@@ -772,10 +778,10 @@ const LogisticsPage: React.FC = () => {
   // 重新获取数据（使用当前搜索参数）
   const refetchData = () => {
     if (currentSearchParams) {
-      fetchData(currentSearchParams);
+      fetchData(currentSearchParams, false); // 不显示加载消息，避免覆盖操作成功消息
     } else {
       // 如果没有保存的搜索参数，使用默认参数
-      fetchData({ filters: { status: ['在途', '入库中'] } });
+      fetchData({ filters: { status: ['在途', '入库中'] } }, false);
     }
   };
 
