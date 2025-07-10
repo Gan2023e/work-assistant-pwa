@@ -33,7 +33,8 @@ import {
   EditOutlined,
   SaveOutlined,
   CloseOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
@@ -702,6 +703,64 @@ const LogisticsPage: React.FC = () => {
   const handleBatchTaxStatusChange = (value: string) => {
     setBatchTaxStatusValue(value);
     handleBatchTaxStatusUpdate(value);
+  };
+
+  // 批量删除处理
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的记录');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认批量删除',
+      content: (
+        <div>
+          <p>您确定要删除选中的 <strong>{selectedRowKeys.length}</strong> 条物流记录吗？</p>
+          <p style={{ color: '#ff4d4f', fontSize: '12px' }}>
+            <strong>警告：</strong>此操作不可撤销，删除后数据将无法恢复！
+          </p>
+        </div>
+      ),
+      okText: '确认删除',
+      cancelText: '取消',
+      okType: 'danger',
+      width: 400,
+      onOk: async () => {
+        setBatchLoading(true);
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shippingIds: selectedRowKeys
+            }),
+          });
+
+          const result = await response.json();
+          
+          if (result.code === 0) {
+            message.success(`成功删除 ${result.data.deletedCount} 条记录`);
+            
+            // 清空选择
+            setSelectedRowKeys([]);
+            setBatchStatusValue(undefined);
+            setBatchPaymentStatusValue(undefined);
+            setBatchTaxStatusValue(undefined);
+            
+            // 重新加载数据
+            refetchData();
+          } else {
+            message.error(result.message || '删除失败');
+          }
+        } catch (error) {
+          console.error('批量删除失败:', error);
+          message.error('删除失败，请稍后重试');
+        } finally {
+          setBatchLoading(false);
+        }
+      }
+    });
   };
 
   // 重新获取数据（使用当前搜索参数）
@@ -1683,6 +1742,16 @@ const LogisticsPage: React.FC = () => {
                 <Option value="未付">未付</Option>
               </Select>
             </Space>
+
+            <Button 
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleBatchDelete()}
+              disabled={batchLoading}
+              size="small"
+            >
+              批量删除
+            </Button>
 
             <Button 
               size="small" 

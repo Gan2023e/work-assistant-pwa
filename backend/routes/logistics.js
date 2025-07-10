@@ -590,4 +590,76 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
+// 批量删除物流记录
+router.post('/batch-delete', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到批量删除物流记录请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { shippingIds } = req.body;
+    
+    // 验证参数
+    if (!Array.isArray(shippingIds) || shippingIds.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'shippingIds 必须是非空数组'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', `准备删除 ${shippingIds.length} 条物流记录`);
+
+    // 先查找要删除的记录（用于日志和验证）
+    const recordsToDelete = await Logistics.findAll({
+      where: {
+        shippingId: {
+          [Op.in]: shippingIds
+        }
+      },
+      attributes: ['shippingId', 'logisticsProvider', 'status']
+    });
+
+    if (recordsToDelete.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: '没有找到要删除的记录'
+      });
+    }
+
+    console.log('\x1b[33m%s\x1b[0m', `找到 ${recordsToDelete.length} 条记录准备删除:`, 
+      recordsToDelete.map(r => `${r.shippingId}(${r.logisticsProvider}-${r.status})`));
+
+    // 执行批量删除
+    const deletedCount = await Logistics.destroy({
+      where: {
+        shippingId: {
+          [Op.in]: shippingIds
+        }
+      }
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', `成功删除 ${deletedCount} 条物流记录`);
+
+    res.json({
+      code: 0,
+      message: '批量删除成功',
+      data: {
+        deletedCount,
+        requestedCount: shippingIds.length,
+        foundCount: recordsToDelete.length,
+        deletedRecords: recordsToDelete.map(r => ({
+          shippingId: r.shippingId,
+          logisticsProvider: r.logisticsProvider,
+          status: r.status
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '批量删除物流记录失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
