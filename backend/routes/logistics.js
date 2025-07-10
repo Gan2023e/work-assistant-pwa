@@ -593,22 +593,33 @@ router.get('/statistics', async (req, res) => {
 
 // 批量删除物流记录
 router.post('/batch-delete', authenticateToken, async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '收到批量删除物流记录请求:', JSON.stringify(req.body, null, 2));
+  console.log('\x1b[32m%s\x1b[0m', '🔥 收到批量删除物流记录请求');
+  console.log('\x1b[36m%s\x1b[0m', '🔍 请求详情:', {
+    headers: req.headers,
+    body: req.body,
+    user: req.user
+  });
   
   try {
     const { shippingIds } = req.body;
     
+    console.log('\x1b[35m%s\x1b[0m', '📋 接收到的shippingIds:', shippingIds);
+    console.log('\x1b[35m%s\x1b[0m', '📋 shippingIds类型:', typeof shippingIds);
+    console.log('\x1b[35m%s\x1b[0m', '📋 shippingIds是否为数组:', Array.isArray(shippingIds));
+    
     // 验证参数
     if (!Array.isArray(shippingIds) || shippingIds.length === 0) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ 参数验证失败 - shippingIds 必须是非空数组');
       return res.status(400).json({
         code: 400,
         message: 'shippingIds 必须是非空数组'
       });
     }
 
-    console.log('\x1b[35m%s\x1b[0m', `准备删除 ${shippingIds.length} 条物流记录`);
+    console.log('\x1b[35m%s\x1b[0m', `✅ 准备删除 ${shippingIds.length} 条物流记录:`, shippingIds);
 
     // 先查找要删除的记录（用于日志和验证）
+    console.log('\x1b[36m%s\x1b[0m', '🔍 查找要删除的记录...');
     const recordsToDelete = await Logistics.findAll({
       where: {
         shippingId: {
@@ -618,16 +629,23 @@ router.post('/batch-delete', authenticateToken, async (req, res) => {
       attributes: ['shippingId', 'logisticsProvider', 'status']
     });
 
+    console.log('\x1b[36m%s\x1b[0m', `🔍 查找结果: 找到 ${recordsToDelete.length} 条记录`);
+    console.log('\x1b[36m%s\x1b[0m', '📋 找到的记录:', recordsToDelete.map(r => ({
+      shippingId: r.shippingId,
+      logisticsProvider: r.logisticsProvider,
+      status: r.status
+    })));
+
     if (recordsToDelete.length === 0) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ 没有找到要删除的记录');
       return res.status(404).json({
         code: 404,
         message: '没有找到要删除的记录'
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `找到 ${recordsToDelete.length} 条记录准备删除:`, 
-      recordsToDelete.map(r => `${r.shippingId}(${r.logisticsProvider}-${r.status})`));
-
+    console.log('\x1b[33m%s\x1b[0m', `🗑️ 开始执行删除操作...`);
+    
     // 执行批量删除
     const deletedCount = await Logistics.destroy({
       where: {
@@ -637,9 +655,9 @@ router.post('/batch-delete', authenticateToken, async (req, res) => {
       }
     });
 
-    console.log('\x1b[32m%s\x1b[0m', `成功删除 ${deletedCount} 条物流记录`);
+    console.log('\x1b[32m%s\x1b[0m', `✅ 删除操作完成! 成功删除 ${deletedCount} 条物流记录`);
 
-    res.json({
+    const responseData = {
       code: 0,
       message: '批量删除成功',
       data: {
@@ -652,9 +670,18 @@ router.post('/batch-delete', authenticateToken, async (req, res) => {
           status: r.status
         }))
       }
-    });
+    };
+    
+    console.log('\x1b[32m%s\x1b[0m', '📤 返回响应:', responseData);
+    res.json(responseData);
+    
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '批量删除物流记录失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '💥 批量删除物流记录失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '💥 错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      sql: error.sql
+    });
     res.status(500).json({
       code: 500,
       message: '服务器错误',
