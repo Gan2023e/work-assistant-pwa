@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const Logistics = require('../models/Logistics');
+const { authenticateToken } = require('./auth');
 
 // 搜索物流信息
-router.post('/search', async (req, res) => {
+router.post('/search', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到搜索请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -122,7 +123,7 @@ router.post('/search', async (req, res) => {
 });
 
 // 更新单个记录
-router.post('/update', async (req, res) => {
+router.post('/update', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到单个记录更新请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -185,7 +186,7 @@ router.post('/update', async (req, res) => {
 });
 
 // 批量更新多字段
-router.post('/batch-update', async (req, res) => {
+router.post('/batch-update', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到批量更新多字段请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -290,7 +291,7 @@ router.post('/batch-update', async (req, res) => {
 });
 
 // 批量更新状态
-router.post('/batch-update-status', async (req, res) => {
+router.post('/batch-update-status', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到批量更新状态请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -347,7 +348,7 @@ router.post('/batch-update-status', async (req, res) => {
 });
 
 // 批量更新付款状态
-router.post('/batch-update-payment-status', async (req, res) => {
+router.post('/batch-update-payment-status', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到批量更新付款状态请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -404,7 +405,7 @@ router.post('/batch-update-payment-status', async (req, res) => {
 });
 
 // 批量更新税金状态
-router.post('/batch-update-tax-status', async (req, res) => {
+router.post('/batch-update-tax-status', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到批量更新税金状态请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -591,7 +592,7 @@ router.get('/statistics', async (req, res) => {
 });
 
 // 批量删除物流记录
-router.post('/batch-delete', async (req, res) => {
+router.post('/batch-delete', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到批量删除物流记录请求:', JSON.stringify(req.body, null, 2));
   
   try {

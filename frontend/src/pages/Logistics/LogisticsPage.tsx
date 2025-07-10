@@ -160,9 +160,13 @@ const LogisticsPage: React.FC = () => {
       // 保存当前搜索参数
       setCurrentSearchParams(params);
       
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(params),
         });
         
@@ -339,9 +343,13 @@ const LogisticsPage: React.FC = () => {
   // 单元格编辑保存
   const handleSaveEdit = async () => {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/update`, {
           method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           shippingId: editingKey,
           [editingField]: editingValue
@@ -379,9 +387,13 @@ const LogisticsPage: React.FC = () => {
   // 单元格编辑保存（直接传值版本）
   const handleSaveEditWithValue = async (value: any) => {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/update`, {
           method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           shippingId: editingKey,
           [editingField]: value
@@ -521,9 +533,13 @@ const LogisticsPage: React.FC = () => {
   const handleBatchUpdateConfirm = async () => {
     try {
       setBatchLoading(true);
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ updates: parsedBatchData }),
       });
 
@@ -564,9 +580,13 @@ const LogisticsPage: React.FC = () => {
 
     setBatchLoading(true);
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           shippingIds: selectedRowKeys,
           status: newStatus
@@ -615,9 +635,13 @@ const LogisticsPage: React.FC = () => {
 
     setBatchLoading(true);
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-payment-status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           shippingIds: selectedRowKeys,
           paymentStatus: newStatus
@@ -666,9 +690,13 @@ const LogisticsPage: React.FC = () => {
 
     setBatchLoading(true);
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/batch-update-tax-status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           shippingIds: selectedRowKeys,
           taxPaymentStatus: newStatus
@@ -741,11 +769,13 @@ const LogisticsPage: React.FC = () => {
           };
           console.log('📤 请求数据:', requestPayload);
           
+          const token = localStorage.getItem('token');
           const response = await fetch(`${API_BASE_URL}/api/logistics/batch-delete`, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Accept': 'application/json'
+              'Accept': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
             },
             body: JSON.stringify(requestPayload),
           });
