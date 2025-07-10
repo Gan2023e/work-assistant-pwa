@@ -464,6 +464,14 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       )
     },
     {
+      title: '本地SKU',
+      dataIndex: 'sku',
+      key: 'sku_status',
+      width: 120,
+      align: 'center',
+      render: (text: string) => <Text strong>{text}</Text>
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
