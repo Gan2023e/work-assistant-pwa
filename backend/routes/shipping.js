@@ -430,6 +430,9 @@ router.post('/mixed-boxes', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的库存数据:', inventoryData.length);
 
+    // 初始化映射表，确保在所有地方都能访问
+    const mappingMap = new Map();
+
     // 第一步：找到选中记录对应的混合箱号
     const selectedMixedBoxNums = new Set();
     inventoryData.forEach(item => {
@@ -485,7 +488,7 @@ router.post('/mixed-boxes', async (req, res) => {
       }
       
       // 创建映射关系的快速查找表（使用优先级选择逻辑）
-      const mappingMap = new Map();
+      // mappingMap 已在函数开头定义
       
       // 按 local_sku + country 分组所有映射
       const mappingGroups = new Map();
