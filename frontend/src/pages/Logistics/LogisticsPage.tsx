@@ -761,6 +761,60 @@ const LogisticsPage: React.FC = () => {
     console.log('🔍 Modal对象检查:', typeof Modal);
     console.log('🔍 Modal.confirm检查:', typeof Modal.confirm);
     
+    // 高级调试：检查DOM和样式
+    console.log('🔍 深度调试 - DOM和样式检查');
+    
+    // 检查现有Modal元素
+    const existingModals = document.querySelectorAll('.ant-modal-root, .ant-modal-wrap, .ant-modal');
+    console.log('🔍 现有Modal元素数量:', existingModals.length);
+    existingModals.forEach((el, index) => {
+      console.log(`🔍 Modal ${index}:`, el);
+      const styles = window.getComputedStyle(el);
+      console.log(`🔍 Modal ${index} 样式:`, {
+        display: styles.display,
+        visibility: styles.visibility,
+        opacity: styles.opacity,
+        zIndex: styles.zIndex,
+        position: styles.position
+      });
+    });
+    
+    // 检查现有遮罩层
+    const existingMasks = document.querySelectorAll('.ant-modal-mask');
+    console.log('🔍 现有遮罩层数量:', existingMasks.length);
+    existingMasks.forEach((mask, index) => {
+      const styles = window.getComputedStyle(mask);
+      console.log(`🔍 遮罩 ${index} 样式:`, {
+        display: styles.display,
+        opacity: styles.opacity,
+        zIndex: styles.zIndex,
+        position: styles.position
+      });
+    });
+    
+    // 检查Body样式
+    const bodyStyles = window.getComputedStyle(document.body);
+    console.log('🔍 Body样式:', {
+      overflow: bodyStyles.overflow,
+      position: bodyStyles.position,
+      zIndex: bodyStyles.zIndex
+    });
+    
+    // 检查高z-index元素
+    const allElements = document.querySelectorAll('*');
+    const highZIndexElements: Array<{tagName: string; className: string; zIndex: string}> = [];
+    allElements.forEach(el => {
+      const zIndex = window.getComputedStyle(el).zIndex;
+      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) > 1000) {
+        highZIndexElements.push({
+          tagName: el.tagName,
+          className: el.className,
+          zIndex: zIndex
+        });
+      }
+    });
+    console.log('🔍 高z-index元素 (>1000):', highZIndexElements.slice(0, 10)); // 只显示前10个
+    
     try {
       console.log('🔥 准备调用Modal.confirm...');
       
@@ -782,6 +836,9 @@ const LogisticsPage: React.FC = () => {
         cancelText: '取消',
         okType: 'danger',
         width: 500,
+        zIndex: 9999, // 添加明确的z-index
+        mask: true, // 确保有遮罩
+        maskClosable: false, // 防止点击遮罩关闭
         onOk: async () => {
           setBatchLoading(true);
           try {
@@ -877,6 +934,33 @@ const LogisticsPage: React.FC = () => {
       
       console.log('✅ Modal.confirm调用成功，返回值:', modalResult);
       
+      // 检查Modal创建后的DOM变化
+      setTimeout(() => {
+        console.log('🔍 Modal创建后DOM检查 (延迟500ms)');
+        const newModals = document.querySelectorAll('.ant-modal-root, .ant-modal-wrap, .ant-modal');
+        console.log('🔍 新Modal元素数量:', newModals.length);
+        
+        const newMasks = document.querySelectorAll('.ant-modal-mask');
+        console.log('🔍 新遮罩层数量:', newMasks.length);
+        
+        if (newModals.length === 0 && newMasks.length === 0) {
+          console.error('💥 严重问题：Modal.confirm调用成功但没有创建DOM元素！');
+          console.log('🔄 尝试手动创建确认对话框...');
+          
+          // 创建自定义确认对话框作为后备方案
+          const customConfirm = createCustomConfirmDialog();
+          customConfirm.show({
+            title: '确认批量删除',
+            content: `您确定要删除选中的 ${selectedRowKeys.length} 条物流记录吗？\n\n警告：此操作不可撤销！\n\n选中的记录ID: ${selectedRowKeys.join(', ')}`,
+            onConfirm: () => {
+              console.log('✅ 自定义对话框 - 用户确认删除');
+              // 这里可以调用删除逻辑，但为了避免重复，先记录日志
+              message.info('已确认删除，但因Modal问题，需要重新点击批量删除按钮');
+            }
+          });
+        }
+      }, 500);
+      
     } catch (modalError) {
       console.error('💥 Modal.confirm调用失败:', modalError);
       console.error('💥 错误详情:', modalError);
@@ -888,7 +972,7 @@ const LogisticsPage: React.FC = () => {
       if (confirmed) {
         console.log('✅ 用户确认删除，开始执行删除操作');
         // 在这里执行删除逻辑，但先通过message.error通知用户Modal有问题
-        message.error('Modal组件异常，请联系技术支持。当前使用备用删除方式。');
+        message.error('Modal组件异常，使用备用删除方式。');
         
         // 手动执行删除逻辑
         (async () => {
@@ -947,6 +1031,70 @@ const LogisticsPage: React.FC = () => {
         console.log('❌ 用户取消删除');
       }
     }
+  };
+
+  // 创建自定义确认对话框（备用方案）
+  const createCustomConfirmDialog = () => {
+    return {
+      show: (options: { title: string; content: string; onConfirm: () => void }) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0, 0, 0, 0.5);
+          z-index: 10000;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        `;
+        
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          background: white;
+          padding: 24px;
+          border-radius: 8px;
+          min-width: 400px;
+          max-width: 600px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        `;
+        
+        modal.innerHTML = `
+          <div style="margin-bottom: 16px; font-size: 16px; font-weight: 500;">
+            ${options.title}
+          </div>
+          <div style="margin-bottom: 24px; color: #666; white-space: pre-line;">
+            ${options.content}
+          </div>
+          <div style="text-align: right;">
+            <button id="customCancel" style="margin-right: 8px; padding: 6px 15px; border: 1px solid #d9d9d9; background: white; border-radius: 4px; cursor: pointer;">
+              取消
+            </button>
+            <button id="customOk" style="padding: 6px 15px; border: none; background: #ff4d4f; color: white; border-radius: 4px; cursor: pointer;">
+              确认删除
+            </button>
+          </div>
+        `;
+        
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        const cleanup = () => document.body.removeChild(overlay);
+        
+        modal.querySelector('#customOk')!.addEventListener('click', () => {
+          cleanup();
+          options.onConfirm();
+        });
+        
+        modal.querySelector('#customCancel')!.addEventListener('click', cleanup);
+        
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) cleanup();
+        });
+      }
+    };
   };
 
   // 重新获取数据（使用当前搜索参数）
