@@ -296,8 +296,33 @@ const Purchase: React.FC = () => {
 
       message.success('批量更新成功');
       setSelectedRowKeys([]);
-      // 刷新数据和统计信息
-      handleSearch();
+      
+      // 更新本地数据
+      setData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, status }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, status }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, status }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
       fetchAllDataStatistics();
     } catch (e) {
       console.error('批量更新失败:', e);
@@ -327,8 +352,21 @@ const Purchase: React.FC = () => {
 
       message.success('批量删除成功');
       setSelectedRowKeys([]);
-      // 刷新数据和统计信息
-      handleSearch();
+      
+      // 从本地数据中移除已删除的记录
+      setData(prevData => 
+        prevData.filter(item => !selectedRowKeys.includes(item.id))
+      );
+      
+      setOriginalData(prevData => 
+        prevData.filter(item => !selectedRowKeys.includes(item.id))
+      );
+      
+      setFilteredData(prevData => 
+        prevData.filter(item => !selectedRowKeys.includes(item.id))
+      );
+      
+      // 刷新统计信息
       fetchAllDataStatistics();
     } catch (e) {
       console.error('批量删除失败:', e);
@@ -360,12 +398,30 @@ const Purchase: React.FC = () => {
       message.success(result.message);
       setSelectedRowKeys([]);
       
-      // 刷新当前搜索结果
-      if (input.trim()) {
-        handleSearch();
-      } else if (filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) {
-        applyFilters(filters);
-      }
+      // 更新本地数据中的CPC状态
+      setData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '申请测试' }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '申请测试' }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '申请测试' }
+            : item
+        )
+      );
       
       // 刷新统计信息
       fetchAllDataStatistics();
@@ -480,8 +536,33 @@ const Purchase: React.FC = () => {
       setEditModalVisible(false);
       setEditingCell(null);
       editForm.resetFields();
-      // 刷新数据和统计信息
-      handleSearch();
+      
+      // 更新本地数据
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === editingCell.id 
+            ? { ...item, [editingCell.field]: values.value }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          item.id === editingCell.id 
+            ? { ...item, [editingCell.field]: values.value }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          item.id === editingCell.id 
+            ? { ...item, [editingCell.field]: values.value }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
       fetchAllDataStatistics();
     } catch (e) {
       console.error('更新失败:', e);
