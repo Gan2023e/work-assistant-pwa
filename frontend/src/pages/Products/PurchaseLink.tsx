@@ -79,7 +79,8 @@ const statusOptions = [
 const cpcStatusOptions = [
   '待测试',
   '测试中',
-  '测试完成'
+  '测试完成',
+  '' // 空项，用于清空字段
 ];
 
 const Purchase: React.FC = () => {
@@ -1090,7 +1091,9 @@ const Purchase: React.FC = () => {
             ) : editingCell?.field === 'cpc_status' ? (
               <Select placeholder="请选择CPC测试情况">
                 {cpcStatusOptions.map(status => (
-                  <Option key={status} value={status}>{status}</Option>
+                  <Option key={status} value={status}>
+                    {status === '' ? '清空' : status}
+                  </Option>
                 ))}
               </Select>
             ) : editingCell?.field === 'notice' ? (
