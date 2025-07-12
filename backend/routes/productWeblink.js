@@ -590,10 +590,16 @@ router.get('/statistics', async (req, res) => {
       where: { status: '待上传' }
     });
 
+    // 计算CPC待测试的产品数量
+    const waitingCpcTestCount = await ProductWeblink.count({
+      where: { cpc_status: '待测试' }
+    });
+
     res.json({
       statistics: {
         waitingPImage: waitingPImageCount,
-        waitingUpload: waitingUploadCount
+        waitingUpload: waitingUploadCount,
+        waitingCpcTest: waitingCpcTestCount
       },
       statusStats: statusStats.map(item => ({
         value: item.status,

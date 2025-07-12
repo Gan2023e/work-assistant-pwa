@@ -75,6 +75,13 @@ const statusOptions = [
   '待上传'
 ];
 
+// CPC测试情况选项
+const cpcStatusOptions = [
+  '待测试',
+  '测试中',
+  '测试完成'
+];
+
 const Purchase: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,7 +109,8 @@ const Purchase: React.FC = () => {
   // 统计数据（基于全库数据）
   const [statistics, setStatistics] = useState({
     waitingPImage: 0,
-    waitingUpload: 0
+    waitingUpload: 0,
+    waitingCpcTest: 0
   });
   
   // 全库统计数据
@@ -241,8 +249,8 @@ const Purchase: React.FC = () => {
 
 
   // 点击卡片显示对应状态数据
-  const handleCardClick = (status: string) => {
-    const cardFilters = { ...filters, status };
+  const handleCardClick = (status: string, type: 'status' | 'cpc_status' = 'status') => {
+    const cardFilters = { ...filters, [type]: status };
     setFilters(cardFilters);
     applyFilters(cardFilters);
   };
@@ -811,6 +819,20 @@ const Purchase: React.FC = () => {
               />
             </Card>
           </Col>
+          <Col span={6}>
+            <Card 
+              hoverable 
+              onClick={() => handleCardClick('待测试', 'cpc_status')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="CPC待测试产品数"
+                value={statistics.waitingCpcTest}
+                prefix={<SearchOutlined />}
+                valueStyle={{ color: '#fa8c16' }}
+              />
+            </Card>
+          </Col>
         </Row>
       </div>
 
@@ -1062,6 +1084,12 @@ const Purchase: React.FC = () => {
             {editingCell?.field === 'status' ? (
               <Select placeholder="请选择状态">
                 {statusOptions.map(status => (
+                  <Option key={status} value={status}>{status}</Option>
+                ))}
+              </Select>
+            ) : editingCell?.field === 'cpc_status' ? (
+              <Select placeholder="请选择CPC测试情况">
+                {cpcStatusOptions.map(status => (
                   <Option key={status} value={status}>{status}</Option>
                 ))}
               </Select>
