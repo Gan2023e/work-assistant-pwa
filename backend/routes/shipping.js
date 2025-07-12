@@ -814,6 +814,71 @@ router.put('/needs/batch-status', async (req, res) => {
   }
 });
 
+// 批量删除需求记录
+router.post('/needs/batch-delete', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量删除需求记录请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { record_nums } = req.body;
+    
+    if (!record_nums || !Array.isArray(record_nums) || record_nums.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '记录ID列表不能为空'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除需求记录:', record_nums);
+    
+    // 先检查是否有已发货记录，避免删除已发货的需求
+    const shippedItems = await ShipmentItem.findAll({
+      where: {
+        order_item_id: { [Op.in]: record_nums }
+      },
+      attributes: ['order_item_id', 'shipped_quantity']
+    });
+    
+    if (shippedItems.length > 0) {
+      const shippedRecords = shippedItems.filter(item => item.shipped_quantity > 0);
+      if (shippedRecords.length > 0) {
+        const shippedIds = shippedRecords.map(item => item.order_item_id);
+        return res.status(400).json({
+          code: 1,
+          message: `记录 ${shippedIds.join(', ')} 已有发货记录，无法删除`
+        });
+      }
+    }
+    
+    // 执行批量删除
+    const deletedCount = await WarehouseProductsNeed.destroy({
+      where: {
+        record_num: { [Op.in]: record_nums }
+      }
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除成功:', {
+      deletedCount,
+      requestedCount: record_nums.length
+    });
+    
+    res.json({
+      code: 0,
+      message: '批量删除成功',
+      data: {
+        deleted_count: deletedCount,
+        requested_count: record_nums.length
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除需求记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
 // 健康检查和测试端点
 router.get('/health', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 发货需求模块健康检查');

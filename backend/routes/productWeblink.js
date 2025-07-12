@@ -41,7 +41,6 @@ router.post('/search', async (req, res) => {
         'check_time',
         'status',
         'notice',
-        'cpc_recommend',
         'cpc_status',
         'cpc_submit',
         'model_number',
@@ -79,6 +78,38 @@ router.post('/batch-update-status', async (req, res) => {
     );
 
     res.json({ message: '批量更新成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
+// 批量发送CPC测试申请
+router.post('/batch-send-cpc-test', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要申请测试的记录' });
+    }
+
+    // 更新选中记录的CPC测试状态为"申请测试"
+    await ProductWeblink.update(
+      { cpc_status: '申请测试' },
+      {
+        where: {
+          id: { [Op.in]: ids }
+        }
+      }
+    );
+
+    // 发送钉钉通知
+    try {
+      await sendCpcTestNotification(ids.length);
+    } catch (notificationError) {
+      console.error('钉钉通知发送失败，但不影响数据更新:', notificationError.message);
+    }
+
+    res.json({ message: `成功提交 ${ids.length} 条CPC测试申请` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: '服务器错误' });
@@ -179,6 +210,65 @@ async function sendDingTalkNotification(newProductCount) {
     }
   } catch (error) {
     console.error('发送钉钉通知时出错:', error.message);
+  }
+}
+
+// CPC测试申请钉钉通知函数
+async function sendCpcTestNotification(cpcTestCount) {
+  try {
+    const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
+    
+    if (!DINGTALK_WEBHOOK) {
+      console.log('钉钉Webhook未配置，跳过通知');
+      return;
+    }
+
+    // 如果有SECRET_KEY，计算签名
+    let webhookUrl = DINGTALK_WEBHOOK;
+    if (SECRET_KEY) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${SECRET_KEY}`;
+      const sign = crypto.createHmac('sha256', SECRET_KEY)
+                        .update(stringToSign)
+                        .digest('base64');
+      
+      // 添加时间戳和签名参数
+      const urlObj = new URL(DINGTALK_WEBHOOK);
+      urlObj.searchParams.append('timestamp', timestamp.toString());
+      urlObj.searchParams.append('sign', encodeURIComponent(sign));
+      webhookUrl = urlObj.toString();
+    }
+
+    // 使用配置的手机号，如果没有配置则使用默认值
+    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+
+    const message = {
+      msgtype: 'text',
+      text: {
+        content: `有${cpcTestCount}款产品申请CPC测试，请及时处理！@${mobileNumber}`
+      },
+      at: {
+        atMobiles: [mobileNumber],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(webhookUrl, message, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    if (response.data.errcode === 0) {
+      console.log('CPC测试申请钉钉通知发送成功');
+    } else {
+      console.error('CPC测试申请钉钉通知发送失败:', response.data);
+    }
+  } catch (error) {
+    console.error('发送CPC测试申请钉钉通知时出错:', error.message);
   }
 }
 
@@ -386,7 +476,7 @@ router.post('/latest-sku', async (req, res) => {
 // 筛选数据接口
 router.post('/filter', async (req, res) => {
   try {
-    const { status, cpc_status, seller_name } = req.body;
+    const { status, cpc_status, seller_name, dateRange } = req.body;
     
     // 构建查询条件
     const whereConditions = {};
@@ -399,6 +489,17 @@ router.post('/filter', async (req, res) => {
     if (seller_name) {
       whereConditions.seller_name = { [Op.like]: `%${seller_name}%` };
     }
+    
+    // 添加时间范围筛选
+    if (dateRange && dateRange.length === 2) {
+      const [startDate, endDate] = dateRange;
+      whereConditions.update_time = {
+        [Op.between]: [
+          new Date(startDate + ' 00:00:00'),
+          new Date(endDate + ' 23:59:59')
+        ]
+      };
+    }
 
     const result = await ProductWeblink.findAll({
       where: whereConditions,
@@ -410,7 +511,6 @@ router.post('/filter', async (req, res) => {
         'check_time',
         'status',
         'notice',
-        'cpc_recommend',
         'cpc_status',
         'cpc_submit',
         'model_number',

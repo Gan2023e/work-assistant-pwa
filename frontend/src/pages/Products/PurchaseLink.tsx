@@ -15,7 +15,8 @@ import {
   Card,
   Row,
   Col,
-  Statistic
+  Statistic,
+  DatePicker
 } from 'antd';
 import { 
   UploadOutlined, 
@@ -36,6 +37,7 @@ import ChildSkuGenerator from '../../components/ChildSkuGenerator';
 const { TextArea } = Input;
 const { Option } = Select;
 const { Text } = Typography;
+const { RangePicker } = DatePicker;
 
 interface ProductRecord {
   id: number;
@@ -45,7 +47,6 @@ interface ProductRecord {
   check_time: string;
   status: string;
   notice: string;
-  cpc_recommend: string;
   cpc_status: string;
   cpc_submit: string;
   model_number: string;
@@ -92,7 +93,8 @@ const Purchase: React.FC = () => {
   const [filters, setFilters] = useState({
     status: '',
     cpc_status: '',
-    seller_name: ''
+    seller_name: '',
+    dateRange: null as [string, string] | null
   });
   const [filteredData, setFilteredData] = useState<ProductRecord[]>([]);
   const [originalData, setOriginalData] = useState<ProductRecord[]>([]);
@@ -192,6 +194,9 @@ const Purchase: React.FC = () => {
       if (currentFilters.seller_name) {
         conditions.seller_name = currentFilters.seller_name;
       }
+      if (currentFilters.dateRange) {
+        conditions.dateRange = currentFilters.dateRange;
+      }
 
       // 如果没有筛选条件，清空数据
       if (Object.keys(conditions).length === 0) {
@@ -227,7 +232,7 @@ const Purchase: React.FC = () => {
   };
 
   // 处理筛选变化
-  const handleFilterChange = (filterType: string, value: string) => {
+  const handleFilterChange = (filterType: string, value: string | [string, string] | null) => {
     const newFilters = { ...filters, [filterType]: value };
     setFilters(newFilters);
     applyFilters(newFilters);
@@ -322,6 +327,45 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 批量发送CPC测试申请
+  const handleBatchSendCpcTest = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要申请测试的记录');
+      return;
+    }
+
+    try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-send-cpc-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      setSelectedRowKeys([]);
+      
+      // 刷新当前搜索结果
+      if (input.trim()) {
+        handleSearch();
+      } else if (filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) {
+        applyFilters(filters);
+      }
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('发送CPC测试申请失败:', e);
+      message.error('发送CPC测试申请失败');
+    }
+  };
+
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
@@ -330,7 +374,7 @@ const Purchase: React.FC = () => {
     }
 
     // 确保类型匹配：将selectedRowKeys中的值转换为数字进行比较
-    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name ? filteredData : data;
+    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange ? filteredData : data;
     const selectedRecords = currentData.filter(record => 
       selectedRowKeys.some(key => Number(key) === record.id)
     );
@@ -592,18 +636,7 @@ const Purchase: React.FC = () => {
         style: { cursor: 'pointer' }
       })
     },
-    { 
-      title: 'CPC测试推荐', 
-      dataIndex: 'cpc_recommend', 
-      key: 'cpc_recommend', 
-      align: 'center',
-      width: 120,
-      sorter: (a, b) => (a.cpc_recommend || '').localeCompare(b.cpc_recommend || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'cpc_recommend'),
-        style: { cursor: 'pointer' }
-      })
-    },
+
     { 
       title: 'CPC测试情况', 
       dataIndex: 'cpc_status', 
@@ -806,7 +839,7 @@ const Purchase: React.FC = () => {
                   setFilteredData([]);
                   setSelectedRowKeys([]);
                   // 清空筛选条件
-                  setFilters({ status: '', cpc_status: '', seller_name: '' });
+                  setFilters({ status: '', cpc_status: '', seller_name: '', dateRange: null });
                   // 重新获取统计数据
                   fetchAllDataStatistics();
                 }}
@@ -818,7 +851,7 @@ const Purchase: React.FC = () => {
             {/* 筛选条件区域 */}
             <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }}>
               <Row gutter={[16, 8]} align="middle">
-                <Col span={8}>
+                <Col span={6}>
                   <div style={{ marginBottom: '4px' }}>产品状态：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -834,7 +867,7 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
                   <div style={{ marginBottom: '4px' }}>CPC测试情况：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -850,7 +883,7 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
                   <div style={{ marginBottom: '4px' }}>供应商：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -870,10 +903,23 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                {(filters.status || filters.cpc_status || filters.seller_name) && (
+                <Col span={6}>
+                  <div style={{ marginBottom: '4px' }}>创建时间：</div>
+                  <RangePicker
+                    style={{ width: '100%' }}
+                    placeholder={['开始日期', '结束日期']}
+                    value={filters.dateRange ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])] : null}
+                    onChange={(dates) => {
+                      const dateRange = dates && dates.length === 2 ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] as [string, string] : null;
+                      handleFilterChange('dateRange', dateRange);
+                    }}
+                    allowClear
+                  />
+                </Col>
+                {(filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) && (
                   <Col span={24} style={{ textAlign: 'center', marginTop: '8px' }}>
                     <span style={{ color: '#1890ff' }}>
-                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name) ? filteredData.length : data.length} 条记录
+                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
                     </span>
                   </Col>
                 )}
@@ -905,6 +951,15 @@ const Purchase: React.FC = () => {
                 disabled={selectedRowKeys.length === 0}
               >
                 批量打开链接
+              </Button>
+
+              {/* 发送CPC测试申请 */}
+              <Button 
+                type="primary"
+                onClick={handleBatchSendCpcTest}
+                disabled={selectedRowKeys.length === 0}
+              >
+                发送CPC测试申请
               </Button>
 
               {/* 批量上传新品 */}
@@ -958,7 +1013,7 @@ const Purchase: React.FC = () => {
       {/* 数据表格 */}
       <Table
         columns={columns}
-        dataSource={filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name ? filteredData : data}
+        dataSource={filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange ? filteredData : data}
         rowKey="id"
         loading={loading}
         rowSelection={rowSelection}
