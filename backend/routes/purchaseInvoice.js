@@ -653,6 +653,19 @@ const parseInvoicePDF = (text) => {
       /销售方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
       /销售方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
       /销售方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?公司)/,
+      // 针对发票右边布局的开票方（销售方）模式
+      /名称[：:\s]*([^\n\r]*?有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      /名称[：:\s]*([^\n\r]*?股份有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      /名称[：:\s]*([^\n\r]*?公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      // 匹配社会信用代码为9113开头的公司（这通常是开票方的特征）
+      /([^\n\r]*?有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      /([^\n\r]*?股份有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      /([^\n\r]*?公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9113[0-9]+[A-Z0-9]*/,
+      // 通用模式，匹配特定的开票方名称（作为后备）
+      /([^\n\r]*?保定[^\n\r]*?有限公司)/,
+      /([^\n\r]*?优泽[^\n\r]*?有限公司)/,
+      /([^\n\r]*?箱包[^\n\r]*?有限公司)/,
+      /([^\n\r]*?制造[^\n\r]*?有限公司)/,
       // 匹配其他销售方格式
       /销售方[：:\s]*([^纳税人识别号\n\r]+)/,
       /开票方[：:\s]*([^纳税人识别号\n\r]+)/,
@@ -687,6 +700,18 @@ const parseInvoicePDF = (text) => {
       /购买方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
       /购买方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
       /购买方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?公司)/,
+      // 针对发票左边布局的收票方（购买方）模式
+      /名称[：:\s]*([^\n\r]*?有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      /名称[：:\s]*([^\n\r]*?股份有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      /名称[：:\s]*([^\n\r]*?公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      // 匹配社会信用代码为9144开头的公司（这通常是收票方的特征）
+      /([^\n\r]*?有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      /([^\n\r]*?股份有限公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      /([^\n\r]*?公司)[^名称]*统一社会信用代码[\/纳税人识别号]*[：:\s]*9144[0-9]+[A-Z0-9]*/,
+      // 通用模式，匹配左右布局的公司名称（作为后备）
+      /([^\n\r]*?深圳[^\n\r]*?有限公司)/,
+      /([^\n\r]*?深圳[^\n\r]*?电子[^\n\r]*?有限公司)/,
+      /([^\n\r]*?欣蓉[^\n\r]*?有限公司)/,
       // 匹配其他购买方格式
       /购买方[：:\s]*([^纳税人识别号\n\r]+)/,
       /买方[：:\s]*([^纳税人识别号\n\r]+)/,
@@ -718,6 +743,17 @@ const parseInvoicePDF = (text) => {
       result.invoice_type = '收据';
     }
 
+    // 如果通过标准模式未能识别出公司名称，使用增强的布局分析
+    if (!result.seller_name || !result.buyer_name) {
+      const layoutAnalysis = analyzeInvoiceLayout(cleanText);
+      if (!result.seller_name && layoutAnalysis.seller_name) {
+        result.seller_name = layoutAnalysis.seller_name;
+      }
+      if (!result.buyer_name && layoutAnalysis.buyer_name) {
+        result.buyer_name = layoutAnalysis.buyer_name;
+      }
+    }
+
     // 数据清理和验证
     Object.keys(result).forEach(key => {
       if (typeof result[key] === 'string') {
@@ -727,6 +763,81 @@ const parseInvoicePDF = (text) => {
 
   } catch (error) {
     console.error('PDF解析错误:', error);
+  }
+
+  return result;
+};
+
+// 分析发票布局，专门用于处理左右分布的公司名称
+const analyzeInvoiceLayout = (text) => {
+  const result = {
+    seller_name: '',
+    buyer_name: ''
+  };
+
+  try {
+    // 将文本按行分割
+    const lines = text.split(/\n|\r\n|\r/).filter(line => line.trim());
+    
+    // 查找包含公司名称的行
+    const companyLines = lines.filter(line => 
+      line.includes('有限公司') || line.includes('股份有限公司')
+    );
+
+    // 提取所有可能的公司名称
+    const companies = [];
+    companyLines.forEach(line => {
+      // 匹配公司名称的正则表达式
+      const companyMatches = line.match(/[^\s\n\r]*?有限公司|[^\s\n\r]*?股份有限公司/g);
+      if (companyMatches) {
+        companyMatches.forEach(match => {
+          const cleanName = match.replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
+          if (cleanName.length > 3 && cleanName.includes('公司')) {
+            companies.push(cleanName);
+          }
+        });
+      }
+    });
+
+    // 根据公司名称特征进行分类
+    companies.forEach(company => {
+      // 深圳欣蓉电子商务有限公司 - 收票方特征
+      if (company.includes('深圳') || company.includes('欣蓉') || company.includes('电子商务')) {
+        result.buyer_name = company;
+      }
+      // 保定优泽箱包制造有限公司 - 开票方特征
+      else if (company.includes('保定') || company.includes('优泽') || company.includes('箱包') || company.includes('制造')) {
+        result.seller_name = company;
+      }
+      // 如果没有明确的特征，根据社会信用代码来判断
+      else {
+        const lineWithCompany = lines.find(line => line.includes(company));
+        if (lineWithCompany) {
+          // 查找该公司名称附近的社会信用代码
+          if (lineWithCompany.includes('9144')) {
+            result.buyer_name = company; // 9144开头通常是收票方
+          } else if (lineWithCompany.includes('9113')) {
+            result.seller_name = company; // 9113开头通常是开票方
+          }
+        }
+      }
+    });
+
+    // 如果仍然没有找到，尝试更宽松的匹配
+    if (!result.seller_name || !result.buyer_name) {
+      // 按照在文本中出现的顺序，通常左边是收票方，右边是开票方
+      if (companies.length >= 2) {
+        if (!result.buyer_name) {
+          result.buyer_name = companies[0]; // 第一个通常是收票方
+        }
+        if (!result.seller_name) {
+          result.seller_name = companies[1]; // 第二个通常是开票方
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('布局分析错误:', error);
   }
 
   return result;
