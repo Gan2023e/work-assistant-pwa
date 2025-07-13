@@ -45,7 +45,7 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
     { key: '/', label: <Link to="/">主页</Link> },
     {
       key: 'products',
-      label: '产品管理',
+      label: '产品与采购管理',
       children: [
         { key: '/products/purchase', label: <Link to="/products/purchase">采购链接管理</Link> },
         { key: '/products/listings', label: <Link to="/products/listings">在线Listings管理</Link> },
@@ -186,7 +186,7 @@ const AppContent: React.FC = () => {
   const menuItems: MenuProps['items'] = [
     { label: <Link to="/">主页</Link>, key: '/' },
     {
-      label: getMenuLabel('产品管理', openKeys.includes('products')),
+      label: getMenuLabel('产品与采购管理', openKeys.includes('products')),
       key: 'products',
       children: [
         { label: <Link to="/products/purchase">采购链接管理</Link>, key: '/products/purchase' },

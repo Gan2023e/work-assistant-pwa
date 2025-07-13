@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const pdf = require('pdf-parse');
 const { uploadToOSS, deleteFromOSS, getSignedUrl, checkOSSConfig } = require('../utils/oss');
 
 // 配置文件上传中间件
@@ -452,6 +453,432 @@ router.post('/upload-invoice', upload.single('file'), async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '文件上传失败',
+      error: error.message
+    });
+  }
+});
+
+// PDF发票解析功能 - 优化版本
+const parseInvoicePDF = (text) => {
+  const result = {
+    invoice_number: '',
+    invoice_date: '',
+    total_amount: '',
+    tax_amount: '',
+    tax_rate: '',
+    seller_name: '',
+    buyer_name: '',
+    invoice_type: '增值税普通发票'
+  };
+
+  try {
+    // 预处理文本：去除多余的空白字符，标准化格式
+    const cleanText = text.replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
+    
+    // 发票号码解析 - 针对发票号码格式优化
+    const invoiceNumberPatterns = [
+      // 匹配 "发票号码：数字" 格式
+      /发票号码[：:\s]*(\d{20,30})/i,
+      // 匹配右上角的长数字发票号
+      /(\d{20,30})/,
+      // 匹配其他可能的发票号格式
+      /发票代码[：:\s]*(\d{10,15})[^0-9]*发票号码[：:\s]*(\d{8,30})/i,
+      /票据号[：:\s]*(\d{8,30})/i,
+      /NO[：:\s]*(\d{8,30})/i,
+      /编号[：:\s]*(\d{8,30})/i,
+      /发票编号[：:\s]*(\d{8,30})/i,
+      /号码[：:\s]*(\d{8,30})/i,
+      // 匹配含字母的发票号码
+      /(\d{8,20}[A-Z]{1,5})/i
+    ];
+    
+    for (const pattern of invoiceNumberPatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        // 取最后一个匹配的数字组合
+        const invoiceNumber = match[match.length - 1];
+        if (invoiceNumber && invoiceNumber.length >= 15) {
+          result.invoice_number = invoiceNumber;
+          break;
+        }
+      }
+    }
+
+    // 开票日期解析 - 针对中文日期格式优化
+    const datePatterns = [
+      // 匹配 "开票日期：YYYY年MM月DD日" 格式
+      /开票日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
+      /开具日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
+      // 匹配其他日期格式
+      /开票日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
+      /开具日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
+      /日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
+      /开票时间[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
+      // 支持 YYYY-MM-DD 格式
+      /(\d{4}-\d{1,2}-\d{1,2})/,
+      // 支持 YYYY/MM/DD 格式
+      /(\d{4}\/\d{1,2}\/\d{1,2})/,
+      // 支持中文日期格式
+      /(\d{4}年\d{1,2}月\d{1,2}日)/
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        let dateStr = match[1];
+        // 标准化日期格式
+        dateStr = dateStr.replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/\//g, '-');
+        if (dateStr.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
+          result.invoice_date = dateStr;
+          break;
+        }
+      }
+    }
+
+    // 金额解析 - 针对价税合计格式优化
+    const amountPatterns = [
+      // 匹配 "价税合计（大写）... （小写）¥XX.XX" 格式
+      /价税合计[^¥]*（小写）[^¥]*¥\s*([\d,]+\.?\d*)/,
+      /价税合计[^¥]*小写[^¥]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配其他价税合计格式
+      /价税合计[^¥]*¥\s*([\d,]+\.?\d*)/,
+      /合计[（(]大写[）)][^¥]*¥\s*([\d,]+\.?\d*)/,
+      /合计[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /总计[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /金额合计[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /小写[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /金额[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配货币符号后的金额
+      /¥\s*([\d,]+\.?\d*)/,
+      // 匹配数字金额（作为后备）
+      /([\d,]+\.\d{2})/
+    ];
+    
+    for (const pattern of amountPatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        const amount = match[1].replace(/,/g, '');
+        if (parseFloat(amount) > 0) {
+          result.total_amount = amount;
+          break;
+        }
+      }
+    }
+
+    // 税额解析 - 针对税额列格式优化
+    const taxAmountPatterns = [
+      // 匹配合计行的税额 "合计 ¥30.69 ¥0.31"
+      /合计[^¥]*¥[^¥]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配税额列最后的小数金额（在税率后面）
+      /税率[\/征收率]*[^%\d]*\d{1,2}%[^0-9]*(\d+\.\d{2})/,
+      /税\s*额[^¥\d]*(\d+\.\d{2})/,
+      /税额[^¥\d]*(\d+\.\d{2})/,
+      // 匹配¥符号后的税额
+      /税额[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /税金[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /增值税[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      /税[：:\s]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配税额列中的数字
+      /税额[^¥\d]*¥?\s*([\d,]+\.?\d*)/,
+      /税金[^¥\d]*¥?\s*([\d,]+\.?\d*)/,
+      /增值税[^¥\d]*¥?\s*([\d,]+\.?\d*)/,
+      // 匹配表格中税额列的数字
+      /税\s*额[^¥\d]*¥?\s*([\d,]+\.?\d*)/,
+      // 匹配税额的数字格式
+      /税额[：:\s]*([\d,]+\.?\d*)/
+    ];
+    
+    for (const pattern of taxAmountPatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        const taxAmount = match[1].replace(/,/g, '');
+        if (parseFloat(taxAmount) >= 0) {
+          result.tax_amount = taxAmount;
+          break;
+        }
+      }
+    }
+
+    // 税率解析 - 针对税率/征收率列格式优化
+    const taxRatePatterns = [
+      // 匹配税率/征收率列中的百分数
+      /税率[\/征收率]*[^%]*(\d{1,2}%)/,
+      /征收率[^%]*(\d{1,2}%)/,
+      // 匹配表格中的税率
+      /税\s*率[\/征收率]*[^%]*(\d{1,2}%)/,
+      // 匹配其他税率格式
+      /税率[：:\s]*(\d{1,2}%)/,
+      /税率[：:\s]*(\d{1,2}\.\d{1,2}%)/,
+      /税率[：:\s]*0\.(\d{2})/,
+      /(\d{1,2}%)/,
+      /(\d{1,2}\.\d{1,2}%)/
+    ];
+    
+    for (const pattern of taxRatePatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        let taxRate = match[1];
+        // 如果匹配到的是小数形式，转换为百分比
+        if (taxRate.match(/^0\.\d{2}$/)) {
+          taxRate = (parseFloat(taxRate) * 100).toFixed(0) + '%';
+        }
+        result.tax_rate = taxRate;
+        break;
+      }
+    }
+
+    // 开票方（销售方）解析 - 针对销售方信息栏优化
+    const sellerPatterns = [
+      // 匹配 "销售方信息 名称：公司名称" 格式
+      /销售方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
+      // 匹配 "名称：公司名称" （在销售方区域）
+      /名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
+      // 匹配销售方区域的公司名称
+      /销售方[^名称]*名称[：:\s]*([^\n\r]*?有限公司)/,
+      /销售方[^名称]*名称[：:\s]*([^\n\r]*?股份有限公司)/,
+      /销售方[^名称]*名称[：:\s]*([^\n\r]*?公司)/,
+      // 匹配其他销售方格式
+      /销售方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /开票方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /卖方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /收款人[：:\s]*([^纳税人识别号\n\r]+)/,
+      // 匹配公司名称格式
+      /([^：:\s]*有限公司)/,
+      /([^：:\s]*股份有限公司)/,
+      /([^：:\s]*商贸有限公司)/
+    ];
+    
+    for (const pattern of sellerPatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        let companyName = match[1].trim();
+        // 清理公司名称，移除多余的空格和特殊字符
+        companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
+        if (companyName.length > 3 && companyName.includes('公司')) {
+          result.seller_name = companyName;
+          break;
+        }
+      }
+    }
+
+    // 购买方解析 - 针对购买方信息栏优化
+    const buyerPatterns = [
+      // 匹配 "购买方信息 名称：公司名称" 格式
+      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
+      // 在购买方区域匹配名称
+      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]+)/,
+      // 匹配购买方区域的公司名称
+      /购买方[^名称]*名称[：:\s]*([^\n\r]*?有限公司)/,
+      /购买方[^名称]*名称[：:\s]*([^\n\r]*?股份有限公司)/,
+      /购买方[^名称]*名称[：:\s]*([^\n\r]*?公司)/,
+      // 匹配其他购买方格式
+      /购买方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /买方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /收票方[：:\s]*([^纳税人识别号\n\r]+)/,
+      /付款方[：:\s]*([^纳税人识别号\n\r]+)/
+    ];
+    
+    for (const pattern of buyerPatterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        let companyName = match[1].trim();
+        // 清理公司名称，移除多余的空格和特殊字符
+        companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
+        if (companyName.length > 3 && companyName.includes('公司')) {
+          result.buyer_name = companyName;
+          break;
+        }
+      }
+    }
+
+    // 发票类型智能识别
+    if (cleanText.includes('增值税专用发票')) {
+      result.invoice_type = '增值税专用发票';
+    } else if (cleanText.includes('增值税普通发票')) {
+      result.invoice_type = '增值税普通发票';
+    } else if (cleanText.includes('普通发票')) {
+      result.invoice_type = '增值税普通发票';
+    } else if (cleanText.includes('收据')) {
+      result.invoice_type = '收据';
+    }
+
+    // 数据清理和验证
+    Object.keys(result).forEach(key => {
+      if (typeof result[key] === 'string') {
+        result[key] = result[key].trim();
+      }
+    });
+
+    console.log('PDF解析结果:', result);
+    console.log('原始文本片段:', cleanText.substring(0, 500));
+    
+  } catch (error) {
+    console.error('PDF解析错误:', error);
+  }
+
+  return result;
+};
+
+// 计算解析完整性评分
+const calculateCompletenessScore = (invoiceInfo) => {
+  const requiredFields = ['invoice_number', 'invoice_date', 'total_amount', 'seller_name'];
+  const optionalFields = ['tax_amount', 'tax_rate', 'buyer_name'];
+  
+  let score = 0;
+  let totalWeight = 0;
+  
+  // 必需字段权重为 3
+  requiredFields.forEach(field => {
+    totalWeight += 3;
+    if (invoiceInfo[field] && invoiceInfo[field].toString().trim()) {
+      score += 3;
+    }
+  });
+  
+  // 可选字段权重为 1
+  optionalFields.forEach(field => {
+    totalWeight += 1;
+    if (invoiceInfo[field] && invoiceInfo[field].toString().trim()) {
+      score += 1;
+    }
+  });
+  
+  return Math.round((score / totalWeight) * 100);
+};
+
+// 上传并解析PDF发票
+router.post('/upload-and-parse-invoice', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '没有上传文件'
+      });
+    }
+
+    // 检查文件类型
+    if (req.file.mimetype !== 'application/pdf') {
+      return res.status(400).json({
+        code: 1,
+        message: '只支持PDF文件'
+      });
+    }
+
+    // 解析PDF内容
+    const pdfData = await pdf(req.file.buffer);
+    const extractedText = pdfData.text;
+
+    // 从PDF文本中提取发票信息
+    const invoiceInfo = parseInvoicePDF(extractedText);
+
+    // 上传文件到OSS
+    let uploadResult = null;
+    if (checkOSSConfig()) {
+      try {
+        uploadResult = await uploadToOSS(
+          req.file.buffer,
+          req.file.originalname,
+          'purchase'
+        );
+      } catch (uploadError) {
+        console.warn('OSS上传失败，但PDF解析成功:', uploadError);
+      }
+    }
+
+    res.json({
+      code: 0,
+      message: 'PDF解析成功',
+      data: {
+        extractedInfo: invoiceInfo,
+        originalText: extractedText,
+        fileInfo: uploadResult ? {
+          filename: uploadResult.originalName,
+          size: uploadResult.size,
+          url: uploadResult.url,
+          objectName: uploadResult.name
+        } : null,
+        // 增加解析质量评估
+        parseQuality: {
+          hasInvoiceNumber: !!invoiceInfo.invoice_number,
+          hasInvoiceDate: !!invoiceInfo.invoice_date,
+          hasTotalAmount: !!invoiceInfo.total_amount,
+          hasSellerName: !!invoiceInfo.seller_name,
+          completeness: calculateCompletenessScore(invoiceInfo)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('PDF解析失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: 'PDF解析失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量关联订单与发票
+router.post('/associate-orders-with-invoice', async (req, res) => {
+  try {
+    const { order_ids, invoice_data } = req.body;
+    
+    if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供要关联的订单ID列表'
+      });
+    }
+
+    if (!invoice_data) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供发票数据'
+      });
+    }
+
+    // 开始事务
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // 创建发票
+      const invoice = await Invoice.create(invoice_data, { transaction });
+      
+      // 更新订单状态和关联发票
+      await PurchaseOrder.update(
+        { 
+          invoice_status: '已开票', 
+          invoice_id: invoice.id 
+        },
+        { 
+          where: { id: { [Op.in]: order_ids } },
+          transaction 
+        }
+      );
+
+      // 提交事务
+      await transaction.commit();
+
+      res.json({
+        code: 0,
+        message: '关联成功',
+        data: {
+          invoice_id: invoice.id,
+          updated_order_count: order_ids.length
+        }
+      });
+
+    } catch (error) {
+      // 回滚事务
+      await transaction.rollback();
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('关联订单与发票失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '关联失败',
       error: error.message
     });
   }

@@ -29,6 +29,11 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: true,
     comment: '税额'
   },
+  tax_rate: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: '税率'
+  },
   invoice_file_url: {
     type: DataTypes.STRING(500),
     allowNull: true,
