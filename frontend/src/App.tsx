@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Layout, Menu, ConfigProvider, Button, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, TeamOutlined } from '@ant-design/icons';
+import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, SettingOutlined, TeamOutlined, AppstoreOutlined, FileTextOutlined, HistoryOutlined, FileExcelOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import 'antd/dist/reset.css';
 import zhCN from 'antd/es/locale/zh_CN';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -38,7 +38,7 @@ const getMenuLabel = (label: string, open: boolean) => (
 );
 
 // LayoutWithSidebar组件，左侧功能栏与顶部主菜单一致
-const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }: any) => {
+const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   // 与顶部主菜单一致的侧边栏菜单结构
   const sideMenuItems = [
