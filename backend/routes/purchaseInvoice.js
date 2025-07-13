@@ -600,17 +600,17 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 金额解析 - 灵活匹配"小写"后面的数字，中间可能有任何字符
+    // 金额解析 - 优先匹配"小写"后面的数字，避免匹配表格中的金额
     const amountPatterns = [
-      // 匹配"小写"后面跟着任意字符（最多20个），然后是数字
-      // 这个模式能匹配：小写）：¥107.82、小写) ¥107.82、小写¥107.82 等
+      // 第一优先级：匹配"价税合计（小写）"后面的数字
+      /价税合计[^¥]*小写[^0-9]{0,20}¥?\s*([\d,]+\.\d{2})/,
+      /价税合计[^¥]*小写[^0-9]{0,20}¥?\s*([\d,]+\.?\d*)/,
+      // 第二优先级：匹配"小写"后面带¥符号的数字
+      /小写[^0-9]{0,20}¥\s*([\d,]+\.\d{2})/,
+      /小写[^0-9]{0,20}¥\s*([\d,]+\.?\d*)/,
+      // 第三优先级：匹配"小写"后面的数字（不要求¥符号）
       /小写[^0-9]{0,20}([\d,]+\.\d{2})/,
-      // 备选：匹配"小写"后面跟着任意字符，然后是带小数点的数字
-      /小写.*?([\d,]+\.\d{2})/,
-      // 备选：匹配"小写"后面跟着任意字符，然后是整数或小数
-      /小写[^0-9]{0,20}([\d,]+\.?\d*)/,
-      // 备选：更宽松的匹配，"小写"后面任意内容跟数字
-      /小写.*?([\d,]+\.?\d*)/
+      /小写[^0-9]{0,20}([\d,]+\.?\d*)/
     ];
     
     for (const pattern of amountPatterns) {
@@ -625,13 +625,48 @@ const parseInvoicePDF = (text) => {
       }
     }
     
-    // 如果没有找到金额，输出调试信息
+    // 如果以上模式都没有匹配到，尝试备选模式（但要避免匹配表格中的金额）
+    if (!result.total_amount) {
+      console.log('❌ 主要金额解析失败，尝试备选模式...');
+      
+      // 备选模式：匹配合计行的金额（但优先级较低）
+      const fallbackPatterns = [
+        // 匹配"合计"后面的最后一个金额（通常是价税合计）
+        /合计[^¥]*¥\s*([\d,]+\.\d{2})[^¥]*¥\s*([\d,]+\.?\d*)/,
+        // 匹配"价税合计"后面的数字
+        /价税合计[^¥]*¥?\s*([\d,]+\.\d{2})/,
+        /价税合计[^¥]*¥?\s*([\d,]+\.?\d*)/
+      ];
+      
+      for (const pattern of fallbackPatterns) {
+        const match = cleanText.match(pattern);
+        if (match) {
+          // 如果匹配到两个数字，取第二个（税额）
+          const amount = match[2] ? match[2].replace(/,/g, '') : match[1].replace(/,/g, '');
+          if (parseFloat(amount) > 0) {
+            result.total_amount = amount;
+            console.log(`✅ 备选金额解析成功: ${amount}, 使用模式: ${pattern}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 如果仍然没有找到金额，输出调试信息
     if (!result.total_amount) {
       console.log('❌ 金额解析失败，尝试在文本中查找价税合计相关内容:');
       const priceRelatedLines = cleanText.split(' ').filter(line => 
         line.includes('价税合计') || line.includes('小写') || line.includes('¥')
       );
       console.log('价税合计相关文本:', priceRelatedLines.slice(0, 5));
+      
+      // 输出原始文本片段用于调试
+      const xiaoxieIndex = cleanText.indexOf('小写');
+      if (xiaoxieIndex !== -1) {
+        const contextStart = Math.max(0, xiaoxieIndex - 50);
+        const contextEnd = Math.min(cleanText.length, xiaoxieIndex + 100);
+        console.log('小写上下文:', cleanText.substring(contextStart, contextEnd));
+      }
     }
 
     // 税额解析 - 针对税额列格式优化
