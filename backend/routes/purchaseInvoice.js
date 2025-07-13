@@ -570,10 +570,8 @@ const parseInvoicePDF = (text) => {
       const match = cleanText.match(pattern);
       if (match) {
         const amount = match[1].replace(/,/g, '');
-        console.log('金额匹配结果:', { pattern: pattern.toString(), match: match[1], amount: amount });
         if (parseFloat(amount) > 0) {
           result.total_amount = amount;
-          console.log('确定的发票总金额:', amount);
           break;
         }
       }
@@ -642,20 +640,15 @@ const parseInvoicePDF = (text) => {
     }
 
     // 开票方（销售方）解析 - 针对销售方信息栏优化
-    console.log('开始解析销售方信息，原始文本长度:', cleanText.length);
-    console.log('原始文本前1000字符:', cleanText.substring(0, 1000));
-    
     const sellerPatterns = [
-      // 最优先匹配包含"保定优泽箱包制造有限公司"的模式
-      /保定优泽箱包制造有限公司/,
-      // 匹配销售方信息栏中的公司名称，更宽松的匹配
-      /销售方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?有限公司)/,
-      /销售方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?股份有限公司)/,
-      /销售方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?公司)/,
-      // 直接匹配"名称："后面的内容
-      /名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?有限公司)/,
-      /名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?股份有限公司)/,
-      /名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?公司)/,
+      // 最优先匹配 "销售方信息 名称：公司名称" 格式（考虑到PDF文本可能有空格）
+      /销售方\s*信息[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|地址|电话|开户行|账号|$)/,
+      // 匹配 "销售方信息名称：公司名称" 格式（无空格）
+      /销售方信息[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|地址|电话|开户行|账号|$)/,
+      // 匹配销售方区域的公司名称（具体匹配有限公司）
+      /销售方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
+      /销售方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
+      /销售方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?公司)/,
       // 匹配 "销售方 名称：公司名称" 格式（没有信息两字）
       /销售方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
       /销售方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
@@ -667,56 +660,29 @@ const parseInvoicePDF = (text) => {
       /收款人[：:\s]*([^纳税人识别号\n\r]+)/
     ];
     
-    for (let i = 0; i < sellerPatterns.length; i++) {
-      const pattern = sellerPatterns[i];
+    for (const pattern of sellerPatterns) {
       const match = cleanText.match(pattern);
-      console.log(`销售方模式 ${i + 1} 匹配结果:`, { 
-        pattern: pattern.toString(), 
-        matched: !!match, 
-        result: match ? match[0] : null,
-        groups: match ? match.slice(1) : null
-      });
-      
       if (match) {
-        let companyName = '';
-        
-        // 如果是直接匹配"保定优泽箱包制造有限公司"
-        if (pattern.toString().includes('保定优泽箱包制造有限公司')) {
-          companyName = '保定优泽箱包制造有限公司';
-        } else if (match[1]) {
-          companyName = match[1].trim();
-        }
-        
-        console.log('销售方原始匹配结果:', { companyName });
-        
-        if (companyName) {
-          // 清理公司名称，移除多余的空格和特殊字符，但保留基本的中文、英文、数字、括号
-          companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
-          console.log('销售方清理后的公司名称:', companyName);
-          
-          if (companyName.length > 3 && companyName.includes('公司')) {
-            result.seller_name = companyName;
-            console.log('确定的销售方（开票方）:', companyName);
-            break;
-          }
+        let companyName = match[1].trim();
+        // 清理公司名称，移除多余的空格和特殊字符，但保留基本的中文、英文、数字、括号
+        companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
+        if (companyName.length > 3 && companyName.includes('公司')) {
+          result.seller_name = companyName;
+          break;
         }
       }
     }
 
     // 购买方解析 - 针对购买方信息栏优化
-    console.log('开始解析购买方信息');
-    
     const buyerPatterns = [
-      // 最优先匹配包含"深圳欣蓉电子商务有限公司"的模式
-      /深圳欣蓉电子商务有限公司/,
-      // 匹配购买方信息栏中的公司名称，更宽松的匹配
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?有限公司)/,
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?股份有限公司)/,
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?公司)/,
-      // 直接匹配"名称："后面的内容（在购买方区域）
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?有限公司)/,
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?股份有限公司)/,
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号地址电话开户行账号\n\r]*?公司)/,
+      // 最优先匹配 "购买方信息 名称：公司名称" 格式（考虑到PDF文本可能有空格）
+      /购买方\s*信息[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|地址|电话|开户行|账号|$)/,
+      // 匹配 "购买方信息名称：公司名称" 格式（无空格）
+      /购买方信息[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|地址|电话|开户行|账号|$)/,
+      // 匹配购买方区域的公司名称（具体匹配有限公司）
+      /购买方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
+      /购买方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
+      /购买方[^名称]*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?公司)/,
       // 匹配 "购买方 名称：公司名称" 格式（没有信息两字）
       /购买方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?有限公司)/,
       /购买方\s*名称[：:\s]*([^地址电话开户行账号统一社会信用代码纳税人识别号\n\r]*?股份有限公司)/,
@@ -728,38 +694,15 @@ const parseInvoicePDF = (text) => {
       /付款方[：:\s]*([^纳税人识别号\n\r]+)/
     ];
     
-    for (let i = 0; i < buyerPatterns.length; i++) {
-      const pattern = buyerPatterns[i];
+    for (const pattern of buyerPatterns) {
       const match = cleanText.match(pattern);
-      console.log(`购买方模式 ${i + 1} 匹配结果:`, { 
-        pattern: pattern.toString(), 
-        matched: !!match, 
-        result: match ? match[0] : null,
-        groups: match ? match.slice(1) : null
-      });
-      
       if (match) {
-        let companyName = '';
-        
-        // 如果是直接匹配"深圳欣蓉电子商务有限公司"
-        if (pattern.toString().includes('深圳欣蓉电子商务有限公司')) {
-          companyName = '深圳欣蓉电子商务有限公司';
-        } else if (match[1]) {
-          companyName = match[1].trim();
-        }
-        
-        console.log('购买方原始匹配结果:', { companyName });
-        
-        if (companyName) {
-          // 清理公司名称，移除多余的空格和特殊字符，但保留基本的中文、英文、数字、括号
-          companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
-          console.log('购买方清理后的公司名称:', companyName);
-          
-          if (companyName.length > 3 && companyName.includes('公司')) {
-            result.buyer_name = companyName;
-            console.log('确定的购买方（收票方）:', companyName);
-            break;
-          }
+        let companyName = match[1].trim();
+        // 清理公司名称，移除多余的空格和特殊字符，但保留基本的中文、英文、数字、括号
+        companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
+        if (companyName.length > 3 && companyName.includes('公司')) {
+          result.buyer_name = companyName;
+          break;
         }
       }
     }
@@ -782,9 +725,6 @@ const parseInvoicePDF = (text) => {
       }
     });
 
-    console.log('PDF解析结果:', result);
-    console.log('原始文本片段:', cleanText.substring(0, 500));
-    
   } catch (error) {
     console.error('PDF解析错误:', error);
   }
