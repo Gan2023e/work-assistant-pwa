@@ -486,6 +486,16 @@ const PurchaseInvoice: React.FC = () => {
                   </Button>
                 </Space>
               )}
+              {/* 删除发票按钮 */}
+              <Button
+                type="link"
+                size="small"
+                danger
+                style={{ padding: '0 4px', marginLeft: '8px' }}
+                onClick={() => handleDeleteInvoice(invoice.id)}
+              >
+                删除发票
+              </Button>
             </div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
               开票日期: {dayjs(invoice.invoice_date).format('YYYY-MM-DD')}
@@ -610,6 +620,37 @@ const PurchaseInvoice: React.FC = () => {
       }
     };
     fileInput.click();
+  };
+
+  // 在组件内添加删除发票方法
+  const handleDeleteInvoice = (invoiceId: number) => {
+    Modal.confirm({
+      title: '确认删除该发票？',
+      content: '删除后可重新上传发票，且该发票记录将被移除。',
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}`, {
+            method: 'DELETE',
+          });
+          const result = await response.json();
+          if (result.code === 0) {
+            message.success('发票删除成功');
+            fetchPurchaseOrders();
+            fetchStatistics();
+          } else {
+            message.error(result.message || '删除失败');
+          }
+        } catch (error) {
+          message.error('删除失败');
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   return (
