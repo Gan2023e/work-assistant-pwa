@@ -33,7 +33,8 @@ import {
   SearchOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
-  EyeOutlined
+  EyeOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload';
@@ -591,22 +592,32 @@ const PurchaseInvoice: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 80,
+      width: 150,
       render: (_, record) => (
-        <Button 
-          size="small" 
-          icon={<EditOutlined />} 
-          onClick={() => {
-            setEditingOrder(record);
-            orderForm.setFieldsValue({
-              ...record,
-              order_date: dayjs(record.order_date)
-            });
-            setOrderModalVisible(true);
-          }}
-        >
-          编辑
-        </Button>
+        <Space size="small">
+          <Button 
+            size="small" 
+            icon={<EditOutlined />} 
+            onClick={() => {
+              setEditingOrder(record);
+              orderForm.setFieldsValue({
+                ...record,
+                order_date: dayjs(record.order_date)
+              });
+              setOrderModalVisible(true);
+            }}
+          >
+            编辑
+          </Button>
+          <Button 
+            size="small" 
+            danger
+            icon={<DeleteOutlined />} 
+            onClick={() => handleDeleteOrder(record)}
+          >
+            删除订单
+          </Button>
+        </Space>
       )
     }
   ];
@@ -728,6 +739,60 @@ const PurchaseInvoice: React.FC = () => {
             
             // 清空选中状态并刷新数据
             setSelectedRowKeys([]);
+            await fetchPurchaseOrders();
+            await fetchStatistics();
+          } else {
+            message.error(result.message || '删除失败');
+          }
+        } catch (error) {
+          if (error instanceof Error) {
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+              message.error('网络连接失败，请检查网络连接');
+            } else if (error.name === 'SyntaxError') {
+              message.error('服务器响应格式错误');
+            } else {
+              message.error(`删除失败: ${error.message}`);
+            }
+          } else {
+            message.error(`删除失败: ${String(error)}`);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
+  // 删除订单
+  const handleDeleteOrder = (record: PurchaseOrder) => {
+    // 检查开票状态
+    if (record.invoice_status !== '未开票') {
+      Modal.error({
+        title: '无法删除',
+        content: '该订单已开票，请先删除发票信息后再删除订单记录。',
+        okText: '确定',
+      });
+      return;
+    }
+
+    // 如果是未开票状态，弹出确认对话框
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除订单 "${record.order_number}" 吗？删除后无法恢复。`,
+      okText: '确定删除',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/orders/${record.id}`, {
+            method: 'DELETE',
+          });
+          
+          const result = await response.json();
+          
+          if (result.code === 0) {
+            message.success('订单删除成功');
+            // 刷新数据
             await fetchPurchaseOrders();
             await fetchStatistics();
           } else {
