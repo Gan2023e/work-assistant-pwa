@@ -368,6 +368,9 @@ router.put('/invoices/:id', async (req, res) => {
 
 // 删除发票
 router.delete('/invoices/:id', async (req, res) => {
+  // 使用事务确保数据一致性
+  const transaction = await sequelize.transaction();
+  
   try {
     const { id } = req.params;
     
@@ -379,25 +382,83 @@ router.delete('/invoices/:id', async (req, res) => {
       });
     }
     
-    // 检查是否有关联的采购订单
+    // 1. 先删除OSS上的文件（如果有的话）
+    if (invoice.invoice_file_url) {
+      console.log('🗑️ 准备删除OSS文件:', invoice.invoice_file_url);
+      
+      // 检查OSS配置
+      if (checkOSSConfig()) {
+        try {
+          // 从URL中提取对象名称
+          let objectName = '';
+          if (invoice.invoice_file_url.includes('aliyuncs.com')) {
+            const url = new URL(invoice.invoice_file_url);
+            objectName = url.pathname.substring(1); // 去掉开头的 /
+          } else {
+            // 如果是本地文件路径，直接使用文件名
+            objectName = path.basename(invoice.invoice_file_url);
+          }
+          
+          console.log('📂 提取的对象名称:', objectName);
+          
+          if (objectName) {
+            const deleteResult = await deleteFromOSS(objectName);
+            if (deleteResult.success) {
+              console.log('✅ OSS文件删除成功');
+            } else {
+              console.warn('⚠️ OSS文件删除失败:', deleteResult.message);
+              // 不阻止删除流程，只记录警告
+            }
+          }
+        } catch (ossError) {
+          console.error('❌ OSS文件删除出错:', ossError);
+          // 不阻止删除流程，只记录错误
+        }
+      } else {
+        console.warn('⚠️ OSS配置不完整，跳过文件删除');
+      }
+    }
+    
+    // 2. 将相关订单的状态重置为"未开票"，并清除invoice_id
     const relatedOrders = await PurchaseOrder.findAll({
       where: { invoice_id: id }
     });
     
     if (relatedOrders.length > 0) {
-      return res.status(400).json({
-        code: 1,
-        message: '该发票有关联的采购订单，不能直接删除'
-      });
+      console.log(`📋 找到 ${relatedOrders.length} 个关联订单，将重置状态`);
+      
+      await PurchaseOrder.update(
+        { 
+          invoice_status: '未开票', 
+          invoice_id: null 
+        },
+        { 
+          where: { invoice_id: id },
+          transaction 
+        }
+      );
+      
+      console.log('✅ 关联订单状态重置完成');
     }
     
-    await invoice.destroy();
+    // 3. 删除发票记录
+    await invoice.destroy({ transaction });
+    
+    // 提交事务
+    await transaction.commit();
+    
+    console.log('✅ 发票删除成功:', invoice.invoice_number);
     
     res.json({
       code: 0,
-      message: '删除成功'
+      message: '删除成功',
+      data: {
+        resetOrdersCount: relatedOrders.length
+      }
     });
   } catch (error) {
+    // 回滚事务
+    await transaction.rollback();
     console.error('删除发票失败:', error);
     res.status(500).json({
       code: 1,

@@ -36,6 +36,7 @@ console.log('- DB_PORT:', process.env.DB_PORT || '3306 (default)');
 app.use(cors({
   origin: [
     'http://localhost:3000',
+    'http://localhost:8000',
     'https://work-assistant-pwa.netlify.app',
     /\.netlify\.app$/,
     /\.railway\.app$/
