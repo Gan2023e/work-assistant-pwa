@@ -19,7 +19,8 @@ import {
   Typography,
   Badge,
   Descriptions,
-  Alert
+  Alert,
+  Tooltip
 } from 'antd';
 import {
   PlusOutlined,
@@ -1213,7 +1214,6 @@ const PurchaseInvoice: React.FC = () => {
       <Modal
         title="批量开票"
         open={invoiceModalVisible}
-        onOk={() => invoiceForm.submit()}
         onCancel={() => {
           setInvoiceModalVisible(false);
           setExtractedInfo(null);
@@ -1223,7 +1223,38 @@ const PurchaseInvoice: React.FC = () => {
           invoiceForm.resetFields();
         }}
         width={800}
-        confirmLoading={loading}
+        footer={[
+          <Button
+            key="cancel"
+            onClick={() => {
+              setInvoiceModalVisible(false);
+              setExtractedInfo(null);
+              setParseQuality(null);
+              setFileList([]);
+              setAmountDifference(0);
+              invoiceForm.resetFields();
+            }}
+          >
+            取消
+          </Button>,
+          <Tooltip
+            key="submit"
+            title={
+              parseQuality && parseQuality.completeness < 100
+                ? "PDF解析有误，需修复后再上传"
+                : ""
+            }
+          >
+            <Button
+              type="primary"
+              loading={loading}
+              disabled={parseQuality ? parseQuality.completeness < 100 : false}
+              onClick={() => invoiceForm.submit()}
+            >
+              确定
+            </Button>
+          </Tooltip>
+        ]}
       >
         {/* 选中订单信息 */}
         <Alert
