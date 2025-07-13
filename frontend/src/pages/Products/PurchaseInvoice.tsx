@@ -621,7 +621,7 @@ const PurchaseInvoice: React.FC = () => {
     fileInput.click();
   };
 
-  // 在组件内添加删除发票方法
+  // 删除发票方法
   const handleDeleteInvoice = (invoiceId: number) => {
     Modal.confirm({
       title: '确认删除该发票？',
@@ -635,23 +635,52 @@ const PurchaseInvoice: React.FC = () => {
           const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}`, {
             method: 'DELETE',
           });
+          
           const result = await response.json();
+          
           if (result.code === 0) {
-            message.success('发票删除成功');
-            // 清空选中状态
+            // 根据操作结果显示不同的成功消息
+            if (result.data?.resetOrdersCount > 0) {
+              if (result.data.ossDelete?.success) {
+                message.success(`发票删除成功！已删除OSS文件并重置${result.data.resetOrdersCount}个相关订单的状态`);
+              } else if (result.data.operationDetails?.hadFile) {
+                message.warning(`发票删除成功，但OSS文件删除失败。已重置${result.data.resetOrdersCount}个相关订单的状态`);
+              } else {
+                message.success(`发票删除成功，已重置${result.data.resetOrdersCount}个相关订单的状态`);
+              }
+            } else {
+              if (result.data?.ossDelete?.success) {
+                message.success('发票删除成功！已删除OSS文件');
+              } else if (result.data?.operationDetails?.hadFile) {
+                message.warning('发票删除成功，但OSS文件删除失败');
+              } else {
+                message.success('发票删除成功');
+              }
+            }
+            
+            // 清空选中状态并刷新数据
             setSelectedRowKeys([]);
-            // 强制刷新数据
             await fetchPurchaseOrders();
             await fetchStatistics();
           } else {
             message.error(result.message || '删除失败');
           }
         } catch (error) {
-          message.error('删除失败');
+          if (error instanceof Error) {
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+              message.error('网络连接失败，请检查网络连接');
+            } else if (error.name === 'SyntaxError') {
+              message.error('服务器响应格式错误');
+            } else {
+              message.error(`删除失败: ${error.message}`);
+            }
+          } else {
+            message.error(`删除失败: ${String(error)}`);
+          }
         } finally {
           setLoading(false);
         }
-      },
+      }
     });
   };
 
