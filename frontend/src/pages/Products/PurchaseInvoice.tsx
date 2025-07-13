@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -157,14 +157,8 @@ const PurchaseInvoice: React.FC = () => {
     date_range: null as [string, string] | null
   });
 
-  // 页面加载时获取数据
-  useEffect(() => {
-    fetchStatistics();
-    fetchPurchaseOrders();
-  }, []);
-
   // 获取统计数据
-  const fetchStatistics = async () => {
+  const fetchStatistics = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/statistics`);
       const result = await response.json();
@@ -174,10 +168,10 @@ const PurchaseInvoice: React.FC = () => {
     } catch (error) {
       console.error('获取统计数据失败:', error);
     }
-  };
+  }, []);
 
   // 获取采购订单列表
-  const fetchPurchaseOrders = async (page = 1) => {
+  const fetchPurchaseOrders = useCallback(async (page = 1) => {
     setLoading(true);
     try {
       const queryParams: Record<string, string> = {
@@ -217,7 +211,13 @@ const PurchaseInvoice: React.FC = () => {
       message.error('获取采购订单失败');
     }
     setLoading(false);
-  };
+  }, [pagination.pageSize, filters]);
+
+  // 页面加载时获取数据
+  useEffect(() => {
+    fetchStatistics();
+    fetchPurchaseOrders();
+  }, [fetchStatistics, fetchPurchaseOrders]);
 
   // 处理订单提交
   const handleOrderSubmit = async (values: any) => {
