@@ -600,25 +600,33 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 金额解析 - 专门匹配"小写）¥107.82"格式中的数字部分
-    const amountPatterns = [
-      // 匹配"小写）¥107.82"，支持中文和英文右括号
-      /小写[）\)]\s*¥\s*([\d,]{1,10}\.\d{2})/,
-      // 备选：匹配小数点可选的情况
-      /小写[）\)]\s*¥\s*([\d,]{1,10}\.?\d{0,2})/
-    ];
+    // 金额解析 - 获取所有"¥"后面的数字，取最大的作为总金额
+    const amountPattern = /¥\s*([\d,]+\.?\d*)/g;
+    const allAmounts = [];
+    let match;
     
-    for (const pattern of amountPatterns) {
-      const match = cleanText.match(pattern);
-      if (match) {
-        const amount = match[1].replace(/,/g, '');
-        // 验证金额的合理性
-        if (parseFloat(amount) > 0 && parseFloat(amount) < 99999999.99) {
-          result.total_amount = amount;
-          console.log(`✅ 金额解析成功: ${amount}, 使用模式: ${pattern}`);
-          break;
-        }
+    // 获取所有¥后面的数字
+    while ((match = amountPattern.exec(cleanText)) !== null) {
+      const amount = match[1].replace(/,/g, '');
+      const numericAmount = parseFloat(amount);
+      
+      // 验证是有效的金额数字
+      if (!isNaN(numericAmount) && numericAmount > 0 && numericAmount < 99999999.99) {
+        allAmounts.push({
+          value: numericAmount,
+          original: amount
+        });
+        console.log(`找到金额: ¥${amount}`);
       }
+    }
+    
+    // 取最大的金额作为总金额
+    if (allAmounts.length > 0) {
+      const maxAmount = allAmounts.reduce((max, current) => 
+        current.value > max.value ? current : max
+      );
+      result.total_amount = maxAmount.original;
+      console.log(`✅ 金额解析成功: ${maxAmount.original} (从${allAmounts.length}个金额中选择最大值)`);
     }
     
     // 如果以上模式都没有匹配到，尝试备选模式（但要避免匹配表格中的金额）
