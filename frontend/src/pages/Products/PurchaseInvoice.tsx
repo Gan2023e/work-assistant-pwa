@@ -37,7 +37,8 @@ import {
   SearchOutlined,
   LinkOutlined,
   CheckCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload';
@@ -453,6 +454,38 @@ const PurchaseInvoice: React.FC = () => {
           <div>
             <div style={{ fontWeight: 'bold' }}>
               <Text copyable>{invoice.invoice_number}</Text>
+              {invoice.invoice_file_url ? (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => handleViewInvoiceFile(invoice.id)}
+                  style={{ padding: '0 4px', marginLeft: '8px' }}
+                  title="查看发票文件"
+                >
+                  查看
+                </Button>
+              ) : (
+                <Space style={{ marginLeft: '8px' }}>
+                  <Tag 
+                    color="default" 
+                    style={{ fontSize: '10px' }}
+                    title="该发票未上传文件"
+                  >
+                    无文件
+                  </Tag>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<UploadOutlined />}
+                    onClick={() => handleUploadFileToInvoice(invoice.id)}
+                    style={{ padding: '0 4px', fontSize: '10px' }}
+                    title="为该发票上传文件"
+                  >
+                    上传
+                  </Button>
+                </Space>
+              )}
             </div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
               开票日期: {dayjs(invoice.invoice_date).format('YYYY-MM-DD')}
@@ -521,6 +554,62 @@ const PurchaseInvoice: React.FC = () => {
       .filter(order => selectedRowKeys.includes(order.id))
       .map(order => order.seller_name);
     return sellers.filter((seller, index) => sellers.indexOf(seller) === index);
+  };
+
+  // 查看发票文件（直接打开代理URL）
+  const handleViewInvoiceFile = (invoiceId: number) => {
+    // 直接在新窗口打开后端代理URL
+    const fileUrl = `${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/file`;
+    window.open(fileUrl, '_blank');
+  };
+
+  // 上传文件到发票
+  const handleUploadFileToInvoice = async (invoiceId: number) => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf';
+    fileInput.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        message.loading('正在上传文件...', 0);
+        setPdfUploading(true);
+        
+        try {
+          console.log('开始上传文件:', file.name);
+          const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/upload-file`, {
+            method: 'POST',
+            body: formData,
+          });
+          
+          console.log('上传响应状态:', response.status);
+          const result = await response.json();
+          console.log('上传结果:', result);
+          
+          message.destroy(); // 清除loading消息
+          
+          if (result.code === 0) {
+            message.success('文件上传成功');
+            fetchPurchaseOrders(); // 刷新列表以更新发票状态
+            fetchStatistics(); // 刷新统计
+          } else {
+            message.error(`文件上传失败: ${result.message}`);
+            if (result.message.includes('OSS配置')) {
+              message.warning('请联系管理员配置OSS存储服务', 5);
+            }
+          }
+        } catch (error) {
+          message.destroy(); // 清除loading消息
+          console.error('文件上传失败:', error);
+          message.error('文件上传失败: 网络错误或服务器问题');
+        } finally {
+          setPdfUploading(false);
+        }
+      }
+    };
+    fileInput.click();
   };
 
   return (

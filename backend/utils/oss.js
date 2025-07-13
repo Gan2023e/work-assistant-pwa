@@ -135,15 +135,18 @@ async function getSignedUrl(objectName, expiresInSeconds = 3600) {
   try {
     const client = createOSSClient();
     
-    const url = client.signatureUrl(objectName, {
-      expires: expiresInSeconds
+    // 尝试直接获取文件并生成代理URL
+    const url = await client.signatureUrl(objectName, {
+      expires: expiresInSeconds,
+      method: 'GET',
+      'response-content-type': 'application/pdf'
     });
     
     return { success: true, url };
     
   } catch (error) {
     console.error('❌ 获取签名URL失败:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
 }
 

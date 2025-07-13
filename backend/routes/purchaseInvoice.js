@@ -1201,6 +1201,176 @@ router.delete('/orders/batch', async (req, res) => {
 
 // ==================== 统计相关接口 ====================
 
+// 获取发票文件（代理方式）
+router.get('/invoices/:id/file', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 获取发票信息
+    const invoice = await Invoice.findByPk(id);
+    if (!invoice) {
+      return res.status(404).json({
+        code: 1,
+        message: '发票不存在'
+      });
+    }
+    
+    // 检查是否有文件URL
+    if (!invoice.invoice_file_url) {
+      return res.status(404).json({
+        code: 1,
+        message: '发票文件不存在'
+      });
+    }
+    
+    // 如果是OSS链接，直接从OSS读取文件并返回
+    if (invoice.invoice_file_url.includes('aliyuncs.com')) {
+      try {
+        const OSS = require('ali-oss');
+        const client = new OSS({
+          region: process.env.OSS_REGION,
+          accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+          accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+          bucket: process.env.OSS_BUCKET,
+          endpoint: process.env.OSS_ENDPOINT
+        });
+        
+        // 从URL中提取对象名称
+        const url = new URL(invoice.invoice_file_url);
+        const objectName = url.pathname.substring(1); // 去掉开头的 /
+        
+        console.log('正在获取OSS文件:', objectName);
+        
+        // 直接获取文件内容
+        const result = await client.get(objectName);
+        
+        // 设置响应头
+        res.set({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${invoice.invoice_file_name || '发票文件.pdf'}"`
+        });
+        
+        // 返回文件内容
+        res.send(result.content);
+        return;
+        
+      } catch (error) {
+        console.error('从OSS获取文件失败:', error);
+        return res.status(500).json({
+          code: 1,
+          message: '获取文件失败: ' + error.message
+        });
+      }
+    }
+    
+    // 如果不是OSS链接，返回原始URL
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        fileUrl: invoice.invoice_file_url,
+        fileName: invoice.invoice_file_name || '发票文件.pdf',
+        fileSize: invoice.file_size
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取发票文件失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取发票文件失败',
+      error: error.message
+    });
+  }
+});
+
+// 上传文件到现有发票
+router.post('/invoices/:id/upload-file', upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 获取发票信息
+    const invoice = await Invoice.findByPk(id);
+    if (!invoice) {
+      return res.status(404).json({
+        code: 1,
+        message: '发票不存在'
+      });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '没有上传文件'
+      });
+    }
+
+    // 检查文件类型
+    if (req.file.mimetype !== 'application/pdf') {
+      return res.status(400).json({
+        code: 1,
+        message: '只支持PDF文件'
+      });
+    }
+
+    // 上传文件到OSS
+    let uploadResult = null;
+    if (checkOSSConfig()) {
+      try {
+        uploadResult = await uploadToOSS(
+          req.file.buffer,
+          req.file.originalname,
+          'purchase'
+        );
+      } catch (uploadError) {
+        console.error('OSS上传失败:', uploadError);
+        return res.status(500).json({
+          code: 1,
+          message: 'OSS上传失败',
+          error: uploadError.message
+        });
+      }
+    } else {
+      return res.status(500).json({
+        code: 1,
+        message: 'OSS配置未完成，无法上传文件'
+      });
+    }
+
+    // 更新发票记录
+    if (uploadResult) {
+      await invoice.update({
+        invoice_file_url: uploadResult.url,
+        invoice_file_name: uploadResult.originalName,
+        file_size: uploadResult.size
+      });
+      
+      res.json({
+        code: 0,
+        message: '文件上传成功',
+        data: {
+          fileUrl: uploadResult.url,
+          fileName: uploadResult.originalName,
+          fileSize: uploadResult.size
+        }
+      });
+    } else {
+      res.status(500).json({
+        code: 1,
+        message: '文件上传失败'
+      });
+    }
+
+  } catch (error) {
+    console.error('上传文件到发票失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '上传文件失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取统计数据
 router.get('/statistics', async (req, res) => {
   try {
