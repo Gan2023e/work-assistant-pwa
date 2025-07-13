@@ -17,25 +17,20 @@ import {
   Statistic,
   Tag,
   Typography,
-  Divider,
   Badge,
   Descriptions,
-  Alert,
-  Spin
+  Alert
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   UploadOutlined,
-  DownloadOutlined,
   FileTextOutlined,
   ShoppingCartOutlined,
   DollarCircleOutlined,
   FilePdfOutlined,
-  FilterOutlined,
   ReloadOutlined,
   SearchOutlined,
-  LinkOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   EyeOutlined
@@ -161,7 +156,7 @@ const PurchaseInvoice: React.FC = () => {
   useEffect(() => {
     fetchStatistics();
     fetchPurchaseOrders();
-  }, []);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 获取统计数据
   const fetchStatistics = async () => {
@@ -205,7 +200,7 @@ const PurchaseInvoice: React.FC = () => {
       
       if (result.code === 0) {
         setPurchaseOrders(result.data.records);
-        setPagination(prev => ({
+        setPagination((prev: any) => ({
           ...prev,
           current: result.data.page,
           total: result.data.total
@@ -380,7 +375,7 @@ const PurchaseInvoice: React.FC = () => {
 
   // 搜索功能
   const handleSearch = () => {
-    setPagination(prev => ({ ...prev, current: 1 }));
+    setPagination((prev: any) => ({ ...prev, current: 1 }));
     fetchPurchaseOrders(1);
   };
 
@@ -532,7 +527,7 @@ const PurchaseInvoice: React.FC = () => {
       title: '操作',
       key: 'actions',
       width: 80,
-      render: (_, record) => (
+      render: (_: any, record: any) => (
         <Button 
           size="small" 
           icon={<EditOutlined />} 
@@ -554,16 +549,16 @@ const PurchaseInvoice: React.FC = () => {
   // 获取选中订单的总金额
   const getSelectedOrdersAmount = () => {
     return purchaseOrders
-      .filter(order => selectedRowKeys.includes(order.id))
-      .reduce((sum, order) => sum + order.amount, 0);
+      .filter((order: any) => selectedRowKeys.includes(order.id))
+      .reduce((sum: any, order: any) => sum + order.amount, 0);
   };
 
   // 获取选中订单的卖家名称列表
   const getSelectedSellers = () => {
     const sellers = purchaseOrders
-      .filter(order => selectedRowKeys.includes(order.id))
-      .map(order => order.seller_name);
-    return sellers.filter((seller, index) => sellers.indexOf(seller) === index);
+      .filter((order: any) => selectedRowKeys.includes(order.id))
+      .map((order: any) => order.seller_name);
+    return sellers.filter((seller: any, index: any) => sellers.indexOf(seller) === index);
   };
 
   // 查看发票文件（直接打开代理URL）
@@ -724,7 +719,7 @@ const PurchaseInvoice: React.FC = () => {
             <Input
               placeholder="订单编号"
               value={filters.order_number}
-              onChange={(e) => setFilters(prev => ({ ...prev, order_number: e.target.value }))}
+              onChange={(e: any) => setFilters((prev: any) => ({ ...prev, order_number: e.target.value }))}
               allowClear
             />
           </Col>
@@ -732,7 +727,7 @@ const PurchaseInvoice: React.FC = () => {
             <Input
               placeholder="卖家公司名"
               value={filters.seller_name}
-              onChange={(e) => setFilters(prev => ({ ...prev, seller_name: e.target.value }))}
+              onChange={(e: any) => setFilters((prev: any) => ({ ...prev, seller_name: e.target.value }))}
               allowClear
             />
           </Col>
@@ -740,7 +735,7 @@ const PurchaseInvoice: React.FC = () => {
             <Input
               placeholder="买家公司名"
               value={filters.payment_account}
-              onChange={(e) => setFilters(prev => ({ ...prev, payment_account: e.target.value }))}
+              onChange={(e: any) => setFilters((prev: any) => ({ ...prev, payment_account: e.target.value }))}
               allowClear
             />
           </Col>
@@ -748,7 +743,7 @@ const PurchaseInvoice: React.FC = () => {
             <Select
               placeholder="开票状态"
               value={filters.invoice_status}
-              onChange={(value) => setFilters(prev => ({ ...prev, invoice_status: value }))}
+              onChange={(value: any) => setFilters((prev: any) => ({ ...prev, invoice_status: value }))}
               allowClear
               style={{ width: '100%' }}
             >
@@ -761,8 +756,8 @@ const PurchaseInvoice: React.FC = () => {
             <RangePicker
               style={{ width: '100%' }}
               value={filters.date_range ? [dayjs(filters.date_range[0]), dayjs(filters.date_range[1])] : null}
-              onChange={(dates) => {
-                setFilters(prev => ({ 
+              onChange={(dates: any) => {
+                setFilters((prev: any) => ({ 
                   ...prev, 
                   date_range: dates ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] : null 
                 }));
@@ -848,10 +843,10 @@ const PurchaseInvoice: React.FC = () => {
             ...pagination,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total, range) => 
+            showTotal: (total: any, range: any) => 
               `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
-            onChange: (page, pageSize) => {
-              setPagination(prev => ({ ...prev, current: page, pageSize }));
+            onChange: (page: any, pageSize: any) => {
+              setPagination((prev: any) => ({ ...prev, current: page, pageSize }));
               fetchPurchaseOrders(page);
             }
           }}
@@ -859,7 +854,7 @@ const PurchaseInvoice: React.FC = () => {
             selectedRowKeys,
             onChange: setSelectedRowKeys,
             preserveSelectedRowKeys: true,
-            getCheckboxProps: (record) => ({
+            getCheckboxProps: (record: any) => ({
               disabled: record.invoice_status === '已开票', // 已开票的订单不允许选择
             })
           }}
@@ -1010,7 +1005,7 @@ const PurchaseInvoice: React.FC = () => {
               accept=".pdf"
               beforeUpload={handlePdfUpload}
               fileList={fileList}
-              onChange={({ fileList }) => setFileList(fileList)}
+              onChange={({ fileList }: any) => setFileList(fileList)}
               showUploadList={false}
               style={{ padding: '20px' }}
             >
