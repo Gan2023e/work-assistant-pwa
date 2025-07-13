@@ -151,6 +151,68 @@ const PurchaseInvoice: React.FC = () => {
     date_range: null as [string, string] | null
   });
 
+  // 卡片点击状态
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
+  // 处理卡片点击
+  const handleCardClick = (cardType: string) => {
+    // 如果点击的是当前激活的卡片，则取消选择
+    if (selectedCard === cardType) {
+      setSelectedCard(null);
+      setFilters(prev => ({ ...prev, invoice_status: '' }));
+    } else {
+      setSelectedCard(cardType);
+      // 根据卡片类型设置过滤条件
+      switch (cardType) {
+        case 'total':
+          setFilters(prev => ({ ...prev, invoice_status: '' }));
+          break;
+        case 'unpaid':
+          setFilters(prev => ({ ...prev, invoice_status: '未开票' }));
+          break;
+        case 'paid':
+          setFilters(prev => ({ ...prev, invoice_status: '已开票' }));
+          break;
+        case 'partial':
+          setFilters(prev => ({ ...prev, invoice_status: '部分开票' }));
+          break;
+        case 'total-amount':
+          setFilters(prev => ({ ...prev, invoice_status: '' }));
+          break;
+        case 'unpaid-amount':
+          setFilters(prev => ({ ...prev, invoice_status: '未开票' }));
+          break;
+        default:
+          setFilters(prev => ({ ...prev, invoice_status: '' }));
+      }
+    }
+  };
+
+  // 获取卡片样式
+  const getCardStyle = (cardType: string) => {
+    const baseStyle = {
+      cursor: 'pointer',
+      transition: 'all 0.3s ease',
+      marginBottom: '16px',
+    };
+
+    if (selectedCard === cardType) {
+      return {
+        ...baseStyle,
+        boxShadow: '0 4px 12px rgba(24, 144, 255, 0.3)',
+        border: '1px solid #1890ff',
+        transform: 'translateY(-2px)',
+      };
+    }
+
+    return baseStyle;
+  };
+
+  // 获取卡片className
+  const getCardClassName = (cardType: string) => {
+    return 'clickable-card';
+  };
+
   // 获取统计数据
   const fetchStatistics = useCallback(async () => {
     try {
@@ -212,6 +274,13 @@ const PurchaseInvoice: React.FC = () => {
     fetchStatistics();
     fetchPurchaseOrders();
   }, [fetchStatistics, fetchPurchaseOrders]);
+
+  // 当selectedCard变化时，重新获取数据
+  useEffect(() => {
+    if (selectedCard) {
+      fetchPurchaseOrders(1);
+    }
+  }, [selectedCard, fetchPurchaseOrders]);
 
   // 处理订单提交
   const handleOrderSubmit = async (values: any) => {
@@ -385,9 +454,8 @@ const PurchaseInvoice: React.FC = () => {
       order_number: '',
       date_range: null
     });
-    setTimeout(() => {
-      fetchPurchaseOrders(1);
-    }, 100);
+    setSelectedCard(null);
+    setPagination(prev => ({ ...prev, current: 1 }));
   };
 
   // 表格列定义
@@ -686,6 +754,17 @@ const PurchaseInvoice: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
+      <style>
+        {`
+          .clickable-card {
+            transition: all 0.3s ease;
+          }
+          .clickable-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+          }
+        `}
+      </style>
       <Title level={2}>
         <FileTextOutlined style={{ marginRight: '8px' }} />
         采购发票管理
@@ -695,7 +774,11 @@ const PurchaseInvoice: React.FC = () => {
       {statistics && (
         <Row gutter={16} style={{ marginBottom: '24px' }}>
           <Col span={4}>
-            <Card>
+                        <Card
+              className={getCardClassName('total')}
+              onClick={() => handleCardClick('total')}
+              style={getCardStyle('total')}
+            >
               <Statistic
                 title="总订单数"
                 value={statistics.overview.totalOrders}
@@ -704,7 +787,11 @@ const PurchaseInvoice: React.FC = () => {
             </Card>
           </Col>
           <Col span={4}>
-            <Card>
+            <Card
+              className={getCardClassName('unpaid')}
+              onClick={() => handleCardClick('unpaid')}
+              style={getCardStyle('unpaid')}
+            >
               <Statistic
                 title="未开票订单"
                 value={statistics.overview.unpaidOrders}
@@ -714,7 +801,11 @@ const PurchaseInvoice: React.FC = () => {
             </Card>
           </Col>
           <Col span={4}>
-            <Card>
+            <Card
+              className={getCardClassName('paid')}
+              onClick={() => handleCardClick('paid')}
+              style={getCardStyle('paid')}
+            >
               <Statistic
                 title="已开票订单"
                 value={statistics.overview.fullyPaidOrders}
@@ -724,31 +815,84 @@ const PurchaseInvoice: React.FC = () => {
             </Card>
           </Col>
           <Col span={4}>
-            <Card>
+            <Card
+              className={getCardClassName('partial')}
+              onClick={() => handleCardClick('partial')}
+              style={getCardStyle('partial')}
+            >
               <Statistic
-                title="订单总金额"
-                value={statistics.overview.totalAmount}
-                prefix={<DollarCircleOutlined />}
-                precision={2}
+                title="部分开票订单"
+                value={statistics.overview.partiallyPaidOrders}
+                prefix={<ExclamationCircleOutlined />}
+                valueStyle={{ color: '#faad14' }}
               />
             </Card>
           </Col>
           <Col span={4}>
-            <Card>
-              <Statistic
-                title="未开票金额"
-                value={statistics.overview.unpaidAmount}
-                prefix={<DollarCircleOutlined />}
-                precision={2}
-                valueStyle={{ color: '#cf1322' }}
-              />
-            </Card>
-          </Col>
+             <Card
+               className={getCardClassName('total-amount')}
+               onClick={() => handleCardClick('total-amount')}
+               style={getCardStyle('total-amount')}
+             >
+               <Statistic
+                 title="订单总金额"
+                 value={statistics.overview.totalAmount}
+                 prefix={<DollarCircleOutlined />}
+                 precision={2}
+               />
+             </Card>
+           </Col>
+           <Col span={4}>
+             <Card
+               className={getCardClassName('unpaid-amount')}
+               onClick={() => handleCardClick('unpaid-amount')}
+               style={getCardStyle('unpaid-amount')}
+             >
+               <Statistic
+                 title="未开票金额"
+                 value={statistics.overview.unpaidAmount}
+                 prefix={<DollarCircleOutlined />}
+                 precision={2}
+                 valueStyle={{ color: '#cf1322' }}
+               />
+             </Card>
+           </Col>
         </Row>
       )}
 
       {/* 主要内容 */}
       <Card>
+        {/* 筛选状态提示 */}
+        {selectedCard && (
+          <Alert
+            message={
+              <div>
+                <strong>当前筛选：</strong>
+                {selectedCard === 'total' && '显示所有订单'}
+                {selectedCard === 'unpaid' && '显示未开票订单'}
+                {selectedCard === 'paid' && '显示已开票订单'}
+                {selectedCard === 'partial' && '显示部分开票订单'}
+                {selectedCard === 'total-amount' && '显示所有订单'}
+                {selectedCard === 'unpaid-amount' && '显示未开票订单'}
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => {
+                    setSelectedCard(null);
+                    setFilters(prev => ({ ...prev, invoice_status: '' }));
+                  }}
+                  style={{ marginLeft: '8px' }}
+                >
+                  清除筛选
+                </Button>
+              </div>
+            }
+            type="info"
+            showIcon
+            style={{ marginBottom: '16px' }}
+          />
+        )}
+        
         {/* 搜索筛选区域 */}
         <Row gutter={16} style={{ marginBottom: '16px' }}>
           <Col span={4}>
@@ -779,7 +923,10 @@ const PurchaseInvoice: React.FC = () => {
             <Select
               placeholder="开票状态"
               value={filters.invoice_status}
-              onChange={(value) => setFilters(prev => ({ ...prev, invoice_status: value }))}
+              onChange={(value) => {
+                setFilters(prev => ({ ...prev, invoice_status: value }));
+                setSelectedCard(null); // 清除卡片选择状态
+              }}
               allowClear
               style={{ width: '100%' }}
             >
