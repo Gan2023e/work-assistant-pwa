@@ -639,8 +639,11 @@ const PurchaseInvoice: React.FC = () => {
           const result = await response.json();
           if (result.code === 0) {
             message.success('发票删除成功');
-            fetchPurchaseOrders();
-            fetchStatistics();
+            // 清空选中状态
+            setSelectedRowKeys([]);
+            // 强制刷新数据
+            await fetchPurchaseOrders();
+            await fetchStatistics();
           } else {
             message.error(result.message || '删除失败');
           }
@@ -990,7 +993,7 @@ const PurchaseInvoice: React.FC = () => {
               <strong>将为以下订单开票：</strong>
               <div style={{ marginTop: '8px' }}>
                 选中订单数量: {selectedRowKeys.length} 个 | 
-                金额合计: ¥{getSelectedOrdersAmount().toLocaleString()} | 
+                金额合计: ¥{getSelectedOrdersAmount().toFixed(2)} | 
                 涉及卖家: {getSelectedSellers().join(', ')}
               </div>
             </div>
@@ -1238,6 +1241,17 @@ const PurchaseInvoice: React.FC = () => {
             name="remarks"
           >
             <TextArea rows={3} placeholder="请输入备注信息" />
+          </Form.Item>
+          
+          {/* 隐藏字段存储文件信息 */}
+          <Form.Item name="invoice_file_url" style={{ display: 'none' }}>
+            <Input type="hidden" />
+          </Form.Item>
+          <Form.Item name="invoice_file_name" style={{ display: 'none' }}>
+            <Input type="hidden" />
+          </Form.Item>
+          <Form.Item name="file_size" style={{ display: 'none' }}>
+            <Input type="hidden" />
           </Form.Item>
         </Form>
       </Modal>
