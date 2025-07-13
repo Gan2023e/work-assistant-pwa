@@ -12,6 +12,7 @@ const shipmentRouter = require('./routes/shipment');
 const shippingRouter = require('./routes/shipping');
 const orderManagementRouter = require('./routes/orderManagement');
 const fbaInventoryRouter = require('./routes/fbaInventory');
+const purchaseInvoiceRouter = require('./routes/purchaseInvoice');
 const { router: authRouter } = require('./routes/auth');
 
 // 触发Railway重新部署 - 2024-06-21
@@ -85,7 +86,8 @@ app.use('/api/shipments', shipmentRouter);
 app.use('/api/shipping', shippingRouter);
 app.use('/api/order-management', orderManagementRouter);
 app.use('/api/fba-inventory', fbaInventoryRouter);
-console.log('✅ API routes registered including /api/shipping, /api/order-management, and /api/fba-inventory');
+app.use('/api/purchase-invoice', purchaseInvoiceRouter);
+console.log('✅ API routes registered including /api/shipping, /api/order-management, /api/fba-inventory, and /api/purchase-invoice');
 
 // 静态文件服务 - 用于图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

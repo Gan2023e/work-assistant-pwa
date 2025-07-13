@@ -11,6 +11,7 @@ import LoginPage from './pages/Auth/LoginPage';
 import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
+import PurchaseInvoice from './pages/Products/PurchaseInvoice';
 import ShippingPage from './pages/Shipping/ShippingPage';
 import OrderManagementPage from './pages/Shipping/OrderManagementPage';
 import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
@@ -48,6 +49,7 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       children: [
         { key: '/products/purchase', label: <Link to="/products/purchase">采购链接管理</Link> },
         { key: '/products/listings', label: <Link to="/products/listings">在线Listings管理</Link> },
+        { key: '/products/purchase-invoice', label: <Link to="/products/purchase-invoice">采购发票管理</Link> },
       ],
     },
     {
@@ -173,7 +175,7 @@ const AppContent: React.FC = () => {
   // 处理主菜单和子菜单的选中状态
   const getSelectedKeys = () => {
     const path = location.pathname;
-    if (["/products/purchase", "/products/listings"].includes(path)) return [path];
+    if (["/products/purchase", "/products/listings", "/products/purchase-invoice"].includes(path)) return [path];
     if (["/shipping/orders", "/shipping/management", "/shipping/pending-inventory", "/shipping/packed-inventory", "/shipping/history"].includes(path)) return [path];
     if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
@@ -189,6 +191,7 @@ const AppContent: React.FC = () => {
       children: [
         { label: <Link to="/products/purchase">采购链接管理</Link>, key: '/products/purchase' },
         { label: <Link to="/products/listings">在线Listings管理</Link>, key: '/products/listings' },
+        { label: <Link to="/products/purchase-invoice">采购发票管理</Link>, key: '/products/purchase-invoice' },
       ],
     },
     {
@@ -273,6 +276,13 @@ const AppContent: React.FC = () => {
             <ProtectedRoute>
               <LayoutWithSidebar>
                 <Listings />
+              </LayoutWithSidebar>
+            </ProtectedRoute>
+          } />
+          <Route path="/products/purchase-invoice" element={
+            <ProtectedRoute>
+              <LayoutWithSidebar>
+                <PurchaseInvoice />
               </LayoutWithSidebar>
             </ProtectedRoute>
           } />

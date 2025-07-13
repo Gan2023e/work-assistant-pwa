@@ -17,6 +17,8 @@ const ShipmentItem = require('./ShipmentItem');
 const OrderShipmentRelation = require('./OrderShipmentRelation');
 const FbaInventory = require('./FbaInventory');
 const SheinProduct = require('./SheinProduct');
+const PurchaseOrder = require('./PurchaseOrder');
+const Invoice = require('./Invoice');
 
 // 设置模型关联关系
 
@@ -52,6 +54,17 @@ OrderShipmentRelation.belongsTo(ShipmentRecord, {
   as: 'shipmentRecord'
 });
 
+// 采购订单与发票的关联关系
+PurchaseOrder.belongsTo(Invoice, {
+  foreignKey: 'invoice_id',
+  as: 'invoice'
+});
+
+Invoice.hasMany(PurchaseOrder, {
+  foreignKey: 'invoice_id',
+  as: 'purchaseOrders'
+});
+
 // 注意：need_num字段使用逻辑关联，不设置数据库级外键约束
 // 因为原表没有对need_num字段建立索引
 
@@ -71,5 +84,7 @@ module.exports = {
   ShipmentItem,
   OrderShipmentRelation,
   FbaInventory,
-  SheinProduct
+  SheinProduct,
+  PurchaseOrder,
+  Invoice
 };
