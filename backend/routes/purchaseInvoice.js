@@ -537,22 +537,22 @@ const parseInvoicePDF = (text) => {
 
     // 金额解析 - 针对价税合计格式优化
     const amountPatterns = [
-      // 优先匹配 "价税合计（小写）¥XX.XX" 格式 - 这是发票总金额
+      // 最优先匹配 "价税合计（大写）...（小写）¥XX.XX" 完整格式 - 这是发票总金额
+      /价税合计[^（]*（大写）[^（]*（小写）[^¥]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配 "价税合计（小写）¥XX.XX" 格式
       /价税合计[^¥]*（小写）[^¥]*¥\s*([\d,]+\.?\d*)/,
       /价税合计[^¥]*小写[^¥]*¥\s*([\d,]+\.?\d*)/,
-      // 匹配 "价税合计（大写）...（小写）¥XX.XX" 格式
-      /价税合计[^（]*（大写）[^（]*（小写）[^¥]*¥\s*([\d,]+\.?\d*)/,
-      // 匹配价税合计行的最后一个金额（通常是总金额）
-      /价税合计[^¥]*¥[\d,]+\.?\d*[^¥]*¥\s*([\d,]+\.?\d*)/,
-      // 匹配其他价税合计格式
+      // 匹配价税合计行且包含"小写"的格式
+      /价税合计.*小写.*¥\s*([\d,]+\.?\d*)/,
+      // 匹配含有"圆整"的价税合计格式
+      /价税合计[^¥]*圆整[^¥]*¥\s*([\d,]+\.?\d*)/,
+      // 匹配其他价税合计格式（优先级降低）
       /价税合计[^¥]*¥\s*([\d,]+\.?\d*)/,
       /合计[（(]大写[）)][^¥]*¥\s*([\d,]+\.?\d*)/,
       /总计[：:\s]*¥\s*([\d,]+\.?\d*)/,
       /金额合计[：:\s]*¥\s*([\d,]+\.?\d*)/,
       /小写[：:\s]*¥\s*([\d,]+\.?\d*)/,
       /金额[：:\s]*¥\s*([\d,]+\.?\d*)/,
-      // 匹配货币符号后的金额（优先级降低）
-      /¥\s*([\d,]+\.?\d*)/,
       // 匹配数字金额（作为后备）
       /([\d,]+\.\d{2})/
     ];
@@ -561,8 +561,10 @@ const parseInvoicePDF = (text) => {
       const match = cleanText.match(pattern);
       if (match) {
         const amount = match[1].replace(/,/g, '');
+        console.log('金额匹配结果:', { pattern: pattern.toString(), match: match[1], amount: amount });
         if (parseFloat(amount) > 0) {
           result.total_amount = amount;
+          console.log('确定的发票总金额:', amount);
           break;
         }
       }
@@ -632,11 +634,9 @@ const parseInvoicePDF = (text) => {
 
     // 开票方（销售方）解析 - 针对销售方信息栏优化
     const sellerPatterns = [
-      // 匹配 "销售方信息 名称：公司名称" 格式
+      // 最优先匹配 "销售方信息 名称：公司名称" 格式
       /销售方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
-      // 匹配 "名称：公司名称" （在销售方区域）
-      /名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
-      // 匹配销售方区域的公司名称
+      // 匹配销售方区域的公司名称（具体匹配）
       /销售方[^名称]*名称[：:\s]*([^\n\r]*?有限公司)/,
       /销售方[^名称]*名称[：:\s]*([^\n\r]*?股份有限公司)/,
       /销售方[^名称]*名称[：:\s]*([^\n\r]*?公司)/,
@@ -644,21 +644,19 @@ const parseInvoicePDF = (text) => {
       /销售方[：:\s]*([^纳税人识别号\n\r]+)/,
       /开票方[：:\s]*([^纳税人识别号\n\r]+)/,
       /卖方[：:\s]*([^纳税人识别号\n\r]+)/,
-      /收款人[：:\s]*([^纳税人识别号\n\r]+)/,
-      // 匹配公司名称格式
-      /([^：:\s]*有限公司)/,
-      /([^：:\s]*股份有限公司)/,
-      /([^：:\s]*商贸有限公司)/
+      /收款人[：:\s]*([^纳税人识别号\n\r]+)/
     ];
     
     for (const pattern of sellerPatterns) {
       const match = cleanText.match(pattern);
       if (match) {
         let companyName = match[1].trim();
+        console.log('销售方匹配结果:', { pattern: pattern.toString(), match: match[1], cleanedText: cleanText.substring(0, 200) });
         // 清理公司名称，移除多余的空格和特殊字符
         companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
         if (companyName.length > 3 && companyName.includes('公司')) {
           result.seller_name = companyName;
+          console.log('确定的销售方（开票方）:', companyName);
           break;
         }
       }
@@ -666,11 +664,9 @@ const parseInvoicePDF = (text) => {
 
     // 购买方解析 - 针对购买方信息栏优化
     const buyerPatterns = [
-      // 匹配 "购买方信息 名称：公司名称" 格式
+      // 最优先匹配 "购买方信息 名称：公司名称" 格式
       /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]*?)(?=统一社会信用代码|纳税人识别号|$)/,
-      // 在购买方区域匹配名称
-      /购买方[^名称]*名称[：:\s]*([^统一社会信用代码纳税人识别号\n\r]+)/,
-      // 匹配购买方区域的公司名称
+      // 匹配购买方区域的公司名称（具体匹配）
       /购买方[^名称]*名称[：:\s]*([^\n\r]*?有限公司)/,
       /购买方[^名称]*名称[：:\s]*([^\n\r]*?股份有限公司)/,
       /购买方[^名称]*名称[：:\s]*([^\n\r]*?公司)/,
@@ -685,10 +681,12 @@ const parseInvoicePDF = (text) => {
       const match = cleanText.match(pattern);
       if (match) {
         let companyName = match[1].trim();
+        console.log('购买方匹配结果:', { pattern: pattern.toString(), match: match[1], cleanedText: cleanText.substring(0, 200) });
         // 清理公司名称，移除多余的空格和特殊字符
         companyName = companyName.replace(/\s+/g, '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9（）()]/g, '');
         if (companyName.length > 3 && companyName.includes('公司')) {
           result.buyer_name = companyName;
+          console.log('确定的购买方（收票方）:', companyName);
           break;
         }
       }
