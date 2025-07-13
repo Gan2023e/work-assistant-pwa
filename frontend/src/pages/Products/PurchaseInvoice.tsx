@@ -17,25 +17,20 @@ import {
   Statistic,
   Tag,
   Typography,
-  Divider,
   Badge,
   Descriptions,
-  Alert,
-  Spin
+  Alert
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   UploadOutlined,
-  DownloadOutlined,
   FileTextOutlined,
   ShoppingCartOutlined,
   DollarCircleOutlined,
   FilePdfOutlined,
-  FilterOutlined,
   ReloadOutlined,
   SearchOutlined,
-  LinkOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   EyeOutlined
@@ -146,7 +141,6 @@ const PurchaseInvoice: React.FC = () => {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [amountDifference, setAmountDifference] = useState<number>(0);
-  const [pdfParseResults, setPdfParseResults] = useState<any>(null);
   
   // 搜索筛选状态
   const [filters, setFilters] = useState({
@@ -278,7 +272,6 @@ const PurchaseInvoice: React.FC = () => {
         
         setExtractedInfo(extractedInfo);
         setParseQuality(parseQuality);
-        setPdfParseResults(result.data);
         
         // 自动填充表单
         const formValues = {
@@ -362,7 +355,6 @@ const PurchaseInvoice: React.FC = () => {
         setSelectedRowKeys([]);
         setExtractedInfo(null);
         setParseQuality(null);
-        setPdfParseResults(null);
         setFileList([]);
         setAmountDifference(0);
         invoiceForm.resetFields();
@@ -553,9 +545,16 @@ const PurchaseInvoice: React.FC = () => {
 
   // 获取选中订单的总金额
   const getSelectedOrdersAmount = () => {
+    if (!purchaseOrders || purchaseOrders.length === 0) {
+      return 0;
+    }
+    
     return purchaseOrders
       .filter(order => selectedRowKeys.includes(order.id))
-      .reduce((sum, order) => sum + order.amount, 0);
+      .reduce((sum, order) => {
+        const amount = typeof order.amount === 'number' ? order.amount : parseFloat(order.amount) || 0;
+        return sum + amount;
+      }, 0);
   };
 
   // 获取选中订单的卖家名称列表
@@ -978,7 +977,6 @@ const PurchaseInvoice: React.FC = () => {
           setInvoiceModalVisible(false);
           setExtractedInfo(null);
           setParseQuality(null);
-          setPdfParseResults(null);
           setFileList([]);
           setAmountDifference(0);
           invoiceForm.resetFields();
