@@ -20,17 +20,6 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 console.log('🚀 Starting backend server...');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('PORT:', PORT);
-console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
-
-// 检查数据库环境变量
-console.log('📊 Database environment variables:');
-console.log('- DB_HOST:', process.env.DB_HOST ? '✓ configured' : '❌ missing');
-console.log('- DB_USER:', process.env.DB_USER ? '✓ configured' : '❌ missing');
-console.log('- DB_PASSWORD:', process.env.DB_PASSWORD ? '✓ configured' : '❌ missing');
-console.log('- DB_DATABASE:', process.env.DB_DATABASE ? '✓ configured' : '❌ missing');
-console.log('- DB_PORT:', process.env.DB_PORT || '3306 (default)');
 
 // CORS配置，允许前端域名访问
 app.use(cors({
@@ -55,13 +44,7 @@ app.get('/health', async (req, res) => {
     res.json({ 
       status: 'OK', 
       timestamp: new Date().toISOString(),
-      database: 'connected',
-      environment: {
-        NODE_ENV: process.env.NODE_ENV,
-        DB_HOST: process.env.DB_HOST ? 'configured' : 'missing',
-        DB_DATABASE: process.env.DB_DATABASE ? 'configured' : 'missing',
-        FRONTEND_URL: process.env.FRONTEND_URL
-      }
+      database: 'connected'
     });
   } catch (error) {
     console.error('❌ Health check: Database connection failed:', error.message);
@@ -87,7 +70,7 @@ app.use('/api/shipping', shippingRouter);
 app.use('/api/order-management', orderManagementRouter);
 app.use('/api/fba-inventory', fbaInventoryRouter);
 app.use('/api/purchase-invoice', purchaseInvoiceRouter);
-console.log('✅ API routes registered including /api/shipping, /api/order-management, /api/fba-inventory, and /api/purchase-invoice');
+console.log('✅ API routes registered');
 
 // 静态文件服务 - 用于图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -118,7 +101,6 @@ app.get('/', (req, res) => {
 });
 
 // 数据库连接和服务启动
-console.log('🔗 Attempting to connect to database...');
 sequelize.authenticate().then(() => {
   console.log('✅ 数据库连接成功');
   
@@ -128,8 +110,6 @@ sequelize.authenticate().then(() => {
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
-      console.log(`健康检查: http://localhost:${PORT}/health`);
-      console.log(`API文档: http://localhost:${PORT}/`);
     });
   } else {
     // 开发环境才进行数据库同步
@@ -139,17 +119,10 @@ sequelize.authenticate().then(() => {
       
       app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ 后端服务已启动，端口 ${PORT}`);
-        console.log(`健康检查: http://localhost:${PORT}/health`);
-        console.log(`API文档: http://localhost:${PORT}/`);
       });
     });
   }
 }).catch(err => {
-  console.error('❌ 数据库连接失败:', err.message);
-  console.error('Error details:', {
-    code: err.original?.code,
-    errno: err.original?.errno,
-    sqlMessage: err.original?.sqlMessage
-  });
+  console.error('❌ 数据库连接失败');
   process.exit(1);
 }); 

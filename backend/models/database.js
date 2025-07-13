@@ -9,26 +9,12 @@ try {
 
 console.log('🔗 Initializing database connection...');
 
-// 详细的环境变量调试输出
-console.log('🔍 Environment Variables Debug:');
-console.log('- DB_HOST:', process.env.DB_HOST || 'NOT SET');
-console.log('- DB_USER:', process.env.DB_USER || 'NOT SET');
-console.log('- DB_PASSWORD:', process.env.DB_PASSWORD ? '***HIDDEN***' : 'NOT SET');
-console.log('- DB_DATABASE:', process.env.DB_DATABASE || 'NOT SET');
-console.log('- DB_PORT:', process.env.DB_PORT || 'NOT SET');
-console.log('- MYSQL_URL:', process.env.MYSQL_URL ? '***HIDDEN***' : 'NOT SET');
-console.log('- DATABASE_URL:', process.env.DATABASE_URL ? '***HIDDEN***' : 'NOT SET');
-
 // 优先使用单独的环境变量（Railway配置）
 let sequelize;
 
 if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_DATABASE) {
   // 使用单独的环境变量（推荐方式）
   console.log('📊 Using individual database environment variables');
-  console.log('- Host:', process.env.DB_HOST);
-  console.log('- Database:', process.env.DB_DATABASE);
-  console.log('- User:', process.env.DB_USER);
-  console.log('- Port:', process.env.DB_PORT || '3306');
   
   sequelize = new Sequelize(
     process.env.DB_DATABASE,
@@ -39,7 +25,7 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
       port: parseInt(process.env.DB_PORT) || 3306,
       dialect: 'mysql',
       timezone: '+08:00',
-      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      logging: false,
       pool: {
         max: 5,
         min: 0,
@@ -74,7 +60,7 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
   sequelize = new Sequelize(process.env.MYSQL_URL, {
     dialect: 'mysql',
     timezone: '+08:00',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: false,
     pool: {
       max: 5,
       min: 0,
@@ -88,7 +74,7 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
   sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'mysql',
     timezone: '+08:00',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: false,
     pool: {
       max: 5,
       min: 0,
@@ -108,7 +94,7 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
       port: 3306,
       dialect: 'mysql',
       timezone: '+08:00',
-      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      logging: false,
       pool: {
         max: 5,
         min: 0,
