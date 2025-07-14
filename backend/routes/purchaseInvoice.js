@@ -1476,27 +1476,87 @@ router.post('/invoices/:id/upload-file', upload.single('file'), async (req, res)
   }
 });
 
+// 获取所有不重复的卖家公司名
+router.get('/seller-companies', async (req, res) => {
+  try {
+    const sellerCompanies = await PurchaseOrder.findAll({
+      attributes: [[sequelize.fn('DISTINCT', sequelize.col('seller_name')), 'seller_name']],
+      where: {
+        seller_name: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      order: [['seller_name', 'ASC']]
+    });
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: sellerCompanies.map(item => item.seller_name)
+    });
+  } catch (error) {
+    console.error('获取卖家公司名失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取卖家公司名失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取统计数据
 router.get('/statistics', async (req, res) => {
   try {
+    // 两个固定的买家公司名称
+    const buyerCompanies = ['深圳欣蓉电子商务有限公司', '深圳先春电子商务有限公司'];
+    
     // 获取基本统计数据
     const [
       totalOrders,
-      unpaidOrders,
-      partiallyPaidOrders,
-      fullyPaidOrders,
       totalInvoices,
-      totalAmount,
-      unpaidAmount
+      totalAmount
     ] = await Promise.all([
       PurchaseOrder.count(),
-      PurchaseOrder.count({ where: { invoice_status: '未开票' } }),
-      PurchaseOrder.count({ where: { invoice_status: '部分开票' } }),
-      PurchaseOrder.count({ where: { invoice_status: '已开票' } }),
       Invoice.count(),
-      PurchaseOrder.sum('amount') || 0,
-      PurchaseOrder.sum('amount', { where: { invoice_status: '未开票' } }) || 0
+      PurchaseOrder.sum('amount') || 0
     ]);
+
+    // 获取按买家公司分组的统计数据
+    const companyStats = {};
+    
+    for (const company of buyerCompanies) {
+      const [
+        unpaidOrders,
+        fullyPaidOrders,
+        unpaidAmount
+      ] = await Promise.all([
+        PurchaseOrder.count({ 
+          where: { 
+            invoice_status: '未开票',
+            payment_account: { [Op.like]: `%${company}%` }
+          } 
+        }),
+        PurchaseOrder.count({ 
+          where: { 
+            invoice_status: '已开票',
+            payment_account: { [Op.like]: `%${company}%` }
+          } 
+        }),
+        PurchaseOrder.sum('amount', { 
+          where: { 
+            invoice_status: '未开票',
+            payment_account: { [Op.like]: `%${company}%` }
+          } 
+        }) || 0
+      ]);
+
+      companyStats[company] = {
+        unpaidOrders,
+        fullyPaidOrders,
+        unpaidAmount
+      };
+    }
 
     // 获取各供应商统计
     const supplierStats = await PurchaseOrder.findAll({
@@ -1527,12 +1587,9 @@ router.get('/statistics', async (req, res) => {
       data: {
         overview: {
           totalOrders,
-          unpaidOrders,
-          partiallyPaidOrders,
-          fullyPaidOrders,
           totalInvoices,
           totalAmount,
-          unpaidAmount
+          companyStats
         },
         supplierStats,
         monthlyStats

@@ -104,12 +104,15 @@ interface ParseQuality {
 interface Statistics {
   overview: {
     totalOrders: number;
-    unpaidOrders: number;
-    partiallyPaidOrders: number;
-    fullyPaidOrders: number;
     totalInvoices: number;
     totalAmount: number;
-    unpaidAmount: number;
+    companyStats: {
+      [key: string]: {
+        unpaidOrders: number;
+        fullyPaidOrders: number;
+        unpaidAmount: number;
+      };
+    };
   };
   supplierStats: Array<{
     seller_name: string;
@@ -155,37 +158,40 @@ const PurchaseInvoice: React.FC = () => {
 
   // 卡片点击状态
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  
+  // 卖家公司名列表
+  const [sellerCompanies, setSellerCompanies] = useState<string[]>([]);
+  
+  // 买家公司名固定列表
+  const buyerCompanies = ['深圳欣蓉电子商务有限公司', '深圳先春电子商务有限公司'];
 
   // 处理卡片点击
   const handleCardClick = (cardType: string) => {
     // 如果点击的是当前激活的卡片，则取消选择
     if (selectedCard === cardType) {
       setSelectedCard(null);
-      setFilters(prev => ({ ...prev, invoice_status: '' }));
+      setFilters(prev => ({ ...prev, invoice_status: '', payment_account: '' }));
     } else {
       setSelectedCard(cardType);
       // 根据卡片类型设置过滤条件
       switch (cardType) {
         case 'total':
-          setFilters(prev => ({ ...prev, invoice_status: '' }));
+          setFilters(prev => ({ ...prev, invoice_status: '', payment_account: '' }));
           break;
-        case 'unpaid':
-          setFilters(prev => ({ ...prev, invoice_status: '未开票' }));
+        case 'xinrong-unpaid':
+          setFilters(prev => ({ ...prev, invoice_status: '未开票', payment_account: '深圳欣蓉电子商务有限公司' }));
           break;
-        case 'paid':
-          setFilters(prev => ({ ...prev, invoice_status: '已开票' }));
+        case 'xinrong-paid':
+          setFilters(prev => ({ ...prev, invoice_status: '已开票', payment_account: '深圳欣蓉电子商务有限公司' }));
           break;
-        case 'partial':
-          setFilters(prev => ({ ...prev, invoice_status: '部分开票' }));
+        case 'xianchun-unpaid':
+          setFilters(prev => ({ ...prev, invoice_status: '未开票', payment_account: '深圳先春电子商务有限公司' }));
           break;
-        case 'total-amount':
-          setFilters(prev => ({ ...prev, invoice_status: '' }));
-          break;
-        case 'unpaid-amount':
-          setFilters(prev => ({ ...prev, invoice_status: '未开票' }));
+        case 'xianchun-paid':
+          setFilters(prev => ({ ...prev, invoice_status: '已开票', payment_account: '深圳先春电子商务有限公司' }));
           break;
         default:
-          setFilters(prev => ({ ...prev, invoice_status: '' }));
+          setFilters(prev => ({ ...prev, invoice_status: '', payment_account: '' }));
       }
     }
   };
@@ -214,6 +220,19 @@ const PurchaseInvoice: React.FC = () => {
   const getCardClassName = (cardType: string) => {
     return 'clickable-card';
   };
+
+  // 获取卖家公司名列表
+  const fetchSellerCompanies = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/seller-companies`);
+      const result = await response.json();
+      if (result.code === 0) {
+        setSellerCompanies(result.data);
+      }
+    } catch (error) {
+      console.error('获取卖家公司名失败:', error);
+    }
+  }, []);
 
   // 获取统计数据
   const fetchStatistics = useCallback(async () => {
@@ -275,7 +294,8 @@ const PurchaseInvoice: React.FC = () => {
   useEffect(() => {
     fetchStatistics();
     fetchPurchaseOrders();
-  }, [fetchStatistics, fetchPurchaseOrders]);
+    fetchSellerCompanies();
+  }, [fetchStatistics, fetchPurchaseOrders, fetchSellerCompanies]);
 
   // 当selectedCard变化时，重新获取数据
   useEffect(() => {
@@ -840,7 +860,7 @@ const PurchaseInvoice: React.FC = () => {
       {statistics && (
         <Row gutter={16} style={{ marginBottom: '24px' }}>
           <Col span={4}>
-                        <Card
+            <Card
               className={getCardClassName('total')}
               onClick={() => handleCardClick('total')}
               style={getCardStyle('total')}
@@ -852,77 +872,62 @@ const PurchaseInvoice: React.FC = () => {
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={5}>
             <Card
-              className={getCardClassName('unpaid')}
-              onClick={() => handleCardClick('unpaid')}
-              style={getCardStyle('unpaid')}
+              className={getCardClassName('xinrong-unpaid')}
+              onClick={() => handleCardClick('xinrong-unpaid')}
+              style={getCardStyle('xinrong-unpaid')}
             >
               <Statistic
-                title="未开票订单"
-                value={statistics.overview.unpaidOrders}
+                title="欣蓉未开票订单"
+                value={statistics.overview.companyStats['深圳欣蓉电子商务有限公司']?.unpaidOrders || 0}
                 prefix={<ExclamationCircleOutlined />}
                 valueStyle={{ color: '#cf1322' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={5}>
             <Card
-              className={getCardClassName('paid')}
-              onClick={() => handleCardClick('paid')}
-              style={getCardStyle('paid')}
+              className={getCardClassName('xinrong-paid')}
+              onClick={() => handleCardClick('xinrong-paid')}
+              style={getCardStyle('xinrong-paid')}
             >
               <Statistic
-                title="已开票订单"
-                value={statistics.overview.fullyPaidOrders}
+                title="欣蓉已开票订单"
+                value={statistics.overview.companyStats['深圳欣蓉电子商务有限公司']?.fullyPaidOrders || 0}
                 prefix={<CheckCircleOutlined />}
                 valueStyle={{ color: '#52c41a' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={5}>
             <Card
-              className={getCardClassName('partial')}
-              onClick={() => handleCardClick('partial')}
-              style={getCardStyle('partial')}
+              className={getCardClassName('xianchun-unpaid')}
+              onClick={() => handleCardClick('xianchun-unpaid')}
+              style={getCardStyle('xianchun-unpaid')}
             >
               <Statistic
-                title="部分开票订单"
-                value={statistics.overview.partiallyPaidOrders}
+                title="先春未开票订单"
+                value={statistics.overview.companyStats['深圳先春电子商务有限公司']?.unpaidOrders || 0}
                 prefix={<ExclamationCircleOutlined />}
-                valueStyle={{ color: '#faad14' }}
+                valueStyle={{ color: '#cf1322' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
-             <Card
-               className={getCardClassName('total-amount')}
-               onClick={() => handleCardClick('total-amount')}
-               style={getCardStyle('total-amount')}
-             >
-               <Statistic
-                 title="订单总金额"
-                 value={statistics.overview.totalAmount}
-                 prefix={<DollarCircleOutlined />}
-                 precision={2}
-               />
-             </Card>
-           </Col>
-           <Col span={4}>
-             <Card
-               className={getCardClassName('unpaid-amount')}
-               onClick={() => handleCardClick('unpaid-amount')}
-               style={getCardStyle('unpaid-amount')}
-             >
-               <Statistic
-                 title="未开票金额"
-                 value={statistics.overview.unpaidAmount}
-                 prefix={<DollarCircleOutlined />}
-                 precision={2}
-                 valueStyle={{ color: '#cf1322' }}
-               />
-             </Card>
-           </Col>
+          <Col span={5}>
+            <Card
+              className={getCardClassName('xianchun-paid')}
+              onClick={() => handleCardClick('xianchun-paid')}
+              style={getCardStyle('xianchun-paid')}
+            >
+              <Statistic
+                title="先春已开票订单"
+                value={statistics.overview.companyStats['深圳先春电子商务有限公司']?.fullyPaidOrders || 0}
+                prefix={<CheckCircleOutlined />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
         </Row>
       )}
 
@@ -935,17 +940,16 @@ const PurchaseInvoice: React.FC = () => {
               <div>
                 <strong>当前筛选：</strong>
                 {selectedCard === 'total' && '显示所有订单'}
-                {selectedCard === 'unpaid' && '显示未开票订单'}
-                {selectedCard === 'paid' && '显示已开票订单'}
-                {selectedCard === 'partial' && '显示部分开票订单'}
-                {selectedCard === 'total-amount' && '显示所有订单'}
-                {selectedCard === 'unpaid-amount' && '显示未开票订单'}
+                {selectedCard === 'xinrong-unpaid' && '显示欣蓉未开票订单'}
+                {selectedCard === 'xinrong-paid' && '显示欣蓉已开票订单'}
+                {selectedCard === 'xianchun-unpaid' && '显示先春未开票订单'}
+                {selectedCard === 'xianchun-paid' && '显示先春已开票订单'}
                 <Button 
                   type="link" 
                   size="small" 
                   onClick={() => {
                     setSelectedCard(null);
-                    setFilters(prev => ({ ...prev, invoice_status: '' }));
+                    setFilters(prev => ({ ...prev, invoice_status: '', payment_account: '' }));
                   }}
                   style={{ marginLeft: '8px' }}
                 >
@@ -970,20 +974,34 @@ const PurchaseInvoice: React.FC = () => {
             />
           </Col>
           <Col span={4}>
-            <Input
+            <Select
               placeholder="卖家公司名"
               value={filters.seller_name}
-              onChange={(e) => setFilters(prev => ({ ...prev, seller_name: e.target.value }))}
+              onChange={(value) => setFilters(prev => ({ ...prev, seller_name: value }))}
               allowClear
-            />
+              style={{ width: '100%' }}
+              showSearch
+              filterOption={(input, option) =>
+                (option?.label as string)?.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }
+            >
+              {sellerCompanies.map(company => (
+                <Option key={company} value={company}>{company}</Option>
+              ))}
+            </Select>
           </Col>
           <Col span={4}>
-            <Input
+            <Select
               placeholder="买家公司名"
               value={filters.payment_account}
-              onChange={(e) => setFilters(prev => ({ ...prev, payment_account: e.target.value }))}
+              onChange={(value) => setFilters(prev => ({ ...prev, payment_account: value }))}
               allowClear
-            />
+              style={{ width: '100%' }}
+            >
+              {buyerCompanies.map(company => (
+                <Option key={company} value={company}>{company}</Option>
+              ))}
+            </Select>
           </Col>
           <Col span={4}>
             <Select
