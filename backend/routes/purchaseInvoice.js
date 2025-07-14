@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const pdf = require('pdf-parse');
+const XLSX = require('xlsx');
 const { uploadToOSS, deleteFromOSS, getSignedUrl, checkOSSConfig } = require('../utils/oss');
 
 // 配置文件上传中间件
@@ -21,6 +22,24 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('只允许上传PDF文件'));
+    }
+  }
+});
+
+// 配置Excel文件上传中间件
+const excelStorage = multer.memoryStorage();
+const excelUpload = multer({
+  storage: excelStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB限制
+  },
+  fileFilter: (req, file, cb) => {
+    // 允许Excel文件
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+        file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传Excel文件'));
     }
   }
 });
@@ -128,6 +147,165 @@ router.post('/orders', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '创建失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量创建采购订单
+router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '请上传Excel文件'
+      });
+    }
+
+    // 解析Excel文件
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    
+    // 将Excel数据转换为JSON
+    const rawData = XLSX.utils.sheet_to_json(sheet);
+    
+    if (!rawData || rawData.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: 'Excel文件没有数据'
+      });
+    }
+
+    // 需要的固定列名
+    const requiredColumns = ['订单编号', '买家公司名', '卖家公司名', '实付款(元)', '订单付款时间'];
+    
+    // 检查必需的列是否存在
+    const headers = Object.keys(rawData[0]);
+    const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+    
+    if (missingColumns.length > 0) {
+      return res.status(400).json({
+        code: 1,
+        message: `Excel文件缺少必需的列: ${missingColumns.join(', ')}`
+      });
+    }
+
+    // 处理数据
+    const processedData = [];
+    const skippedData = [];
+    const errorData = [];
+
+    for (let i = 0; i < rawData.length; i++) {
+      const row = rawData[i];
+      
+      try {
+        // 提取数据
+        const orderNumber = String(row['订单编号'] || '').trim();
+        const buyerName = String(row['买家公司名'] || '').trim();
+        const sellerName = String(row['卖家公司名'] || '').trim();
+        const amount = parseFloat(row['实付款(元)']) || 0;
+        const orderDateStr = String(row['订单付款时间'] || '').trim();
+
+        // 验证必需字段
+        if (!orderNumber || !buyerName || !sellerName || !amount) {
+          errorData.push({
+            row: i + 1,
+            reason: '缺少必需字段',
+            data: row
+          });
+          continue;
+        }
+
+        // 解析日期
+        let orderDate;
+        try {
+          // 尝试解析不同格式的日期
+          if (orderDateStr.includes('/')) {
+            const parts = orderDateStr.split('/');
+            if (parts.length === 3) {
+              // 假设格式是 MM/DD/YYYY 或 DD/MM/YYYY
+              orderDate = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`);
+            }
+          } else if (orderDateStr.includes('-')) {
+            orderDate = new Date(orderDateStr);
+          } else {
+            // 尝试直接解析
+            orderDate = new Date(orderDateStr);
+          }
+          
+          if (isNaN(orderDate.getTime())) {
+            throw new Error('无效日期格式');
+          }
+        } catch (error) {
+          errorData.push({
+            row: i + 1,
+            reason: '日期格式错误',
+            data: row
+          });
+          continue;
+        }
+
+        // 检查订单号是否已存在
+        const existingOrder = await PurchaseOrder.findOne({
+          where: { order_number: orderNumber }
+        });
+
+        if (existingOrder) {
+          skippedData.push({
+            row: i + 1,
+            reason: '订单号已存在',
+            data: row
+          });
+          continue;
+        }
+
+        // 准备插入数据
+        const orderData = {
+          order_number: orderNumber,
+          order_date: orderDate.toISOString().split('T')[0],
+          amount: amount,
+          seller_name: sellerName,
+          payment_account: buyerName,
+          invoice_status: '未开票',
+          remarks: '批量导入'
+        };
+
+        processedData.push(orderData);
+
+      } catch (error) {
+        errorData.push({
+          row: i + 1,
+          reason: error.message,
+          data: row
+        });
+      }
+    }
+
+    // 批量插入数据
+    let createdCount = 0;
+    if (processedData.length > 0) {
+      const createdOrders = await PurchaseOrder.bulkCreate(processedData);
+      createdCount = createdOrders.length;
+    }
+
+    res.json({
+      code: 0,
+      message: '批量导入完成',
+      data: {
+        total: rawData.length,
+        created: createdCount,
+        skipped: skippedData.length,
+        error: errorData.length,
+        skippedDetails: skippedData,
+        errorDetails: errorData
+      }
+    });
+  } catch (error) {
+    console.error('批量创建采购订单失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量导入失败',
       error: error.message
     });
   }

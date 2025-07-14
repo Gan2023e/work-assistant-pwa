@@ -164,6 +164,42 @@ const PurchaseInvoice: React.FC = () => {
   
   // 买家公司名固定列表
   const buyerCompanies = ['深圳欣蓉电子商务有限公司', '深圳先春电子商务有限公司'];
+  
+  // 批量录入订单相关状态
+  const [batchImportModalVisible, setBatchImportModalVisible] = useState(false);
+  const [batchImportResult, setBatchImportResult] = useState<any>(null);
+  const [batchImportLoading, setBatchImportLoading] = useState(false);
+
+  // 处理批量录入订单
+  const handleBatchImport = async (file: File) => {
+    try {
+      setBatchImportLoading(true);
+      const formData = new FormData();
+      formData.append('excel', file);
+
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/orders/batch`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      setBatchImportResult(result);
+
+      if (result.code === 0) {
+        message.success(`批量导入完成！成功导入 ${result.data.created} 条记录`);
+        // 刷新数据
+        await fetchPurchaseOrders();
+        await fetchStatistics();
+      } else {
+        message.error(result.message || '批量导入失败');
+      }
+    } catch (error) {
+      console.error('批量导入失败:', error);
+      message.error('批量导入失败，请检查网络连接');
+    } finally {
+      setBatchImportLoading(false);
+    }
+  };
 
   // 处理卡片点击
   const handleCardClick = (cardType: string) => {
@@ -1068,6 +1104,16 @@ const PurchaseInvoice: React.FC = () => {
               <Button 
                 type="primary" 
                 icon={<UploadOutlined />}
+                onClick={() => {
+                  setBatchImportModalVisible(true);
+                  setBatchImportResult(null);
+                }}
+              >
+                批量录入订单
+              </Button>
+              <Button 
+                type="primary" 
+                icon={<UploadOutlined />}
                 disabled={selectedRowKeys.length === 0}
                                  onClick={() => {
                    setExtractedInfo(null);
@@ -1544,6 +1590,118 @@ const PurchaseInvoice: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 批量录入订单模态框 */}
+      <Modal
+        title="批量录入订单"
+        open={batchImportModalVisible}
+        onCancel={() => {
+          setBatchImportModalVisible(false);
+          setBatchImportResult(null);
+        }}
+        width={800}
+        footer={null}
+      >
+        <Alert
+          message="上传说明"
+          description={
+            <div>
+              <p>请上传包含以下列的Excel文件（列名必须完全匹配）：</p>
+              <ul>
+                <li><strong>订单编号</strong>：必填，系统会自动跳过已存在的订单</li>
+                <li><strong>买家公司名</strong>：必填</li>
+                <li><strong>卖家公司名</strong>：必填</li>
+                <li><strong>实付款(元)</strong>：必填，数字格式</li>
+                <li><strong>订单付款时间</strong>：必填，支持多种日期格式</li>
+              </ul>
+              <p>注意：列名必须完全匹配上述5个名称，否则无法识别。</p>
+            </div>
+          }
+          type="info"
+          showIcon
+          style={{ marginBottom: '16px' }}
+        />
+        
+        <Upload
+          beforeUpload={(file) => {
+            // 检查文件类型
+            const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                          file.type === 'application/vnd.ms-excel';
+            if (!isExcel) {
+              message.error('只能上传Excel文件！');
+              return false;
+            }
+            
+            // 检查文件大小
+            const isLt10M = file.size / 1024 / 1024 < 10;
+            if (!isLt10M) {
+              message.error('文件大小不能超过10MB！');
+              return false;
+            }
+            
+            handleBatchImport(file);
+            return false; // 阻止自动上传
+          }}
+          showUploadList={false}
+        >
+          <Button 
+            icon={<UploadOutlined />} 
+            loading={batchImportLoading}
+            size="large"
+            type="primary"
+            style={{ width: '100%', height: '80px' }}
+          >
+            {batchImportLoading ? '正在处理中...' : '点击上传Excel文件'}
+          </Button>
+        </Upload>
+        
+        {/* 导入结果 */}
+        {batchImportResult && (
+          <div style={{ marginTop: '20px' }}>
+            <Alert
+              message={`导入结果`}
+              description={
+                <div>
+                  <p>总计处理: {batchImportResult.data?.total || 0} 条记录</p>
+                  <p>成功导入: {batchImportResult.data?.created || 0} 条</p>
+                  <p>跳过重复: {batchImportResult.data?.skipped || 0} 条</p>
+                  <p>错误记录: {batchImportResult.data?.error || 0} 条</p>
+                </div>
+              }
+              type={batchImportResult.code === 0 ? 'success' : 'error'}
+              showIcon
+              style={{ marginBottom: '16px' }}
+            />
+            
+            {/* 错误详情 */}
+            {batchImportResult.data?.errorDetails && batchImportResult.data.errorDetails.length > 0 && (
+              <div>
+                <Typography.Title level={5}>错误详情：</Typography.Title>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {batchImportResult.data.errorDetails.map((error: any, index: number) => (
+                    <div key={index} style={{ marginBottom: '8px' }}>
+                      <Text type="danger">第{error.row}行: {error.reason}</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* 跳过详情 */}
+            {batchImportResult.data?.skippedDetails && batchImportResult.data.skippedDetails.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <Typography.Title level={5}>跳过详情：</Typography.Title>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {batchImportResult.data.skippedDetails.map((skipped: any, index: number) => (
+                    <div key={index} style={{ marginBottom: '8px' }}>
+                      <Text type="warning">第{skipped.row}行: {skipped.reason}</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
     </div>
   );
