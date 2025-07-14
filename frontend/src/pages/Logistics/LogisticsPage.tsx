@@ -450,12 +450,20 @@ const LogisticsPage: React.FC = () => {
     let currentUpdates: { [key: string]: any } = {};
 
     for (const line of lines) {
-      const trimmedLine = line.trim();
+      // 去除零宽度字符和其他不可见字符
+      const cleanLine = line.replace(/[\u200B-\u200F\uFEFF]/g, '').trim();
+      
       // 支持中文冒号和英文冒号
-      if (trimmedLine.includes('：') || trimmedLine.includes(':')) {
+      if (cleanLine.includes('：') || cleanLine.includes(':')) {
         // 优先使用中文冒号分割，如果没有则使用英文冒号
-        const separator = trimmedLine.includes('：') ? '：' : ':';
-        const [key, value] = trimmedLine.split(separator).map(s => s.trim());
+        const separator = cleanLine.includes('：') ? '：' : ':';
+        const parts = cleanLine.split(separator);
+        
+        if (parts.length < 2) continue;
+        
+        // 清理 key 和 value 的空格和特殊字符
+        const key = parts[0].trim().replace(/[\u200B-\u200F\uFEFF]/g, '');
+        const value = parts.slice(1).join(separator).trim(); // 处理值中包含冒号的情况
         
         if (key === 'Shipping ID') {
           // 如果遇到新的Shipping ID，先保存之前的数据
@@ -495,6 +503,8 @@ const LogisticsPage: React.FC = () => {
             '付款状态': 'paymentStatus'
           };
           
+          console.log('解析字段:', key, '-> 映射到:', fieldMap[key], '值:', value);
+          
           const fieldName = fieldMap[key];
           if (fieldName) {
             // 对日期字段进行格式化处理
@@ -513,6 +523,8 @@ const LogisticsPage: React.FC = () => {
             } else {
               currentUpdates[fieldName] = value;
             }
+          } else {
+            console.warn('未找到字段映射:', key);
           }
         }
       }
@@ -526,6 +538,7 @@ const LogisticsPage: React.FC = () => {
       });
     }
 
+    console.log('解析结果:', result);
     return result;
   };
 
