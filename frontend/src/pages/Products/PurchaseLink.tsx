@@ -7,7 +7,6 @@ import {
   Space, 
   Select, 
   Modal, 
-  Upload, 
   Popconfirm,
   Form,
   Tooltip,
@@ -16,12 +15,12 @@ import {
   Row,
   Col,
   Statistic,
-  DatePicker
+  DatePicker,
+  Checkbox
 } from 'antd';
 import { 
   UploadOutlined, 
   DeleteOutlined, 
-  EditOutlined, 
   LinkOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -97,6 +96,10 @@ const Purchase: React.FC = () => {
   const [latestSku, setLatestSku] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // 搜索相关状态
+  const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
+  const [isFuzzySearch, setIsFuzzySearch] = useState(true);
+  
   // 筛选相关状态
   const [filters, setFilters] = useState({
     status: '',
@@ -105,6 +108,7 @@ const Purchase: React.FC = () => {
     dateRange: null as [string, string] | null
   });
   const [filteredData, setFilteredData] = useState<ProductRecord[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [originalData, setOriginalData] = useState<ProductRecord[]>([]);
   
   // 统计数据（基于全库数据）
@@ -153,18 +157,27 @@ const Purchase: React.FC = () => {
       .map(i => i.trim())
       .filter(Boolean);
     if (keywords.length === 0) {
-      message.warning('请输入parent_sku或weblink');
+      const searchTypeName = searchType === 'sku' ? 'SKU' : '产品链接/ID';
+      message.warning(`请输入${searchTypeName}`);
       return;
     }
     
     setLoading(true);
     try {
+      const requestPayload = { 
+        keywords,
+        searchType,
+        isFuzzy: searchType === 'weblink' ? true : isFuzzySearch // 产品链接搜索强制模糊搜索
+      };
+      
+      console.log('🔍 搜索请求参数:', requestPayload);
+      
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/search`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ keywords }),
+        body: JSON.stringify(requestPayload),
       });
       
       if (!res.ok) {
@@ -180,7 +193,9 @@ const Purchase: React.FC = () => {
       if (!searchData || searchData.length === 0) {
         message.info('未找到匹配的产品信息');
       } else {
-        message.success(`找到 ${searchData.length} 条产品信息`);
+        const searchTypeName = searchType === 'sku' ? 'SKU' : '产品链接/ID';
+        const searchModeName = searchType === 'weblink' ? '模糊' : (isFuzzySearch ? '模糊' : '精确');
+        message.success(`通过${searchModeName}搜索${searchTypeName}，找到 ${searchData.length} 条产品信息`);
       }
     } catch (e) {
       console.error('搜索失败:', e);
@@ -927,13 +942,47 @@ const Purchase: React.FC = () => {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="请输入parent_sku或weblink（每行一个，支持部分内容模糊查询）"
+              placeholder={
+                searchType === 'sku' 
+                  ? `请输入SKU（每行一个，支持${isFuzzySearch ? '模糊' : '精确'}查询）`
+                  : "请输入产品链接/ID（每行一个，支持模糊查询）"
+              }
               style={{ width: 400 }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <Button type="primary" onClick={handleSearch} loading={loading}>
-                搜索
-              </Button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Select
+                  value={searchType}
+                  onChange={(value) => {
+                    setSearchType(value);
+                    // 切换搜索类型时清空输入和结果
+                    setInput('');
+                    setData([]);
+                    setOriginalData([]);
+                    setFilteredData([]);
+                    setSelectedRowKeys([]);
+                  }}
+                  style={{ width: 120 }}
+                >
+                  <Option value="sku">搜索SKU</Option>
+                  <Option value="weblink">搜索产品链接/ID</Option>
+                </Select>
+                
+                {searchType === 'sku' && (
+                  <Checkbox
+                    checked={isFuzzySearch}
+                    onChange={e => setIsFuzzySearch(e.target.checked)}
+                    style={{ fontSize: '12px' }}
+                  >
+                    模糊搜索
+                  </Checkbox>
+                )}
+                
+                <Button type="primary" onClick={handleSearch} loading={loading}>
+                  搜索
+                </Button>
+              </div>
+              
               <Button 
                 icon={<ReloadOutlined />} 
                 onClick={() => {
@@ -942,6 +991,9 @@ const Purchase: React.FC = () => {
                   setOriginalData([]);
                   setFilteredData([]);
                   setSelectedRowKeys([]);
+                  // 重置搜索相关状态
+                  setSearchType('sku');
+                  setIsFuzzySearch(true);
                   // 清空筛选条件
                   setFilters({ status: '', cpc_status: '', seller_name: '', dateRange: null });
                   // 重新获取统计数据

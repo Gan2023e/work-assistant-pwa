@@ -13,21 +13,48 @@ const path = require('path');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// 搜索功能（原有）
+// 搜索功能（优化后）
 router.post('/search', async (req, res) => {
   try {
-    const { keywords } = req.body;
+    const { keywords, searchType = 'auto', isFuzzy = true } = req.body;
+    console.log('🔍 后端收到搜索请求:', { keywords, searchType, isFuzzy });
+    
     if (!Array.isArray(keywords) || keywords.length === 0) {
       return res.json({ data: [] });
     }
 
-    // 构建模糊查询条件
-    const orConditions = keywords.map(keyword => ({
-      [Op.or]: [
-        { parent_sku: { [Op.like]: `%${keyword}%` } },
-        { weblink: { [Op.like]: `%${keyword}%` } }
-      ]
-    }));
+    let orConditions = [];
+
+    // 根据搜索类型构建不同的查询条件
+    if (searchType === 'sku') {
+      // 搜索SKU
+      orConditions = keywords.map(keyword => {
+        if (isFuzzy) {
+          // 模糊搜索
+          console.log(`🔍 构建模糊搜索条件: parent_sku LIKE %${keyword}%`);
+          return { parent_sku: { [Op.like]: `%${keyword}%` } };
+        } else {
+          // 精确搜索
+          console.log(`🔍 构建精确搜索条件: parent_sku = ${keyword}`);
+          return { parent_sku: keyword };
+        }
+      });
+    } else if (searchType === 'weblink') {
+      // 搜索产品链接/ID - 只支持模糊搜索
+      orConditions = keywords.map(keyword => ({
+        weblink: { [Op.like]: `%${keyword}%` }
+      }));
+    } else {
+      // 默认模式（auto）- 同时搜索SKU和产品链接
+      orConditions = keywords.map(keyword => ({
+        [Op.or]: [
+          { parent_sku: { [Op.like]: `%${keyword}%` } },
+          { weblink: { [Op.like]: `%${keyword}%` } }
+        ]
+      }));
+    }
+    
+    console.log('🔍 最终查询条件:', JSON.stringify(orConditions, null, 2));
 
     const result = await ProductWeblink.findAll({
       where: {
