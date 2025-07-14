@@ -1013,7 +1013,10 @@ const PurchaseInvoice: React.FC = () => {
             <Select
               placeholder="卖家公司名"
               value={filters.seller_name}
-              onChange={(value) => setFilters(prev => ({ ...prev, seller_name: value }))}
+              onChange={(value) => {
+                setFilters(prev => ({ ...prev, seller_name: value }));
+                if (!value) handleSearch(); // 清空时自动刷新
+              }}
               allowClear
               style={{ width: '100%' }}
               showSearch
@@ -1030,7 +1033,10 @@ const PurchaseInvoice: React.FC = () => {
             <Select
               placeholder="买家公司名"
               value={filters.payment_account}
-              onChange={(value) => setFilters(prev => ({ ...prev, payment_account: value }))}
+              onChange={(value) => {
+                setFilters(prev => ({ ...prev, payment_account: value }));
+                if (!value) handleSearch(); // 清空时自动刷新
+              }}
               allowClear
               style={{ width: '100%' }}
             >
@@ -1039,23 +1045,8 @@ const PurchaseInvoice: React.FC = () => {
               ))}
             </Select>
           </Col>
+          {/* 删除开票状态下拉框相关Col和Select */}
           <Col span={4}>
-            <Select
-              placeholder="开票状态"
-              value={filters.invoice_status}
-              onChange={(value) => {
-                setFilters(prev => ({ ...prev, invoice_status: value }));
-                setSelectedCard(null); // 清除卡片选择状态
-              }}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              <Option value="未开票">未开票</Option>
-              <Option value="部分开票">部分开票</Option>
-              <Option value="已开票">已开票</Option>
-            </Select>
-          </Col>
-          <Col span={5}>
             <RangePicker
               style={{ width: '100%' }}
               value={filters.date_range ? [dayjs(filters.date_range[0]), dayjs(filters.date_range[1])] : null}
