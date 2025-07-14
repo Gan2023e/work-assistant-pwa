@@ -98,7 +98,7 @@ const Purchase: React.FC = () => {
   
   // 搜索相关状态
   const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
-  const [isFuzzySearch, setIsFuzzySearch] = useState(true);
+  const [isFuzzySearch, setIsFuzzySearch] = useState(false);
   
   // 筛选相关状态
   const [filters, setFilters] = useState({
