@@ -514,6 +514,8 @@ const PurchaseInvoice: React.FC = () => {
     });
     setSelectedCard(null);
     setPagination(prev => ({ ...prev, current: 1 }));
+    // 重置后重新获取数据
+    setTimeout(() => fetchPurchaseOrders(1), 0);
   };
 
   // 表格列定义
@@ -1009,13 +1011,16 @@ const PurchaseInvoice: React.FC = () => {
               allowClear
             />
           </Col>
-          <Col span={4}>
+          <Col span={5}>
             <Select
               placeholder="卖家公司名"
               value={filters.seller_name}
               onChange={(value) => {
                 setFilters(prev => ({ ...prev, seller_name: value }));
-                if (!value) handleSearch(); // 清空时自动刷新
+                // 清空时自动刷新数据
+                if (!value) {
+                  setTimeout(() => handleSearch(), 0);
+                }
               }}
               allowClear
               style={{ width: '100%' }}
@@ -1029,13 +1034,16 @@ const PurchaseInvoice: React.FC = () => {
               ))}
             </Select>
           </Col>
-          <Col span={4}>
+          <Col span={5}>
             <Select
               placeholder="买家公司名"
               value={filters.payment_account}
               onChange={(value) => {
                 setFilters(prev => ({ ...prev, payment_account: value }));
-                if (!value) handleSearch(); // 清空时自动刷新
+                // 清空时自动刷新数据
+                if (!value) {
+                  setTimeout(() => handleSearch(), 0);
+                }
               }}
               allowClear
               style={{ width: '100%' }}
