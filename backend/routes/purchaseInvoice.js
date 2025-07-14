@@ -923,10 +923,10 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 解析开票方信息
-    const tryParseIssuer = (text) => {
-      // 首先提取所有公司名称和统一社会信用代码
-      const extractCompanyInfo = (text) => {
+    // 解析开票方和收票方信息 - 优化版本
+    const parseCompanyInfo = (text) => {
+      // 提取所有公司名称
+      const extractAllCompanies = (text) => {
         const companies = [];
         const companyPatterns = [
           /([^：\n\r]*?有限公司)/g,
@@ -936,187 +936,127 @@ const parseInvoicePDF = (text) => {
           /([^：\n\r]*?厂)/g
         ];
         
-        const creditCodes = [];
-        // 修复统一社会信用代码的正则表达式
-        const codePattern = /\b91[0-9A-Z]{17}\b/g;
+        // 创建一个包含公司名称和位置的数组
+        const companyWithPositions = [];
         
-        // 提取所有公司名称
         companyPatterns.forEach(pattern => {
           let match;
           while ((match = pattern.exec(text)) !== null) {
             const companyName = match[1].trim();
+            const position = match.index;
+            
             // 过滤掉明显不是真正公司名称的匹配
             if (companyName.length > 2 && 
-                !companies.includes(companyName) && 
                 !companyName.includes('银行账号') && 
                 !companyName.includes('开户银行') &&
-                !companyName.startsWith('销方开户银行')) {
-              companies.push(companyName);
+                !companyName.includes('销方开户银行') &&
+                !companyName.includes('购方开户银行') &&
+                !companyName.includes('纳税人识别号') &&
+                !companyName.includes('地址电话') &&
+                !companyName.includes('开户行') &&
+                !companies.some(existing => existing.name === companyName)) {
+              
+              companyWithPositions.push({
+                name: companyName,
+                position: position
+              });
+              companies.push({
+                name: companyName,
+                position: position
+              });
             }
           }
         });
         
-        // 提取所有统一社会信用代码
-        let match;
-        while ((match = codePattern.exec(text)) !== null) {
-          creditCodes.push(match[0]);
-        }
+        // 按照在文本中出现的位置排序
+        companies.sort((a, b) => a.position - b.position);
         
-        return { companies, creditCodes };
+        return companies;
       };
       
-      const { companies, creditCodes } = extractCompanyInfo(text);
+      const companies = extractAllCompanies(text);
       
-      // 根据文本中的位置关系确定开票方（销售方）
-      if (companies.length >= 2 && creditCodes.length >= 2) {
-        // 在这种垂直布局的PDF中，通常第二个公司是销售方（开票方）
-        // 通过文本位置来判断
-        const issuerIndex = text.indexOf('销售方信息');
-        if (issuerIndex !== -1) {
-          // 找到销售方信息后面的第一个公司名称
-          for (let i = 0; i < companies.length; i++) {
-            const companyIndex = text.indexOf(companies[i]);
-            if (companyIndex > issuerIndex) {
-              result.issuer_name = companies[i];
-              break;
-            }
-          }
+      console.log('📋 提取到的公司名称（按出现顺序）:', companies.map(c => c.name));
+      
+      // 按照用户需求：第一个公司名是收票方，第二个公司名是开票方
+      if (companies.length >= 2) {
+        result.buyer_name = companies[0].name;  // 第一个公司名是收票方
+        result.issuer_name = companies[1].name; // 第二个公司名是开票方
+        
+        console.log(`✅ 按顺序识别 - 收票方: ${result.buyer_name}, 开票方: ${result.issuer_name}`);
+      } else if (companies.length === 1) {
+        // 只有一个公司名的情况，需要通过其他方式判断
+        const singleCompanyName = companies[0].name;
+        
+        // 检查是否包含已知的收票方特征
+        if (singleCompanyName.includes('深圳欣蓉') || 
+            singleCompanyName.includes('深圳先春') ||
+            singleCompanyName.includes('电子商务')) {
+          result.buyer_name = singleCompanyName;
+          console.log(`✅ 单公司识别为收票方: ${result.buyer_name}`);
+        } else {
+          // 其他情况默认为开票方
+          result.issuer_name = singleCompanyName;
+          console.log(`✅ 单公司识别为开票方: ${result.issuer_name}`);
         }
+      } else {
+        console.log('❌ 未能识别到任何公司名称');
       }
+    };
+
+    // 调用优化后的解析函数
+    parseCompanyInfo(originalText);
+
+    // 如果按顺序识别失败，尝试传统的关键字匹配作为备选方案
+    if (!result.buyer_name && !result.issuer_name) {
+      console.log('🔄 使用备选方案进行公司识别...');
       
-      // 如果上述方法失败，尝试通过已知的模式匹配
-      if (!result.issuer_name) {
-        // 尝试原始文本中的直接模式匹配...
-        const directPatterns = [
-          // 针对标准格式：销售方信息 名称：公司名称
+      // 备选方案：通过关键字匹配
+      const fallbackPatterns = {
+        buyer: [
+          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?有限公司)/,
+          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?公司)/,
+          /深圳欣蓉[^：\n\r]*?有限公司/,
+          /深圳先春[^：\n\r]*?有限公司/,
+          /([^：\n\r]*?电子商务有限公司)/
+        ],
+        seller: [
           /销[\s\S]*?售[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?有限公司)/,
-          /销[\s\S]*?售[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?股份有限公司)/,
           /销[\s\S]*?售[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?公司)/,
-          /销[\s\S]*?售[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?企业)/,
-          /销[\s\S]*?售[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?厂)/,
-          // 针对特定城市的公司
-          /保定[^：\n\r]*?有限公司/,
-          /北京[^：\n\r]*?有限公司/,
-          /上海[^：\n\r]*?有限公司/,
-          /广州[^：\n\r]*?有限公司/,
-          /深圳[^：\n\r]*?有限公司/,
-          // 针对特定类型的公司
           /([^：\n\r]*?制造有限公司)/,
           /([^：\n\r]*?贸易有限公司)/,
-          /([^：\n\r]*?商贸有限公司)/,
-          /([^：\n\r]*?有限公司)/
-        ];
-        
-        // 尝试原始文本匹配
-        for (let i = 0; i < directPatterns.length; i++) {
-          const pattern = directPatterns[i];
-          const match = text.match(pattern);
-          if (match) {
-            const companyName = match[1] || match[0];
-            // 确保这个公司名称不是购买方（避免混淆）
-            if (!companyName.includes('深圳欣蓉')) {
-              result.issuer_name = companyName.trim();
-              break;
-            }
-          }
-        }
-      }
-    };
-
-    // 解析收票方信息
-    const tryParseRecipient = (text) => {
-      // 首先提取所有公司名称和统一社会信用代码
-      const extractCompanyInfo = (text) => {
-        const companies = [];
-        const companyPatterns = [
-          /([^：\n\r]*?有限公司)/g,
-          /([^：\n\r]*?股份有限公司)/g,
-          /([^：\n\r]*?公司)/g,
-          /([^：\n\r]*?企业)/g,
-          /([^：\n\r]*?厂)/g
-        ];
-        
-        const creditCodes = [];
-        const codePattern = /91[0-9A-Z]{17}/g;
-        
-        // 提取所有公司名称
-        companyPatterns.forEach(pattern => {
-          let match;
-          while ((match = pattern.exec(text)) !== null) {
-            const companyName = match[1].trim();
-            if (companyName.length > 2 && !companies.includes(companyName)) {
-              companies.push(companyName);
-            }
-          }
-        });
-        
-        // 提取所有统一社会信用代码
-        let match;
-        while ((match = codePattern.exec(text)) !== null) {
-          creditCodes.push(match[0]);
-        }
-        
-        return { companies, creditCodes };
+          /([^：\n\r]*?商贸有限公司)/
+        ]
       };
       
-      const { companies, creditCodes } = extractCompanyInfo(text);
-      
-      // 根据文本中的位置关系确定收票方（购买方）
-      if (companies.length >= 2 && creditCodes.length >= 2) {
-        // 在这种垂直布局的PDF中，通常第一个公司是购买方（收票方）
-        // 通过文本位置来判断
-        const recipientIndex = text.indexOf('购买方信息');
-        if (recipientIndex !== -1) {
-          // 找到购买方信息后面的第一个公司名称
-          for (let i = 0; i < companies.length; i++) {
-            const companyIndex = text.indexOf(companies[i]);
-            if (companyIndex > recipientIndex) {
-              result.buyer_name = companies[i];
-              console.log(`找到收票方: ${companies[i]} (位置: ${companyIndex})`);
-              break;
-            }
-          }
-        }
-      }
-      
-      // 如果上述方法失败，尝试通过已知的模式匹配
+      // 尝试匹配收票方
       if (!result.buyer_name) {
-        const directPatterns = [
-          // 针对标准格式：购买方信息 名称：公司名称
-          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?有限公司)/,
-          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?股份有限公司)/,
-          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?公司)/,
-          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?企业)/,
-          /购[\s\S]*?买[\s\S]*?方[\s\S]*?信[\s\S]*?息[\s\S]*?名称[：:]\s*([^：\n\r]*?厂)/,
-          // 直接匹配深圳欣蓉（已知的购买方）
-          /深圳欣蓉[^：\n\r]*?有限公司/,
-          /深圳[^：\n\r]*?有限公司/,
-          /北京[^：\n\r]*?有限公司/,
-          /上海[^：\n\r]*?有限公司/,
-          /广州[^：\n\r]*?有限公司/,
-          /([^：\n\r]*?电子商务有限公司)/,
-          /([^：\n\r]*?有限公司)/
-        ];
-        
-        // 尝试原始文本匹配
-        for (let i = 0; i < directPatterns.length; i++) {
-          const pattern = directPatterns[i];
-          const match = text.match(pattern);
+        for (const pattern of fallbackPatterns.buyer) {
+          const match = originalText.match(pattern);
           if (match) {
-            const companyName = match[1] || match[0];
-            // 确保这个公司名称不是销售方（避免混淆）
-            if (!companyName.includes('保定') && !companyName.includes('制造')) {
-              result.buyer_name = companyName.trim();
+            result.buyer_name = (match[1] || match[0]).trim();
+            console.log(`✅ 备选方案识别收票方: ${result.buyer_name}`);
+            break;
+          }
+        }
+      }
+      
+      // 尝试匹配开票方
+      if (!result.issuer_name) {
+        for (const pattern of fallbackPatterns.seller) {
+          const match = originalText.match(pattern);
+          if (match) {
+            const companyName = (match[1] || match[0]).trim();
+            // 确保不是已识别的收票方
+            if (companyName !== result.buyer_name) {
+              result.issuer_name = companyName;
+              console.log(`✅ 备选方案识别开票方: ${result.issuer_name}`);
               break;
             }
           }
         }
       }
-    };
-
-    // 调用解析函数
-    tryParseIssuer(originalText);
-    tryParseRecipient(originalText);
+    }
 
     // 发票类型智能识别
     if (cleanText.includes('增值税专用发票')) {
