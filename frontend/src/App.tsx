@@ -49,6 +49,7 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       children: [
         { key: '/products/purchase', label: <Link to="/products/purchase">采购链接管理</Link> },
         { key: '/products/listings', label: <Link to="/products/listings">在线Listings管理</Link> },
+        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
         { key: '/products/purchase-invoice', label: <Link to="/products/purchase-invoice">采购发票管理</Link> },
       ],
     },
@@ -57,7 +58,6 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       label: '发货管理',
       children: [
         { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
-        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
         { key: '/shipping/pending-inventory', label: <Link to="/shipping/pending-inventory">待发货库存管理</Link> },
         { key: '/shipping/packed-inventory', label: <Link to="/shipping/packed-inventory">已封箱库存</Link> },
         { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
@@ -175,8 +175,8 @@ const AppContent: React.FC = () => {
   // 处理主菜单和子菜单的选中状态
   const getSelectedKeys = () => {
     const path = location.pathname;
-    if (["/products/purchase", "/products/listings", "/products/purchase-invoice"].includes(path)) return [path];
-    if (["/shipping/orders", "/shipping/management", "/shipping/pending-inventory", "/shipping/packed-inventory", "/shipping/history"].includes(path)) return [path];
+    if (["/products/purchase", "/products/listings", "/shipping/orders", "/products/purchase-invoice"].includes(path)) return [path];
+    if (["/shipping/management", "/shipping/pending-inventory", "/shipping/packed-inventory", "/shipping/history"].includes(path)) return [path];
     if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
@@ -191,6 +191,7 @@ const AppContent: React.FC = () => {
       children: [
         { label: <Link to="/products/purchase">采购链接管理</Link>, key: '/products/purchase' },
         { label: <Link to="/products/listings">在线Listings管理</Link>, key: '/products/listings' },
+        { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
         { label: <Link to="/products/purchase-invoice">采购发票管理</Link>, key: '/products/purchase-invoice' },
       ],
     },
@@ -199,7 +200,6 @@ const AppContent: React.FC = () => {
       key: 'shipping',
       children: [
         { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
-        { label: <Link to="/shipping/orders">需求单管理</Link>, key: '/shipping/orders' },
         { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
         { label: <Link to="/shipping/packed-inventory">已封箱库存</Link>, key: '/shipping/packed-inventory' },
         { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
