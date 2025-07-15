@@ -2229,63 +2229,110 @@ router.post('/amazon-template/generate', async (req, res) => {
       // 填写数据到模板 - 智能保持原始格式
       let currentRow = config.startRow;
       
-      // 辅助函数：智能设置单元格值，保持所有格式信息
-      const setSmartCellValue = (cellAddress, value, valueType) => {
-        if (!worksheet[cellAddress]) {
-          // 单元格不存在，尝试从模板中复制格式
-          const col = cellAddress.replace(/\d+/, '');
-          const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+      // 预先扫描模板，建立格式源映射
+      const formatSources = {};
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
+      
+      console.log(`🔍 扫描模板格式源，范围: ${worksheet['!ref']}`);
+      
+      // 扫描整个模板，找到所有有丰富格式的单元格
+      for (let r = range.s.r; r <= Math.min(range.e.r, 50); r++) { // 限制扫描前50行
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cellRef = XLSX.utils.encode_cell({r, c});
+          const cell = worksheet[cellRef];
           
-          // 策略1: 从同一列的上面几行找到有格式的单元格
-          for (let i = 1; i <= 10; i++) {
-            const sourceRow = row - i;
-            if (sourceRow > 0) {
-              const sourceCell = col + sourceRow;
-              if (worksheet[sourceCell] && typeof worksheet[sourceCell] === 'object' && 
-                  (worksheet[sourceCell].s || worksheet[sourceCell].z || Object.keys(worksheet[sourceCell]).length > 2)) {
-                // 找到了有丰富格式的单元格，深拷贝其格式
-                worksheet[cellAddress] = JSON.parse(JSON.stringify(worksheet[sourceCell]));
-                console.log(`📋 从 ${sourceCell} 复制格式到 ${cellAddress}`);
+          if (cell && typeof cell === 'object') {
+            // 计算格式丰富度分数
+            let formatScore = 0;
+            if (cell.s) formatScore += 10; // 有样式
+            if (cell.s && cell.s.border) formatScore += 20; // 有边框
+            if (cell.s && cell.s.fill) formatScore += 15; // 有填充
+            if (cell.s && cell.s.font) formatScore += 15; // 有字体设置
+            if (cell.s && cell.s.alignment) formatScore += 5; // 有对齐设置
+            if (cell.z) formatScore += 5; // 有数字格式
+            
+            if (formatScore > 15) { // 只有高质量的格式才被选中
+              const col = XLSX.utils.encode_col(c);
+              if (!formatSources[col] || formatSources[col].score < formatScore) {
+                formatSources[col] = {
+                  cellRef: cellRef,
+                  score: formatScore,
+                  cell: JSON.parse(JSON.stringify(cell)), // 深拷贝
+                  row: r + 1 // 转换为1基索引
+                };
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`📋 找到格式源:`, Object.keys(formatSources).map(col => 
+        `${col}列->${formatSources[col].cellRef}(分数:${formatSources[col].score})`
+      ).join(', '));
+      
+      // 辅助函数：高级智能设置单元格值，完美保持格式
+      const setAdvancedCellValue = (cellAddress, value, valueType) => {
+        const col = cellAddress.replace(/\d+/, '');
+        const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+        
+        if (!worksheet[cellAddress]) {
+          // 单元格不存在，需要创建并应用格式
+          let bestFormat = null;
+          
+          // 策略1: 优先使用同列的最佳格式源
+          if (formatSources[col]) {
+            bestFormat = formatSources[col].cell;
+            console.log(`📋 使用${col}列格式源 ${formatSources[col].cellRef} -> ${cellAddress}`);
+          }
+          
+          // 策略2: 如果同列没有，使用相邻列的格式源（优先A/B列）
+          if (!bestFormat) {
+            const preferredCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+            for (const prefCol of preferredCols) {
+              if (formatSources[prefCol]) {
+                bestFormat = formatSources[prefCol].cell;
+                console.log(`📋 使用相邻列格式源 ${formatSources[prefCol].cellRef} -> ${cellAddress}`);
                 break;
               }
             }
           }
           
-          // 策略2: 如果同列没找到，尝试从同一行的相邻列复制格式
-          if (!worksheet[cellAddress]) {
-            const adjacentCols = ['A', 'B', 'C', 'D', 'E']; // 常见的数据列
-            for (const adjCol of adjacentCols) {
-              if (adjCol !== col) {
-                const adjCell = adjCol + row;
-                if (worksheet[adjCell] && typeof worksheet[adjCell] === 'object' &&
-                    (worksheet[adjCell].s || worksheet[adjCell].z || Object.keys(worksheet[adjCell]).length > 2)) {
-                  worksheet[cellAddress] = JSON.parse(JSON.stringify(worksheet[adjCell]));
-                  console.log(`📋 从相邻单元格 ${adjCell} 复制格式到 ${cellAddress}`);
-                  break;
-                }
-              }
+          // 策略3: 使用任何可用的格式源
+          if (!bestFormat) {
+            const availableCols = Object.keys(formatSources);
+            if (availableCols.length > 0) {
+              bestFormat = formatSources[availableCols[0]].cell;
+              console.log(`📋 使用备选格式源 ${formatSources[availableCols[0]].cellRef} -> ${cellAddress}`);
             }
           }
           
-          // 策略3: 如果还是没有找到，创建基本单元格
-          if (!worksheet[cellAddress]) {
+          // 应用格式
+          if (bestFormat) {
+            worksheet[cellAddress] = JSON.parse(JSON.stringify(bestFormat));
+          } else {
             worksheet[cellAddress] = {};
+            console.log(`⚠️ 未找到格式源，创建基本单元格 ${cellAddress}`);
           }
         }
         
-        // 只修改值和类型，保持所有其他格式属性
+        // 只修改值和类型，完美保持所有其他格式属性
         worksheet[cellAddress].v = value;
         worksheet[cellAddress].t = valueType;
+        
+        // 确保计算链不被破坏
+        if (worksheet[cellAddress].f) {
+          delete worksheet[cellAddress].f; // 移除公式，因为我们要设置具体值
+        }
       };
       
       Object.entries(amazonSkuSummary).forEach(([amzSku, quantity]) => {
-        // 智能设置Merchant SKU列 - 保持所有格式信息
+        // 高级智能设置Merchant SKU列 - 完美保持所有格式信息
         const skuCell = config.merchantSkuColumn + currentRow;
-        setSmartCellValue(skuCell, amzSku, 's');
+        setAdvancedCellValue(skuCell, amzSku, 's');
 
-        // 智能设置Quantity列 - 保持所有格式信息  
+        // 高级智能设置Quantity列 - 完美保持所有格式信息  
         const quantityCell = config.quantityColumn + currentRow;
-        setSmartCellValue(quantityCell, quantity, 'n');
+        setAdvancedCellValue(quantityCell, quantity, 'n');
 
         currentRow++;
       });
@@ -4331,72 +4378,119 @@ router.post('/logistics-invoice/generate', async (req, res) => {
         continue;
       }
 
-      // 这里可以根据具体的发票模板格式来填写数据 - 智能保持原始格式
+      // 这里可以根据具体的发票模板格式来填写数据 - 高级智能保持原始格式
       // 目前先简单地在第一列填写商品信息，第二列填写数量
       let currentRow = 2; // 假设第一行是表头
       
-      // 辅助函数：智能设置单元格值，保持所有格式信息
-      const setSmartCellValue = (cellAddress, value, valueType) => {
-        if (!worksheet[cellAddress]) {
-          // 单元格不存在，尝试从模板中复制格式
-          const col = cellAddress.replace(/\d+/, '');
-          const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+      // 预先扫描发票模板，建立格式源映射
+      const formatSources = {};
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
+      
+      console.log(`🔍 扫描发票模板格式源，范围: ${worksheet['!ref']}`);
+      
+      // 扫描整个发票模板，找到所有有丰富格式的单元格
+      for (let r = range.s.r; r <= Math.min(range.e.r, 50); r++) { // 限制扫描前50行
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cellRef = XLSX.utils.encode_cell({r, c});
+          const cell = worksheet[cellRef];
           
-          // 策略1: 从同一列的上面几行找到有格式的单元格
-          for (let i = 1; i <= 10; i++) {
-            const sourceRow = row - i;
-            if (sourceRow > 0) {
-              const sourceCell = col + sourceRow;
-              if (worksheet[sourceCell] && typeof worksheet[sourceCell] === 'object' && 
-                  (worksheet[sourceCell].s || worksheet[sourceCell].z || Object.keys(worksheet[sourceCell]).length > 2)) {
-                // 找到了有丰富格式的单元格，深拷贝其格式
-                worksheet[cellAddress] = JSON.parse(JSON.stringify(worksheet[sourceCell]));
-                console.log(`📋 发票: 从 ${sourceCell} 复制格式到 ${cellAddress}`);
+          if (cell && typeof cell === 'object') {
+            // 计算格式丰富度分数
+            let formatScore = 0;
+            if (cell.s) formatScore += 10; // 有样式
+            if (cell.s && cell.s.border) formatScore += 20; // 有边框
+            if (cell.s && cell.s.fill) formatScore += 15; // 有填充
+            if (cell.s && cell.s.font) formatScore += 15; // 有字体设置
+            if (cell.s && cell.s.alignment) formatScore += 5; // 有对齐设置
+            if (cell.z) formatScore += 5; // 有数字格式
+            
+            if (formatScore > 15) { // 只有高质量的格式才被选中
+              const col = XLSX.utils.encode_col(c);
+              if (!formatSources[col] || formatSources[col].score < formatScore) {
+                formatSources[col] = {
+                  cellRef: cellRef,
+                  score: formatScore,
+                  cell: JSON.parse(JSON.stringify(cell)), // 深拷贝
+                  row: r + 1 // 转换为1基索引
+                };
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`📋 发票模板找到格式源:`, Object.keys(formatSources).map(col => 
+        `${col}列->${formatSources[col].cellRef}(分数:${formatSources[col].score})`
+      ).join(', '));
+      
+      // 辅助函数：高级智能设置单元格值，完美保持格式
+      const setAdvancedCellValue = (cellAddress, value, valueType) => {
+        const col = cellAddress.replace(/\d+/, '');
+        const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+        
+        if (!worksheet[cellAddress]) {
+          // 单元格不存在，需要创建并应用格式
+          let bestFormat = null;
+          
+          // 策略1: 优先使用同列的最佳格式源
+          if (formatSources[col]) {
+            bestFormat = formatSources[col].cell;
+            console.log(`📋 发票使用${col}列格式源 ${formatSources[col].cellRef} -> ${cellAddress}`);
+          }
+          
+          // 策略2: 如果同列没有，使用相邻列的格式源（优先A/B/C列）
+          if (!bestFormat) {
+            const preferredCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+            for (const prefCol of preferredCols) {
+              if (formatSources[prefCol]) {
+                bestFormat = formatSources[prefCol].cell;
+                console.log(`📋 发票使用相邻列格式源 ${formatSources[prefCol].cellRef} -> ${cellAddress}`);
                 break;
               }
             }
           }
           
-          // 策略2: 如果同列没找到，尝试从同一行的相邻列复制格式
-          if (!worksheet[cellAddress]) {
-            const adjacentCols = ['A', 'B', 'C', 'D', 'E']; // 常见的数据列
-            for (const adjCol of adjacentCols) {
-              if (adjCol !== col) {
-                const adjCell = adjCol + row;
-                if (worksheet[adjCell] && typeof worksheet[adjCell] === 'object' &&
-                    (worksheet[adjCell].s || worksheet[adjCell].z || Object.keys(worksheet[adjCell]).length > 2)) {
-                  worksheet[cellAddress] = JSON.parse(JSON.stringify(worksheet[adjCell]));
-                  console.log(`📋 发票: 从相邻单元格 ${adjCell} 复制格式到 ${cellAddress}`);
-                  break;
-                }
-              }
+          // 策略3: 使用任何可用的格式源
+          if (!bestFormat) {
+            const availableCols = Object.keys(formatSources);
+            if (availableCols.length > 0) {
+              bestFormat = formatSources[availableCols[0]].cell;
+              console.log(`📋 发票使用备选格式源 ${formatSources[availableCols[0]].cellRef} -> ${cellAddress}`);
             }
           }
           
-          // 策略3: 如果还是没有找到，创建基本单元格
-          if (!worksheet[cellAddress]) {
+          // 应用格式
+          if (bestFormat) {
+            worksheet[cellAddress] = JSON.parse(JSON.stringify(bestFormat));
+          } else {
             worksheet[cellAddress] = {};
+            console.log(`⚠️ 发票未找到格式源，创建基本单元格 ${cellAddress}`);
           }
         }
         
-        // 只修改值和类型，保持所有其他格式属性
+        // 只修改值和类型，完美保持所有其他格式属性
         worksheet[cellAddress].v = value;
         worksheet[cellAddress].t = valueType;
+        
+        // 确保计算链不被破坏
+        if (worksheet[cellAddress].f) {
+          delete worksheet[cellAddress].f; // 移除公式，因为我们要设置具体值
+        }
       };
       
       data.forEach(item => {
-        // 智能填写商品SKU - 保持所有格式信息
+        // 高级智能填写商品SKU - 完美保持所有格式信息
         const skuCell = `A${currentRow}`;
-        setSmartCellValue(skuCell, item.amz_sku || item.sku, 's');
+        setAdvancedCellValue(skuCell, item.amz_sku || item.sku, 's');
 
-        // 智能填写数量 - 保持所有格式信息
+        // 高级智能填写数量 - 完美保持所有格式信息
         const quantityCell = `B${currentRow}`;
-        setSmartCellValue(quantityCell, item.quantity, 'n');
+        setAdvancedCellValue(quantityCell, item.quantity, 'n');
 
-        // 智能填写箱号（如果有） - 保持所有格式信息
+        // 高级智能填写箱号（如果有） - 完美保持所有格式信息
         if (item.box_num) {
           const boxCell = `C${currentRow}`;
-          setSmartCellValue(boxCell, item.box_num, 's');
+          setAdvancedCellValue(boxCell, item.box_num, 's');
         }
         
         currentRow++;
