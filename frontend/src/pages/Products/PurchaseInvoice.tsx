@@ -654,7 +654,7 @@ const PurchaseInvoice: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 150,
+      width: 180,
       render: (_, record) => (
         <Space size="small">
           <Button 
@@ -677,7 +677,7 @@ const PurchaseInvoice: React.FC = () => {
             icon={<DeleteOutlined />} 
             onClick={() => handleDeleteOrder(record)}
           >
-            删除订单
+            删除
           </Button>
         </Space>
       )
