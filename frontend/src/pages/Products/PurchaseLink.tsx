@@ -84,6 +84,16 @@ const cpcStatusOptions = [
   '' // 空项，用于清空字段
 ];
 
+// CPC提交情况选项
+const cpcSubmitOptions = [
+  '已提交',
+  '待提交',
+  '提交失败',
+  '审核通过',
+  '审核未通过',
+  '' // 空项，用于清空字段
+];
+
 const Purchase: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -128,6 +138,7 @@ const Purchase: React.FC = () => {
   const [allDataStats, setAllDataStats] = useState({
     statusStats: [] as { value: string; count: number }[],
     cpcStatusStats: [] as { value: string; count: number }[],
+    cpcSubmitStats: [] as { value: string; count: number }[],
     supplierStats: [] as { value: string; count: number }[]
   });
 
@@ -144,6 +155,7 @@ const Purchase: React.FC = () => {
       setAllDataStats({
         statusStats: result.statusStats,
         cpcStatusStats: result.cpcStatusStats,
+        cpcSubmitStats: result.cpcSubmitStats || [],
         supplierStats: result.supplierStats
       });
     } catch (e) {
@@ -322,6 +334,12 @@ const Purchase: React.FC = () => {
   const getUniqueCpcStatuses = () => {
     return allDataStats.cpcStatusStats
       .sort((a, b) => a.value.localeCompare(b.value));
+  };
+
+  // 获取唯一的CPC提交情况选项（基于全库数据）
+  const getUniqueCpcSubmits = () => {
+    return allDataStats.cpcSubmitStats
+      .sort((a: { value: string; count: number }, b: { value: string; count: number }) => a.value.localeCompare(b.value));
   };
 
   // 获取唯一的供应商选项（基于全库数据）
@@ -1153,7 +1171,7 @@ const Purchase: React.FC = () => {
             {/* 筛选条件区域 */}
             <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }}>
               <Row gutter={[16, 8]} align="middle">
-                <Col span={6}>
+                <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>产品状态：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -1169,7 +1187,7 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                <Col span={6}>
+                <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>CPC测试情况：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -1185,7 +1203,23 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                <Col span={6}>
+                <Col span={4}>
+                  <div style={{ marginBottom: '4px' }}>CPC提交情况：</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="选择CPC提交情况"
+                    value={filters.cpc_submit}
+                    onChange={(value) => handleFilterChange('cpc_submit', value)}
+                    allowClear
+                  >
+                    {getUniqueCpcSubmits().map(submitItem => (
+                      <Option key={submitItem.value} value={submitItem.value}>
+                        {submitItem.value} ({submitItem.count})
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>供应商：</div>
                   <Select
                     style={{ width: '100%' }}
@@ -1205,7 +1239,7 @@ const Purchase: React.FC = () => {
                     ))}
                   </Select>
                 </Col>
-                <Col span={6}>
+                <Col span={8}>
                   <div style={{ marginBottom: '4px' }}>创建时间：</div>
                   <RangePicker
                     style={{ width: '100%' }}
@@ -1382,6 +1416,14 @@ const Purchase: React.FC = () => {
                 {cpcStatusOptions.map(status => (
                   <Option key={status} value={status}>
                     {status === '' ? '清空' : status}
+                  </Option>
+                ))}
+              </Select>
+            ) : editingCell?.field === 'cpc_submit' ? (
+              <Select placeholder="请选择CPC提交情况">
+                {cpcSubmitOptions.map(submit => (
+                  <Option key={submit} value={submit}>
+                    {submit === '' ? '清空' : submit}
                   </Option>
                 ))}
               </Select>

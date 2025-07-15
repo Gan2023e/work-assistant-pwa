@@ -729,6 +729,22 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
+    // 获取CPC提交情况统计
+    const cpcSubmitStats = await ProductWeblink.findAll({
+      attributes: [
+        'cpc_submit',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      where: {
+        cpc_submit: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      group: ['cpc_submit'],
+      raw: true
+    });
+
     // 获取供应商统计
     const supplierStats = await ProductWeblink.findAll({
       attributes: [
@@ -795,6 +811,10 @@ router.get('/statistics', async (req, res) => {
       })),
       cpcStatusStats: cpcStatusStats.map(item => ({
         value: item.cpc_status,
+        count: parseInt(item.count)
+      })),
+      cpcSubmitStats: cpcSubmitStats.map(item => ({
+        value: item.cpc_submit,
         count: parseInt(item.count)
       })),
       supplierStats: supplierStats.map(item => ({
