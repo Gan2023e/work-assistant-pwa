@@ -63,36 +63,7 @@ interface EditingCell {
   value: string;
 }
 
-// 更新状态选项
-const statusOptions = [
-  '已经上传',
-  '商品已下架',
-  '手动调库存',
-  '审核未通过',
-  '待P图',
-  '临时下架',
-  '待上传'
-];
-
-// CPC测试情况选项
-const cpcStatusOptions = [
-  '待测试',
-  '申请测试',
-  '样品已发',
-  '测试中',
-  '测试完成',
-  '' // 空项，用于清空字段
-];
-
-// CPC提交情况选项
-const cpcSubmitOptions = [
-  '已提交',
-  '待提交',
-  '提交失败',
-  '审核通过',
-  '审核未通过',
-  '' // 空项，用于清空字段
-];
+// 注：状态、CPC测试情况、CPC提交情况选项现在都从数据库动态获取
 
 const Purchase: React.FC = () => {
   const [input, setInput] = useState('');
@@ -1275,8 +1246,10 @@ const Purchase: React.FC = () => {
                 onSelect={(value) => handleBatchUpdateStatus(value)}
                 disabled={selectedRowKeys.length === 0}
               >
-                {statusOptions.map(status => (
-                  <Option key={status} value={status}>{status}</Option>
+                {getUniqueStatuses().map(statusItem => (
+                  <Option key={statusItem.value} value={statusItem.value}>
+                    {statusItem.value} ({statusItem.count})
+                  </Option>
                 ))}
               </Select>
 
@@ -1407,23 +1380,27 @@ const Purchase: React.FC = () => {
           >
             {editingCell?.field === 'status' ? (
               <Select placeholder="请选择状态">
-                {statusOptions.map(status => (
-                  <Option key={status} value={status}>{status}</Option>
+                {getUniqueStatuses().map(statusItem => (
+                  <Option key={statusItem.value} value={statusItem.value}>
+                    {statusItem.value} ({statusItem.count})
+                  </Option>
                 ))}
               </Select>
             ) : editingCell?.field === 'cpc_status' ? (
               <Select placeholder="请选择CPC测试情况">
-                {cpcStatusOptions.map(status => (
-                  <Option key={status} value={status}>
-                    {status === '' ? '清空' : status}
+                <Option key="" value="">清空</Option>
+                {getUniqueCpcStatuses().map(statusItem => (
+                  <Option key={statusItem.value} value={statusItem.value}>
+                    {statusItem.value} ({statusItem.count})
                   </Option>
                 ))}
               </Select>
             ) : editingCell?.field === 'cpc_submit' ? (
               <Select placeholder="请选择CPC提交情况">
-                {cpcSubmitOptions.map(submit => (
-                  <Option key={submit} value={submit}>
-                    {submit === '' ? '清空' : submit}
+                <Option key="" value="">清空</Option>
+                {getUniqueCpcSubmits().map(submitItem => (
+                  <Option key={submitItem.value} value={submitItem.value}>
+                    {submitItem.value} ({submitItem.count})
                   </Option>
                 ))}
               </Select>
