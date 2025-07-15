@@ -57,10 +57,16 @@ router.get('/orders', async (req, res) => {
       payment_account,
       start_date,
       end_date,
-      order_number 
+      order_number,
+      invoice_number
     } = req.query;
 
     const whereCondition = {};
+    const includeCondition = [{
+      model: Invoice,
+      as: 'invoice',
+      required: false
+    }];
     
     if (seller_name) {
       whereCondition.seller_name = { [Op.like]: `%${seller_name}%` };
@@ -78,6 +84,18 @@ router.get('/orders', async (req, res) => {
       whereCondition.order_number = { [Op.like]: `%${order_number}%` };
     }
     
+    // 添加发票号搜索
+    if (invoice_number) {
+      includeCondition[0] = {
+        model: Invoice,
+        as: 'invoice',
+        required: true,
+        where: {
+          invoice_number: { [Op.like]: `%${invoice_number}%` }
+        }
+      };
+    }
+    
     if (start_date && end_date) {
       whereCondition.order_date = {
         [Op.between]: [start_date, end_date]
@@ -88,11 +106,7 @@ router.get('/orders', async (req, res) => {
     
     const { count, rows } = await PurchaseOrder.findAndCountAll({
       where: whereCondition,
-      include: [{
-        model: Invoice,
-        as: 'invoice',
-        required: false
-      }],
+      include: includeCondition,
       order: [['order_date', 'DESC']],
       limit: parseInt(limit),
       offset: offset

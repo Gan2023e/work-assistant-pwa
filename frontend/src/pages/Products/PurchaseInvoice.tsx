@@ -153,6 +153,7 @@ const PurchaseInvoice: React.FC = () => {
     invoice_status: '',
     payment_account: '',
     order_number: '',
+    invoice_number: '',
     date_range: null as [string, string] | null
   });
 
@@ -294,6 +295,7 @@ const PurchaseInvoice: React.FC = () => {
         invoice_status: filters.invoice_status,
         payment_account: filters.payment_account,
         order_number: filters.order_number,
+        invoice_number: filters.invoice_number,
         ...(filters.date_range ? {
           start_date: filters.date_range[0],
           end_date: filters.date_range[1]
@@ -510,6 +512,7 @@ const PurchaseInvoice: React.FC = () => {
       invoice_status: '',
       payment_account: '',
       order_number: '',
+      invoice_number: '',
       date_range: null
     });
     setSelectedCard(null);
@@ -1004,84 +1007,109 @@ const PurchaseInvoice: React.FC = () => {
         {/* 搜索筛选区域 */}
         <Row gutter={16} style={{ marginBottom: '16px' }}>
           <Col span={4}>
-            <Input
-              placeholder="订单编号"
-              value={filters.order_number}
-              onChange={(e) => setFilters(prev => ({ ...prev, order_number: e.target.value }))}
-              allowClear
-            />
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>订单编号</label>
+              <Input
+                placeholder="请输入订单编号"
+                value={filters.order_number}
+                onChange={(e) => setFilters(prev => ({ ...prev, order_number: e.target.value }))}
+                allowClear
+              />
+            </div>
           </Col>
-          <Col span={5}>
-            <Select
-              placeholder="卖家公司名"
-              value={filters.seller_name}
-              onChange={(value) => {
-                setFilters(prev => ({ ...prev, seller_name: value }));
-                // 清空时自动刷新数据
-                if (!value) {
-                  setTimeout(() => handleSearch(), 0);
-                }
-              }}
-              allowClear
-              style={{ width: '100%' }}
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label as string)?.toLowerCase().indexOf(input.toLowerCase()) >= 0
-              }
-            >
-              {sellerCompanies.map(company => (
-                <Option key={company} value={company}>{company}</Option>
-              ))}
-            </Select>
-          </Col>
-          <Col span={5}>
-            <Select
-              placeholder="买家公司名"
-              value={filters.payment_account}
-              onChange={(value) => {
-                setFilters(prev => ({ ...prev, payment_account: value }));
-                // 清空时自动刷新数据
-                if (!value) {
-                  setTimeout(() => handleSearch(), 0);
-                }
-              }}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              {buyerCompanies.map(company => (
-                <Option key={company} value={company}>{company}</Option>
-              ))}
-            </Select>
-          </Col>
-          {/* 删除开票状态下拉框相关Col和Select */}
           <Col span={4}>
-            <RangePicker
-              style={{ width: '100%' }}
-              value={filters.date_range ? [dayjs(filters.date_range[0]), dayjs(filters.date_range[1])] : null}
-              onChange={(dates) => {
-                setFilters(prev => ({ 
-                  ...prev, 
-                  date_range: dates ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] : null 
-                }));
-              }}
-            />
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>发票号</label>
+              <Input
+                placeholder="请输入发票号"
+                value={filters.invoice_number}
+                onChange={(e) => setFilters(prev => ({ ...prev, invoice_number: e.target.value }))}
+                allowClear
+              />
+            </div>
           </Col>
-          <Col span={3}>
-            <Space>
-              <Button 
-                type="primary" 
-                icon={<SearchOutlined />} 
-                onClick={handleSearch}
+          <Col span={4}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>卖家公司名</label>
+              <Select
+                placeholder="请选择卖家公司名"
+                value={filters.seller_name}
+                onChange={(value) => {
+                  setFilters(prev => ({ ...prev, seller_name: value }));
+                  // 清空时自动刷新数据
+                  if (!value) {
+                    setTimeout(() => handleSearch(), 0);
+                  }
+                }}
+                allowClear
+                style={{ width: '100%' }}
+                showSearch
+                filterOption={(input, option) =>
+                  (option?.label as string)?.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }
               >
-                搜索
-              </Button>
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={handleReset}
+                {sellerCompanies.map(company => (
+                  <Option key={company} value={company}>{company}</Option>
+                ))}
+              </Select>
+            </div>
+          </Col>
+          <Col span={4}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>买家公司名</label>
+              <Select
+                placeholder="请选择买家公司名"
+                value={filters.payment_account}
+                onChange={(value) => {
+                  setFilters(prev => ({ ...prev, payment_account: value }));
+                  // 清空时自动刷新数据
+                  if (!value) {
+                    setTimeout(() => handleSearch(), 0);
+                  }
+                }}
+                allowClear
+                style={{ width: '100%' }}
               >
-                重置
-              </Button>
-            </Space>
+                {buyerCompanies.map(company => (
+                  <Option key={company} value={company}>{company}</Option>
+                ))}
+              </Select>
+            </div>
+          </Col>
+          <Col span={4}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>订单日期</label>
+              <RangePicker
+                style={{ width: '100%' }}
+                placeholder={['开始日期', '结束日期']}
+                value={filters.date_range ? [dayjs(filters.date_range[0]), dayjs(filters.date_range[1])] : null}
+                onChange={(dates) => {
+                  setFilters(prev => ({ 
+                    ...prev, 
+                    date_range: dates ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] : null 
+                  }));
+                }}
+              />
+            </div>
+          </Col>
+          <Col span={4}>
+            <div style={{ paddingTop: '24px' }}>
+              <Space>
+                <Button 
+                  type="primary" 
+                  icon={<SearchOutlined />} 
+                  onClick={handleSearch}
+                >
+                  搜索
+                </Button>
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  onClick={handleReset}
+                >
+                  重置
+                </Button>
+              </Space>
+            </div>
           </Col>
         </Row>
 
@@ -1195,11 +1223,11 @@ const PurchaseInvoice: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                label="订单编号"
+                label="发票号"
                 name="order_number"
-                rules={[{ required: true, message: '请输入订单编号' }]}
+                rules={[{ required: true, message: '请输入发票号' }]}
               >
-                <Input placeholder="请输入订单编号" />
+                <Input placeholder="请输入发票号" />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1208,7 +1236,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="order_date"
                 rules={[{ required: true, message: '请选择订单日期' }]}
               >
-                <DatePicker style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} placeholder="请选择订单日期" />
               </Form.Item>
             </Col>
           </Row>
@@ -1243,7 +1271,7 @@ const PurchaseInvoice: React.FC = () => {
               >
                 <InputNumber
                   style={{ width: '100%' }}
-                  placeholder="请输入实付款"
+                  placeholder="请输入实付款金额"
                   min={0}
                   precision={2}
                 />
@@ -1255,7 +1283,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="invoice_status"
                 initialValue="未开票"
               >
-                <Select>
+                <Select placeholder="请选择开票状态">
                   <Option value="未开票">未开票</Option>
                   <Option value="部分开票">部分开票</Option>
                   <Option value="已开票">已开票</Option>
@@ -1467,7 +1495,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="invoice_number"
                 rules={[{ required: true, message: '请输入发票号' }]}
               >
-                <Input placeholder="请输入发票号" />
+                <Input placeholder="请输入发票号码" />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1476,7 +1504,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="invoice_date"
                 rules={[{ required: true, message: '请选择开票日期' }]}
               >
-                <DatePicker style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} placeholder="请选择开票日期" />
               </Form.Item>
             </Col>
           </Row>
@@ -1526,7 +1554,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="seller_name"
                 rules={[{ required: true, message: '请输入开票方' }]}
               >
-                <Input placeholder="请输入开票方" />
+                <Input placeholder="请输入开票方公司名称" />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1534,7 +1562,7 @@ const PurchaseInvoice: React.FC = () => {
                 label="收票方"
                 name="buyer_name"
               >
-                <Input placeholder="请输入收票方" />
+                <Input placeholder="请输入收票方公司名称" />
               </Form.Item>
             </Col>
           </Row>
@@ -1546,7 +1574,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="invoice_type"
                 initialValue="增值税普通发票"
               >
-                <Select>
+                <Select placeholder="请选择发票类型">
                   <Option value="增值税专用发票">增值税专用发票</Option>
                   <Option value="增值税普通发票">增值税普通发票</Option>
                   <Option value="收据">收据</Option>
@@ -1560,7 +1588,7 @@ const PurchaseInvoice: React.FC = () => {
                 name="status"
                 initialValue="正常"
               >
-                <Select>
+                <Select placeholder="请选择发票状态">
                   <Option value="正常">正常</Option>
                   <Option value="作废">作废</Option>
                   <Option value="红冲">红冲</Option>
