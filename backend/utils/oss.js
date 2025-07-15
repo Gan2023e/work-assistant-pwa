@@ -150,9 +150,221 @@ async function getSignedUrl(objectName, expiresInSeconds = 3600) {
   }
 }
 
+// 上传模板文件到OSS
+async function uploadTemplateToOSS(buffer, filename, templateType, provider = null, country = null) {
+  try {
+    const client = createOSSClient();
+    
+    // 生成唯一文件名
+    const ext = path.extname(filename);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const uniqueName = `${timestamp}-${filename}`;
+    
+    // 构建文件路径
+    let folderPath;
+    switch (templateType) {
+      case 'amazon':
+        folderPath = `templates/excel/amazon/${country || 'default'}`;
+        break;
+      case 'logistics':
+        const providerFolder = provider ? provider.toLowerCase().replace(/[^a-z0-9]/g, '') : 'others';
+        folderPath = `templates/excel/logistics/${providerFolder}/${country || 'default'}`;
+        break;
+      case 'packing-list':
+        folderPath = `templates/excel/packing-list`;
+        break;
+      default:
+        folderPath = `templates/excel/others`;
+    }
+    
+    const objectName = `${folderPath}/${uniqueName}`;
+    
+    // 设置Content-Type
+    let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (ext.toLowerCase() === '.xls') {
+      contentType = 'application/vnd.ms-excel';
+    }
+    
+    // 上传文件
+    const result = await client.put(objectName, buffer, {
+      headers: {
+        'Content-Type': contentType,
+        'x-oss-storage-class': 'Standard'
+      }
+    });
+    
+    console.log('✅ 模板文件上传成功:', result.name);
+    
+    return {
+      success: true,
+      url: result.url,
+      name: result.name,
+      size: buffer.length,
+      originalName: filename,
+      uniqueName: uniqueName,
+      folder: folderPath,
+      templateType: templateType,
+      provider: provider,
+      country: country
+    };
+    
+  } catch (error) {
+    console.error('❌ 模板文件上传失败:', error);
+    throw error;
+  }
+}
+
+// 获取模板文件列表
+async function listTemplateFiles(templateType, provider = null, country = null) {
+  try {
+    const client = createOSSClient();
+    
+    // 构建搜索前缀
+    let prefix;
+    switch (templateType) {
+      case 'amazon':
+        prefix = country ? `templates/excel/amazon/${country}/` : `templates/excel/amazon/`;
+        break;
+      case 'logistics':
+        if (provider && country) {
+          const providerFolder = provider.toLowerCase().replace(/[^a-z0-9]/g, '');
+          prefix = `templates/excel/logistics/${providerFolder}/${country}/`;
+        } else if (provider) {
+          const providerFolder = provider.toLowerCase().replace(/[^a-z0-9]/g, '');
+          prefix = `templates/excel/logistics/${providerFolder}/`;
+        } else {
+          prefix = `templates/excel/logistics/`;
+        }
+        break;
+      case 'packing-list':
+        prefix = `templates/excel/packing-list/`;
+        break;
+      default:
+        prefix = `templates/excel/others/`;
+    }
+    
+    const result = await client.list({
+      prefix: prefix,
+      'max-keys': 100
+    });
+    
+    // 过滤掉 placeholder 文件，只返回实际的模板文件
+    const templateFiles = (result.objects || [])
+      .filter(obj => !obj.name.includes('.placeholder') && obj.name !== prefix)
+      .map(obj => ({
+        name: obj.name,
+        size: obj.size,
+        lastModified: obj.lastModified,
+        url: `https://${process.env.OSS_BUCKET}.${process.env.OSS_ENDPOINT}/${obj.name}`,
+        fileName: obj.name.split('/').pop(),
+        folder: obj.name.replace(/\/[^\/]+$/, '/')
+      }));
+    
+    return {
+      success: true,
+      files: templateFiles,
+      count: templateFiles.length
+    };
+    
+  } catch (error) {
+    console.error('❌ 获取模板文件列表失败:', error);
+    throw error;
+  }
+}
+
+// 下载模板文件
+async function downloadTemplateFromOSS(objectName) {
+  try {
+    const client = createOSSClient();
+    
+    // 检查文件是否存在
+    try {
+      await client.head(objectName);
+    } catch (error) {
+      if (error.code === 'NoSuchKey') {
+        throw new Error('模板文件不存在');
+      }
+      throw error;
+    }
+    
+    // 获取文件内容
+    const result = await client.get(objectName);
+    
+    return {
+      success: true,
+      content: result.content,
+      fileName: objectName.split('/').pop(),
+      size: result.res.size || 0,
+      contentType: result.res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    
+  } catch (error) {
+    console.error('❌ 下载模板文件失败:', error);
+    throw error;
+  }
+}
+
+// 删除模板文件
+async function deleteTemplateFromOSS(objectName) {
+  try {
+    const client = createOSSClient();
+    
+    await client.delete(objectName);
+    console.log('✅ 模板文件删除成功:', objectName);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ 模板文件删除失败:', error);
+    
+    if (error.code === 'AccessDenied') {
+      return { 
+        success: false, 
+        error: 'AccessDenied', 
+        message: '删除权限不足' 
+      };
+    }
+    
+    throw error;
+  }
+}
+
+// 备份模板文件
+async function backupTemplate(objectName, templateType) {
+  try {
+    const client = createOSSClient();
+    
+    // 构建备份路径
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = objectName.split('/').pop();
+    const backupPath = `templates/backup/${templateType}/${timestamp}-${fileName}`;
+    
+    // 复制文件到备份位置
+    await client.copy(backupPath, objectName);
+    
+    console.log('✅ 模板文件备份成功:', backupPath);
+    
+    return {
+      success: true,
+      backupPath: backupPath,
+      originalPath: objectName
+    };
+    
+  } catch (error) {
+    console.error('❌ 模板文件备份失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   uploadToOSS,
   deleteFromOSS,
   getSignedUrl,
-  checkOSSConfig
+  checkOSSConfig,
+  createOSSClient,
+  uploadTemplateToOSS,
+  listTemplateFiles,
+  downloadTemplateFromOSS,
+  deleteTemplateFromOSS,
+  backupTemplate
 }; 

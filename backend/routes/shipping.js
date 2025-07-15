@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const { uploadTemplateToOSS, listTemplateFiles, downloadTemplateFromOSS, deleteTemplateFromOSS, backupTemplate, checkOSSConfig, createOSSClient } = require('../utils/oss');
 
 // 钉钉通知函数
 async function sendDingTalkNotification(message, atMobiles = []) {
@@ -1788,20 +1789,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// 配置multer用于文件上传
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    // 使用时间戳和随机数生成唯一文件名
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'amazon-template-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// 配置multer用于文件上传（使用内存存储以便上传到OSS）
 const upload = multer({ 
-  storage: storage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     // 只允许Excel文件
     if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
@@ -1816,60 +1806,150 @@ const upload = multer({
   }
 });
 
-// 亚马逊模板配置存储
-const templateConfigPath = path.join(__dirname, '../uploads/amazon-templates/template-config.json');
+// 亚马逊模板配置存储（现在存储在OSS中）
+const TEMPLATE_CONFIG_OSS_PATH = 'templates/config/amazon-template-config.json';
+
+// 物流商发票模板配置存储（现在存储在OSS中）
+const LOGISTICS_INVOICE_CONFIG_OSS_PATH = 'templates/config/logistics-invoice-config.json';
+
+// OSS配置管理辅助函数
+async function getTemplateConfigFromOSS() {
+  try {
+    if (!checkOSSConfig()) {
+      console.warn('OSS配置不完整，使用空配置');
+      return {};
+    }
+    
+    const result = await downloadTemplateFromOSS(TEMPLATE_CONFIG_OSS_PATH);
+    if (result.success) {
+      const configText = result.content.toString('utf8');
+      return JSON.parse(configText);
+    }
+  } catch (error) {
+    if (error.message === '模板文件不存在') {
+      console.log('配置文件不存在，返回空配置');
+      return {};
+    }
+    console.error('获取模板配置失败:', error);
+  }
+  return {};
+}
+
+async function saveTemplateConfigToOSS(config) {
+  try {
+    if (!checkOSSConfig()) {
+      throw new Error('OSS配置不完整');
+    }
+    
+    const configBuffer = Buffer.from(JSON.stringify(config, null, 2), 'utf8');
+    
+    // 使用OSS客户端直接上传配置文件
+    const client = createOSSClient();
+    
+    const result = await client.put(TEMPLATE_CONFIG_OSS_PATH, configBuffer, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-oss-storage-class': 'Standard'
+      }
+    });
+    
+    console.log('✅ 模板配置保存成功:', result.name);
+    return true;
+  } catch (error) {
+    console.error('❌ 保存模板配置失败:', error);
+    throw error;
+  }
+}
+
+// 物流商发票模板配置管理函数
+async function getLogisticsInvoiceConfigFromOSS() {
+  try {
+    if (!checkOSSConfig()) {
+      console.warn('OSS配置不完整，使用空配置');
+      return {};
+    }
+    
+    const result = await downloadTemplateFromOSS(LOGISTICS_INVOICE_CONFIG_OSS_PATH);
+    if (result.success) {
+      const configText = result.content.toString('utf8');
+      return JSON.parse(configText);
+    }
+  } catch (error) {
+    if (error.message === '模板文件不存在') {
+      console.log('物流商发票配置文件不存在，返回空配置');
+      return {};
+    }
+    console.error('获取物流商发票配置失败:', error);
+  }
+  return {};
+}
+
+async function saveLogisticsInvoiceConfigToOSS(config) {
+  try {
+    if (!checkOSSConfig()) {
+      throw new Error('OSS配置不完整');
+    }
+    
+    const configBuffer = Buffer.from(JSON.stringify(config, null, 2), 'utf8');
+    
+    // 使用OSS客户端直接上传配置文件
+    const client = createOSSClient();
+    
+    const result = await client.put(LOGISTICS_INVOICE_CONFIG_OSS_PATH, configBuffer, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-oss-storage-class': 'Standard'
+      }
+    });
+    
+    console.log('✅ 物流商发票配置保存成功:', result.name);
+    return true;
+  } catch (error) {
+    console.error('❌ 保存物流商发票配置失败:', error);
+    throw error;
+  }
+}
 
 // 获取当前模板配置
 router.get('/amazon-template/config', async (req, res) => {
   try {
     const { country } = req.query;
     
-    if (fs.existsSync(templateConfigPath)) {
-      const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
-      
-      if (country) {
-        // 获取特定国家的模板配置
-        const countryConfig = allConfigs[country];
-        if (countryConfig) {
-          res.json({
-            success: true,
-            data: {
-              hasTemplate: true,
-              country: country,
-              ...countryConfig
-            }
-          });
-        } else {
-          res.json({
-            success: true,
-            data: {
-              hasTemplate: false,
-              country: country,
-              message: `尚未上传 ${country} 的亚马逊模板`
-            }
-          });
-        }
-      } else {
-        // 获取所有国家的模板配置
-        const hasAnyTemplate = Object.keys(allConfigs).length > 0;
+    // 从OSS获取配置
+    const allConfigs = await getTemplateConfigFromOSS();
+    
+    if (country) {
+      // 获取特定国家的模板配置
+      const countryConfig = allConfigs[country];
+      if (countryConfig) {
         res.json({
           success: true,
           data: {
-            hasTemplate: hasAnyTemplate,
-            templates: allConfigs,
-            countries: Object.keys(allConfigs),
-            message: hasAnyTemplate ? '已配置模板' : '尚未上传任何亚马逊模板'
+            hasTemplate: true,
+            country: country,
+            ...countryConfig
+          }
+        });
+      } else {
+        res.json({
+          success: true,
+          data: {
+            hasTemplate: false,
+            country: country,
+            message: `尚未上传 ${country} 的亚马逊模板`
           }
         });
       }
     } else {
+      // 获取所有国家的模板配置
+      const hasAnyTemplate = Object.keys(allConfigs).length > 0;
       res.json({
         success: true,
         data: {
-          hasTemplate: false,
-          templates: {},
-          countries: [],
-          message: '尚未上传任何亚马逊模板'
+          hasTemplate: hasAnyTemplate,
+          templates: allConfigs,
+          countries: Object.keys(allConfigs),
+          message: hasAnyTemplate ? '已配置模板' : '尚未上传任何亚马逊模板'
         }
       });
     }
@@ -1912,10 +1992,8 @@ router.post('/amazon-template/upload', (req, res, next) => {
   console.log('📋 请求体参数:', req.body);
   console.log('📁 上传文件信息:', req.file ? {
     originalname: req.file.originalname,
-    filename: req.file.filename,
     mimetype: req.file.mimetype,
-    size: req.file.size,
-    path: req.file.path
+    size: req.file.size
   } : '无文件');
   
   try {
@@ -1924,6 +2002,14 @@ router.post('/amazon-template/upload', (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: '请选择要上传的Excel文件'
+      });
+    }
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，请联系管理员配置OSS服务'
       });
     }
 
@@ -1942,18 +2028,12 @@ router.post('/amazon-template/upload', (req, res, next) => {
     // 验证Excel文件并获取sheet信息
     let workbook, sheetNames;
     try {
-      console.log('📖 正在读取Excel文件:', req.file.path);
-      workbook = XLSX.readFile(req.file.path);
+      console.log('📖 正在读取Excel文件Buffer...');
+      workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       sheetNames = workbook.SheetNames;
       console.log('📊 Excel文件读取成功，Sheet页:', sheetNames);
     } catch (xlsxError) {
       console.error('❌ Excel文件读取失败:', xlsxError);
-      // 删除上传的文件
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (deleteError) {
-        console.warn('⚠️ 删除上传文件失败:', deleteError.message);
-      }
       return res.status(400).json({
         success: false,
         message: '无法读取Excel文件，请确保文件格式正确且未损坏'
@@ -1972,22 +2052,40 @@ router.post('/amazon-template/upload', (req, res, next) => {
       });
     }
 
-    // 读取现有配置或创建新配置
-    let allConfigs = {};
-    if (fs.existsSync(templateConfigPath)) {
+    // 读取现有配置
+    let allConfigs = await getTemplateConfigFromOSS();
+
+    // 如果该国家已有模板，先备份旧模板，然后删除
+    if (allConfigs[country] && allConfigs[country].ossPath) {
       try {
-        allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
+        console.log(`🔄 ${country} 已有模板，正在备份旧模板...`);
+        await backupTemplate(allConfigs[country].ossPath, 'amazon');
+        await deleteTemplateFromOSS(allConfigs[country].ossPath);
+        console.log(`✅ 已备份并删除 ${country} 的旧模板文件`);
       } catch (err) {
-        console.warn('读取现有配置失败，将创建新配置:', err.message);
-        allConfigs = {};
+        console.warn(`⚠️ 处理 ${country} 旧模板文件失败:`, err.message);
       }
+    }
+
+    // 上传新模板文件到OSS
+    console.log('☁️ 正在上传模板文件到OSS...');
+    const uploadResult = await uploadTemplateToOSS(
+      req.file.buffer,
+      req.file.originalname,
+      'amazon',
+      null,
+      country
+    );
+
+    if (!uploadResult.success) {
+      throw new Error('模板文件上传到OSS失败');
     }
 
     // 保存该国家的模板配置
     const config = {
-      filename: req.file.filename,
       originalName: req.file.originalname,
-      filePath: req.file.path,
+      ossPath: uploadResult.name,
+      ossUrl: uploadResult.url,
       uploadTime: new Date().toISOString(),
       sheetName: sheetName,
       merchantSkuColumn: merchantSkuColumn.toUpperCase(),
@@ -1995,34 +2093,25 @@ router.post('/amazon-template/upload', (req, res, next) => {
       startRow: parseInt(startRow),
       sheetNames: sheetNames, // 保存所有可用的sheet名称
       country: country,
-      countryName: countryName || country
+      countryName: countryName || country,
+      fileSize: uploadResult.size
     };
-
-    // 如果该国家已有模板，删除旧的模板文件
-    if (allConfigs[country] && allConfigs[country].filePath && fs.existsSync(allConfigs[country].filePath)) {
-      try {
-        fs.unlinkSync(allConfigs[country].filePath);
-        console.log(`✅ 已删除 ${country} 的旧模板文件`);
-      } catch (err) {
-        console.warn(`⚠️ 删除 ${country} 旧模板文件失败:`, err.message);
-      }
-    }
 
     allConfigs[country] = config;
     
-    // 保存配置文件
+    // 保存配置文件到OSS
     try {
-      // 确保目录存在
-      const configDir = path.dirname(templateConfigPath);
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
-        console.log('✅ 创建配置目录:', configDir);
-      }
-      
-      fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
-      console.log('✅ 配置文件保存成功:', templateConfigPath);
+      console.log('💾 正在保存配置文件到OSS...');
+      await saveTemplateConfigToOSS(allConfigs);
+      console.log('✅ 配置文件保存成功');
     } catch (saveError) {
       console.error('❌ 配置文件保存失败:', saveError);
+      // 如果配置保存失败，尝试删除已上传的模板文件
+      try {
+        await deleteTemplateFromOSS(uploadResult.name);
+      } catch (deleteError) {
+        console.error('❌ 回滚失败，删除已上传文件失败:', deleteError);
+      }
       return res.status(500).json({
         success: false,
         message: '模板配置保存失败: ' + saveError.message
@@ -2062,14 +2151,14 @@ router.post('/amazon-template/generate', async (req, res) => {
     }
 
     // 获取模板配置
-    if (!fs.existsSync(templateConfigPath)) {
+    const allConfigs = await getTemplateConfigFromOSS();
+    
+    if (!allConfigs || Object.keys(allConfigs).length === 0) {
       return res.status(400).json({
         success: false,
         message: '尚未配置亚马逊模板，请先上传模板'
       });
     }
-
-    const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
     
     // 按国家分组发货数据
     const dataByCountry = {};
@@ -2093,8 +2182,8 @@ router.post('/amazon-template/generate', async (req, res) => {
         continue;
       }
       
-      if (!fs.existsSync(config.filePath)) {
-        console.warn(`⚠️ ${itemCountry} 的模板文件不存在: ${config.filePath}`);
+      if (!config.ossPath) {
+        console.warn(`⚠️ ${itemCountry} 的模板文件路径不存在`);
         continue;
       }
 
@@ -2108,9 +2197,28 @@ router.post('/amazon-template/generate', async (req, res) => {
         }
       });
 
-      // 读取模板文件
-      const workbook = XLSX.readFile(config.filePath);
-      const worksheet = workbook.Sheets[config.sheetName];
+      // 从OSS下载模板文件
+      let workbook, worksheet;
+      try {
+        console.log(`📥 正在从OSS下载 ${itemCountry} 的模板文件...`);
+        const downloadResult = await downloadTemplateFromOSS(config.ossPath);
+        if (!downloadResult.success) {
+          throw new Error('下载失败');
+        }
+        
+        // 读取模板文件
+        workbook = XLSX.read(downloadResult.content, { type: 'buffer' });
+        worksheet = workbook.Sheets[config.sheetName];
+        
+        if (!worksheet) {
+          throw new Error(`Sheet页 "${config.sheetName}" 不存在`);
+        }
+        
+        console.log(`✅ ${itemCountry} 模板文件下载并读取成功`);
+      } catch (downloadError) {
+        console.error(`❌ ${itemCountry} 模板文件处理失败:`, downloadError);
+        continue;
+      }
 
       // 填写数据到模板
       let currentRow = config.startRow;
@@ -2209,33 +2317,58 @@ router.delete('/amazon-template/config', async (req, res) => {
   try {
     const { country } = req.query;
 
-    if (!fs.existsSync(templateConfigPath)) {
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法删除模板'
+      });
+    }
+
+    const allConfigs = await getTemplateConfigFromOSS();
+
+    if (!allConfigs || Object.keys(allConfigs).length === 0) {
       return res.json({
         success: true,
         message: '没有模板配置需要删除'
       });
     }
 
-    const allConfigs = JSON.parse(fs.readFileSync(templateConfigPath, 'utf8'));
-
     if (country) {
       // 删除特定国家的模板配置
       if (allConfigs[country]) {
         const config = allConfigs[country];
         
-        // 删除模板文件
-        if (config.filePath && fs.existsSync(config.filePath)) {
-          fs.unlinkSync(config.filePath);
+        // 先备份然后删除OSS中的模板文件
+        if (config.ossPath) {
+          try {
+            console.log(`🔄 正在备份并删除 ${country} 的模板文件...`);
+            await backupTemplate(config.ossPath, 'amazon');
+            await deleteTemplateFromOSS(config.ossPath);
+            console.log(`✅ ${country} 模板文件已备份并删除`);
+          } catch (deleteError) {
+            console.warn(`⚠️ 删除 ${country} 模板文件失败:`, deleteError.message);
+            // 即使文件删除失败，也继续删除配置
+          }
         }
         
         // 从配置中删除该国家
         delete allConfigs[country];
         
         // 更新配置文件
-        if (Object.keys(allConfigs).length > 0) {
-          fs.writeFileSync(templateConfigPath, JSON.stringify(allConfigs, null, 2));
-        } else {
-          fs.unlinkSync(templateConfigPath);
+        try {
+          if (Object.keys(allConfigs).length > 0) {
+            await saveTemplateConfigToOSS(allConfigs);
+          } else {
+            // 如果没有配置了，删除配置文件
+            await deleteTemplateFromOSS(TEMPLATE_CONFIG_OSS_PATH);
+          }
+        } catch (saveError) {
+          console.error('❌ 更新配置文件失败:', saveError);
+          return res.status(500).json({
+            success: false,
+            message: '配置文件更新失败: ' + saveError.message
+          });
         }
 
         res.json({
@@ -2250,18 +2383,27 @@ router.delete('/amazon-template/config', async (req, res) => {
       }
     } else {
       // 删除所有模板配置
-      Object.values(allConfigs).forEach(config => {
-        if (config.filePath && fs.existsSync(config.filePath)) {
+      console.log('🗑️ 正在删除所有亚马逊模板配置...');
+      
+      for (const [countryCode, config] of Object.entries(allConfigs)) {
+        if (config.ossPath) {
           try {
-            fs.unlinkSync(config.filePath);
-          } catch (err) {
-            console.warn(`删除文件失败: ${config.filePath}`, err.message);
+            console.log(`🔄 正在备份并删除 ${countryCode} 的模板文件...`);
+            await backupTemplate(config.ossPath, 'amazon');
+            await deleteTemplateFromOSS(config.ossPath);
+            console.log(`✅ ${countryCode} 模板文件已备份并删除`);
+          } catch (deleteError) {
+            console.warn(`⚠️ 删除 ${countryCode} 模板文件失败:`, deleteError.message);
           }
         }
-      });
+      }
       
       // 删除配置文件
-      fs.unlinkSync(templateConfigPath);
+      try {
+        await deleteTemplateFromOSS(TEMPLATE_CONFIG_OSS_PATH);
+      } catch (deleteError) {
+        console.warn('⚠️ 删除配置文件失败:', deleteError.message);
+      }
 
       res.json({
         success: true,
@@ -3767,6 +3909,729 @@ router.get('/shipment-history/:shipmentId/details', async (req, res) => {
       code: 1,
       message: '获取失败',
       error: error.message
+    });
+  }
+});
+
+// ======================= 物流商发票模板管理 API =======================
+
+// 获取物流商发票模板配置
+router.get('/logistics-invoice/config', async (req, res) => {
+  try {
+    const { logisticsProvider, country } = req.query;
+    
+    // 从OSS获取配置
+    const allConfigs = await getLogisticsInvoiceConfigFromOSS();
+    
+    if (logisticsProvider && country) {
+      // 获取特定物流商和国家的配置
+      const providerConfig = allConfigs[logisticsProvider];
+      if (providerConfig && providerConfig[country]) {
+        res.json({
+          success: true,
+          data: {
+            hasTemplate: true,
+            logisticsProvider: logisticsProvider,
+            country: country,
+            ...providerConfig[country]
+          }
+        });
+      } else {
+        res.json({
+          success: true,
+          data: {
+            hasTemplate: false,
+            logisticsProvider: logisticsProvider,
+            country: country,
+            message: `尚未上传 ${logisticsProvider} - ${country} 的发票模板`
+          }
+        });
+      }
+    } else {
+      // 获取所有配置
+      const hasAnyTemplate = Object.keys(allConfigs).length > 0;
+      const logisticsProviders = Object.keys(allConfigs);
+      
+      res.json({
+        success: true,
+        data: {
+          hasTemplate: hasAnyTemplate,
+          templates: allConfigs,
+          logisticsProviders: logisticsProviders,
+          message: hasAnyTemplate ? '已配置发票模板' : '尚未上传任何物流商发票模板'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ 获取物流商发票模板配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取配置失败'
+    });
+  }
+});
+
+// 上传物流商发票模板
+router.post('/logistics-invoice/upload', (req, res, next) => {
+  // Multer错误处理
+  upload.single('template')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Multer上传错误:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          message: '文件大小超过限制(最大10MB)'
+        });
+      } else if (err.message === '只允许上传Excel文件') {
+        return res.status(400).json({
+          success: false,
+          message: '只支持Excel文件格式(.xlsx, .xls)'
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: '文件上传失败: ' + err.message
+        });
+      }
+    }
+    next();
+  });
+}, async (req, res) => {
+  console.log('📥 收到物流商发票模板上传请求');
+  console.log('📋 请求体参数:', req.body);
+  console.log('📁 上传文件信息:', req.file ? {
+    originalname: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size
+  } : '无文件');
+  
+  try {
+    if (!req.file) {
+      console.error('❌ 未接收到文件');
+      return res.status(400).json({
+        success: false,
+        message: '请选择要上传的Excel文件'
+      });
+    }
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，请联系管理员配置OSS服务'
+      });
+    }
+
+    const { sheetName, logisticsProvider, country, countryName } = req.body;
+
+    if (!sheetName || !logisticsProvider || !country) {
+      console.error('❌ 缺少必填参数:', {
+        sheetName, logisticsProvider, country
+      });
+      return res.status(400).json({
+        success: false,
+        message: '请提供完整的配置信息，包括物流商、适用国家和Sheet页名称'
+      });
+    }
+
+    // 验证Excel文件并获取sheet信息
+    let workbook, sheetNames;
+    try {
+      console.log('📖 正在读取Excel文件Buffer...');
+      workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      sheetNames = workbook.SheetNames;
+      console.log('📊 Excel文件读取成功，Sheet页:', sheetNames);
+    } catch (xlsxError) {
+      console.error('❌ Excel文件读取失败:', xlsxError);
+      return res.status(400).json({
+        success: false,
+        message: '无法读取Excel文件，请确保文件格式正确且未损坏'
+      });
+    }
+    
+    if (!sheetNames.includes(sheetName)) {
+      console.error('❌ Sheet页不存在:', { requested: sheetName, available: sheetNames });
+      return res.status(400).json({
+        success: false,
+        message: `模板中不存在sheet页: ${sheetName}。可用的sheet页: ${sheetNames.join(', ')}`,
+        data: {
+          availableSheets: sheetNames,
+          requestedSheet: sheetName
+        }
+      });
+    }
+
+    // 读取现有配置
+    let allConfigs = await getLogisticsInvoiceConfigFromOSS();
+
+    // 初始化物流商配置
+    if (!allConfigs[logisticsProvider]) {
+      allConfigs[logisticsProvider] = {};
+    }
+
+    // 如果该物流商和国家已有模板，先备份旧模板，然后删除
+    if (allConfigs[logisticsProvider][country] && allConfigs[logisticsProvider][country].ossPath) {
+      try {
+        console.log(`🔄 ${logisticsProvider}-${country} 已有模板，正在备份旧模板...`);
+        await backupTemplate(allConfigs[logisticsProvider][country].ossPath, 'logistics');
+        await deleteTemplateFromOSS(allConfigs[logisticsProvider][country].ossPath);
+        console.log(`✅ 已备份并删除 ${logisticsProvider}-${country} 的旧模板文件`);
+      } catch (err) {
+        console.warn(`⚠️ 处理 ${logisticsProvider}-${country} 旧模板文件失败:`, err.message);
+      }
+    }
+
+    // 上传新模板文件到OSS
+    console.log('☁️ 正在上传发票模板文件到OSS...');
+    const uploadResult = await uploadTemplateToOSS(
+      req.file.buffer,
+      req.file.originalname,
+      'logistics',
+      logisticsProvider,
+      country
+    );
+
+    if (!uploadResult.success) {
+      throw new Error('模板文件上传到OSS失败');
+    }
+
+    // 保存该物流商和国家的模板配置
+    const config = {
+      originalName: req.file.originalname,
+      ossPath: uploadResult.name,
+      ossUrl: uploadResult.url,
+      uploadTime: new Date().toISOString(),
+      sheetName: sheetName,
+      sheetNames: sheetNames, // 保存所有可用的sheet名称
+      logisticsProvider: logisticsProvider,
+      country: country,
+      countryName: countryName || country,
+      fileSize: uploadResult.size
+    };
+
+    allConfigs[logisticsProvider][country] = config;
+    
+    // 保存配置文件到OSS
+    try {
+      console.log('💾 正在保存发票模板配置文件到OSS...');
+      await saveLogisticsInvoiceConfigToOSS(allConfigs);
+      console.log('✅ 发票模板配置文件保存成功');
+    } catch (saveError) {
+      console.error('❌ 配置文件保存失败:', saveError);
+      // 如果配置保存失败，尝试删除已上传的模板文件
+      try {
+        await deleteTemplateFromOSS(uploadResult.name);
+      } catch (deleteError) {
+        console.error('❌ 回滚失败，删除已上传文件失败:', deleteError);
+      }
+      return res.status(500).json({
+        success: false,
+        message: '模板配置保存失败: ' + saveError.message
+      });
+    }
+
+    console.log('✅ 物流商发票模板上传完成:', `${logisticsProvider}-${country}`);
+    res.json({
+      success: true,
+      message: `${logisticsProvider} - ${countryName || country} 发票模板上传成功`,
+      data: {
+        hasTemplate: true,
+        logisticsProvider: logisticsProvider,
+        country: country,
+        ...config
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 上传物流商发票模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '上传模板失败: ' + error.message
+    });
+  }
+});
+
+// 生成物流商发票
+router.post('/logistics-invoice/generate', async (req, res) => {
+  try {
+    const { shippingData } = req.body;
+
+    if (!shippingData || !Array.isArray(shippingData)) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供发货数据'
+      });
+    }
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法生成发票'
+      });
+    }
+
+    // 获取物流商发票模板配置
+    const allConfigs = await getLogisticsInvoiceConfigFromOSS();
+    
+    if (!allConfigs || Object.keys(allConfigs).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '尚未配置物流商发票模板，请先上传模板'
+      });
+    }
+
+    // 按物流商和国家分组发货数据
+    const dataByProviderAndCountry = {};
+    shippingData.forEach(item => {
+      const provider = item.logisticsProvider || '默认';
+      const country = item.country || '默认';
+      const key = `${provider}-${country}`;
+      
+      if (!dataByProviderAndCountry[key]) {
+        dataByProviderAndCountry[key] = {
+          provider: provider,
+          country: country,
+          data: []
+        };
+      }
+      dataByProviderAndCountry[key].data.push(item);
+    });
+
+    const generatedFiles = [];
+    const outputDir = path.join(__dirname, '../uploads/generated-invoices');
+    
+    // 确保输出目录存在
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    // 为每个物流商和国家生成对应的发票
+    for (const [key, groupData] of Object.entries(dataByProviderAndCountry)) {
+      const { provider, country, data } = groupData;
+      
+      const providerConfig = allConfigs[provider];
+      if (!providerConfig || !providerConfig[country]) {
+        console.warn(`⚠️ 未找到 ${provider}-${country} 的发票模板配置，跳过生成`);
+        continue;
+      }
+      
+      const config = providerConfig[country];
+      
+      if (!config.ossPath) {
+        console.warn(`⚠️ ${provider}-${country} 的模板文件路径不存在`);
+        continue;
+      }
+
+      // 从OSS下载发票模板文件
+      let workbook, worksheet;
+      try {
+        console.log(`📥 正在从OSS下载 ${provider}-${country} 的发票模板文件...`);
+        const downloadResult = await downloadTemplateFromOSS(config.ossPath);
+        if (!downloadResult.success) {
+          throw new Error('下载失败');
+        }
+        
+        // 读取模板文件
+        workbook = XLSX.read(downloadResult.content, { type: 'buffer' });
+        worksheet = workbook.Sheets[config.sheetName];
+        
+        if (!worksheet) {
+          throw new Error(`Sheet页 "${config.sheetName}" 不存在`);
+        }
+        
+        console.log(`✅ ${provider}-${country} 发票模板文件下载并读取成功`);
+      } catch (downloadError) {
+        console.error(`❌ ${provider}-${country} 发票模板文件处理失败:`, downloadError);
+        continue;
+      }
+
+      // 这里可以根据具体的发票模板格式来填写数据
+      // 目前先简单地在第一列填写商品信息，第二列填写数量
+      let currentRow = 2; // 假设第一行是表头
+      data.forEach(item => {
+        // 填写商品SKU
+        XLSX.utils.sheet_add_aoa(worksheet, [[item.amz_sku || item.sku]], { origin: `A${currentRow}` });
+        // 填写数量
+        XLSX.utils.sheet_add_aoa(worksheet, [[item.quantity]], { origin: `B${currentRow}` });
+        // 填写箱号（如果有）
+        if (item.box_num) {
+          XLSX.utils.sheet_add_aoa(worksheet, [[item.box_num]], { origin: `C${currentRow}` });
+        }
+        
+        currentRow++;
+      });
+
+      // 生成新的文件名
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const providerCode = provider.replace(/[^a-zA-Z0-9]/g, '');
+      const countryCode = country.replace(/[^a-zA-Z0-9]/g, '');
+      const outputFilename = `invoice-${providerCode}-${countryCode}-${timestamp}.xlsx`;
+      const outputPath = path.join(outputDir, outputFilename);
+
+      // 保存填写后的发票文件
+      XLSX.writeFile(workbook, outputPath);
+
+      generatedFiles.push({
+        logisticsProvider: provider,
+        country: country,
+        countryName: config.countryName || country,
+        filename: outputFilename,
+        downloadUrl: `/api/shipping/logistics-invoice/download/${outputFilename}`,
+        itemCount: data.length,
+        totalQuantity: data.reduce((sum, item) => sum + (item.quantity || 0), 0)
+      });
+    }
+
+    if (generatedFiles.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '没有找到对应的发票模板配置，无法生成发票'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `成功生成 ${generatedFiles.length} 个发票文件`,
+      data: {
+        files: generatedFiles,
+        totalFiles: generatedFiles.length,
+        totalItems: generatedFiles.reduce((sum, file) => sum + file.itemCount, 0),
+        totalQuantity: generatedFiles.reduce((sum, file) => sum + file.totalQuantity, 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 生成物流商发票失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '生成发票失败: ' + error.message
+    });
+  }
+});
+
+// 下载生成的发票文件
+router.get('/logistics-invoice/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '../uploads/generated-invoices', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: '文件不存在'
+      });
+    }
+
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error('❌ 发票文件下载失败:', err);
+        res.status(500).json({
+          success: false,
+          message: '文件下载失败'
+        });
+      }
+    });
+  } catch (error) {
+    console.error('❌ 下载发票文件失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '下载失败'
+    });
+  }
+});
+
+// 下载原始模板文件（亚马逊模板）
+router.get('/amazon-template/download-original/:country', async (req, res) => {
+  try {
+    const { country } = req.params;
+    
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法下载模板'
+      });
+    }
+
+    // 获取模板配置
+    const allConfigs = await getTemplateConfigFromOSS();
+    
+    if (!allConfigs[country]) {
+      return res.status(404).json({
+        success: false,
+        message: `未找到 ${country} 的模板配置`
+      });
+    }
+
+    const config = allConfigs[country];
+    
+    if (!config.ossPath) {
+      return res.status(404).json({
+        success: false,
+        message: `${country} 模板文件路径不存在`
+      });
+    }
+
+    // 从OSS下载模板文件
+    try {
+      console.log(`📥 正在从OSS下载 ${country} 的亚马逊模板文件...`);
+      const downloadResult = await downloadTemplateFromOSS(config.ossPath);
+      
+      if (!downloadResult.success) {
+        throw new Error('下载失败');
+      }
+
+      // 设置响应头
+      res.set({
+        'Content-Type': downloadResult.contentType,
+        'Content-Disposition': `attachment; filename="${config.originalName}"`,
+        'Content-Length': downloadResult.size
+      });
+
+      // 返回文件内容
+      res.send(downloadResult.content);
+      
+    } catch (downloadError) {
+      console.error(`❌ 下载 ${country} 亚马逊模板失败:`, downloadError);
+      res.status(500).json({
+        success: false,
+        message: '模板文件下载失败: ' + downloadError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ 下载亚马逊模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '下载失败: ' + error.message
+    });
+  }
+});
+
+// 下载原始模板文件（物流商发票模板）
+router.get('/logistics-invoice/download-original/:logisticsProvider/:country', async (req, res) => {
+  try {
+    const { logisticsProvider, country } = req.params;
+    
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法下载模板'
+      });
+    }
+
+    // 获取配置
+    const allConfigs = await getLogisticsInvoiceConfigFromOSS();
+    
+    if (!allConfigs[logisticsProvider] || !allConfigs[logisticsProvider][country]) {
+      return res.status(404).json({
+        success: false,
+        message: `未找到 ${logisticsProvider} - ${country} 的发票模板配置`
+      });
+    }
+
+    const config = allConfigs[logisticsProvider][country];
+    
+    if (!config.ossPath) {
+      return res.status(404).json({
+        success: false,
+        message: `${logisticsProvider} - ${country} 模板文件路径不存在`
+      });
+    }
+
+    // 从OSS下载模板文件
+    try {
+      console.log(`📥 正在从OSS下载 ${logisticsProvider}-${country} 的发票模板文件...`);
+      const downloadResult = await downloadTemplateFromOSS(config.ossPath);
+      
+      if (!downloadResult.success) {
+        throw new Error('下载失败');
+      }
+
+      // 设置响应头
+      res.set({
+        'Content-Type': downloadResult.contentType,
+        'Content-Disposition': `attachment; filename="${config.originalName}"`,
+        'Content-Length': downloadResult.size
+      });
+
+      // 返回文件内容
+      res.send(downloadResult.content);
+      
+    } catch (downloadError) {
+      console.error(`❌ 下载 ${logisticsProvider}-${country} 发票模板失败:`, downloadError);
+      res.status(500).json({
+        success: false,
+        message: '模板文件下载失败: ' + downloadError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ 下载发票模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '下载失败: ' + error.message
+    });
+  }
+});
+
+// 删除物流商发票模板配置
+router.delete('/logistics-invoice/config', async (req, res) => {
+  try {
+    const { logisticsProvider, country } = req.query;
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法删除模板'
+      });
+    }
+
+    const allConfigs = await getLogisticsInvoiceConfigFromOSS();
+
+    if (!allConfigs || Object.keys(allConfigs).length === 0) {
+      return res.json({
+        success: true,
+        message: '没有发票模板配置需要删除'
+      });
+    }
+
+    if (logisticsProvider && country) {
+      // 删除特定物流商和国家的模板配置
+      if (allConfigs[logisticsProvider] && allConfigs[logisticsProvider][country]) {
+        const config = allConfigs[logisticsProvider][country];
+        
+        // 先备份然后删除OSS中的模板文件
+        if (config.ossPath) {
+          try {
+            console.log(`🔄 正在备份并删除 ${logisticsProvider}-${country} 的发票模板文件...`);
+            await backupTemplate(config.ossPath, 'logistics');
+            await deleteTemplateFromOSS(config.ossPath);
+            console.log(`✅ ${logisticsProvider}-${country} 发票模板文件已备份并删除`);
+          } catch (deleteError) {
+            console.warn(`⚠️ 删除 ${logisticsProvider}-${country} 发票模板文件失败:`, deleteError.message);
+          }
+        }
+        
+        // 从配置中删除该国家
+        delete allConfigs[logisticsProvider][country];
+        
+        // 如果该物流商没有其他国家的配置了，删除整个物流商配置
+        if (Object.keys(allConfigs[logisticsProvider]).length === 0) {
+          delete allConfigs[logisticsProvider];
+        }
+        
+        // 更新配置文件
+        try {
+          if (Object.keys(allConfigs).length > 0) {
+            await saveLogisticsInvoiceConfigToOSS(allConfigs);
+          } else {
+            // 如果没有配置了，删除配置文件
+            await deleteTemplateFromOSS(LOGISTICS_INVOICE_CONFIG_OSS_PATH);
+          }
+        } catch (saveError) {
+          console.error('❌ 更新发票配置文件失败:', saveError);
+          return res.status(500).json({
+            success: false,
+            message: '配置文件更新失败: ' + saveError.message
+          });
+        }
+
+        res.json({
+          success: true,
+          message: `${logisticsProvider} - ${config.countryName || country} 发票模板配置已删除`
+        });
+      } else {
+        res.json({
+          success: true,
+          message: `${logisticsProvider} - ${country} 没有发票模板配置需要删除`
+        });
+      }
+    } else if (logisticsProvider) {
+      // 删除特定物流商的所有模板配置
+      if (allConfigs[logisticsProvider]) {
+        console.log(`🗑️ 正在删除物流商 ${logisticsProvider} 的所有发票模板配置...`);
+        
+        for (const [countryCode, config] of Object.entries(allConfigs[logisticsProvider])) {
+          if (config.ossPath) {
+            try {
+              console.log(`🔄 正在备份并删除 ${logisticsProvider}-${countryCode} 的发票模板文件...`);
+              await backupTemplate(config.ossPath, 'logistics');
+              await deleteTemplateFromOSS(config.ossPath);
+              console.log(`✅ ${logisticsProvider}-${countryCode} 发票模板文件已备份并删除`);
+            } catch (deleteError) {
+              console.warn(`⚠️ 删除 ${logisticsProvider}-${countryCode} 发票模板文件失败:`, deleteError.message);
+            }
+          }
+        }
+        
+        // 删除整个物流商配置
+        delete allConfigs[logisticsProvider];
+        
+        // 更新配置文件
+        try {
+          if (Object.keys(allConfigs).length > 0) {
+            await saveLogisticsInvoiceConfigToOSS(allConfigs);
+          } else {
+            await deleteTemplateFromOSS(LOGISTICS_INVOICE_CONFIG_OSS_PATH);
+          }
+        } catch (saveError) {
+          console.error('❌ 更新发票配置文件失败:', saveError);
+          return res.status(500).json({
+            success: false,
+            message: '配置文件更新失败: ' + saveError.message
+          });
+        }
+
+        res.json({
+          success: true,
+          message: `物流商 ${logisticsProvider} 的所有发票模板配置已删除`
+        });
+      } else {
+        res.json({
+          success: true,
+          message: `物流商 ${logisticsProvider} 没有发票模板配置需要删除`
+        });
+      }
+    } else {
+      // 删除所有物流商发票模板配置
+      console.log('🗑️ 正在删除所有物流商发票模板配置...');
+      
+      for (const [providerName, providerConfigs] of Object.entries(allConfigs)) {
+        for (const [countryCode, config] of Object.entries(providerConfigs)) {
+          if (config.ossPath) {
+            try {
+              console.log(`🔄 正在备份并删除 ${providerName}-${countryCode} 的发票模板文件...`);
+              await backupTemplate(config.ossPath, 'logistics');
+              await deleteTemplateFromOSS(config.ossPath);
+              console.log(`✅ ${providerName}-${countryCode} 发票模板文件已备份并删除`);
+            } catch (deleteError) {
+              console.warn(`⚠️ 删除 ${providerName}-${countryCode} 发票模板文件失败:`, deleteError.message);
+            }
+          }
+        }
+      }
+      
+      // 删除配置文件
+      try {
+        await deleteTemplateFromOSS(LOGISTICS_INVOICE_CONFIG_OSS_PATH);
+      } catch (deleteError) {
+        console.warn('⚠️ 删除发票配置文件失败:', deleteError.message);
+      }
+
+      res.json({
+        success: true,
+        message: '所有物流商发票模板配置已删除'
+      });
+    }
+  } catch (error) {
+    console.error('❌ 删除物流商发票模板配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除失败: ' + error.message
     });
   }
 });
