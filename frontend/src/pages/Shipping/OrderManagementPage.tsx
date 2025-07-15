@@ -527,12 +527,40 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               }}
             />
           </Tooltip>
-                       <Popconfirm
-               title="确定删除此SKU吗？"
-               description={record.shipped_quantity > 0 ? `该SKU已发货 ${record.shipped_quantity} 件，无法删除` : "删除后无法恢复，确认删除吗？"}
-               disabled={record.shipped_quantity > 0}
-               onConfirm={async () => {
-                 try {
+                                  <Popconfirm
+             title={record.shipped_quantity > 0 ? "删除未发货数量" : "确定删除此SKU吗？"}
+             description={
+               record.shipped_quantity > 0 
+                 ? `该SKU已发货 ${record.shipped_quantity} 件，剩余 ${record.remaining_quantity} 件未发货。确认删除未发货部分吗？` 
+                 : "删除后无法恢复，确认删除吗？"
+             }
+             onConfirm={async () => {
+               try {
+                 if (record.shipped_quantity > 0) {
+                   // 如果有已发货数量，调用修改数量API，将需求数量改为已发货数量
+                   const response = await fetch(
+                     `${API_BASE_URL}/api/order-management/orders/${record.need_num}/items/${record.record_num}`,
+                     {
+                       method: 'PUT',
+                       headers: {
+                         'Content-Type': 'application/json',
+                         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                       },
+                       body: JSON.stringify({ quantity: record.shipped_quantity }),
+                     }
+                   );
+                   const result = await response.json();
+                   if (result.code === 0) {
+                     message.success(`已删除未发货数量，当前需求数量调整为 ${record.shipped_quantity} 件`);
+                     if (selectedOrder) {
+                       await fetchOrderDetails(selectedOrder);
+                     }
+                     await fetchOrders(pagination.current, pagination.pageSize);
+                   } else {
+                     message.error(result.message || '修改数量失败');
+                   }
+                 } else {
+                   // 如果没有已发货数量，直接删除SKU
                    const response = await fetch(
                      `${API_BASE_URL}/api/shipping/needs/${record.record_num}`,
                      {
@@ -553,21 +581,21 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                    } else {
                      message.error(result.message || 'SKU删除失败');
                    }
-                 } catch (error) {
-                   console.error('删除SKU失败:', error);
-                   message.error('SKU删除失败');
                  }
-               }}
-               okText="确定"
-               cancelText="取消"
-             >
+               } catch (error) {
+                 console.error('操作失败:', error);
+                 message.error('操作失败');
+               }
+             }}
+             okText="确定"
+             cancelText="取消"
+           >
             <Tooltip title="删除SKU">
                              <Button 
                  type="link" 
                  size="small" 
                  icon={<DeleteOutlined />}
                  danger
-                 disabled={record.shipped_quantity > 0}
                />
             </Tooltip>
           </Popconfirm>
