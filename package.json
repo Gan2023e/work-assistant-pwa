@@ -1,6 +1,6 @@
 {
   "name": "work-assistant-pwa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "backend/app.js",
   "scripts": {
     "start": "cd backend && npm start",
