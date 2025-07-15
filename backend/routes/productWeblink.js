@@ -759,6 +759,11 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '申请测试' }
     });
 
+    // 计算CPC检测中的产品数量
+    const cpcTestingCount = await ProductWeblink.count({
+      where: { cpc_status: '测试中' }
+    });
+
     // 计算CPC已发样品数量
     const cpcSampleSentCount = await ProductWeblink.count({
       where: { cpc_status: '样品已发' }
@@ -780,6 +785,7 @@ router.get('/statistics', async (req, res) => {
         waitingPImage: waitingPImageCount,
         waitingUpload: waitingUploadCount,
         cpcTestPending: cpcTestPendingCount,
+        cpcTesting: cpcTestingCount,
         cpcSampleSent: cpcSampleSentCount,
         cpcPendingListing: cpcPendingListingCount
       },

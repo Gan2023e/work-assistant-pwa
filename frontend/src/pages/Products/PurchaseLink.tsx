@@ -119,6 +119,7 @@ const Purchase: React.FC = () => {
     waitingPImage: 0,
     waitingUpload: 0,
     cpcTestPending: 0,
+    cpcTesting: 0,
     cpcSampleSent: 0,
     cpcPendingListing: 0
   });
@@ -988,81 +989,93 @@ const Purchase: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      {/* 统计卡片区域 */}
+            {/* 统计卡片区域 */}
       <div style={{ marginBottom: '20px' }}>
-        <Row gutter={16} style={{ marginBottom: '16px' }}>
-          <Col span={6}>
+        <Row gutter={12} style={{ marginBottom: '12px' }}>
+          <Col span={4}>
             <Card 
               hoverable 
               onClick={() => handleCardClick('待P图')}
               style={{ cursor: 'pointer' }}
             >
               <Statistic
-                title="待P图产品数"
+                title="待P图"
                 value={statistics.waitingPImage}
                 prefix={<CameraOutlined />}
                 valueStyle={{ color: '#cf1322' }}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card 
               hoverable 
               onClick={() => handleCardClick('待上传')}
               style={{ cursor: 'pointer' }}
             >
               <Statistic
-                title="待上传产品数"
+                title="待上传"
                 value={statistics.waitingUpload}
                 prefix={<CloudUploadOutlined />}
                 valueStyle={{ color: '#1890ff' }}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card 
               hoverable 
               onClick={() => handleCardClick('申请测试', 'cpc_status')}
               style={{ cursor: 'pointer' }}
             >
               <Statistic
-                title="CPC测试待审核数"
+                title="CPC测试待审核"
                 value={statistics.cpcTestPending}
                 prefix={<SearchOutlined />}
                 valueStyle={{ color: '#fa8c16' }}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
+            <Card 
+              hoverable 
+              onClick={() => handleCardClick('测试中', 'cpc_status')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="CPC检测中"
+                value={statistics.cpcTesting}
+                prefix={<SearchOutlined />}
+                valueStyle={{ color: '#13c2c2' }}
+              />
+            </Card>
+          </Col>
+          <Col span={4}>
             <Card 
               hoverable 
               onClick={() => handleCardClick('样品已发', 'cpc_status')}
               style={{ cursor: 'pointer' }}
             >
               <Statistic
-                title="CPC已发样品数"
+                title="CPC已发样品"
                 value={statistics.cpcSampleSent}
                 prefix={<SearchOutlined />}
                 valueStyle={{ color: '#52c41a' }}
               />
             </Card>
           </Col>
-        </Row>
-        <Row gutter={16}>
-                     <Col span={6}>
-             <Card 
-               hoverable 
-               onClick={handleCpcPendingListingClick}
-               style={{ cursor: 'pointer' }}
-             >
-               <Statistic
-                 title="CPC待上架产品数"
-                 value={statistics.cpcPendingListing}
-                 prefix={<SearchOutlined />}
-                 valueStyle={{ color: '#722ed1' }}
-               />
-             </Card>
-           </Col>
+          <Col span={4}>
+            <Card 
+              hoverable 
+              onClick={handleCpcPendingListingClick}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="CPC待上架产品"
+                value={statistics.cpcPendingListing}
+                prefix={<SearchOutlined />}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Card>
+          </Col>
         </Row>
       </div>
 
