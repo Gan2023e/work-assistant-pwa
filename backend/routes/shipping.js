@@ -2206,15 +2206,21 @@ router.post('/amazon-template/generate', async (req, res) => {
           throw new Error('下载失败');
         }
         
-        // 读取模板文件
-        workbook = XLSX.read(downloadResult.content, { type: 'buffer' });
+        // 读取模板文件，保持所有格式信息
+        workbook = XLSX.read(downloadResult.content, { 
+          type: 'buffer',
+          cellStyles: true,     // 保持单元格样式
+          cellDates: true,      // 保持日期格式
+          bookVBA: true,        // 保持VBA代码
+          cellNF: true          // 保持数字格式
+        });
         worksheet = workbook.Sheets[config.sheetName];
         
         if (!worksheet) {
           throw new Error(`Sheet页 "${config.sheetName}" 不存在`);
         }
         
-        console.log(`✅ ${itemCountry} 模板文件下载并读取成功`);
+        console.log(`✅ ${itemCountry} 模板文件下载并读取成功，原始范围: ${worksheet['!ref']}`);
       } catch (downloadError) {
         console.error(`❌ ${itemCountry} 模板文件处理失败:`, downloadError);
         continue;
@@ -2242,21 +2248,25 @@ router.post('/amazon-template/generate', async (req, res) => {
         currentRow++;
       });
 
-      // 更新工作表范围以包含新填写的数据
-      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+      // 更新工作表范围以包含新填写的数据，但保持原始模板的完整结构
+      const originalRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+      console.log(`📋 ${itemCountry} 原始模板范围:`, worksheet['!ref']);
       
-      // 计算所需的列范围
-      const skuColIndex = XLSX.utils.decode_col(config.merchantSkuColumn);
-      const quantityColIndex = XLSX.utils.decode_col(config.quantityColumn);
-      const maxCol = Math.max(skuColIndex, quantityColIndex, range.e.c);
+      // 计算填写数据后的最大行号
+      const maxDataRow = currentRow - 1;
       
-      // 计算所需的行范围
-      const maxRow = Math.max(currentRow - 1, range.e.r);
+      // 只扩展行范围，保持原始的列范围不变
+      // 确保新的范围至少包含原始范围和新填写的数据
+      const newRange = {
+        s: { c: originalRange.s.c, r: originalRange.s.r }, // 保持原始起始位置
+        e: { 
+          c: originalRange.e.c, // 保持原始列范围
+          r: Math.max(originalRange.e.r, maxDataRow) // 扩展行范围以包含新数据
+        }
+      };
       
-      // 更新范围
-      range.e.c = maxCol;
-      range.e.r = maxRow;
-      worksheet['!ref'] = XLSX.utils.encode_range(range);
+      worksheet['!ref'] = XLSX.utils.encode_range(newRange);
+      console.log(`📋 ${itemCountry} 更新后范围:`, worksheet['!ref']);
 
       // 生成新的文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -2264,8 +2274,11 @@ router.post('/amazon-template/generate', async (req, res) => {
       const outputFilename = `amazon-upload-${countryCode}-${timestamp}.xlsx`;
       const outputPath = path.join(uploadsDir, outputFilename);
 
-      // 保存填写后的文件
-      XLSX.writeFile(workbook, outputPath);
+      // 保存填写后的文件，保持所有格式信息
+      XLSX.writeFile(workbook, outputPath, {
+        cellStyles: true,     // 保持单元格样式
+        bookVBA: true         // 保持VBA代码
+      });
 
       generatedFiles.push({
         country: itemCountry,
@@ -4256,15 +4269,21 @@ router.post('/logistics-invoice/generate', async (req, res) => {
           throw new Error('下载失败');
         }
         
-        // 读取模板文件
-        workbook = XLSX.read(downloadResult.content, { type: 'buffer' });
+        // 读取发票模板文件，保持所有格式信息
+        workbook = XLSX.read(downloadResult.content, { 
+          type: 'buffer',
+          cellStyles: true,     // 保持单元格样式
+          cellDates: true,      // 保持日期格式
+          bookVBA: true,        // 保持VBA代码
+          cellNF: true          // 保持数字格式
+        });
         worksheet = workbook.Sheets[config.sheetName];
         
         if (!worksheet) {
           throw new Error(`Sheet页 "${config.sheetName}" 不存在`);
         }
         
-        console.log(`✅ ${provider}-${country} 发票模板文件下载并读取成功`);
+        console.log(`✅ ${provider}-${country} 发票模板文件下载并读取成功，原始范围: ${worksheet['!ref']}`);
       } catch (downloadError) {
         console.error(`❌ ${provider}-${country} 发票模板文件处理失败:`, downloadError);
         continue;
@@ -4303,13 +4322,24 @@ router.post('/logistics-invoice/generate', async (req, res) => {
         currentRow++;
       });
 
-      // 更新工作表范围以包含新填写的数据
-      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
-      const maxRow = Math.max(currentRow - 1, range.e.r);
-      const maxCol = Math.max(2, range.e.c); // 至少包含A、B、C列
-      range.e.r = maxRow;
-      range.e.c = maxCol;
-      worksheet['!ref'] = XLSX.utils.encode_range(range);
+      // 更新工作表范围以包含新填写的数据，但保持原始模板的完整结构
+      const originalRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+      console.log(`📋 ${provider}-${country} 原始发票模板范围:`, worksheet['!ref']);
+      
+      // 计算填写数据后的最大行号
+      const maxDataRow = currentRow - 1;
+      
+      // 只扩展行范围，保持原始的列范围不变
+      const newRange = {
+        s: { c: originalRange.s.c, r: originalRange.s.r }, // 保持原始起始位置
+        e: { 
+          c: originalRange.e.c, // 保持原始列范围
+          r: Math.max(originalRange.e.r, maxDataRow) // 扩展行范围以包含新数据
+        }
+      };
+      
+      worksheet['!ref'] = XLSX.utils.encode_range(newRange);
+      console.log(`📋 ${provider}-${country} 更新后范围:`, worksheet['!ref']);
 
       // 生成新的文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -4318,8 +4348,11 @@ router.post('/logistics-invoice/generate', async (req, res) => {
       const outputFilename = `invoice-${providerCode}-${countryCode}-${timestamp}.xlsx`;
       const outputPath = path.join(outputDir, outputFilename);
 
-      // 保存填写后的发票文件
-      XLSX.writeFile(workbook, outputPath);
+      // 保存填写后的发票文件，保持所有格式信息
+      XLSX.writeFile(workbook, outputPath, {
+        cellStyles: true,     // 保持单元格样式
+        bookVBA: true         // 保持VBA代码
+      });
 
       generatedFiles.push({
         logisticsProvider: provider,
