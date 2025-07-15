@@ -77,6 +77,8 @@ const statusOptions = [
 // CPC测试情况选项
 const cpcStatusOptions = [
   '待测试',
+  '申请测试',
+  '样品已发',
   '测试中',
   '测试完成',
   '' // 空项，用于清空字段
@@ -104,6 +106,7 @@ const Purchase: React.FC = () => {
   const [filters, setFilters] = useState({
     status: '',
     cpc_status: '',
+    cpc_submit: '',
     seller_name: '',
     dateRange: null as [string, string] | null
   });
@@ -115,7 +118,9 @@ const Purchase: React.FC = () => {
   const [statistics, setStatistics] = useState({
     waitingPImage: 0,
     waitingUpload: 0,
-    waitingCpcTest: 0
+    cpcTestPending: 0,
+    cpcSampleSent: 0,
+    cpcPendingListing: 0
   });
   
   // 全库统计数据
@@ -269,6 +274,47 @@ const Purchase: React.FC = () => {
     const cardFilters = { ...filters, [type]: status };
     setFilters(cardFilters);
     applyFilters(cardFilters);
+  };
+
+  // 点击CPC待上架产品数卡片的特殊处理
+  const handleCpcPendingListingClick = async () => {
+    try {
+      // 构建特殊查询条件：测试完成且CPC提交情况为空
+      const conditions = {
+        cpc_status: '测试完成',
+        cpc_submit_empty: true // 特殊标识，后端会处理
+      };
+
+      // 调用后端API获取筛选数据
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-cpc-pending-listing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(conditions),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新筛选状态以反映当前筛选条件
+      setFilters({ 
+        ...filters, 
+        cpc_status: '测试完成',
+        cpc_submit: '' // 显示为空的提交情况
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条CPC待上架产品记录`);
+    } catch (e) {
+      console.error('筛选CPC待上架产品失败:', e);
+      message.error('筛选CPC待上架产品失败');
+    }
   };
 
   // 获取唯一的CPC状态选项（基于全库数据）
@@ -446,6 +492,63 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 批量标记CPC样品已发
+  const handleBatchMarkCpcSampleSent = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要标记的记录');
+      return;
+    }
+
+    try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-mark-cpc-sample-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      setSelectedRowKeys([]);
+      
+      // 更新本地数据中的CPC状态
+      setData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '样品已发' }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '样品已发' }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '样品已发' }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('标记CPC样品已发失败:', e);
+      message.error('标记CPC样品已发失败');
+    }
+  };
+
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
@@ -454,7 +557,7 @@ const Purchase: React.FC = () => {
     }
 
     // 确保类型匹配：将selectedRowKeys中的值转换为数字进行比较
-    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange ? filteredData : data;
+    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
     const selectedRecords = currentData.filter(record => 
       selectedRowKeys.some(key => Number(key) === record.id)
     );
@@ -887,7 +990,7 @@ const Purchase: React.FC = () => {
     <div style={{ padding: '20px' }}>
       {/* 统计卡片区域 */}
       <div style={{ marginBottom: '20px' }}>
-        <Row gutter={16}>
+        <Row gutter={16} style={{ marginBottom: '16px' }}>
           <Col span={6}>
             <Card 
               hoverable 
@@ -919,17 +1022,47 @@ const Purchase: React.FC = () => {
           <Col span={6}>
             <Card 
               hoverable 
-              onClick={() => handleCardClick('待测试', 'cpc_status')}
+              onClick={() => handleCardClick('申请测试', 'cpc_status')}
               style={{ cursor: 'pointer' }}
             >
               <Statistic
-                title="CPC待测试产品数"
-                value={statistics.waitingCpcTest}
+                title="CPC测试待审核数"
+                value={statistics.cpcTestPending}
                 prefix={<SearchOutlined />}
                 valueStyle={{ color: '#fa8c16' }}
               />
             </Card>
           </Col>
+          <Col span={6}>
+            <Card 
+              hoverable 
+              onClick={() => handleCardClick('样品已发', 'cpc_status')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Statistic
+                title="CPC已发样品数"
+                value={statistics.cpcSampleSent}
+                prefix={<SearchOutlined />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+                     <Col span={6}>
+             <Card 
+               hoverable 
+               onClick={handleCpcPendingListingClick}
+               style={{ cursor: 'pointer' }}
+             >
+               <Statistic
+                 title="CPC待上架产品数"
+                 value={statistics.cpcPendingListing}
+                 prefix={<SearchOutlined />}
+                 valueStyle={{ color: '#722ed1' }}
+               />
+             </Card>
+           </Col>
         </Row>
       </div>
 
@@ -995,7 +1128,7 @@ const Purchase: React.FC = () => {
                   setSearchType('sku');
                   setIsFuzzySearch(true);
                   // 清空筛选条件
-                  setFilters({ status: '', cpc_status: '', seller_name: '', dateRange: null });
+                  setFilters({ status: '', cpc_status: '', cpc_submit: '', seller_name: '', dateRange: null });
                   // 重新获取统计数据
                   fetchAllDataStatistics();
                 }}
@@ -1072,10 +1205,10 @@ const Purchase: React.FC = () => {
                     allowClear
                   />
                 </Col>
-                {(filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) && (
+                {(filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) && (
                   <Col span={24} style={{ textAlign: 'center', marginTop: '8px' }}>
                     <span style={{ color: '#1890ff' }}>
-                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
+                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
                     </span>
                   </Col>
                 )}
@@ -1116,6 +1249,16 @@ const Purchase: React.FC = () => {
                 disabled={selectedRowKeys.length === 0}
               >
                 发送CPC测试申请
+              </Button>
+
+              {/* 标记CPC样品已发 */}
+              <Button 
+                type="primary"
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                onClick={handleBatchMarkCpcSampleSent}
+                disabled={selectedRowKeys.length === 0}
+              >
+                标记CPC样品已发
               </Button>
 
               {/* 批量上传新品 */}
@@ -1169,7 +1312,7 @@ const Purchase: React.FC = () => {
       {/* 数据表格 */}
       <Table
         columns={columns}
-        dataSource={filteredData.length > 0 || filters.status || filters.cpc_status || filters.seller_name || filters.dateRange ? filteredData : data}
+        dataSource={filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data}
         rowKey="id"
         loading={loading}
         rowSelection={rowSelection}

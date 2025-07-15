@@ -143,6 +143,38 @@ router.post('/batch-send-cpc-test', async (req, res) => {
   }
 });
 
+// 批量标记CPC样品已发
+router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要标记的记录' });
+    }
+
+    // 更新选中记录的CPC测试状态为"样品已发"
+    await ProductWeblink.update(
+      { cpc_status: '样品已发' },
+      {
+        where: {
+          id: { [Op.in]: ids }
+        }
+      }
+    );
+
+    // 发送钉钉通知
+    try {
+      await sendCpcSampleSentNotification(ids.length);
+    } catch (notificationError) {
+      console.error('钉钉通知发送失败，但不影响数据更新:', notificationError.message);
+    }
+
+    res.json({ message: `成功标记 ${ids.length} 条CPC样品已发` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
 // 批量删除
 router.post('/batch-delete', async (req, res) => {
   try {
@@ -296,6 +328,65 @@ async function sendCpcTestNotification(cpcTestCount) {
     }
   } catch (error) {
     console.error('发送CPC测试申请钉钉通知时出错:', error.message);
+  }
+}
+
+// CPC样品已发钉钉通知函数
+async function sendCpcSampleSentNotification(sampleCount) {
+  try {
+    const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
+    
+    if (!DINGTALK_WEBHOOK) {
+      console.log('钉钉Webhook未配置，跳过通知');
+      return;
+    }
+
+    // 如果有SECRET_KEY，计算签名
+    let webhookUrl = DINGTALK_WEBHOOK;
+    if (SECRET_KEY) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${SECRET_KEY}`;
+      const sign = crypto.createHmac('sha256', SECRET_KEY)
+                        .update(stringToSign)
+                        .digest('base64');
+      
+      // 添加时间戳和签名参数
+      const urlObj = new URL(DINGTALK_WEBHOOK);
+      urlObj.searchParams.append('timestamp', timestamp.toString());
+      urlObj.searchParams.append('sign', encodeURIComponent(sign));
+      webhookUrl = urlObj.toString();
+    }
+
+    // 使用配置的手机号，如果没有配置则使用默认值
+    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+
+    const message = {
+      msgtype: 'text',
+      text: {
+        content: `已标记${sampleCount}款产品CPC样品已发，请及时跟进测试进度！@${mobileNumber}`
+      },
+      at: {
+        atMobiles: [mobileNumber],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(webhookUrl, message, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    if (response.data.errcode === 0) {
+      console.log('CPC样品已发钉钉通知发送成功');
+    } else {
+      console.error('CPC样品已发钉钉通知发送失败:', response.data);
+    }
+  } catch (error) {
+    console.error('发送CPC样品已发钉钉通知时出错:', error.message);
   }
 }
 
@@ -503,7 +594,7 @@ router.post('/latest-sku', async (req, res) => {
 // 筛选数据接口
 router.post('/filter', async (req, res) => {
   try {
-    const { status, cpc_status, seller_name, dateRange } = req.body;
+    const { status, cpc_status, cpc_submit, seller_name, dateRange } = req.body;
     
     // 构建查询条件
     const whereConditions = {};
@@ -512,6 +603,14 @@ router.post('/filter', async (req, res) => {
     }
     if (cpc_status) {
       whereConditions.cpc_status = cpc_status;
+    }
+    if (cpc_submit !== undefined) {
+      if (cpc_submit === '') {
+        // 筛选空的CPC提交情况
+        whereConditions.cpc_submit = { [Op.or]: [null, ''] };
+      } else {
+        whereConditions.cpc_submit = cpc_submit;
+      }
     }
     if (seller_name) {
       whereConditions.seller_name = { [Op.like]: `%${seller_name}%` };
@@ -554,6 +653,44 @@ router.post('/filter', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: '筛选失败' });
+  }
+});
+
+// CPC待上架产品筛选接口（测试完成且CPC提交情况为空）
+router.post('/filter-cpc-pending-listing', async (req, res) => {
+  try {
+    const result = await ProductWeblink.findAll({
+      where: {
+        cpc_status: '测试完成',
+        [Op.or]: [
+          { cpc_submit: null },
+          { cpc_submit: '' }
+        ]
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name'
+      ]
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '筛选CPC待上架产品失败' });
   }
 });
 
@@ -617,16 +754,34 @@ router.get('/statistics', async (req, res) => {
       where: { status: '待上传' }
     });
 
-    // 计算CPC待测试的产品数量
-    const waitingCpcTestCount = await ProductWeblink.count({
-      where: { cpc_status: '待测试' }
+    // 计算CPC测试待审核的产品数量（申请测试状态）
+    const cpcTestPendingCount = await ProductWeblink.count({
+      where: { cpc_status: '申请测试' }
+    });
+
+    // 计算CPC已发样品数量
+    const cpcSampleSentCount = await ProductWeblink.count({
+      where: { cpc_status: '样品已发' }
+    });
+
+    // 计算CPC待上架产品数量（测试完成且CPC提交情况为空）
+    const cpcPendingListingCount = await ProductWeblink.count({
+      where: {
+        cpc_status: '测试完成',
+        [Op.or]: [
+          { cpc_submit: null },
+          { cpc_submit: '' }
+        ]
+      }
     });
 
     res.json({
       statistics: {
         waitingPImage: waitingPImageCount,
         waitingUpload: waitingUploadCount,
-        waitingCpcTest: waitingCpcTestCount
+        cpcTestPending: cpcTestPendingCount,
+        cpcSampleSent: cpcSampleSentCount,
+        cpcPendingListing: cpcPendingListingCount
       },
       statusStats: statusStats.map(item => ({
         value: item.status,
