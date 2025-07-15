@@ -2220,19 +2220,43 @@ router.post('/amazon-template/generate', async (req, res) => {
         continue;
       }
 
-      // 填写数据到模板
+      // 填写数据到模板 - 保持原始格式
       let currentRow = config.startRow;
       Object.entries(amazonSkuSummary).forEach(([amzSku, quantity]) => {
-        // 设置Merchant SKU列
+        // 设置Merchant SKU列 - 直接设置单元格值以保持格式
         const skuCell = config.merchantSkuColumn + currentRow;
-        XLSX.utils.sheet_add_aoa(worksheet, [[amzSku]], { origin: skuCell });
+        if (!worksheet[skuCell]) {
+          worksheet[skuCell] = {};
+        }
+        worksheet[skuCell].v = amzSku;
+        worksheet[skuCell].t = 's'; // 标记为字符串类型
 
-        // 设置Quantity列
+        // 设置Quantity列 - 直接设置单元格值以保持格式
         const quantityCell = config.quantityColumn + currentRow;
-        XLSX.utils.sheet_add_aoa(worksheet, [[quantity]], { origin: quantityCell });
+        if (!worksheet[quantityCell]) {
+          worksheet[quantityCell] = {};
+        }
+        worksheet[quantityCell].v = quantity;
+        worksheet[quantityCell].t = 'n'; // 标记为数字类型
 
         currentRow++;
       });
+
+      // 更新工作表范围以包含新填写的数据
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+      
+      // 计算所需的列范围
+      const skuColIndex = XLSX.utils.decode_col(config.merchantSkuColumn);
+      const quantityColIndex = XLSX.utils.decode_col(config.quantityColumn);
+      const maxCol = Math.max(skuColIndex, quantityColIndex, range.e.c);
+      
+      // 计算所需的行范围
+      const maxRow = Math.max(currentRow - 1, range.e.r);
+      
+      // 更新范围
+      range.e.c = maxCol;
+      range.e.r = maxRow;
+      worksheet['!ref'] = XLSX.utils.encode_range(range);
 
       // 生成新的文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -4246,21 +4270,46 @@ router.post('/logistics-invoice/generate', async (req, res) => {
         continue;
       }
 
-      // 这里可以根据具体的发票模板格式来填写数据
+      // 这里可以根据具体的发票模板格式来填写数据 - 保持原始格式
       // 目前先简单地在第一列填写商品信息，第二列填写数量
       let currentRow = 2; // 假设第一行是表头
       data.forEach(item => {
-        // 填写商品SKU
-        XLSX.utils.sheet_add_aoa(worksheet, [[item.amz_sku || item.sku]], { origin: `A${currentRow}` });
-        // 填写数量
-        XLSX.utils.sheet_add_aoa(worksheet, [[item.quantity]], { origin: `B${currentRow}` });
-        // 填写箱号（如果有）
+        // 填写商品SKU - 直接设置单元格值以保持格式
+        const skuCell = `A${currentRow}`;
+        if (!worksheet[skuCell]) {
+          worksheet[skuCell] = {};
+        }
+        worksheet[skuCell].v = item.amz_sku || item.sku;
+        worksheet[skuCell].t = 's'; // 标记为字符串类型
+
+        // 填写数量 - 直接设置单元格值以保持格式
+        const quantityCell = `B${currentRow}`;
+        if (!worksheet[quantityCell]) {
+          worksheet[quantityCell] = {};
+        }
+        worksheet[quantityCell].v = item.quantity;
+        worksheet[quantityCell].t = 'n'; // 标记为数字类型
+
+        // 填写箱号（如果有） - 直接设置单元格值以保持格式
         if (item.box_num) {
-          XLSX.utils.sheet_add_aoa(worksheet, [[item.box_num]], { origin: `C${currentRow}` });
+          const boxCell = `C${currentRow}`;
+          if (!worksheet[boxCell]) {
+            worksheet[boxCell] = {};
+          }
+          worksheet[boxCell].v = item.box_num;
+          worksheet[boxCell].t = 's'; // 标记为字符串类型
         }
         
         currentRow++;
       });
+
+      // 更新工作表范围以包含新填写的数据
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+      const maxRow = Math.max(currentRow - 1, range.e.r);
+      const maxCol = Math.max(2, range.e.c); // 至少包含A、B、C列
+      range.e.r = maxRow;
+      range.e.c = maxCol;
+      worksheet['!ref'] = XLSX.utils.encode_range(range);
 
       // 生成新的文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
