@@ -17,11 +17,13 @@ import {
   Progress,
   Descriptions,
   Alert,
-  Tooltip
+  Tooltip,
+  Popconfirm
 } from 'antd';
 import { 
   EyeOutlined,
   EditOutlined,
+  DeleteOutlined,
   ShopOutlined,
   HistoryOutlined,
   BarChartOutlined,
@@ -117,6 +119,11 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
   const [editForm] = Form.useForm();
+  
+  // 发货详情Modal相关状态
+  const [shipmentDetailsModalVisible, setShipmentDetailsModalVisible] = useState(false);
+  const [shipmentDetailsLoading, setShipmentDetailsLoading] = useState(false);
+  const [shipmentDetails, setShipmentDetails] = useState<any>(null);
 
   // 分页状态
   const [pagination, setPagination] = useState({
@@ -192,6 +199,32 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       message.error('获取需求单详情失败');
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  // 获取发货详情
+  const fetchShipmentDetails = async (shipmentId: number) => {
+    setShipmentDetailsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/shipment-history/${shipmentId}/details`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setShipmentDetails(result.data);
+        setShipmentDetailsModalVisible(true);
+      } else {
+        message.error(result.message || '获取发货详情失败');
+      }
+    } catch (error) {
+      console.error('获取发货详情失败:', error);
+      message.error('获取发货详情失败');
+    } finally {
+      setShipmentDetailsLoading(false);
     }
   };
 
@@ -478,21 +511,67 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     {
       title: '操作',
       key: 'actions',
-      width: 80,
+      width: 150,
       align: 'center',
       render: (_, record) => (
-        <Tooltip title="修改数量">
-          <Button 
-            type="link" 
-            size="small" 
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingItem(record);
-              editForm.setFieldsValue({ quantity: record.ori_quantity });
-              setEditModalVisible(true);
-            }}
-          />
-        </Tooltip>
+        <Space>
+          <Tooltip title="修改数量">
+            <Button 
+              type="link" 
+              size="small" 
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditingItem(record);
+                editForm.setFieldsValue({ quantity: record.ori_quantity });
+                setEditModalVisible(true);
+              }}
+            />
+          </Tooltip>
+                       <Popconfirm
+               title="确定删除此SKU吗？"
+               description={record.shipped_quantity > 0 ? `该SKU已发货 ${record.shipped_quantity} 件，无法删除` : "删除后无法恢复，确认删除吗？"}
+               disabled={record.shipped_quantity > 0}
+               onConfirm={async () => {
+                 try {
+                   const response = await fetch(
+                     `${API_BASE_URL}/api/shipping/needs/${record.record_num}`,
+                     {
+                       method: 'DELETE',
+                       headers: {
+                         'Content-Type': 'application/json',
+                         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                       },
+                     }
+                   );
+                   const result = await response.json();
+                   if (result.code === 0) {
+                     message.success('SKU删除成功');
+                     if (selectedOrder) {
+                       await fetchOrderDetails(selectedOrder);
+                     }
+                     await fetchOrders(pagination.current, pagination.pageSize);
+                   } else {
+                     message.error(result.message || 'SKU删除失败');
+                   }
+                 } catch (error) {
+                   console.error('删除SKU失败:', error);
+                   message.error('SKU删除失败');
+                 }
+               }}
+               okText="确定"
+               cancelText="取消"
+             >
+            <Tooltip title="删除SKU">
+                             <Button 
+                 type="link" 
+                 size="small" 
+                 icon={<DeleteOutlined />}
+                 danger
+                 disabled={record.shipped_quantity > 0}
+               />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       )
     }
   ];
@@ -582,7 +661,14 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                           key={history.relation_id}
                           message={
                             <Space>
-                              <Text strong>{history.shipment_info.shipment_number}</Text>
+                              <Button 
+                                type="link" 
+                                style={{ padding: 0, height: 'auto', fontSize: 'inherit', fontWeight: 'bold' }}
+                                onClick={() => fetchShipmentDetails(history.shipment_id)}
+                                loading={shipmentDetailsLoading}
+                              >
+                                {history.shipment_info.shipment_number}
+                              </Button>
                               <Tag color={history.completion_status === '全部完成' ? 'green' : 'orange'}>
                                 {history.completion_status}
                               </Tag>
@@ -688,6 +774,135 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               />
             </Form.Item>
           </Form>
+        )}
+      </Modal>
+
+      {/* 发货详情模态框 */}
+      <Modal
+        title="发货详情"
+        open={shipmentDetailsModalVisible}
+        onCancel={() => {
+          setShipmentDetailsModalVisible(false);
+          setShipmentDetails(null);
+        }}
+        width={1000}
+        footer={null}
+        loading={shipmentDetailsLoading}
+      >
+        {shipmentDetails && (
+          <div>
+            {/* 发货记录基本信息 */}
+            <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="发货单号">
+                <Text strong>{shipmentDetails.shipment_record.shipment_number}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="操作员">
+                {shipmentDetails.shipment_record.operator}
+              </Descriptions.Item>
+              <Descriptions.Item label="发货时间">
+                {new Date(shipmentDetails.shipment_record.created_at).toLocaleString('zh-CN')}
+              </Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Tag color="green">{shipmentDetails.shipment_record.status}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="总箱数">
+                <Text strong>{shipmentDetails.shipment_record.total_boxes}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="总件数">
+                <Text strong>{shipmentDetails.shipment_record.total_items}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="运输方式" span={2}>
+                {shipmentDetails.shipment_record.shipping_method || '-'}
+              </Descriptions.Item>
+              {shipmentDetails.shipment_record.remark && (
+                <Descriptions.Item label="备注" span={2}>
+                  {shipmentDetails.shipment_record.remark}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+
+            {/* 发货统计 */}
+            <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col span={6}>
+                <Statistic title="需求单数" value={shipmentDetails.summary.total_need_orders} />
+              </Col>
+              <Col span={6}>
+                <Statistic title="SKU数量" value={shipmentDetails.summary.total_sku_count} />
+              </Col>
+              <Col span={6}>
+                <Statistic 
+                  title="总需求数量" 
+                  value={shipmentDetails.summary.total_requested}
+                  valueStyle={{ color: '#1890ff' }}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic 
+                  title="实际发货" 
+                  value={shipmentDetails.summary.total_shipped}
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Col>
+            </Row>
+
+            <Progress 
+              percent={shipmentDetails.summary.overall_completion_rate} 
+              status={shipmentDetails.summary.overall_completion_rate === 100 ? 'success' : 'active'}
+              style={{ marginBottom: 16 }}
+            />
+
+            {/* 发货明细表格 */}
+            <Title level={5}>发货明细</Title>
+            <Table
+              dataSource={shipmentDetails.shipment_items}
+              columns={[
+                { title: '需求单号', dataIndex: 'need_num', key: 'need_num', width: 120 },
+                { title: '本地SKU', dataIndex: 'local_sku', key: 'local_sku', width: 120 },
+                { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
+                { title: '国家', dataIndex: 'country', key: 'country', width: 80, align: 'center' },
+                { title: '平台', dataIndex: 'marketplace', key: 'marketplace', width: 80 },
+                { 
+                  title: '需求数量', 
+                  dataIndex: 'requested_quantity', 
+                  key: 'requested_quantity', 
+                  width: 90, 
+                  align: 'center' 
+                },
+                { 
+                  title: '发货数量', 
+                  dataIndex: 'shipped_quantity', 
+                  key: 'shipped_quantity', 
+                  width: 90, 
+                  align: 'center',
+                  render: (value: number, record: any) => (
+                    <Text type={value >= record.requested_quantity ? 'success' : 'warning'}>
+                      {value}
+                    </Text>
+                  )
+                },
+                { 
+                  title: '整箱数', 
+                  dataIndex: 'whole_boxes', 
+                  key: 'whole_boxes', 
+                  width: 80, 
+                  align: 'center',
+                  render: (value: number) => value || '-'
+                },
+                { 
+                  title: '混合箱数量', 
+                  dataIndex: 'mixed_box_quantity', 
+                  key: 'mixed_box_quantity', 
+                  width: 100, 
+                  align: 'center',
+                  render: (value: number) => value || '-'
+                }
+              ]}
+              rowKey={(record, index) => `${record.need_num}_${record.local_sku}_${index}`}
+              size="small"
+              scroll={{ y: 400 }}
+              pagination={false}
+            />
+          </div>
         )}
       </Modal>
     </div>
