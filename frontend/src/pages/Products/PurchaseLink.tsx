@@ -122,13 +122,23 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
+      console.log('🔍 获取到的统计数据:', result);
+      
       setStatistics(result.statistics);
       setAllDataStats({
-        statusStats: result.statusStats,
-        cpcStatusStats: result.cpcStatusStats,
+        statusStats: result.statusStats || [],
+        cpcStatusStats: result.cpcStatusStats || [],
         cpcSubmitStats: result.cpcSubmitStats || [],
-        supplierStats: result.supplierStats
+        supplierStats: result.supplierStats || []
       });
+      
+      // 添加调试日志
+      console.log('📊 CPC提交情况统计数据:', result.cpcSubmitStats);
+      if (result.cpcSubmitStats && result.cpcSubmitStats.length > 0) {
+        console.log('✅ CPC提交情况数据加载成功，共', result.cpcSubmitStats.length, '种状态');
+      } else {
+        console.warn('⚠️  CPC提交情况数据为空');
+      }
     } catch (e) {
       console.error('获取统计数据失败:', e);
     }
@@ -203,6 +213,9 @@ const Purchase: React.FC = () => {
       }
       if (currentFilters.cpc_status) {
         conditions.cpc_status = currentFilters.cpc_status;
+      }
+      if (currentFilters.cpc_submit !== undefined && currentFilters.cpc_submit !== '') {
+        conditions.cpc_submit = currentFilters.cpc_submit;
       }
       if (currentFilters.seller_name) {
         conditions.seller_name = currentFilters.seller_name;
@@ -309,7 +322,12 @@ const Purchase: React.FC = () => {
 
   // 获取唯一的CPC提交情况选项（基于全库数据）
   const getUniqueCpcSubmits = () => {
+    if (!allDataStats.cpcSubmitStats || !Array.isArray(allDataStats.cpcSubmitStats)) {
+      console.warn('CPC提交情况统计数据为空或格式错误:', allDataStats.cpcSubmitStats);
+      return [];
+    }
     return allDataStats.cpcSubmitStats
+      .filter(item => item && item.value && item.count > 0) // 过滤无效数据
       .sort((a: { value: string; count: number }, b: { value: string; count: number }) => a.value.localeCompare(b.value));
   };
 
@@ -1180,14 +1198,25 @@ const Purchase: React.FC = () => {
                     style={{ width: '100%' }}
                     placeholder="选择CPC提交情况"
                     value={filters.cpc_submit}
-                    onChange={(value) => handleFilterChange('cpc_submit', value)}
+                    onChange={(value) => {
+                      console.log('🔧 CPC提交情况筛选值改变:', value);
+                      handleFilterChange('cpc_submit', value);
+                    }}
                     allowClear
+                    loading={!allDataStats.cpcSubmitStats || allDataStats.cpcSubmitStats.length === 0}
+                    notFoundContent={allDataStats.cpcSubmitStats?.length === 0 ? "暂无CPC提交情况数据" : "暂无数据"}
                   >
-                    {getUniqueCpcSubmits().map(submitItem => (
-                      <Option key={submitItem.value} value={submitItem.value}>
-                        {submitItem.value} ({submitItem.count})
+                    {getUniqueCpcSubmits().length > 0 ? (
+                      getUniqueCpcSubmits().map(submitItem => (
+                        <Option key={submitItem.value} value={submitItem.value}>
+                          {submitItem.value} ({submitItem.count})
+                        </Option>
+                      ))
+                    ) : (
+                      <Option disabled value="no-data">
+                        暂无CPC提交情况数据
                       </Option>
-                    ))}
+                    )}
                   </Select>
                 </Col>
                 <Col span={4}>
@@ -1398,11 +1427,17 @@ const Purchase: React.FC = () => {
             ) : editingCell?.field === 'cpc_submit' ? (
               <Select placeholder="请选择CPC提交情况">
                 <Option key="" value="">清空</Option>
-                {getUniqueCpcSubmits().map(submitItem => (
-                  <Option key={submitItem.value} value={submitItem.value}>
-                    {submitItem.value} ({submitItem.count})
+                {getUniqueCpcSubmits().length > 0 ? (
+                  getUniqueCpcSubmits().map(submitItem => (
+                    <Option key={submitItem.value} value={submitItem.value}>
+                      {submitItem.value} ({submitItem.count})
+                    </Option>
+                  ))
+                ) : (
+                  <Option disabled value="no-data">
+                    暂无CPC提交情况数据
                   </Option>
-                ))}
+                )}
               </Select>
             ) : editingCell?.field === 'notice' ? (
               <TextArea rows={3} placeholder="请输入备注" />

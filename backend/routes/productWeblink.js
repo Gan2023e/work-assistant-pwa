@@ -742,8 +742,15 @@ router.get('/statistics', async (req, res) => {
         }
       },
       group: ['cpc_submit'],
+      having: require('sequelize').where(
+        require('sequelize').fn('COUNT', require('sequelize').col('id')), 
+        '>', 
+        0
+      ),
       raw: true
     });
+
+    console.log('📊 CPC提交情况统计查询结果:', cpcSubmitStats);
 
     // 获取供应商统计
     const supplierStats = await ProductWeblink.findAll({
@@ -813,10 +820,13 @@ router.get('/statistics', async (req, res) => {
         value: item.cpc_status,
         count: parseInt(item.count)
       })),
-      cpcSubmitStats: cpcSubmitStats.map(item => ({
-        value: item.cpc_submit,
-        count: parseInt(item.count)
-      })),
+      cpcSubmitStats: cpcSubmitStats
+        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // 过滤空值
+        .map(item => ({
+          value: item.cpc_submit,
+          count: parseInt(item.count) || 0
+        }))
+        .filter(item => item.count > 0), // 确保count大于0
       supplierStats: supplierStats.map(item => ({
         value: item.seller_name,
         count: parseInt(item.count)
