@@ -591,7 +591,18 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-    // 删除模板配置
+    // 查看模板文件
+  const handleViewTemplate = (country: string) => {
+    try {
+      const url = `${API_BASE_URL}/api/shipping/amazon-template/download-original/${encodeURIComponent(country)}`;
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('打开模板文件失败:', error);
+      message.error('无法打开模板文件');
+    }
+  };
+
+  // 删除模板配置
   const deleteTemplateConfig = async (country?: string) => {
     try {
       const url = country 
@@ -2756,6 +2767,13 @@ const ShippingPage: React.FC = () => {
                       </Col>
                       <Col span={4} style={{ textAlign: 'right' }}>
                         <Space direction="vertical" size="small">
+                          <Button 
+                            size="small"
+                            type="default"
+                            onClick={() => handleViewTemplate(country)}
+                          >
+                            查看
+                          </Button>
                           <Button 
                             size="small"
                             onClick={() => setSelectedTemplateCountry(country)}
