@@ -198,6 +198,33 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     
+    // 处理合并单元格 - 获取合并单元格信息并填充空单元格
+    if (sheet['!merges']) {
+      sheet['!merges'].forEach(merge => {
+        const startRow = merge.s.r;
+        const endRow = merge.e.r;
+        const startCol = merge.s.c;
+        const endCol = merge.e.c;
+        
+        // 获取合并单元格的值（通常在左上角单元格）
+        const startCellAddress = XLSX.utils.encode_cell({ c: startCol, r: startRow });
+        const mergedValue = sheet[startCellAddress] ? sheet[startCellAddress].v : '';
+        
+        // 将值填充到合并区域内的所有单元格
+        for (let row = startRow; row <= endRow; row++) {
+          for (let col = startCol; col <= endCol; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ c: col, r: row });
+            if (!sheet[cellAddress]) {
+              sheet[cellAddress] = { 
+                t: typeof mergedValue === 'string' ? 's' : 'n',
+                v: mergedValue 
+              };
+            }
+          }
+        }
+      });
+    }
+    
     // 将Excel数据转换为JSON
     const rawData = XLSX.utils.sheet_to_json(sheet);
     
@@ -248,21 +275,48 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
           continue;
         }
 
-        // 解析日期
+        // 解析日期 - 优化处理，支持提取时间中的日期部分
         let orderDate;
         try {
-          // 尝试解析不同格式的日期
-          if (orderDateStr.includes('/')) {
-            const parts = orderDateStr.split('/');
-            if (parts.length === 3) {
-              // 假设格式是 MM/DD/YYYY 或 DD/MM/YYYY
-              orderDate = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`);
+          // 先提取日期部分，去除时间部分
+          let dateOnlyStr = orderDateStr;
+          
+          // 如果包含时间（有空格），只取空格前的部分
+          if (dateOnlyStr.includes(' ')) {
+            dateOnlyStr = dateOnlyStr.split(' ')[0].trim();
+          }
+          
+          // 如果包含时间（有冒号），分割并取日期部分
+          if (dateOnlyStr.includes(':')) {
+            // 查找最后一个数字后跟冒号的位置，从该位置截断
+            const match = dateOnlyStr.match(/^(.*?)[\s]+\d{1,2}:/);
+            if (match) {
+              dateOnlyStr = match[1].trim();
             }
-          } else if (orderDateStr.includes('-')) {
-            orderDate = new Date(orderDateStr);
+          }
+          
+          // 尝试解析不同格式的日期
+          if (dateOnlyStr.includes('/')) {
+            const parts = dateOnlyStr.split('/');
+            if (parts.length === 3) {
+              // 处理 YYYY/M/D 或 YYYY/MM/DD 格式
+              const year = parseInt(parts[0]);
+              const month = parseInt(parts[1]);
+              const day = parseInt(parts[2]);
+              
+              if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                orderDate = new Date(year, month - 1, day); // 月份从0开始
+              } else {
+                throw new Error('日期数值超出有效范围');
+              }
+            } else {
+              throw new Error('日期格式不正确');
+            }
+          } else if (dateOnlyStr.includes('-')) {
+            orderDate = new Date(dateOnlyStr);
           } else {
             // 尝试直接解析
-            orderDate = new Date(orderDateStr);
+            orderDate = new Date(dateOnlyStr);
           }
           
           if (isNaN(orderDate.getTime())) {
@@ -271,7 +325,7 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
         } catch (error) {
           errorData.push({
             row: i + 1,
-            reason: '日期格式错误',
+            reason: `日期格式错误: ${error.message}`,
             data: row
           });
           continue;

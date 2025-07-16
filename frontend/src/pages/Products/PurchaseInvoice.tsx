@@ -2055,8 +2055,15 @@ const PurchaseInvoice: React.FC = () => {
                 <li><strong>买家公司名</strong>：必填</li>
                 <li><strong>卖家公司名</strong>：必填</li>
                 <li><strong>实付款(元)</strong>：必填，数字格式</li>
-                <li><strong>订单付款时间</strong>：必填，支持多种日期格式</li>
+                <li><strong>订单付款时间</strong>：必填，支持多种日期时间格式（如：2025/4/2、2025/4/2 09:27:26）</li>
               </ul>
+              <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f6f8fa', borderRadius: '4px' }}>
+                <p style={{ margin: 0, fontWeight: 'bold', color: '#0366d6' }}>✨ 新功能支持：</p>
+                <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                  <li>✅ 自动处理Excel合并单元格</li>
+                  <li>✅ 自动提取日期时间中的日期部分（忽略具体时间）</li>
+                </ul>
+              </div>
               <p>注意：列名必须完全匹配上述5个名称，否则无法识别。</p>
             </div>
           }
