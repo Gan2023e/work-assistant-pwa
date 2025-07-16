@@ -487,7 +487,7 @@ const PurchaseInvoice: React.FC = () => {
         });
         
         const newFile: UploadFile = {
-          uid: result.data.objectName,
+          uid: file.uid || `rc-upload-${Date.now()}-${Math.random()}`,
           name: result.data.filename,
           status: 'done',
           url: result.data.url,
@@ -1853,7 +1853,19 @@ const PurchaseInvoice: React.FC = () => {
                           accept="image/*"
                           beforeUpload={handleScreenshotUpload}
                           fileList={uploadedScreenshots}
-                          onChange={({ fileList }) => setUploadedScreenshots(fileList)}
+                          onChange={({ fileList }) => {
+                            console.log('📋 Upload组件onChange触发，fileList:', fileList);
+                            console.log('🔍 当前uploadedScreenshots:', uploadedScreenshots);
+                            
+                            // 如果fileList为空或者长度减少，说明是删除操作
+                            if (fileList.length < uploadedScreenshots.length) {
+                              console.log('🗑️ 检测到文件删除，直接更新状态');
+                              setUploadedScreenshots(fileList);
+                            } else {
+                              // 如果是添加操作，保留现有状态，避免覆盖URL
+                              console.log('➕ 检测到文件添加，保持现有状态不变（URL由beforeUpload处理）');
+                            }
+                          }}
                           multiple
                           listType="picture-card"
                           showUploadList={{
@@ -1863,7 +1875,7 @@ const PurchaseInvoice: React.FC = () => {
                           }}
                           onPreview={handlePreviewUploadedScreenshot}
                           onRemove={(file) => {
-                            console.log('删除截图文件:', file);
+                            console.log('🗑️ 删除截图文件:', file);
                             // 从列表中移除该文件
                             setUploadedScreenshots(prev => 
                               prev.filter(item => item.uid !== file.uid)
