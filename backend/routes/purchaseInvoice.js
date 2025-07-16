@@ -1898,9 +1898,9 @@ router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
 });
 
 // 截图代理路由 - 解决CORS和权限问题
-router.get('/screenshot-proxy/:objectName(*)', async (req, res) => {
+router.get('/screenshot-proxy/*', async (req, res) => {
   try {
-    const objectName = decodeURIComponent(req.params.objectName);
+    const objectName = decodeURIComponent(req.params[0]); // 通配符匹配的路径，需要解码
     console.log('🔄 代理请求截图:', objectName);
     
     // 检查OSS配置
