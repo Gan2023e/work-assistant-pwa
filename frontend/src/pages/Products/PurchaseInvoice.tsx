@@ -290,14 +290,23 @@ const PurchaseInvoice: React.FC = () => {
   const fetchPurchaseOrders = useCallback(async (page = 1) => {
     setLoading(true);
     try {
+      // 处理多行输入，将每行作为一个搜索条件
+      const processMultiLineInput = (input: string) => {
+        if (!input || input.trim() === '') return '';
+        return input.split('\n')
+          .map(line => line.trim())
+          .filter(line => line !== '')
+          .join(',');
+      };
+
       const queryParams: Record<string, string> = {
         page: page.toString(),
         limit: pagination.pageSize.toString(),
         seller_name: filters.seller_name,
         invoice_status: filters.invoice_status,
         payment_account: filters.payment_account,
-        order_number: filters.order_number,
-        invoice_number: filters.invoice_number,
+        order_number: processMultiLineInput(filters.order_number),
+        invoice_number: processMultiLineInput(filters.invoice_number),
         ...(filters.date_range ? {
           start_date: filters.date_range[0],
           end_date: filters.date_range[1]
@@ -321,6 +330,8 @@ const PurchaseInvoice: React.FC = () => {
           current: result.data.page,
           total: result.data.total
         }));
+        // 数据刷新时清空选中状态
+        setSelectedRowKeys([]);
       } else {
         message.error(result.message);
       }
@@ -625,6 +636,7 @@ const PurchaseInvoice: React.FC = () => {
       date_range: null
     });
     setSelectedCard(null);
+    setSelectedRowKeys([]); // 重置已勾选的记录
     setPagination(prev => ({ ...prev, current: 1 }));
     // 重置后重新获取数据
     setTimeout(() => fetchPurchaseOrders(1), 0);
@@ -1323,10 +1335,11 @@ const PurchaseInvoice: React.FC = () => {
           <Col span={4}>
             <div>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>订单编号</label>
-              <Input
-                placeholder="请输入订单编号"
+              <TextArea
+                placeholder="请输入订单编号，每行一个"
                 value={filters.order_number}
                 onChange={(e) => setFilters(prev => ({ ...prev, order_number: e.target.value }))}
+                autoSize={{ minRows: 2, maxRows: 8 }}
                 allowClear
               />
             </div>
@@ -1334,10 +1347,11 @@ const PurchaseInvoice: React.FC = () => {
           <Col span={4}>
             <div>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>发票号</label>
-              <Input
-                placeholder="请输入发票号"
+              <TextArea
+                placeholder="请输入发票号，每行一个"
                 value={filters.invoice_number}
                 onChange={(e) => setFilters(prev => ({ ...prev, invoice_number: e.target.value }))}
+                autoSize={{ minRows: 2, maxRows: 8 }}
                 allowClear
               />
             </div>
@@ -1508,7 +1522,7 @@ const PurchaseInvoice: React.FC = () => {
           rowSelection={{
             selectedRowKeys,
             onChange: setSelectedRowKeys,
-            preserveSelectedRowKeys: true,
+            preserveSelectedRowKeys: false, // 不保留跨页选中状态
             getCheckboxProps: (record) => ({
               disabled: record.invoice_status === '已开票', // 已开票的订单不允许选择
             })
