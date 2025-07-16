@@ -2026,15 +2026,16 @@ router.post('/amazon-template/upload', (req, res, next) => {
       });
     }
 
-    // 验证Excel文件并获取sheet信息
+    // 验证Excel文件并获取sheet信息 - 使用ExcelJS保持完整格式
     let workbook, sheetNames;
     try {
-      console.log('📖 正在读取Excel文件Buffer...');
-      workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      sheetNames = workbook.SheetNames;
-      console.log('📊 Excel文件读取成功，Sheet页:', sheetNames);
-    } catch (xlsxError) {
-      console.error('❌ Excel文件读取失败:', xlsxError);
+      console.log('📖 正在使用ExcelJS读取Excel文件Buffer...');
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      sheetNames = workbook.worksheets.map(ws => ws.name);
+      console.log('📊 ExcelJS文件读取成功，Sheet页:', sheetNames);
+    } catch (excelError) {
+      console.error('❌ ExcelJS文件读取失败:', excelError);
       return res.status(400).json({
         success: false,
         message: '无法读取Excel文件，请确保文件格式正确且未损坏'
@@ -4062,15 +4063,16 @@ router.post('/logistics-invoice/upload', (req, res, next) => {
       });
     }
 
-    // 验证Excel文件并获取sheet信息
+    // 验证Excel文件并获取sheet信息 - 使用ExcelJS保持完整格式
     let workbook, sheetNames;
     try {
-      console.log('📖 正在读取Excel文件Buffer...');
-      workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      sheetNames = workbook.SheetNames;
-      console.log('📊 Excel文件读取成功，Sheet页:', sheetNames);
-    } catch (xlsxError) {
-      console.error('❌ Excel文件读取失败:', xlsxError);
+      console.log('📖 正在使用ExcelJS读取Excel文件Buffer...');
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      sheetNames = workbook.worksheets.map(ws => ws.name);
+      console.log('📊 ExcelJS文件读取成功，Sheet页:', sheetNames);
+    } catch (excelError) {
+      console.error('❌ ExcelJS文件读取失败:', excelError);
       return res.status(400).json({
         success: false,
         message: '无法读取Excel文件，请确保文件格式正确且未损坏'
@@ -4260,18 +4262,10 @@ router.post('/logistics-invoice/generate', async (req, res) => {
           throw new Error('下载失败');
         }
         
-        // 读取发票模板文件，使用最大兼容性模式保持所有格式信息
-        workbook = XLSX.read(downloadResult.content, { 
-          type: 'buffer',
-          cellStyles: true,     // 保持单元格样式
-          cellDates: true,      // 保持日期格式
-          bookVBA: true,        // 保持VBA代码
-          cellNF: true,         // 保持数字格式
-          bookFiles: true,      // 保持所有文件信息
-          bookProps: true,      // 保持文档属性
-          raw: false            // 不进行数据转换，保持原始格式
-        });
-        worksheet = workbook.Sheets[config.sheetName];
+        // 使用ExcelJS读取发票模板文件，完美保持所有格式信息
+        workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(downloadResult.content);
+        worksheet = workbook.getWorksheet(config.sheetName);
         
         if (!worksheet) {
           throw new Error(`Sheet页 "${config.sheetName}" 不存在`);
@@ -4290,70 +4284,30 @@ router.post('/logistics-invoice/generate', async (req, res) => {
       console.log(`📝 开始填写发票数据到模板副本，起始行: ${currentRow}`);
       
       data.forEach(item => {
-        // 直接设置商品SKU列的值，保持原有格式
-        const skuCell = `A${currentRow}`;
-        if (worksheet[skuCell]) {
-          // 单元格已存在，只修改值，完全保持原有格式
-          worksheet[skuCell].v = item.amz_sku || item.sku;
-          worksheet[skuCell].t = 's'; // 字符串类型
-          console.log(`📝 填写发票SKU: ${skuCell} = ${item.amz_sku || item.sku}`);
-        } else {
-          // 单元格不存在，创建新单元格（保持简单）
-          worksheet[skuCell] = { v: item.amz_sku || item.sku, t: 's' };
-          console.log(`📝 新建发票SKU单元格: ${skuCell} = ${item.amz_sku || item.sku}`);
-        }
+        // 使用ExcelJS设置商品SKU列的值，完美保持原有格式
+        const skuCell = worksheet.getCell(`A${currentRow}`);
+        skuCell.value = item.amz_sku || item.sku;
+        console.log(`📝 ExcelJS填写发票SKU: A${currentRow} = ${item.amz_sku || item.sku}`);
 
-        // 直接设置数量列的值，保持原有格式
-        const quantityCell = `B${currentRow}`;
-        if (worksheet[quantityCell]) {
-          // 单元格已存在，只修改值，完全保持原有格式
-          worksheet[quantityCell].v = item.quantity;
-          worksheet[quantityCell].t = 'n'; // 数字类型
-          console.log(`📝 填写发票数量: ${quantityCell} = ${item.quantity}`);
-        } else {
-          // 单元格不存在，创建新单元格（保持简单）
-          worksheet[quantityCell] = { v: item.quantity, t: 'n' };
-          console.log(`📝 新建发票数量单元格: ${quantityCell} = ${item.quantity}`);
-        }
+        // 使用ExcelJS设置数量列的值，完美保持原有格式
+        const quantityCell = worksheet.getCell(`B${currentRow}`);
+        quantityCell.value = item.quantity;
+        console.log(`📝 ExcelJS填写发票数量: B${currentRow} = ${item.quantity}`);
 
-        // 直接设置箱号列的值（如果有），保持原有格式
+        // 使用ExcelJS设置箱号列的值（如果有），完美保持原有格式
         if (item.box_num) {
-          const boxCell = `C${currentRow}`;
-          if (worksheet[boxCell]) {
-            // 单元格已存在，只修改值，完全保持原有格式
-            worksheet[boxCell].v = item.box_num;
-            worksheet[boxCell].t = 's'; // 字符串类型
-            console.log(`📝 填写发票箱号: ${boxCell} = ${item.box_num}`);
-          } else {
-            // 单元格不存在，创建新单元格（保持简单）
-            worksheet[boxCell] = { v: item.box_num, t: 's' };
-            console.log(`📝 新建发票箱号单元格: ${boxCell} = ${item.box_num}`);
-          }
+          const boxCell = worksheet.getCell(`C${currentRow}`);
+          boxCell.value = item.box_num;
+          console.log(`📝 ExcelJS填写发票箱号: C${currentRow} = ${item.box_num}`);
         }
         
         currentRow++;
       });
       
-      console.log(`✅ 完成发票数据填写，共填写 ${data.length} 行数据`);
+      console.log(`✅ ExcelJS完成发票数据填写，共填写 ${data.length} 行数据`);
 
-      // 更新工作表范围以包含新填写的数据，但保持原始模板的完整结构
-      const originalRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
-      console.log(`📋 ${provider}-${country} 原始发票模板范围:`, worksheet['!ref']);
-      
-      // 计算填写数据后的最大行号
-      const maxDataRow = currentRow - 1;
-      
-      // 只扩展行范围，保持原始的列范围不变
-      const newRange = {
-        s: { c: originalRange.s.c, r: originalRange.s.r }, // 保持原始起始位置
-        e: { 
-          c: originalRange.e.c, // 保持原始列范围
-          r: Math.max(originalRange.e.r, maxDataRow) // 扩展行范围以包含新数据
-        }
-      };
-      
-      worksheet['!ref'] = XLSX.utils.encode_range(newRange);
-      console.log(`📋 ${provider}-${country} 更新后范围:`, worksheet['!ref']);
+      // ExcelJS会自动管理工作表范围，无需手动更新
+      console.log(`📋 ${provider}-${country} ExcelJS自动管理工作表范围，数据已填写到第${currentRow-1}行`);
 
       // 生成新的文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -4362,15 +4316,10 @@ router.post('/logistics-invoice/generate', async (req, res) => {
       const outputFilename = `invoice-${providerCode}-${countryCode}-${timestamp}.xlsx`;
       const outputPath = path.join(outputDir, outputFilename);
 
-      // 保存填写后的发票文件，使用最大兼容性模式保持所有格式信息
-      XLSX.writeFile(workbook, outputPath, {
-        cellStyles: true,     // 保持单元格样式
-        bookVBA: true,        // 保持VBA代码
-        bookSST: true,        // 保持共享字符串表
-        type: 'file',         // 直接写入文件
-        Props: workbook.Props, // 保持文档属性
-        compression: true     // 使用压缩，保持Excel原生格式
-      });
+      // 使用ExcelJS保存文件，完美保持所有原始格式
+      console.log(`💾 使用ExcelJS保存发票文件到: ${outputPath}`);
+      await workbook.xlsx.writeFile(outputPath);
+      console.log(`✅ ${provider}-${country} 发票文件保存成功，所有格式完美保持`);
 
       generatedFiles.push({
         logisticsProvider: provider,
