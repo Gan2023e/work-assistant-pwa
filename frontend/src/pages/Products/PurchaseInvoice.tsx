@@ -78,6 +78,7 @@ interface Invoice {
   invoice_type: '增值税专用发票' | '增值税普通发票' | '收据' | '其他';
   status: '正常' | '作废' | '红冲';
   remarks?: string;
+  amount_difference_screenshot?: string;
   created_at: string;
   updated_at: string;
 }
@@ -146,6 +147,8 @@ const PurchaseInvoice: React.FC = () => {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [amountDifference, setAmountDifference] = useState<number>(0);
+  const [screenshotUploading, setScreenshotUploading] = useState(false);
+  const [uploadedScreenshots, setUploadedScreenshots] = useState<UploadFile[]>([]);
   
   // 搜索筛选状态
   const [filters, setFilters] = useState({
@@ -450,7 +453,42 @@ const PurchaseInvoice: React.FC = () => {
     return false; // 阻止默认上传
   };
 
-
+  // 处理金额差异截图上传
+  const handleScreenshotUpload = async (file: any) => {
+    setScreenshotUploading(true);
+    const formData = new FormData();
+    formData.append('screenshot', file);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/upload-amount-difference-screenshot`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        const newFile: UploadFile = {
+          uid: result.data.objectName,
+          name: result.data.filename,
+          status: 'done',
+          url: result.data.url,
+          size: result.data.size,
+        };
+        
+        setUploadedScreenshots(prev => [...prev, newFile]);
+        message.success('截图上传成功');
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      message.error('截图上传失败');
+    } finally {
+      setScreenshotUploading(false);
+    }
+    
+    return false; // 阻止默认上传
+  };
 
   // 处理发票提交
   const handleInvoiceSubmit = async (values: any) => {
@@ -462,7 +500,8 @@ const PurchaseInvoice: React.FC = () => {
       
       const invoiceData = {
         ...values,
-        invoice_date: values.invoice_date.format('YYYY-MM-DD')
+        invoice_date: values.invoice_date.format('YYYY-MM-DD'),
+        amount_difference_screenshot: uploadedScreenshots.length > 0 ? JSON.stringify(uploadedScreenshots) : null
       };
       
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/associate-orders-with-invoice`, {
@@ -486,6 +525,7 @@ const PurchaseInvoice: React.FC = () => {
         setParseQuality(null);
         setFileList([]);
         setAmountDifference(0);
+        setUploadedScreenshots([]);
         invoiceForm.resetFields();
         fetchPurchaseOrders();
         fetchStatistics();
@@ -640,6 +680,21 @@ const PurchaseInvoice: React.FC = () => {
               类型: <Tag>{invoice.invoice_type}</Tag>
               状态: <Tag color={invoice.status === '正常' ? 'green' : 'red'}>{invoice.status}</Tag>
             </div>
+            {/* 金额差异截图显示 */}
+            {invoice.amount_difference_screenshot && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                                 <Button
+                   type="link"
+                   size="small"
+                   icon={<EyeOutlined />}
+                   onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
+                   style={{ padding: '0 4px' }}
+                   title="查看金额差异截图"
+                 >
+                  查看差异截图
+                </Button>
+              </div>
+            )}
           </div>
         );
       }
@@ -711,6 +766,42 @@ const PurchaseInvoice: React.FC = () => {
     // 直接在新窗口打开后端代理URL
     const fileUrl = `${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/file`;
     window.open(fileUrl, '_blank');
+  };
+
+  // 查看金额差异截图
+  const handleViewScreenshots = (screenshotData: string) => {
+    try {
+      const screenshots = JSON.parse(screenshotData);
+      const screenshotUrls = screenshots.map((shot: any) => shot.url);
+      
+      // 创建一个模态框显示所有截图
+      Modal.info({
+        title: '金额差异截图',
+        width: 800,
+        content: (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {screenshotUrls.map((url: string, index: number) => (
+              <img
+                key={index}
+                src={url}
+                alt={`截图 ${index + 1}`}
+                style={{ 
+                  maxWidth: '200px', 
+                  maxHeight: '200px', 
+                  objectFit: 'contain',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+                onClick={() => window.open(url, '_blank')}
+              />
+            ))}
+          </div>
+        )
+      });
+    } catch (error) {
+      message.error('截图数据格式错误');
+    }
   };
 
   // 上传文件到发票
@@ -1146,6 +1237,7 @@ const PurchaseInvoice: React.FC = () => {
                    setExtractedInfo(null);
                    setFileList([]);
                    setAmountDifference(0);
+                   setUploadedScreenshots([]);
                    invoiceForm.resetFields();
                    setInvoiceModalVisible(true);
                  }}
@@ -1311,6 +1403,7 @@ const PurchaseInvoice: React.FC = () => {
           setParseQuality(null);
           setFileList([]);
           setAmountDifference(0);
+          setUploadedScreenshots([]);
           invoiceForm.resetFields();
         }}
         width={800}
@@ -1323,6 +1416,7 @@ const PurchaseInvoice: React.FC = () => {
               setParseQuality(null);
               setFileList([]);
               setAmountDifference(0);
+              setUploadedScreenshots([]);
               invoiceForm.resetFields();
             }}
           >
@@ -1474,7 +1568,30 @@ const PurchaseInvoice: React.FC = () => {
                 {amountDifference > 0.01 && (
                   <Alert
                     message={`金额不匹配警告：发票金额与选中订单总额相差¥${amountDifference.toLocaleString()}`}
-                    description="请检查发票金额或重新选择订单"
+                    description={
+                      <div>
+                        <p>请检查发票金额或重新选择订单</p>
+                        <p style={{ marginTop: '8px' }}>如果是因平台活动导致的金额差异，请上传相关订单记录截图：</p>
+                        <Upload
+                          accept="image/*"
+                          beforeUpload={handleScreenshotUpload}
+                          fileList={uploadedScreenshots}
+                          onChange={({ fileList }) => setUploadedScreenshots(fileList)}
+                          multiple
+                          listType="picture-card"
+                          style={{ marginTop: '8px' }}
+                        >
+                          {uploadedScreenshots.length >= 3 ? null : (
+                            <div>
+                              <PlusOutlined />
+                              <div style={{ marginTop: 8 }}>
+                                {screenshotUploading ? '上传中...' : '上传截图'}
+                              </div>
+                            </div>
+                          )}
+                        </Upload>
+                      </div>
+                    }
                     type="warning"
                     showIcon
                     action={

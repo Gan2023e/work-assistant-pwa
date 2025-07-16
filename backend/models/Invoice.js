@@ -74,6 +74,11 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: true,
     comment: '备注信息'
   },
+  amount_difference_screenshot: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: '金额差异截图信息(JSON格式存储OSS链接等信息)'
+  },
   created_at: {
     type: DataTypes.DATE,
     allowNull: false,

@@ -1737,4 +1737,61 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
+// 上传金额差异截图
+router.post('/upload-amount-difference-screenshot', upload.single('screenshot'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '没有上传截图文件'
+      });
+    }
+
+    // 检查文件类型
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({
+        code: 1,
+        message: '只支持图片文件'
+      });
+    }
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        code: 1,
+        message: 'OSS配置不完整，请联系管理员'
+      });
+    }
+
+    // 上传截图到OSS
+    const uploadResult = await uploadToOSS(
+      req.file.buffer,
+      req.file.originalname,
+      'purchase'
+    );
+    
+    if (uploadResult.success) {
+      res.json({
+        code: 0,
+        message: '截图上传成功',
+        data: {
+          filename: uploadResult.originalName,
+          size: uploadResult.size,
+          url: uploadResult.url,
+          objectName: uploadResult.name
+        }
+      });
+    } else {
+      throw new Error('截图上传失败');
+    }
+  } catch (error) {
+    console.error('截图上传失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '截图上传失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
