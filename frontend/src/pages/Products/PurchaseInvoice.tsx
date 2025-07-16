@@ -680,19 +680,40 @@ const PurchaseInvoice: React.FC = () => {
               类型: <Tag>{invoice.invoice_type}</Tag>
               状态: <Tag color={invoice.status === '正常' ? 'green' : 'red'}>{invoice.status}</Tag>
             </div>
-            {/* 金额差异截图显示 */}
+                        {/* 金额差异截图显示 */}
             {invoice.amount_difference_screenshot && (
               <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                                 <Button
-                   type="link"
-                   size="small"
-                   icon={<EyeOutlined />}
-                   onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
-                   style={{ padding: '0 4px' }}
-                   title="查看金额差异截图"
-                 >
-                  查看差异截图
-                </Button>
+                <Space size="small">
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
+                    style={{ padding: '0 4px' }}
+                    title="查看金额差异截图"
+                  >
+                    查看差异截图
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: '确认删除',
+                        content: '确定要删除这些金额差异截图吗？删除后无法恢复。',
+                        okText: '确定',
+                        cancelText: '取消',
+                        onOk: () => handleDeleteScreenshots(invoice.id)
+                      });
+                    }}
+                    style={{ padding: '0 4px' }}
+                    title="删除金额差异截图"
+                  >
+                    删除截图
+                  </Button>
+                </Space>
               </div>
             )}
           </div>
@@ -772,7 +793,27 @@ const PurchaseInvoice: React.FC = () => {
   const handleViewScreenshots = (screenshotData: string) => {
     try {
       const screenshots = JSON.parse(screenshotData);
-      const screenshotUrls = screenshots.map((shot: any) => shot.url);
+      console.log('Screenshots data:', screenshots); // 调试用
+      
+      // 处理不同的数据格式
+      let screenshotUrls: string[] = [];
+      if (Array.isArray(screenshots)) {
+        screenshotUrls = screenshots.map((shot: any) => {
+          if (typeof shot === 'string') {
+            return shot;
+          } else if (shot.url) {
+            return shot.url;
+          } else if (shot.response && shot.response.url) {
+            return shot.response.url;
+          }
+          return '';
+        }).filter(url => url);
+      }
+      
+      if (screenshotUrls.length === 0) {
+        message.warning('没有找到有效的截图');
+        return;
+      }
       
       // 创建一个模态框显示所有截图
       Modal.info({
@@ -794,13 +835,40 @@ const PurchaseInvoice: React.FC = () => {
                   cursor: 'pointer'
                 }}
                 onClick={() => window.open(url, '_blank')}
+                onError={(e) => {
+                  console.error('Image load error:', url);
+                  message.error(`截图 ${index + 1} 加载失败`);
+                }}
               />
             ))}
           </div>
         )
       });
     } catch (error) {
-      message.error('截图数据格式错误');
+      console.error('Parse screenshots error:', error);
+      message.error('截图数据格式错误: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  // 删除金额差异截图
+  const handleDeleteScreenshots = async (invoiceId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/screenshots`, {
+        method: 'DELETE',
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('截图删除成功');
+        fetchPurchaseOrders(); // 刷新列表
+        fetchStatistics(); // 刷新统计
+      } else {
+        message.error(result.message || '截图删除失败');
+      }
+    } catch (error) {
+      console.error('删除截图失败:', error);
+      message.error('删除截图失败，请检查网络连接');
     }
   };
 

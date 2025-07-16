@@ -1807,4 +1807,62 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
   }
 });
 
+// 删除发票的金额差异截图
+router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    
+    // 获取发票信息
+    const invoice = await Invoice.findByPk(invoiceId);
+    if (!invoice) {
+      return res.status(404).json({
+        code: 1,
+        message: '发票不存在'
+      });
+    }
+    
+    // 如果有截图，先删除OSS中的文件
+    if (invoice.amount_difference_screenshot) {
+      try {
+        const screenshots = JSON.parse(invoice.amount_difference_screenshot);
+        
+        // 删除OSS中的截图文件
+        for (const screenshot of screenshots) {
+          if (screenshot.uid) {
+            try {
+              await deleteFromOSS(screenshot.uid);
+              console.log('✅ 删除OSS截图文件成功:', screenshot.uid);
+            } catch (ossError) {
+              console.warn('⚠️ 删除OSS截图文件失败:', screenshot.uid, ossError.message);
+            }
+          }
+        }
+      } catch (parseError) {
+        console.warn('⚠️ 解析截图数据失败:', parseError.message);
+      }
+    }
+    
+    // 更新数据库，清除截图信息
+    await invoice.update({
+      amount_difference_screenshot: null
+    });
+    
+    res.json({
+      code: 0,
+      message: '截图删除成功',
+      data: {
+        invoiceId: invoice.id
+      }
+    });
+    
+  } catch (error) {
+    console.error('删除截图失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除截图失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
