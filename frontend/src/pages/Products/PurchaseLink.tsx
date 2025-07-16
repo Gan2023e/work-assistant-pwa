@@ -16,7 +16,8 @@ import {
   Col,
   Statistic,
   DatePicker,
-  Checkbox
+  Checkbox,
+  AutoComplete
 } from 'antd';
 import { 
   UploadOutlined, 
@@ -1194,30 +1195,27 @@ const Purchase: React.FC = () => {
                 </Col>
                 <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>CPC提交情况：</div>
-                  <Select
+                  <AutoComplete
                     style={{ width: '100%' }}
-                    placeholder="选择CPC提交情况"
+                    placeholder="选择或输入CPC提交情况"
                     value={filters.cpc_submit}
                     onChange={(value) => {
                       console.log('🔧 CPC提交情况筛选值改变:', value);
                       handleFilterChange('cpc_submit', value);
                     }}
                     allowClear
-                    loading={!allDataStats.cpcSubmitStats || allDataStats.cpcSubmitStats.length === 0}
-                    notFoundContent={allDataStats.cpcSubmitStats?.length === 0 ? "暂无CPC提交情况数据" : "暂无数据"}
-                  >
-                    {getUniqueCpcSubmits().length > 0 ? (
-                      getUniqueCpcSubmits().map(submitItem => (
-                        <Option key={submitItem.value} value={submitItem.value}>
-                          {submitItem.value} ({submitItem.count})
-                        </Option>
-                      ))
-                    ) : (
-                      <Option disabled value="no-data">
-                        暂无CPC提交情况数据
-                      </Option>
-                    )}
-                  </Select>
+                    filterOption={(inputValue, option) =>
+                      option?.value?.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1
+                    }
+                    options={getUniqueCpcSubmits().length > 0 ? 
+                      getUniqueCpcSubmits().map(submitItem => ({
+                        value: submitItem.value,
+                        label: `${submitItem.value} (${submitItem.count})`
+                      })) : 
+                      []
+                    }
+                    notFoundContent={allDataStats.cpcSubmitStats?.length === 0 ? "暂无CPC提交情况数据" : "暂无匹配数据"}
+                  />
                 </Col>
                 <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>供应商：</div>
@@ -1425,20 +1423,21 @@ const Purchase: React.FC = () => {
                 ))}
               </Select>
             ) : editingCell?.field === 'cpc_submit' ? (
-              <Select placeholder="请选择CPC提交情况">
-                <Option key="" value="">清空</Option>
-                {getUniqueCpcSubmits().length > 0 ? (
-                  getUniqueCpcSubmits().map(submitItem => (
-                    <Option key={submitItem.value} value={submitItem.value}>
-                      {submitItem.value} ({submitItem.count})
-                    </Option>
-                  ))
-                ) : (
-                  <Option disabled value="no-data">
-                    暂无CPC提交情况数据
-                  </Option>
-                )}
-              </Select>
+              <AutoComplete
+                placeholder="选择或输入CPC提交情况"
+                allowClear
+                filterOption={(inputValue, option) =>
+                  option?.value?.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1
+                }
+                options={[
+                  { value: '', label: '清空' },
+                  ...getUniqueCpcSubmits().map(submitItem => ({
+                    value: submitItem.value,
+                    label: `${submitItem.value} (${submitItem.count})`
+                  }))
+                ]}
+                notFoundContent={getUniqueCpcSubmits().length === 0 ? "暂无CPC提交情况数据" : "暂无匹配数据"}
+              />
             ) : editingCell?.field === 'notice' ? (
               <TextArea rows={3} placeholder="请输入备注" />
             ) : editingCell?.field === 'weblink' ? (
