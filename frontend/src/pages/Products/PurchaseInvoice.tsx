@@ -455,70 +455,41 @@ const PurchaseInvoice: React.FC = () => {
 
   // 处理金额差异截图上传
   const handleScreenshotUpload = async (file: any) => {
-    console.log('🔄 开始上传截图:', {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
-    
     setScreenshotUploading(true);
     const formData = new FormData();
     formData.append('screenshot', file);
     
     try {
-      console.log('🚀 发送上传请求到后端...');
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/upload-amount-difference-screenshot`, {
         method: 'POST',
         body: formData,
       });
       
-      console.log('📥 收到后端响应，状态:', response.status);
       const result = await response.json();
-      console.log('📨 后端返回的完整数据:', result);
       
       if (result.code === 0) {
-        console.log('✅ 后端确认上传成功');
-        console.log('📊 返回的数据字段:', {
-          filename: result.data.filename,
-          size: result.data.size,
-          url: result.data.url,
-          objectName: result.data.objectName,
-          hasUrl: !!result.data.url
-        });
-        
         const newFile: UploadFile = {
           uid: file.uid || `rc-upload-${Date.now()}-${Math.random()}`,
           name: result.data.filename,
           status: 'done',
           url: result.data.url,
           size: result.data.size,
-          thumbUrl: result.data.url, // 添加缩略图URL
+          thumbUrl: result.data.url,
           response: {
-            ...result.data // 保存完整的响应数据
+            ...result.data
           }
         };
         
-        console.log('📁 创建的文件对象:', newFile);
-        console.log('🔗 文件对象中的URL:', newFile.url);
-        
-        setUploadedScreenshots(prev => {
-          const newList = [...prev, newFile];
-          console.log('📋 更新后的截图列表:', newList);
-          return newList;
-        });
-        
-        message.success('截图上传成功，点击眼睛图标可预览');
-        console.log('🎉 截图上传成功，文件数据:', newFile);
+        setUploadedScreenshots(prev => [...prev, newFile]);
+        message.success('截图上传成功');
       } else {
-        console.error('❌ 后端返回错误:', result);
         message.error(`截图上传失败: ${result.message || '未知错误'}`);
       }
     } catch (error) {
-      console.error('❌ 网络请求失败:', error);
+      console.error('截图上传失败:', error);
       message.error('截图上传失败：网络错误');
     } finally {
       setScreenshotUploading(false);
-      console.log('🔚 截图上传流程结束');
     }
     
     return false; // 阻止默认上传
@@ -532,42 +503,18 @@ const PurchaseInvoice: React.FC = () => {
         return;
       }
       
-      // 处理截图数据，确保只存储必要的信息
+      // 处理截图数据
       let screenshotData = null;
       if (uploadedScreenshots.length > 0) {
-        console.log('💾 处理截图数据准备保存...');
-        console.log('📋 当前截图列表:', uploadedScreenshots);
-        
-        const cleanScreenshots = uploadedScreenshots.map((file, index) => {
-          console.log(`📁 处理第${index + 1}个文件:`, {
-            uid: file.uid,
-            name: file.name,
-            url: file.url,
-            size: file.size,
-            status: file.status,
-            hasUrl: !!file.url
-          });
-          
-          return {
-            uid: file.uid,
-            name: file.name,
-            url: file.url,
-            size: file.size,
-            status: file.status
-          };
-        });
+        const cleanScreenshots = uploadedScreenshots.map((file) => ({
+          uid: file.uid,
+          name: file.name,
+          url: file.url,
+          size: file.size,
+          status: file.status
+        }));
         
         screenshotData = JSON.stringify(cleanScreenshots);
-        console.log('📊 清理后的截图数据:', cleanScreenshots);
-        console.log('💽 JSON字符串格式:', screenshotData);
-        
-        // 验证每个截图是否都有URL
-        const missingUrls = cleanScreenshots.filter(shot => !shot.url);
-        if (missingUrls.length > 0) {
-          console.warn('⚠️ 发现缺少URL的截图:', missingUrls);
-        }
-      } else {
-        console.log('📭 没有截图数据需要保存');
       }
       
       const invoiceData = {
@@ -907,45 +854,28 @@ const PurchaseInvoice: React.FC = () => {
 
   // 查看金额差异截图
   const handleViewScreenshots = (screenshotData: string) => {
-    console.log('🔍 handleViewScreenshots 被调用');
-    console.log('📨 接收到的数据类型:', typeof screenshotData);
-    console.log('📨 数据长度:', screenshotData?.length);
-    
     try {
-      console.log('📋 原始截图数据:', screenshotData);
-      
       let screenshots: any;
       try {
         screenshots = JSON.parse(screenshotData);
-        console.log('✅ JSON解析成功');
       } catch (parseError) {
-        console.error('❌ JSON解析失败:', parseError);
         message.error('截图数据格式错误，无法解析');
         return;
       }
-      
-      console.log('📊 解析后的截图数据:', screenshots);
-      console.log('📊 数据类型:', typeof screenshots);
-      console.log('📊 是否为数组:', Array.isArray(screenshots));
       
       // 处理不同的数据格式
       let screenshotUrls: string[] = [];
       
       if (Array.isArray(screenshots)) {
         screenshotUrls = screenshots.map((shot: any) => {
-          console.log('处理截图项:', shot);
-          
-          // 直接是URL字符串
           if (typeof shot === 'string') {
             return shot;
           }
           
-          // Ant Design Upload组件格式 - 检查多个可能的URL字段
           if (shot.url) {
             return shot.url;
           }
           
-          // 检查response字段（上传后可能在这里）
           if (shot.response) {
             if (typeof shot.response === 'string') {
               return shot.response;
@@ -958,17 +888,14 @@ const PurchaseInvoice: React.FC = () => {
             }
           }
           
-          // 检查thumbUrl字段
           if (shot.thumbUrl) {
             return shot.thumbUrl;
           }
           
-          // 其他可能的字段
           if (shot.src) {
             return shot.src;
           }
           
-          console.warn('无法从截图项中提取URL:', shot);
           return '';
         }).filter(url => url && url.trim() !== '');
       } else if (typeof screenshots === 'object' && screenshots !== null) {
@@ -986,73 +913,41 @@ const PurchaseInvoice: React.FC = () => {
         screenshotUrls = [screenshots];
       }
       
-      console.log('📋 提取的URL列表:', screenshotUrls);
-      console.log('📊 URL数量:', screenshotUrls.length);
-      
       if (screenshotUrls.length === 0) {
-        console.warn('⚠️ 没有找到有效的截图URL');
-        console.log('🔍 调试信息 - 原始数组:', Array.isArray(screenshots) ? screenshots : '不是数组');
-        if (Array.isArray(screenshots)) {
-          console.log('🔍 数组长度:', screenshots.length);
-          screenshots.forEach((item, idx) => {
-            console.log(`🔍 第${idx + 1}项:`, item);
-            console.log(`  - url字段:`, item.url);
-            console.log(`  - thumbUrl字段:`, item.thumbUrl);
-            console.log(`  - response字段:`, item.response);
-          });
-        }
         message.warning('没有找到有效的截图');
         return;
       }
       
-      // 创建一个模态框显示所有截图
-      console.log('🖼️ 准备显示模态框，截图数量:', screenshotUrls.length);
-      console.log('🖼️ 截图URL列表:', screenshotUrls);
-      
+      // 显示截图模态框
       Modal.info({
         title: '金额差异截图',
         width: 800,
-        onOk: () => {
-          console.log('🔚 模态框关闭');
-        },
         content: (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {screenshotUrls.map((url: string, index: number) => {
-              console.log(`🖼️ 渲染第${index + 1}张图片:`, url);
-              return (
-                <img
-                  key={index}
-                  src={url}
-                  alt={`截图 ${index + 1}`}
-                  style={{ 
-                    maxWidth: '200px', 
-                    maxHeight: '200px', 
-                    objectFit: 'contain',
-                    border: '1px solid #d9d9d9',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => {
-                    console.log('🖱️ 点击图片，在新窗口打开:', url);
-                    window.open(url, '_blank');
-                  }}
-                  onError={(e) => {
-                    console.error('❌ 图片加载失败:', url);
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    message.error(`截图 ${index + 1} 加载失败`);
-                  }}
-                  onLoad={() => {
-                    console.log('✅ 图片加载成功:', url);
-                  }}
-                />
-              );
-            })}
+            {screenshotUrls.map((url: string, index: number) => (
+              <img
+                key={index}
+                src={url}
+                alt={`截图 ${index + 1}`}
+                style={{ 
+                  maxWidth: '200px', 
+                  maxHeight: '200px', 
+                  objectFit: 'contain',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+                onClick={() => window.open(url, '_blank')}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  message.error(`截图 ${index + 1} 加载失败`);
+                }}
+              />
+            ))}
           </div>
         )
       });
-      
-      console.log('🎉 模态框创建完成');
     } catch (error) {
       console.error('查看截图时发生错误:', error);
       message.error('查看截图失败: ' + (error instanceof Error ? error.message : String(error)));
@@ -1854,17 +1749,11 @@ const PurchaseInvoice: React.FC = () => {
                           beforeUpload={handleScreenshotUpload}
                           fileList={uploadedScreenshots}
                           onChange={({ fileList }) => {
-                            console.log('📋 Upload组件onChange触发，fileList:', fileList);
-                            console.log('🔍 当前uploadedScreenshots:', uploadedScreenshots);
-                            
                             // 如果fileList为空或者长度减少，说明是删除操作
                             if (fileList.length < uploadedScreenshots.length) {
-                              console.log('🗑️ 检测到文件删除，直接更新状态');
                               setUploadedScreenshots(fileList);
-                            } else {
-                              // 如果是添加操作，保留现有状态，避免覆盖URL
-                              console.log('➕ 检测到文件添加，保持现有状态不变（URL由beforeUpload处理）');
                             }
+                            // 如果是添加操作，保留现有状态，避免覆盖URL
                           }}
                           multiple
                           listType="picture-card"
@@ -1875,8 +1764,6 @@ const PurchaseInvoice: React.FC = () => {
                           }}
                           onPreview={handlePreviewUploadedScreenshot}
                           onRemove={(file) => {
-                            console.log('🗑️ 删除截图文件:', file);
-                            // 从列表中移除该文件
                             setUploadedScreenshots(prev => 
                               prev.filter(item => item.uid !== file.uid)
                             );

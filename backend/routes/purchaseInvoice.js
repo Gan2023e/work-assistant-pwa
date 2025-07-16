@@ -1791,8 +1791,6 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
       });
     }
 
-    console.log('✅ OSS配置检查通过，开始上传文件...');
-
     // 上传截图到OSS
     const uploadResult = await uploadToOSS(
       req.file.buffer,
@@ -1800,24 +1798,15 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
       'purchase'
     );
     
-    console.log('📤 OSS上传结果:', uploadResult);
-    console.log('🔗 生成的URL:', uploadResult.url);
-    
     // 生成代理URL避免CORS和权限问题
-    // Railway总是通过HTTPS对外提供服务，强制使用HTTPS
     const proxyUrl = `https://${req.get('host')}/api/purchase-invoice/screenshot-proxy?path=${encodeURIComponent(uploadResult.name)}`;
     
     const responseData = {
       filename: uploadResult.originalName,
       size: uploadResult.size,
-      url: proxyUrl,  // 使用代理URL
-      directUrl: uploadResult.url,  // 保留原始URL用于调试
+      url: proxyUrl,
       objectName: uploadResult.name
     };
-    
-    console.log('🔄 使用代理URL:', proxyUrl);
-    
-    console.log('📨 返回给前端的数据:', responseData);
     
     res.json({
       code: 0,
@@ -1901,8 +1890,7 @@ router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
 // 截图代理路由 - 解决CORS和权限问题
 router.get('/screenshot-proxy', async (req, res) => {
   try {
-    const objectName = req.query.path; // 从查询参数获取文件路径
-    console.log('🔄 代理请求截图:', objectName);
+    const objectName = req.query.path;
     
     if (!objectName) {
       return res.status(400).json({
@@ -1929,7 +1917,6 @@ router.get('/screenshot-proxy', async (req, res) => {
       secure: true
     });
     
-    console.log('📥 从OSS获取文件:', objectName);
     const result = await client.get(objectName);
     
     // 设置正确的Content-Type
@@ -1955,11 +1942,10 @@ router.get('/screenshot-proxy', async (req, res) => {
       'Access-Control-Allow-Headers': 'Content-Type'
     });
     
-    console.log('✅ 截图代理成功，文件大小:', result.content.length);
     res.send(result.content);
     
   } catch (error) {
-    console.error('❌ 截图代理失败:', error);
+    console.error('截图代理失败:', error.message);
     
     if (error.code === 'NoSuchKey') {
       res.status(404).json({
