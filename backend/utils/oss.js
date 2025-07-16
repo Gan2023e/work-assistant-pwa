@@ -8,7 +8,8 @@ const ossConfig = {
   accessKeyId: process.env.OSS_ACCESS_KEY_ID,
   accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
   bucket: process.env.OSS_BUCKET,
-  endpoint: process.env.OSS_ENDPOINT
+  endpoint: process.env.OSS_ENDPOINT,
+  secure: true  // 强制使用HTTPS
 };
 
 // 检查必要的环境变量
@@ -88,9 +89,16 @@ async function uploadToOSS(buffer, filename, folder = 'purchase') {
     
     console.log('✅ 文件上传成功:', result.name);
     
+    // 确保URL使用HTTPS
+    let secureUrl = result.url;
+    if (secureUrl && secureUrl.startsWith('http://')) {
+      secureUrl = secureUrl.replace('http://', 'https://');
+      console.log('🔒 将HTTP URL转换为HTTPS:', secureUrl);
+    }
+    
     return {
       success: true,
-      url: result.url,
+      url: secureUrl,
       name: result.name,
       size: buffer.length,
       originalName: filename,
@@ -142,7 +150,14 @@ async function getSignedUrl(objectName, expiresInSeconds = 3600) {
       'response-content-type': 'application/pdf'
     });
     
-    return { success: true, url };
+    // 确保URL使用HTTPS
+    let secureUrl = url;
+    if (secureUrl && secureUrl.startsWith('http://')) {
+      secureUrl = secureUrl.replace('http://', 'https://');
+      console.log('🔒 将签名URL从HTTP转换为HTTPS');
+    }
+    
+    return { success: true, url: secureUrl };
     
   } catch (error) {
     console.error('❌ 获取签名URL失败:', error);
@@ -195,9 +210,16 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
     
     console.log('✅ 模板文件上传成功:', result.name);
     
+    // 确保URL使用HTTPS
+    let secureUrl = result.url;
+    if (secureUrl && secureUrl.startsWith('http://')) {
+      secureUrl = secureUrl.replace('http://', 'https://');
+      console.log('🔒 将HTTP URL转换为HTTPS:', secureUrl);
+    }
+    
     return {
       success: true,
-      url: result.url,
+      url: secureUrl,
       name: result.name,
       size: buffer.length,
       originalName: filename,
