@@ -474,10 +474,15 @@ const PurchaseInvoice: React.FC = () => {
           status: 'done',
           url: result.data.url,
           size: result.data.size,
+          thumbUrl: result.data.url, // 添加缩略图URL
+          response: {
+            ...result.data // 保存完整的响应数据
+          }
         };
         
         setUploadedScreenshots(prev => [...prev, newFile]);
         message.success('截图上传成功');
+        console.log('截图上传成功，文件数据:', newFile);
       } else {
         message.error(result.message);
       }
@@ -498,10 +503,24 @@ const PurchaseInvoice: React.FC = () => {
         return;
       }
       
+      // 处理截图数据，确保只存储必要的信息
+      let screenshotData = null;
+      if (uploadedScreenshots.length > 0) {
+        const cleanScreenshots = uploadedScreenshots.map(file => ({
+          uid: file.uid,
+          name: file.name,
+          url: file.url,
+          size: file.size,
+          status: file.status
+        }));
+        screenshotData = JSON.stringify(cleanScreenshots);
+        console.log('准备存储的截图数据:', cleanScreenshots);
+      }
+      
       const invoiceData = {
         ...values,
         invoice_date: values.invoice_date.format('YYYY-MM-DD'),
-        amount_difference_screenshot: uploadedScreenshots.length > 0 ? JSON.stringify(uploadedScreenshots) : null
+        amount_difference_screenshot: screenshotData
       };
       
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/associate-orders-with-invoice`, {
@@ -683,13 +702,13 @@ const PurchaseInvoice: React.FC = () => {
                         {/* 金额差异截图显示 */}
             {invoice.amount_difference_screenshot && (
               <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                <Space size="small">
+                <Space size={4}>
                   <Button
                     type="link"
                     size="small"
                     icon={<EyeOutlined />}
                     onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
-                    style={{ padding: '0 4px' }}
+                    style={{ padding: '0 4px', height: '20px' }}
                     title="查看金额差异截图"
                   >
                     查看差异截图
@@ -708,7 +727,7 @@ const PurchaseInvoice: React.FC = () => {
                         onOk: () => handleDeleteScreenshots(invoice.id)
                       });
                     }}
-                    style={{ padding: '0 4px' }}
+                    style={{ padding: '0 4px', height: '20px' }}
                     title="删除金额差异截图"
                   >
                     删除截图
@@ -792,25 +811,81 @@ const PurchaseInvoice: React.FC = () => {
   // 查看金额差异截图
   const handleViewScreenshots = (screenshotData: string) => {
     try {
-      const screenshots = JSON.parse(screenshotData);
-      console.log('Screenshots data:', screenshots); // 调试用
+      console.log('原始截图数据:', screenshotData);
+      
+      let screenshots: any;
+      try {
+        screenshots = JSON.parse(screenshotData);
+      } catch (parseError) {
+        console.error('JSON解析失败:', parseError);
+        message.error('截图数据格式错误，无法解析');
+        return;
+      }
+      
+      console.log('解析后的截图数据:', screenshots);
       
       // 处理不同的数据格式
       let screenshotUrls: string[] = [];
+      
       if (Array.isArray(screenshots)) {
         screenshotUrls = screenshots.map((shot: any) => {
+          console.log('处理截图项:', shot);
+          
+          // 直接是URL字符串
           if (typeof shot === 'string') {
             return shot;
-          } else if (shot.url) {
-            return shot.url;
-          } else if (shot.response && shot.response.url) {
-            return shot.response.url;
           }
+          
+          // Ant Design Upload组件格式 - 检查多个可能的URL字段
+          if (shot.url) {
+            return shot.url;
+          }
+          
+          // 检查response字段（上传后可能在这里）
+          if (shot.response) {
+            if (typeof shot.response === 'string') {
+              return shot.response;
+            }
+            if (shot.response.url) {
+              return shot.response.url;
+            }
+            if (shot.response.data && shot.response.data.url) {
+              return shot.response.data.url;
+            }
+          }
+          
+          // 检查thumbUrl字段
+          if (shot.thumbUrl) {
+            return shot.thumbUrl;
+          }
+          
+          // 其他可能的字段
+          if (shot.src) {
+            return shot.src;
+          }
+          
+          console.warn('无法从截图项中提取URL:', shot);
           return '';
-        }).filter(url => url);
+        }).filter(url => url && url.trim() !== '');
+      } else if (typeof screenshots === 'object' && screenshots !== null) {
+        // 单个对象的情况
+        const shot = screenshots;
+        if (shot.url) {
+          screenshotUrls = [shot.url];
+        } else if (shot.response && shot.response.url) {
+          screenshotUrls = [shot.response.url];
+        } else if (typeof shot === 'string') {
+          screenshotUrls = [shot];
+        }
+      } else if (typeof screenshots === 'string') {
+        // 单个URL字符串
+        screenshotUrls = [screenshots];
       }
       
+      console.log('提取的URL列表:', screenshotUrls);
+      
       if (screenshotUrls.length === 0) {
+        console.warn('没有找到有效的截图URL');
         message.warning('没有找到有效的截图');
         return;
       }
@@ -836,8 +911,13 @@ const PurchaseInvoice: React.FC = () => {
                 }}
                 onClick={() => window.open(url, '_blank')}
                 onError={(e) => {
-                  console.error('Image load error:', url);
+                  console.error('图片加载失败:', url);
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
                   message.error(`截图 ${index + 1} 加载失败`);
+                }}
+                onLoad={() => {
+                  console.log('图片加载成功:', url);
                 }}
               />
             ))}
@@ -845,8 +925,8 @@ const PurchaseInvoice: React.FC = () => {
         )
       });
     } catch (error) {
-      console.error('Parse screenshots error:', error);
-      message.error('截图数据格式错误: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('查看截图时发生错误:', error);
+      message.error('查看截图失败: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 

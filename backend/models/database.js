@@ -83,26 +83,20 @@ if (process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD && pro
     }
   });
 } else {
-  // 兜底配置 - 连接到first_database
-  console.log('⚠️ No database configuration found, using defaults for first_database');
-  sequelize = new Sequelize(
-    'first_database',
-    'root',
-    '',
-    {
-      host: 'localhost',
-      port: 3306,
-      dialect: 'mysql',
-      timezone: '+08:00',
-      logging: false,
-      pool: {
-        max: 5,
-        min: 0,
-        acquire: 30000,
-        idle: 10000
-      }
+  // 兜底配置 - 使用SQLite数据库进行本地开发
+  console.log('⚠️ No database configuration found, using SQLite for local development');
+  const path = require('path');
+  sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: path.join(__dirname, '../database.db'),
+    logging: false,
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
     }
-  );
+  });
 }
 
 module.exports = { sequelize }; 
