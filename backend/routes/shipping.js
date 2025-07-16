@@ -2667,9 +2667,11 @@ router.post('/packing-list/analyze', uploadPackingList.single('packingList'), as
       size: req.file.size
     });
 
-    // 读取Excel文件
-    const workbook = XLSX.readFile(req.file.path);
-    const sheetNames = workbook.SheetNames;
+    // 使用ExcelJS读取Excel文件，完美保持格式
+    console.log('🔍 使用ExcelJS读取装箱表分析文件...');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(req.file.path);
+    const sheetNames = workbook.worksheets.map(sheet => sheet.name);
     
     // 自动分析配置
     const autoConfig = {
@@ -2685,8 +2687,19 @@ router.post('/packing-list/analyze', uploadPackingList.single('packingList'), as
 
     // 尝试自动检测配置
     for (const sheetName of sheetNames) {
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      const worksheet = workbook.getWorksheet(sheetName);
+      
+      // 将ExcelJS工作表数据转换为数组格式，便于分析
+      const data = [];
+      for (let rowNum = 1; rowNum <= worksheet.rowCount; rowNum++) {
+        const row = worksheet.getRow(rowNum);
+        const rowData = [];
+        for (let colNum = 1; colNum <= worksheet.columnCount; colNum++) {
+          const cell = row.getCell(colNum);
+          rowData.push(cell.value || '');
+        }
+        data.push(rowData);
+      }
       
       // 查找包含"Box 1 quantity"等关键字的行作为标题行
       for (let rowIndex = 0; rowIndex < Math.min(10, data.length); rowIndex++) {
@@ -2820,9 +2833,11 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       size: req.file.size
     });
 
-    // 读取Excel文件
-    const workbook = XLSX.readFile(req.file.path);
-    const sheetNames = workbook.SheetNames;
+    // 使用ExcelJS读取Excel文件，完美保持格式
+    console.log('🔍 使用ExcelJS读取装箱表上传文件...');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(req.file.path);
+    const sheetNames = workbook.worksheets.map(sheet => sheet.name);
     
 
 
@@ -2858,7 +2873,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
     
-    const worksheet = workbook.Sheets[targetSheetName];
+    const worksheet = workbook.getWorksheet(targetSheetName);
     
     if (!worksheet) {
       return res.status(400).json({
@@ -2867,7 +2882,17 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       });
     }
     
-    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    // 将ExcelJS工作表数据转换为数组格式，便于处理
+    const data = [];
+    for (let rowNum = 1; rowNum <= worksheet.rowCount; rowNum++) {
+      const row = worksheet.getRow(rowNum);
+      const rowData = [];
+      for (let colNum = 1; colNum <= worksheet.columnCount; colNum++) {
+        const cell = row.getCell(colNum);
+        rowData.push(cell.value || '');
+      }
+      data.push(rowData);
+    }
     
     if (data.length === 0) {
       return res.status(400).json({
@@ -3377,20 +3402,19 @@ router.post('/packing-list/fill', async (req, res) => {
       boxNumbers: config.boxNumbers
     });
 
-    // 读取原始Excel文件
-
-
+    // 使用ExcelJS读取原始Excel文件，完美保持格式
+    console.log('🔍 使用ExcelJS读取装箱表模板文件...');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(config.filePath);
     
-    const workbook = XLSX.readFile(config.filePath);
+    const worksheet = workbook.getWorksheet(config.sheetName);
     
-    if (!workbook.Sheets[config.sheetName]) {
+    if (!worksheet) {
       return res.status(400).json({
         success: false,
         message: `配置的Sheet页 "${config.sheetName}" 不存在于Excel文件中`
       });
     }
-    
-    const worksheet = workbook.Sheets[config.sheetName];
     
     // 列字母转换函数
     const getColumnLetter = (index) => {
@@ -3416,8 +3440,17 @@ router.post('/packing-list/fill', async (req, res) => {
       return getColumnLetter(col) + (row + 1);
     };
 
-    // 获取Excel数据用于读取SKU列表，但不用于重写整个工作表
-    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    // 将ExcelJS工作表数据转换为数组格式，用于读取SKU列表
+    const data = [];
+    for (let rowNum = 1; rowNum <= worksheet.rowCount; rowNum++) {
+      const row = worksheet.getRow(rowNum);
+      const rowData = [];
+      for (let colNum = 1; colNum <= worksheet.columnCount; colNum++) {
+        const cell = row.getCell(colNum);
+        rowData.push(cell.value || '');
+      }
+      data.push(rowData);
+    }
     
     // 按箱号和SKU组织发货数据
     const shippingByBoxAndSku = {};
@@ -3477,19 +3510,12 @@ router.post('/packing-list/fill', async (req, res) => {
         return;
       }
       
-      // 直接修改工作表单元格，保持原始格式
-      const cellRef = getCellRef(skuInfo.rowIndex, colIndex);
-      if (worksheet[cellRef]) {
-        // 如果单元格已存在，只修改值，保持格式
-        worksheet[cellRef].v = shippingItem.quantity;
-        worksheet[cellRef].t = 'n'; // 标记为数字类型
-      } else {
-        // 如果单元格不存在，创建新的单元格
-        worksheet[cellRef] = {
-          v: shippingItem.quantity,
-          t: 'n'
-        };
-      }
+      // 使用ExcelJS直接修改工作表单元格，完美保持原始格式
+      const rowNum = skuInfo.rowIndex + 1; // 转换为1基索引
+      const colNum = colIndex + 1; // 转换为1基索引
+      const cell = worksheet.getCell(rowNum, colNum);
+      cell.value = shippingItem.quantity;
+      console.log(`📝 ExcelJS填写装箱表: 行${rowNum} 列${colNum} = ${shippingItem.quantity}`);
       
       filledCount++;
     });
@@ -3525,59 +3551,44 @@ router.post('/packing-list/fill', async (req, res) => {
       );
       
       if (hasItems) {
-        // 只为有装货的箱子填写默认信息 - 直接修改工作表单元格
+        // 只为有装货的箱子使用ExcelJS填写默认信息，完美保持格式
+        const colNum = colIndex + 1; // 转换为1基索引
+        
         if (config.boxWeightRow) {
-          const cellRef = getCellRef(config.boxWeightRow - 1, colIndex);
-          worksheet[cellRef] = worksheet[cellRef] || {};
-          worksheet[cellRef].v = defaultBoxWeight;
-          worksheet[cellRef].t = 'n';
+          const weightCell = worksheet.getCell(config.boxWeightRow, colNum);
+          weightCell.value = defaultBoxWeight;
+          console.log(`📝 ExcelJS填写箱重: 行${config.boxWeightRow} 列${colNum} = ${defaultBoxWeight}`);
         }
         if (config.boxWidthRow) {
-          const cellRef = getCellRef(config.boxWidthRow - 1, colIndex);
-          worksheet[cellRef] = worksheet[cellRef] || {};
-          worksheet[cellRef].v = defaultBoxDimensions.width;
-          worksheet[cellRef].t = 'n';
+          const widthCell = worksheet.getCell(config.boxWidthRow, colNum);
+          widthCell.value = defaultBoxDimensions.width;
+          console.log(`📝 ExcelJS填写箱宽: 行${config.boxWidthRow} 列${colNum} = ${defaultBoxDimensions.width}`);
         }
         if (config.boxLengthRow) {
-          const cellRef = getCellRef(config.boxLengthRow - 1, colIndex);
-          worksheet[cellRef] = worksheet[cellRef] || {};
-          worksheet[cellRef].v = defaultBoxDimensions.length;
-          worksheet[cellRef].t = 'n';
+          const lengthCell = worksheet.getCell(config.boxLengthRow, colNum);
+          lengthCell.value = defaultBoxDimensions.length;
+          console.log(`📝 ExcelJS填写箱长: 行${config.boxLengthRow} 列${colNum} = ${defaultBoxDimensions.length}`);
         }
         if (config.boxHeightRow) {
-          const cellRef = getCellRef(config.boxHeightRow - 1, colIndex);
-          worksheet[cellRef] = worksheet[cellRef] || {};
-          worksheet[cellRef].v = defaultBoxDimensions.height;
-          worksheet[cellRef].t = 'n';
+          const heightCell = worksheet.getCell(config.boxHeightRow, colNum);
+          heightCell.value = defaultBoxDimensions.height;
+          console.log(`📝 ExcelJS填写箱高: 行${config.boxHeightRow} 列${colNum} = ${defaultBoxDimensions.height}`);
         }
       }
     }
     
-    // 更新工作表范围（确保新添加的单元格被包含在范围内）
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
-    // 扩展范围以包含所有可能的新单元格
-    for (let i = 0; i < config.boxColumns.length; i++) {
-      const colIndex = getColumnIndex(config.boxColumns[i]);
-      range.e.c = Math.max(range.e.c, colIndex);
-    }
-    // 扩展到最大可能的行
-    const maxRow = Math.max(
-      skuStartRowIndex + availableSkus.length - 1,
-      config.boxWeightRow ? config.boxWeightRow - 1 : 0,
-      config.boxWidthRow ? config.boxWidthRow - 1 : 0,
-      config.boxLengthRow ? config.boxLengthRow - 1 : 0,
-      config.boxHeightRow ? config.boxHeightRow - 1 : 0
-    );
-    range.e.r = Math.max(range.e.r, maxRow);
-    worksheet['!ref'] = XLSX.utils.encode_range(range);
+    // ExcelJS会自动管理工作表范围，无需手动更新
+    console.log('📋 ExcelJS自动管理装箱表工作表范围，数据填写完成');
 
-    // 保存到新文件，保持原始文件名
+    // 使用ExcelJS保存到新文件，完美保持原始格式
     const timestamp = Date.now();
     const originalNameWithoutExt = path.basename(config.originalName, path.extname(config.originalName));
     const outputFileName = `${timestamp}_${originalNameWithoutExt}_已填写.xlsx`;
     const outputPath = path.join(__dirname, '../uploads/packing-lists', outputFileName);
     
-    XLSX.writeFile(workbook, outputPath);
+    console.log(`💾 使用ExcelJS保存装箱表到: ${outputPath}`);
+    await workbook.xlsx.writeFile(outputPath);
+    console.log(`✅ 装箱表保存成功，所有格式完美保持`);
 
     // 更新配置文件，记录填写结果
     const updatedConfig = {
