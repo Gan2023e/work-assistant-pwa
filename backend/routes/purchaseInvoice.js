@@ -249,10 +249,11 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
       });
     }
 
-    // 处理数据
+    // 处理数据 - 先去重，因为合并单元格会导致同一订单出现多行
     const processedData = [];
     const skippedData = [];
     const errorData = [];
+    const processedOrderNumbers = new Set(); // 用于去重订单号
 
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
@@ -269,17 +270,29 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
 
         // 验证必需字段
         if (!orderNumber || !buyerName || !sellerName || !amount) {
-          errorData.push({
-            row: i + 1,
-            reason: '缺少必需字段',
-            data: row
-          });
+          // 只有当订单号不为空时才报错，否则可能是合并单元格的空行
+          if (orderNumber) {
+            errorData.push({
+              row: i + 1,
+              reason: '缺少必需字段',
+              data: row
+            });
+          }
+          continue;
+        }
+
+        // 检查是否已处理过此订单号（合并单元格导致的重复行）
+        if (processedOrderNumbers.has(orderNumber)) {
+          // 跳过重复的订单，不算作错误
           continue;
         }
 
         // 解析日期 - 优化处理，支持提取时间中的日期部分
         let orderDate;
         try {
+          // 调试信息：输出原始日期字符串
+          console.log(`第${i + 1}行 - 原始日期字符串: "${orderDateStr}"`);
+          
           // 先提取日期部分，去除时间部分
           let dateOnlyStr = orderDateStr;
           
@@ -297,51 +310,63 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
             }
           }
           
+          console.log(`第${i + 1}行 - 提取的日期部分: "${dateOnlyStr}"`);
+          
           // 尝试解析不同格式的日期
           if (dateOnlyStr.includes('/')) {
             const parts = dateOnlyStr.split('/');
+            console.log(`第${i + 1}行 - 斜杠分割结果:`, parts);
             if (parts.length === 3) {
               // 处理 YYYY/M/D 或 YYYY/MM/DD 格式
               const year = parseInt(parts[0]);
               const month = parseInt(parts[1]);
               const day = parseInt(parts[2]);
               
+              console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
+              
               if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                 orderDate = new Date(year, month - 1, day); // 月份从0开始
               } else {
-                throw new Error('日期数值超出有效范围');
+                throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
               }
             } else {
-              throw new Error('日期格式不正确');
+              throw new Error(`斜杠分割后部分数量不正确: ${parts.length}`);
             }
           } else if (dateOnlyStr.includes('-')) {
             // 处理 YYYY-MM-DD 格式
             const parts = dateOnlyStr.split('-');
+            console.log(`第${i + 1}行 - 横杠分割结果:`, parts);
             if (parts.length === 3) {
               const year = parseInt(parts[0]);
               const month = parseInt(parts[1]);
               const day = parseInt(parts[2]);
               
+              console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
+              
               if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                 orderDate = new Date(year, month - 1, day); // 月份从0开始
               } else {
-                throw new Error('日期数值超出有效范围');
+                throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
               }
             } else {
-              throw new Error('横杠格式日期不正确');
+              throw new Error(`横杠分割后部分数量不正确: ${parts.length}`);
             }
           } else {
             // 尝试直接解析
+            console.log(`第${i + 1}行 - 尝试直接解析日期: "${dateOnlyStr}"`);
             orderDate = new Date(dateOnlyStr);
           }
           
           if (isNaN(orderDate.getTime())) {
-            throw new Error('无效日期格式');
+            throw new Error(`解析后的日期无效: ${orderDate}`);
           }
+          
+          console.log(`第${i + 1}行 - 最终日期对象:`, orderDate);
         } catch (error) {
+          console.error(`第${i + 1}行 - 日期解析失败:`, error.message);
           errorData.push({
             row: i + 1,
-            reason: `日期格式错误: ${error.message}`,
+            reason: `日期格式错误: ${error.message} (原始: "${orderDateStr}")`,
             data: row
           });
           continue;
@@ -358,6 +383,8 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
             reason: '订单号已存在',
             data: row
           });
+          // 将此订单号标记为已处理，避免重复处理合并单元格的其他行
+          processedOrderNumbers.add(orderNumber);
           continue;
         }
 
@@ -373,6 +400,9 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
         };
 
         processedData.push(orderData);
+        
+        // 将此订单号标记为已处理，避免重复处理合并单元格的其他行
+        processedOrderNumbers.add(orderNumber);
 
       } catch (error) {
         errorData.push({
@@ -390,11 +420,15 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
       createdCount = createdOrders.length;
     }
 
+    // 计算实际处理的有效订单数（去除空行和重复行）
+    const validOrderCount = processedOrderNumbers.size + skippedData.length + errorData.length;
+    
     res.json({
       code: 0,
       message: '批量导入完成',
       data: {
         total: rawData.length,
+        validOrders: validOrderCount, // 实际有效订单数
         created: createdCount,
         skipped: skippedData.length,
         error: errorData.length,
