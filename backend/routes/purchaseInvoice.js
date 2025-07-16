@@ -1804,7 +1804,10 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
     console.log('🔗 生成的URL:', uploadResult.url);
     
     // 生成代理URL避免CORS和权限问题
-    const proxyUrl = `${req.protocol}://${req.get('host')}/api/purchase-invoice/screenshot-proxy?path=${encodeURIComponent(uploadResult.name)}`;
+    // 强制使用HTTPS，避免混合内容错误
+    const protocol = req.get('x-forwarded-proto') || req.protocol;
+    const secureProtocol = protocol === 'http' ? 'https' : protocol;
+    const proxyUrl = `${secureProtocol}://${req.get('host')}/api/purchase-invoice/screenshot-proxy?path=${encodeURIComponent(uploadResult.name)}`;
     
     const responseData = {
       filename: uploadResult.originalName,
