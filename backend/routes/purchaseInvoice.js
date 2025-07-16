@@ -262,7 +262,9 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
         const orderNumber = String(row['订单编号'] || '').trim();
         const buyerName = String(row['买家公司名'] || '').trim();
         const sellerName = String(row['卖家公司名'] || '').trim();
-        const amount = parseFloat(row['实付款(元)']) || 0;
+        // 处理金额格式，移除千位分隔符逗号
+        const amountStr = String(row['实付款(元)'] || '').trim().replace(/,/g, '');
+        const amount = parseFloat(amountStr) || 0;
         const orderDateStr = String(row['订单付款时间'] || '').trim();
 
         // 验证必需字段
@@ -313,7 +315,21 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
               throw new Error('日期格式不正确');
             }
           } else if (dateOnlyStr.includes('-')) {
-            orderDate = new Date(dateOnlyStr);
+            // 处理 YYYY-MM-DD 格式
+            const parts = dateOnlyStr.split('-');
+            if (parts.length === 3) {
+              const year = parseInt(parts[0]);
+              const month = parseInt(parts[1]);
+              const day = parseInt(parts[2]);
+              
+              if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                orderDate = new Date(year, month - 1, day); // 月份从0开始
+              } else {
+                throw new Error('日期数值超出有效范围');
+              }
+            } else {
+              throw new Error('横杠格式日期不正确');
+            }
           } else {
             // 尝试直接解析
             orderDate = new Date(dateOnlyStr);

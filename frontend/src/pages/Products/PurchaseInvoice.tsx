@@ -2054,8 +2054,8 @@ const PurchaseInvoice: React.FC = () => {
                 <li><strong>订单编号</strong>：必填，系统会自动跳过已存在的订单</li>
                 <li><strong>买家公司名</strong>：必填</li>
                 <li><strong>卖家公司名</strong>：必填</li>
-                <li><strong>实付款(元)</strong>：必填，数字格式</li>
-                <li><strong>订单付款时间</strong>：必填，支持多种日期时间格式（如：2025/4/2、2025/4/2 09:27:26）</li>
+                <li><strong>实付款(元)</strong>：必填，数字格式（支持千位分隔符，如：20,400.00）</li>
+                <li><strong>订单付款时间</strong>：必填，支持多种日期时间格式（如：2025/4/2、2025-04-02、2025/4/2 09:27:26、2025-04-02 09:27:26）</li>
               </ul>
               <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f6f8fa', borderRadius: '4px' }}>
                 <p style={{ margin: 0, fontWeight: 'bold', color: '#0366d6' }}>✨ 新功能支持：</p>
