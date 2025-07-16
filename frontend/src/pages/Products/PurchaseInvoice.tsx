@@ -28,7 +28,6 @@ import {
   UploadOutlined,
   FileTextOutlined,
   ShoppingCartOutlined,
-  DollarCircleOutlined,
   FilePdfOutlined,
   ReloadOutlined,
   SearchOutlined,
