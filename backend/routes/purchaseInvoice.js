@@ -1803,12 +1803,18 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
     console.log('📤 OSS上传结果:', uploadResult);
     console.log('🔗 生成的URL:', uploadResult.url);
     
+    // 生成代理URL避免CORS和权限问题
+    const proxyUrl = `${req.protocol}://${req.get('host')}/api/purchase-invoice/screenshot-proxy/${encodeURIComponent(uploadResult.name)}`;
+    
     const responseData = {
       filename: uploadResult.originalName,
       size: uploadResult.size,
-      url: uploadResult.url,
+      url: proxyUrl,  // 使用代理URL
+      directUrl: uploadResult.url,  // 保留原始URL用于调试
       objectName: uploadResult.name
     };
+    
+    console.log('🔄 使用代理URL:', proxyUrl);
     
     console.log('📨 返回给前端的数据:', responseData);
     
@@ -1888,6 +1894,76 @@ router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
       message: '删除截图失败',
       error: error.message
     });
+  }
+});
+
+// 截图代理路由 - 解决CORS和权限问题
+router.get('/screenshot-proxy/:objectName(*)', async (req, res) => {
+  try {
+    const objectName = decodeURIComponent(req.params.objectName);
+    console.log('🔄 代理请求截图:', objectName);
+    
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        code: 1,
+        message: 'OSS配置不完整'
+      });
+    }
+    
+    // 从OSS获取文件
+    const OSS = require('ali-oss');
+    const client = new OSS({
+      region: process.env.OSS_REGION || 'oss-cn-hangzhou',
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+      bucket: process.env.OSS_BUCKET,
+      secure: true
+    });
+    
+    console.log('📥 从OSS获取文件:', objectName);
+    const result = await client.get(objectName);
+    
+    // 设置正确的Content-Type
+    const ext = objectName.toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext.includes('.jpg') || ext.includes('.jpeg')) {
+      contentType = 'image/jpeg';
+    } else if (ext.includes('.png')) {
+      contentType = 'image/png';
+    } else if (ext.includes('.gif')) {
+      contentType = 'image/gif';
+    } else if (ext.includes('.webp')) {
+      contentType = 'image/webp';
+    }
+    
+    // 设置响应头
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': result.content.length,
+      'Cache-Control': 'public, max-age=31536000', // 缓存1年
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    
+    console.log('✅ 截图代理成功，文件大小:', result.content.length);
+    res.send(result.content);
+    
+  } catch (error) {
+    console.error('❌ 截图代理失败:', error);
+    
+    if (error.code === 'NoSuchKey') {
+      res.status(404).json({
+        code: 1,
+        message: '截图文件不存在'
+      });
+    } else {
+      res.status(500).json({
+        code: 1,
+        message: '获取截图失败: ' + error.message
+      });
+    }
   }
 });
 
