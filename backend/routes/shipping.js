@@ -3716,8 +3716,9 @@ router.get('/packing-list/download', async (req, res) => {
       });
     }
 
-    // 创建新的工作簿
-    const workbook = XLSX.utils.book_new();
+    // 使用ExcelJS创建新的工作簿，确保完全兼容Excel
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(configData.sheetName || 'Sheet1');
     
     // 准备数据：按照原始格式重建装箱表
     // 先创建标题行
@@ -3738,71 +3739,102 @@ router.get('/packing-list/download', async (req, res) => {
       skuData[item.sku][item.box_num] = item.quantity;
     });
     
-    // 构建表格数据
-    const sheetData = [];
+    // 使用ExcelJS逐行填写数据
+    let currentRow = 1;
     
     // 添加几行空行（模拟亚马逊表格格式）
     for (let i = 0; i < configData.headerRow - 1; i++) {
       if (i === 0) {
-        sheetData.push(['装箱表 - ' + new Date().toLocaleDateString('zh-CN')]);
-      } else {
-        sheetData.push([]);
+        worksheet.getCell(currentRow, 1).value = '装箱表 - ' + new Date().toLocaleDateString('zh-CN');
+        // 设置标题样式
+        worksheet.getCell(currentRow, 1).font = { bold: true, size: 14 };
       }
+      currentRow++;
     }
     
     // 添加标题行
-    sheetData.push(headerRow);
+    headerRow.forEach((header, index) => {
+      const cell = worksheet.getCell(currentRow, index + 1);
+      cell.value = header;
+      // 设置表头样式
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+    currentRow++;
     
     // 添加SKU数据行
     Object.keys(skuData).forEach(sku => {
-      const row = [sku];
-      configData.boxNumbers.forEach(boxNum => {
-        row.push(skuData[sku][boxNum] || 0);
+      worksheet.getCell(currentRow, 1).value = sku;
+      configData.boxNumbers.forEach((boxNum, index) => {
+        const cell = worksheet.getCell(currentRow, index + 2);
+        cell.value = skuData[sku][boxNum] || 0;
+        // 设置数据单元格边框
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
       });
-      sheetData.push(row);
+      // 设置SKU列边框
+      worksheet.getCell(currentRow, 1).border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      currentRow++;
     });
     
     // 添加统计行（可选）
-    sheetData.push([]); // 空行
-    const totalRow = ['总计'];
-    configData.boxNumbers.forEach(boxNum => {
+    currentRow++; // 空行
+    
+    // 总计行
+    worksheet.getCell(currentRow, 1).value = '总计';
+    worksheet.getCell(currentRow, 1).font = { bold: true };
+    configData.boxNumbers.forEach((boxNum, index) => {
       const total = configData.items
         .filter(item => item.box_num === boxNum)
         .reduce((sum, item) => sum + item.quantity, 0);
-      totalRow.push(total);
+      const cell = worksheet.getCell(currentRow, index + 2);
+      cell.value = total;
+      cell.font = { bold: true };
     });
-    sheetData.push(totalRow);
+    currentRow++;
     
     // 如果有箱子信息，添加重量等信息
     if (configData.boxes && configData.boxes.length > 0) {
-      sheetData.push([]); // 空行
-      const weightRow = ['箱子重量(kg)'];
-      configData.boxNumbers.forEach(boxNum => {
+      currentRow++; // 空行
+      worksheet.getCell(currentRow, 1).value = '箱子重量(kg)';
+      worksheet.getCell(currentRow, 1).font = { bold: true };
+      configData.boxNumbers.forEach((boxNum, index) => {
         const box = configData.boxes.find(b => b.box_num === boxNum);
-        weightRow.push(box?.weight || '');
+        worksheet.getCell(currentRow, index + 2).value = box?.weight || '';
       });
-      sheetData.push(weightRow);
     }
     
-    // 创建工作表
-    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-    
     // 设置列宽
-    const columnWidths = [{ wch: 20 }]; // SKU列宽度
-    configData.boxNumbers.forEach(() => {
-      columnWidths.push({ wch: 15 }); // 箱子列宽度
-    });
-    worksheet['!cols'] = columnWidths;
-    
-    // 添加工作表到工作簿
-    XLSX.utils.book_append_sheet(workbook, worksheet, configData.sheetName || 'Sheet1');
+    worksheet.getColumn(1).width = 20; // SKU列宽度
+    for (let i = 2; i <= configData.boxNumbers.length + 1; i++) {
+      worksheet.getColumn(i).width = 15; // 箱子列宽度
+    }
     
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filename = `装箱表_已填写_${timestamp}.xlsx`;
     
-    // 生成Excel文件buffer
-    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // 使用ExcelJS生成Excel文件buffer
+    const excelBuffer = await workbook.xlsx.writeBuffer();
     
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
