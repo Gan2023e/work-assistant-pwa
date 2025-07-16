@@ -455,19 +455,37 @@ const PurchaseInvoice: React.FC = () => {
 
   // 处理金额差异截图上传
   const handleScreenshotUpload = async (file: any) => {
+    console.log('🔄 开始上传截图:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+    
     setScreenshotUploading(true);
     const formData = new FormData();
     formData.append('screenshot', file);
     
     try {
+      console.log('🚀 发送上传请求到后端...');
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/upload-amount-difference-screenshot`, {
         method: 'POST',
         body: formData,
       });
       
+      console.log('📥 收到后端响应，状态:', response.status);
       const result = await response.json();
+      console.log('📨 后端返回的完整数据:', result);
       
       if (result.code === 0) {
+        console.log('✅ 后端确认上传成功');
+        console.log('📊 返回的数据字段:', {
+          filename: result.data.filename,
+          size: result.data.size,
+          url: result.data.url,
+          objectName: result.data.objectName,
+          hasUrl: !!result.data.url
+        });
+        
         const newFile: UploadFile = {
           uid: result.data.objectName,
           name: result.data.filename,
@@ -480,17 +498,27 @@ const PurchaseInvoice: React.FC = () => {
           }
         };
         
-        setUploadedScreenshots(prev => [...prev, newFile]);
+        console.log('📁 创建的文件对象:', newFile);
+        console.log('🔗 文件对象中的URL:', newFile.url);
+        
+        setUploadedScreenshots(prev => {
+          const newList = [...prev, newFile];
+          console.log('📋 更新后的截图列表:', newList);
+          return newList;
+        });
+        
         message.success('截图上传成功，点击眼睛图标可预览');
-        console.log('截图上传成功，文件数据:', newFile);
+        console.log('🎉 截图上传成功，文件数据:', newFile);
       } else {
-        console.error('截图上传失败:', result);
+        console.error('❌ 后端返回错误:', result);
         message.error(`截图上传失败: ${result.message || '未知错误'}`);
       }
     } catch (error) {
-      message.error('截图上传失败');
+      console.error('❌ 网络请求失败:', error);
+      message.error('截图上传失败：网络错误');
     } finally {
       setScreenshotUploading(false);
+      console.log('🔚 截图上传流程结束');
     }
     
     return false; // 阻止默认上传
@@ -507,15 +535,39 @@ const PurchaseInvoice: React.FC = () => {
       // 处理截图数据，确保只存储必要的信息
       let screenshotData = null;
       if (uploadedScreenshots.length > 0) {
-        const cleanScreenshots = uploadedScreenshots.map(file => ({
-          uid: file.uid,
-          name: file.name,
-          url: file.url,
-          size: file.size,
-          status: file.status
-        }));
+        console.log('💾 处理截图数据准备保存...');
+        console.log('📋 当前截图列表:', uploadedScreenshots);
+        
+        const cleanScreenshots = uploadedScreenshots.map((file, index) => {
+          console.log(`📁 处理第${index + 1}个文件:`, {
+            uid: file.uid,
+            name: file.name,
+            url: file.url,
+            size: file.size,
+            status: file.status,
+            hasUrl: !!file.url
+          });
+          
+          return {
+            uid: file.uid,
+            name: file.name,
+            url: file.url,
+            size: file.size,
+            status: file.status
+          };
+        });
+        
         screenshotData = JSON.stringify(cleanScreenshots);
-        console.log('准备存储的截图数据:', cleanScreenshots);
+        console.log('📊 清理后的截图数据:', cleanScreenshots);
+        console.log('💽 JSON字符串格式:', screenshotData);
+        
+        // 验证每个截图是否都有URL
+        const missingUrls = cleanScreenshots.filter(shot => !shot.url);
+        if (missingUrls.length > 0) {
+          console.warn('⚠️ 发现缺少URL的截图:', missingUrls);
+        }
+      } else {
+        console.log('📭 没有截图数据需要保存');
       }
       
       const invoiceData = {
@@ -940,7 +992,6 @@ const PurchaseInvoice: React.FC = () => {
       if (screenshotUrls.length === 0) {
         console.warn('⚠️ 没有找到有效的截图URL');
         console.log('🔍 调试信息 - 原始数组:', Array.isArray(screenshots) ? screenshots : '不是数组');
-        
         if (Array.isArray(screenshots)) {
           console.log('🔍 数组长度:', screenshots.length);
           screenshots.forEach((item, idx) => {
@@ -949,21 +1000,8 @@ const PurchaseInvoice: React.FC = () => {
             console.log(`  - thumbUrl字段:`, item.thumbUrl);
             console.log(`  - response字段:`, item.response);
           });
-          
-          // 检查是否有文件信息但缺少URL
-          const hasFileInfo = screenshots.some(item => item.name && item.size);
-          if (hasFileInfo) {
-            console.log('🔧 检测到截图文件信息但缺少URL，可能是OSS配置问题');
-            message.error({
-              content: '检测到截图数据异常（缺少访问链接）。这可能是OSS存储配置问题导致的。请联系管理员检查OSS配置或重新上传截图。',
-              duration: 10
-            });
-          } else {
-            message.warning('没有找到有效的截图');
-          }
-        } else {
-          message.warning('没有找到有效的截图');
         }
+        message.warning('没有找到有效的截图');
         return;
       }
       
