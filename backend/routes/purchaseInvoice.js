@@ -44,6 +44,23 @@ const excelUpload = multer({
   }
 });
 
+// 配置图片文件上传中间件（用于截图）
+const imageStorage = multer.memoryStorage();
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB限制
+  },
+  fileFilter: (req, file, cb) => {
+    // 允许图片文件
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传图片文件'));
+    }
+  }
+});
+
 // ==================== 采购订单相关接口 ====================
 
 // 获取采购订单列表
@@ -1738,7 +1755,7 @@ router.get('/statistics', async (req, res) => {
 });
 
 // 上传金额差异截图
-router.post('/upload-amount-difference-screenshot', upload.single('screenshot'), async (req, res) => {
+router.post('/upload-amount-difference-screenshot', imageUpload.single('screenshot'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -1770,20 +1787,16 @@ router.post('/upload-amount-difference-screenshot', upload.single('screenshot'),
       'purchase'
     );
     
-    if (uploadResult.success) {
-      res.json({
-        code: 0,
-        message: '截图上传成功',
-        data: {
-          filename: uploadResult.originalName,
-          size: uploadResult.size,
-          url: uploadResult.url,
-          objectName: uploadResult.name
-        }
-      });
-    } else {
-      throw new Error('截图上传失败');
-    }
+    res.json({
+      code: 0,
+      message: '截图上传成功',
+      data: {
+        filename: uploadResult.originalName,
+        size: uploadResult.size,
+        url: uploadResult.url,
+        objectName: uploadResult.name
+      }
+    });
   } catch (error) {
     console.error('截图上传失败:', error);
     res.status(500).json({

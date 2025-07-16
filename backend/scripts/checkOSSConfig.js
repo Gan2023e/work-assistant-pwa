@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { checkOSSConfig } = require('../utils/oss');
 
 console.log('=== OSS配置检查工具 ===\n');
