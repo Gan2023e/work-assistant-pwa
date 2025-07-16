@@ -1865,4 +1865,139 @@ router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
   }
 });
 
+// 修复截图数据 - 为缺少URL的截图重新生成访问链接
+router.post('/fix-screenshot-urls', async (req, res) => {
+  try {
+    console.log('🔧 开始修复截图URL数据...');
+    
+    // 查找所有包含截图但可能缺少URL的发票
+    const invoicesWithScreenshots = await Invoice.findAll({
+      where: {
+        amount_difference_screenshot: {
+          [Op.not]: null
+        }
+      }
+    });
+    
+    console.log(`📊 找到 ${invoicesWithScreenshots.length} 条包含截图的发票记录`);
+    
+    let fixedCount = 0;
+    let errorCount = 0;
+    const fixResults = [];
+    
+    for (const invoice of invoicesWithScreenshots) {
+      try {
+        const screenshots = JSON.parse(invoice.amount_difference_screenshot);
+        let needsUpdate = false;
+        
+        if (Array.isArray(screenshots)) {
+          for (let i = 0; i < screenshots.length; i++) {
+            const screenshot = screenshots[i];
+            
+            // 检查是否缺少URL但有文件名
+            if (!screenshot.url && screenshot.name && screenshot.uid) {
+              console.log(`🔍 发现缺少URL的截图: 发票${invoice.id}, 文件${screenshot.name}`);
+              
+              // 尝试根据uid在OSS中查找文件
+              try {
+                if (checkOSSConfig()) {
+                  const OSS = require('ali-oss');
+                  const client = new OSS({
+                    region: process.env.OSS_REGION || 'oss-cn-hangzhou',
+                    accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+                    accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+                    bucket: process.env.OSS_BUCKET
+                  });
+                  
+                  // 尝试在不同的路径中查找文件
+                  const possiblePaths = [
+                    screenshot.uid,  // 直接使用uid
+                    `invoices/purchase/${new Date().getFullYear()}/${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${screenshot.name}`,
+                    `invoices/purchase/${screenshot.name}`,
+                    screenshot.name
+                  ];
+                  
+                  let foundUrl = null;
+                  for (const path of possiblePaths) {
+                    try {
+                      const result = await client.head(path);
+                      if (result.status === 200) {
+                        foundUrl = `https://${process.env.OSS_BUCKET}.${process.env.OSS_REGION}.aliyuncs.com/${path}`;
+                        console.log(`✅ 找到文件: ${path} -> ${foundUrl}`);
+                        break;
+                      }
+                    } catch (headError) {
+                      // 文件不存在，继续尝试下一个路径
+                    }
+                  }
+                  
+                  if (foundUrl) {
+                    screenshot.url = foundUrl;
+                    needsUpdate = true;
+                    console.log(`🔧 为发票${invoice.id}的截图添加URL: ${foundUrl}`);
+                  } else {
+                    console.log(`⚠️ 未能找到发票${invoice.id}的截图文件: ${screenshot.name}`);
+                  }
+                }
+              } catch (ossError) {
+                console.error(`❌ OSS查找失败:`, ossError.message);
+              }
+            }
+          }
+          
+          if (needsUpdate) {
+            await invoice.update({
+              amount_difference_screenshot: JSON.stringify(screenshots)
+            });
+            fixedCount++;
+            fixResults.push({
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoice_number,
+              status: 'fixed',
+              screenshotCount: screenshots.length
+            });
+            console.log(`✅ 已修复发票${invoice.id}的截图URL`);
+          } else {
+            fixResults.push({
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoice_number,
+              status: 'no_fix_needed',
+              screenshotCount: screenshots.length
+            });
+          }
+        }
+        
+      } catch (processError) {
+        console.error(`❌ 处理发票${invoice.id}失败:`, processError.message);
+        errorCount++;
+        fixResults.push({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoice_number,
+          status: 'error',
+          error: processError.message
+        });
+      }
+    }
+    
+    res.json({
+      code: 0,
+      message: '截图URL修复完成',
+      data: {
+        totalInvoices: invoicesWithScreenshots.length,
+        fixedCount: fixedCount,
+        errorCount: errorCount,
+        details: fixResults
+      }
+    });
+    
+  } catch (error) {
+    console.error('修复截图URL失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '修复失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

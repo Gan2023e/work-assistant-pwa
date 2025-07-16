@@ -940,6 +940,7 @@ const PurchaseInvoice: React.FC = () => {
       if (screenshotUrls.length === 0) {
         console.warn('⚠️ 没有找到有效的截图URL');
         console.log('🔍 调试信息 - 原始数组:', Array.isArray(screenshots) ? screenshots : '不是数组');
+        
         if (Array.isArray(screenshots)) {
           console.log('🔍 数组长度:', screenshots.length);
           screenshots.forEach((item, idx) => {
@@ -948,8 +949,21 @@ const PurchaseInvoice: React.FC = () => {
             console.log(`  - thumbUrl字段:`, item.thumbUrl);
             console.log(`  - response字段:`, item.response);
           });
+          
+          // 检查是否有文件信息但缺少URL
+          const hasFileInfo = screenshots.some(item => item.name && item.size);
+          if (hasFileInfo) {
+            console.log('🔧 检测到截图文件信息但缺少URL，可能是OSS配置问题');
+            message.error({
+              content: '检测到截图数据异常（缺少访问链接）。这可能是OSS存储配置问题导致的。请联系管理员检查OSS配置或重新上传截图。',
+              duration: 10
+            });
+          } else {
+            message.warning('没有找到有效的截图');
+          }
+        } else {
+          message.warning('没有找到有效的截图');
         }
-        message.warning('没有找到有效的截图');
         return;
       }
       
