@@ -225,8 +225,11 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
       });
     }
     
-    // 将Excel数据转换为JSON
-    const rawData = XLSX.utils.sheet_to_json(sheet);
+    // 将Excel数据转换为JSON，保留原始数据类型
+    const rawData = XLSX.utils.sheet_to_json(sheet, {
+      raw: false, // 转换为字符串而不是保留原始类型
+      dateNF: 'yyyy-mm-dd' // 指定日期格式
+    });
     
     if (!rawData || rawData.length === 0) {
       return res.status(400).json({
@@ -266,7 +269,29 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
         // 处理金额格式，移除千位分隔符逗号
         const amountStr = String(row['实付款(元)'] || '').trim().replace(/,/g, '');
         const amount = parseFloat(amountStr) || 0;
-        const orderDateStr = String(row['订单付款时间'] || '').trim();
+        // 处理日期字段 - 可能是Date对象、数字或字符串
+        let orderDateStr;
+        const rawDateValue = row['订单付款时间'];
+        
+        console.log(`第${i + 1}行 - 原始日期值类型: ${typeof rawDateValue}, 值: `, rawDateValue);
+        
+        if (rawDateValue instanceof Date) {
+          // 如果是Date对象，直接使用
+          orderDateStr = rawDateValue.toISOString().split('T')[0];
+          console.log(`第${i + 1}行 - Date对象转换结果: "${orderDateStr}"`);
+        } else if (typeof rawDateValue === 'number') {
+          // 如果是Excel的日期数字格式，转换为Date
+          const excelDate = XLSX.SSF.parse_date_code(rawDateValue);
+          if (excelDate) {
+            orderDateStr = `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`;
+            console.log(`第${i + 1}行 - Excel数字日期转换结果: "${orderDateStr}"`);
+          } else {
+            orderDateStr = String(rawDateValue).trim();
+          }
+        } else {
+          // 字符串格式
+          orderDateStr = String(rawDateValue || '').trim();
+        }
 
         // 验证必需字段
         if (!orderNumber || !buyerName || !sellerName || !amount) {
@@ -290,71 +315,80 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
         // 解析日期 - 优化处理，支持提取时间中的日期部分
         let orderDate;
         try {
-          // 调试信息：输出原始日期字符串
-          console.log(`第${i + 1}行 - 原始日期字符串: "${orderDateStr}"`);
+          console.log(`第${i + 1}行 - 处理后的日期字符串: "${orderDateStr}"`);
           
-          // 先提取日期部分，去除时间部分
-          let dateOnlyStr = orderDateStr;
-          
-          // 如果包含时间（有空格），只取空格前的部分
-          if (dateOnlyStr.includes(' ')) {
-            dateOnlyStr = dateOnlyStr.split(' ')[0].trim();
-          }
-          
-          // 如果包含时间（有冒号），分割并取日期部分
-          if (dateOnlyStr.includes(':')) {
-            // 查找最后一个数字后跟冒号的位置，从该位置截断
-            const match = dateOnlyStr.match(/^(.*?)[\s]+\d{1,2}:/);
-            if (match) {
-              dateOnlyStr = match[1].trim();
-            }
-          }
-          
-          console.log(`第${i + 1}行 - 提取的日期部分: "${dateOnlyStr}"`);
-          
-          // 尝试解析不同格式的日期
-          if (dateOnlyStr.includes('/')) {
-            const parts = dateOnlyStr.split('/');
-            console.log(`第${i + 1}行 - 斜杠分割结果:`, parts);
-            if (parts.length === 3) {
-              // 处理 YYYY/M/D 或 YYYY/MM/DD 格式
-              const year = parseInt(parts[0]);
-              const month = parseInt(parts[1]);
-              const day = parseInt(parts[2]);
-              
-              console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
-              
-              if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                orderDate = new Date(year, month - 1, day); // 月份从0开始
-              } else {
-                throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
-              }
-            } else {
-              throw new Error(`斜杠分割后部分数量不正确: ${parts.length}`);
-            }
-          } else if (dateOnlyStr.includes('-')) {
-            // 处理 YYYY-MM-DD 格式
-            const parts = dateOnlyStr.split('-');
-            console.log(`第${i + 1}行 - 横杠分割结果:`, parts);
-            if (parts.length === 3) {
-              const year = parseInt(parts[0]);
-              const month = parseInt(parts[1]);
-              const day = parseInt(parts[2]);
-              
-              console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
-              
-              if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                orderDate = new Date(year, month - 1, day); // 月份从0开始
-              } else {
-                throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
-              }
-            } else {
-              throw new Error(`横杠分割后部分数量不正确: ${parts.length}`);
-            }
+          // 如果已经是YYYY-MM-DD格式，直接创建Date对象
+          if (/^\d{4}-\d{2}-\d{2}$/.test(orderDateStr)) {
+            const parts = orderDateStr.split('-');
+            const year = parseInt(parts[0]);
+            const month = parseInt(parts[1]);
+            const day = parseInt(parts[2]);
+            orderDate = new Date(year, month - 1, day);
+            console.log(`第${i + 1}行 - 直接解析YYYY-MM-DD格式成功: `, orderDate);
           } else {
-            // 尝试直接解析
-            console.log(`第${i + 1}行 - 尝试直接解析日期: "${dateOnlyStr}"`);
-            orderDate = new Date(dateOnlyStr);
+            // 先提取日期部分，去除时间部分
+            let dateOnlyStr = orderDateStr;
+            
+            // 如果包含时间（有空格），只取空格前的部分
+            if (dateOnlyStr.includes(' ')) {
+              dateOnlyStr = dateOnlyStr.split(' ')[0].trim();
+            }
+            
+            // 如果包含时间（有冒号），分割并取日期部分
+            if (dateOnlyStr.includes(':')) {
+              // 查找最后一个数字后跟冒号的位置，从该位置截断
+              const match = dateOnlyStr.match(/^(.*?)[\s]+\d{1,2}:/);
+              if (match) {
+                dateOnlyStr = match[1].trim();
+              }
+            }
+            
+            console.log(`第${i + 1}行 - 提取的日期部分: "${dateOnlyStr}"`);
+            
+            // 尝试解析不同格式的日期
+            if (dateOnlyStr.includes('/')) {
+              const parts = dateOnlyStr.split('/');
+              console.log(`第${i + 1}行 - 斜杠分割结果:`, parts);
+              if (parts.length === 3) {
+                // 处理 YYYY/M/D 或 YYYY/MM/DD 格式
+                const year = parseInt(parts[0]);
+                const month = parseInt(parts[1]);
+                const day = parseInt(parts[2]);
+                
+                console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
+                
+                if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                  orderDate = new Date(year, month - 1, day); // 月份从0开始
+                } else {
+                  throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
+                }
+              } else {
+                throw new Error(`斜杠分割后部分数量不正确: ${parts.length}`);
+              }
+            } else if (dateOnlyStr.includes('-')) {
+              // 处理 YYYY-MM-DD 格式
+              const parts = dateOnlyStr.split('-');
+              console.log(`第${i + 1}行 - 横杠分割结果:`, parts);
+              if (parts.length === 3) {
+                const year = parseInt(parts[0]);
+                const month = parseInt(parts[1]);
+                const day = parseInt(parts[2]);
+                
+                console.log(`第${i + 1}行 - 解析的日期: ${year}-${month}-${day}`);
+                
+                if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                  orderDate = new Date(year, month - 1, day); // 月份从0开始
+                } else {
+                  throw new Error(`日期数值超出有效范围: ${year}-${month}-${day}`);
+                }
+              } else {
+                throw new Error(`横杠分割后部分数量不正确: ${parts.length}`);
+              }
+            } else {
+              // 尝试直接解析
+              console.log(`第${i + 1}行 - 尝试直接解析日期: "${dateOnlyStr}"`);
+              orderDate = new Date(dateOnlyStr);
+            }
           }
           
           if (isNaN(orderDate.getTime())) {
