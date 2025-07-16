@@ -481,10 +481,11 @@ const PurchaseInvoice: React.FC = () => {
         };
         
         setUploadedScreenshots(prev => [...prev, newFile]);
-        message.success('截图上传成功');
+        message.success('截图上传成功，点击眼睛图标可预览');
         console.log('截图上传成功，文件数据:', newFile);
       } else {
-        message.error(result.message);
+        console.error('截图上传失败:', result);
+        message.error(`截图上传失败: ${result.message || '未知错误'}`);
       }
     } catch (error) {
       message.error('截图上传失败');
@@ -806,6 +807,50 @@ const PurchaseInvoice: React.FC = () => {
     // 直接在新窗口打开后端代理URL
     const fileUrl = `${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/file`;
     window.open(fileUrl, '_blank');
+  };
+
+  // 预览上传中的截图文件
+  const handlePreviewUploadedScreenshot = (file: UploadFile) => {
+    console.log('预览上传文件:', file);
+    
+    // 获取文件URL，按优先级检查不同字段
+    const url = file.url || file.thumbUrl || (file.response && file.response.url) || 
+                (file.response && file.response.data && file.response.data.url);
+    
+    if (url) {
+      Modal.info({
+        title: '截图预览',
+        width: 600,
+        content: (
+          <div style={{ textAlign: 'center' }}>
+            <img
+              src={url}
+              alt={file.name || '截图'}
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '400px', 
+                objectFit: 'contain',
+                border: '1px solid #d9d9d9',
+                borderRadius: '4px'
+              }}
+              onError={(e) => {
+                console.error('图片预览失败:', url);
+                message.error('图片预览失败');
+              }}
+              onLoad={() => {
+                console.log('图片预览成功:', url);
+              }}
+            />
+            <p style={{ marginTop: '8px', color: '#666' }}>
+              文件名: {file.name}
+            </p>
+          </div>
+        )
+      });
+    } else {
+      console.error('无法获取文件URL:', file);
+      message.error('无法预览该文件，未找到有效的URL');
+    }
   };
 
   // 查看金额差异截图
@@ -1727,6 +1772,21 @@ const PurchaseInvoice: React.FC = () => {
                           onChange={({ fileList }) => setUploadedScreenshots(fileList)}
                           multiple
                           listType="picture-card"
+                          showUploadList={{
+                            showPreviewIcon: true,
+                            showRemoveIcon: true,
+                            showDownloadIcon: false
+                          }}
+                          onPreview={handlePreviewUploadedScreenshot}
+                          onRemove={(file) => {
+                            console.log('删除截图文件:', file);
+                            // 从列表中移除该文件
+                            setUploadedScreenshots(prev => 
+                              prev.filter(item => item.uid !== file.uid)
+                            );
+                            message.success('截图删除成功');
+                            return true;
+                          }}
                           style={{ marginTop: '8px' }}
                         >
                           {uploadedScreenshots.length >= 3 ? null : (
