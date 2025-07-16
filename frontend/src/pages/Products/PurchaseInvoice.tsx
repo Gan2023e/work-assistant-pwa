@@ -415,6 +415,7 @@ const PurchaseInvoice: React.FC = () => {
           seller_name: extractedInfo.seller_name,
           buyer_name: extractedInfo.buyer_name,
           invoice_file_url: result.data.fileInfo?.url,
+          invoice_file_object_name: result.data.fileInfo?.name,
           invoice_file_name: result.data.fileInfo?.filename,
           file_size: result.data.fileInfo?.size,
           invoice_type: extractedInfo.invoice_type || '增值税普通发票',
@@ -456,8 +457,26 @@ const PurchaseInvoice: React.FC = () => {
   // 处理金额差异截图上传
   const handleScreenshotUpload = async (file: any) => {
     setScreenshotUploading(true);
+    
+    // 检查文件大小 (限制5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('截图文件过大，请选择小于5MB的图片');
+      setScreenshotUploading(false);
+      return false;
+    }
+    
+    // 检查文件类型
+    if (!file.type.startsWith('image/')) {
+      message.error('只支持图片格式的文件');
+      setScreenshotUploading(false);
+      return false;
+    }
+    
     const formData = new FormData();
     formData.append('screenshot', file);
+    
+    // 显示上传进度消息
+    const loadingMessage = message.loading('正在上传截图...', 0);
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/upload-amount-difference-screenshot`, {
@@ -481,13 +500,24 @@ const PurchaseInvoice: React.FC = () => {
         };
         
         setUploadedScreenshots(prev => [...prev, newFile]);
-        message.success('截图上传成功');
+        loadingMessage(); // 关闭加载消息
+        message.success(`截图上传成功：${result.data.filename}`);
       } else {
+        loadingMessage(); // 关闭加载消息
         message.error(`截图上传失败: ${result.message || '未知错误'}`);
       }
     } catch (error) {
+      loadingMessage(); // 关闭加载消息
       console.error('截图上传失败:', error);
-      message.error('截图上传失败：网络错误');
+      if (error instanceof Error) {
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+          message.error('网络连接失败，请检查网络连接后重试');
+        } else {
+          message.error(`截图上传失败：${error.message}`);
+        }
+      } else {
+        message.error('截图上传失败：未知错误');
+      }
     } finally {
       setScreenshotUploading(false);
     }
@@ -506,15 +536,36 @@ const PurchaseInvoice: React.FC = () => {
       // 处理截图数据
       let screenshotData = null;
       if (uploadedScreenshots.length > 0) {
-        const cleanScreenshots = uploadedScreenshots.map((file) => ({
-          uid: file.uid,
-          name: file.name,
-          url: file.url,
-          size: file.size,
-          status: file.status
-        }));
+        const cleanScreenshots = uploadedScreenshots.map((file) => {
+          // 确保获取到正确的objectName
+          let objectName = null;
+          if (file.response?.objectName) {
+            objectName = file.response.objectName;
+          } else if (file.response?.data?.objectName) {
+            objectName = file.response.data.objectName;
+          } else if (file.response?.name) {
+            objectName = file.response.name;
+          }
+          
+          console.log('📷 保存截图数据:', {
+            uid: file.uid,
+            name: file.name,
+            objectName: objectName,
+            url: file.url
+          });
+          
+          return {
+            uid: file.uid,
+            name: file.name,
+            url: file.url,
+            size: file.size,
+            status: file.status,
+            objectName: objectName // 确保保存OSS对象名
+          };
+        });
         
         screenshotData = JSON.stringify(cleanScreenshots);
+        console.log('📷 最终截图数据:', screenshotData);
       }
       
       const invoiceData = {
@@ -676,7 +727,7 @@ const PurchaseInvoice: React.FC = () => {
                 style={{ padding: '0 4px', marginLeft: '8px' }}
                 onClick={() => handleDeleteInvoice(invoice.id)}
               >
-                删除发票
+                {invoice.amount_difference_screenshot ? '删除发票及截图' : '删除发票'}
               </Button>
             </div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
@@ -702,37 +753,16 @@ const PurchaseInvoice: React.FC = () => {
                         {/* 金额差异截图显示 */}
             {invoice.amount_difference_screenshot && (
               <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                <Space size={4}>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<EyeOutlined />}
-                    onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
-                    style={{ padding: '0 4px', height: '20px' }}
-                    title="查看金额差异截图"
-                  >
-                    查看差异截图
-                  </Button>
-                  <Button
-                    type="link"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => {
-                      Modal.confirm({
-                        title: '确认删除',
-                        content: '确定要删除这些金额差异截图吗？删除后无法恢复。',
-                        okText: '确定',
-                        cancelText: '取消',
-                        onOk: () => handleDeleteScreenshots(invoice.id)
-                      });
-                    }}
-                    style={{ padding: '0 4px', height: '20px' }}
-                    title="删除金额差异截图"
-                  >
-                    删除截图
-                  </Button>
-                </Space>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => handleViewScreenshots(invoice.amount_difference_screenshot!)}
+                  style={{ padding: '0 4px', height: '20px' }}
+                  title="查看金额差异截图"
+                >
+                  查看差异截图
+                </Button>
               </div>
             )}
           </div>
@@ -954,27 +984,7 @@ const PurchaseInvoice: React.FC = () => {
     }
   };
 
-  // 删除金额差异截图
-  const handleDeleteScreenshots = async (invoiceId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/${invoiceId}/screenshots`, {
-        method: 'DELETE',
-      });
-      
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        message.success('截图删除成功');
-        fetchPurchaseOrders(); // 刷新列表
-        fetchStatistics(); // 刷新统计
-      } else {
-        message.error(result.message || '截图删除失败');
-      }
-    } catch (error) {
-      console.error('删除截图失败:', error);
-      message.error('删除截图失败，请检查网络连接');
-    }
-  };
+
 
   // 上传文件到发票
   const handleUploadFileToInvoice = async (invoiceId: number) => {
@@ -1043,23 +1053,55 @@ const PurchaseInvoice: React.FC = () => {
           const result = await response.json();
           
           if (result.code === 0) {
-            // 根据操作结果显示不同的成功消息
-            if (result.data?.resetOrdersCount > 0) {
-              if (result.data.ossDelete?.success) {
-                message.success(`发票删除成功！已删除OSS文件并重置${result.data.resetOrdersCount}个相关订单的状态`);
-              } else if (result.data.operationDetails?.hadFile) {
-                message.warning(`发票删除成功，但OSS文件删除失败。已重置${result.data.resetOrdersCount}个相关订单的状态`);
+            // 构建详细的删除结果消息
+            const {
+              resetOrdersCount = 0,
+              ossDelete = {},
+              screenshotDelete = {},
+              operationDetails = {}
+            } = result.data || {};
+            
+            let messages = ['发票删除成功'];
+            
+            // OSS文件删除结果
+            if (operationDetails.hadFile) {
+              if (ossDelete.success) {
+                messages.push('OSS发票文件已删除');
               } else {
-                message.success(`发票删除成功，已重置${result.data.resetOrdersCount}个相关订单的状态`);
+                messages.push('OSS发票文件删除失败');
               }
+            }
+            
+            // 截图删除结果
+            if (operationDetails.hadScreenshots) {
+              if (screenshotDelete.success) {
+                const deletedCount = screenshotDelete.deletedCount || 0;
+                const failedCount = screenshotDelete.failedCount || 0;
+                if (failedCount > 0) {
+                  messages.push(`${deletedCount}个截图已删除，${failedCount}个删除失败`);
+                } else {
+                  messages.push(`${deletedCount}个截图已删除`);
+                }
+              } else {
+                messages.push('截图删除失败');
+              }
+            }
+            
+            // 订单重置结果
+            if (resetOrdersCount > 0) {
+              messages.push(`已重置${resetOrdersCount}个相关订单的状态`);
+            }
+            
+            const finalMessage = messages.join('，');
+            
+            // 根据是否有失败的操作选择消息类型
+            const hasFailures = (operationDetails.hadFile && !ossDelete.success) || 
+                               (operationDetails.hadScreenshots && !screenshotDelete.success);
+            
+            if (hasFailures) {
+              message.warning(finalMessage);
             } else {
-              if (result.data?.ossDelete?.success) {
-                message.success('发票删除成功！已删除OSS文件');
-              } else if (result.data?.operationDetails?.hadFile) {
-                message.warning('发票删除成功，但OSS文件删除失败');
-              } else {
-                message.success('发票删除成功');
-              }
+              message.success(finalMessage);
             }
             
             // 清空选中状态并刷新数据
@@ -1152,6 +1194,16 @@ const PurchaseInvoice: React.FC = () => {
           .clickable-card:hover {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             transform: translateY(-2px);
+          }
+          .upload-disabled {
+            opacity: 0.6;
+            pointer-events: none;
+          }
+          .ant-upload-list-picture-card .ant-upload-list-item-uploading {
+            border-color: #1890ff;
+          }
+          .ant-upload-list-picture-card .ant-upload-list-item-uploading .ant-upload-list-item-thumbnail {
+            filter: blur(1px);
           }
         `}
       </style>
@@ -1763,11 +1815,61 @@ const PurchaseInvoice: React.FC = () => {
                             showDownloadIcon: false
                           }}
                           onPreview={handlePreviewUploadedScreenshot}
-                          onRemove={(file) => {
-                            setUploadedScreenshots(prev => 
-                              prev.filter(item => item.uid !== file.uid)
-                            );
-                            message.success('截图删除成功');
+                          disabled={screenshotUploading}
+                          className={screenshotUploading ? 'upload-disabled' : ''}
+                          onRemove={async (file) => {
+                            try {
+                              // 获取OSS对象名
+                              let objectName = null;
+                              if (file.response?.objectName) {
+                                objectName = file.response.objectName;
+                              } else if (file.response?.data?.objectName) {
+                                objectName = file.response.data.objectName;
+                              } else if (file.url && file.url.includes('screenshot-proxy?path=')) {
+                                // 从代理URL中提取路径参数
+                                try {
+                                  const urlObj = new URL(file.url);
+                                  objectName = decodeURIComponent(urlObj.searchParams.get('path') || '');
+                                                                 } catch (urlError: any) {
+                                   console.warn('⚠️ 从URL解析对象名失败:', file.url, urlError.message);
+                                }
+                              }
+                              
+                              if (objectName) {
+                                // 调用后端删除OSS文件
+                                const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/delete-invoice-file`, {
+                                  method: 'DELETE',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({ objectName }),
+                                });
+                                
+                                const result = await response.json();
+                                if (result.code === 0) {
+                                  console.log('✅ OSS截图文件删除成功:', objectName);
+                                } else {
+                                  console.warn('⚠️ OSS截图文件删除失败:', objectName, result.message);
+                                }
+                              } else {
+                                console.warn('⚠️ 无法获取截图的OSS对象名:', file);
+                              }
+                              
+                              // 从前端状态中移除
+                              setUploadedScreenshots(prev => 
+                                prev.filter(item => item.uid !== file.uid)
+                              );
+                              message.success('截图删除成功');
+                              
+                            } catch (error) {
+                              console.error('删除截图时发生错误:', error);
+                              // 即使OSS删除失败，也要从前端状态中移除
+                              setUploadedScreenshots(prev => 
+                                prev.filter(item => item.uid !== file.uid)
+                              );
+                              message.warning('截图从界面移除成功，但OSS文件可能删除失败');
+                            }
+                            
                             return true;
                           }}
                           style={{ marginTop: '8px' }}
@@ -1914,6 +2016,9 @@ const PurchaseInvoice: React.FC = () => {
           
           {/* 隐藏字段存储文件信息 */}
           <Form.Item name="invoice_file_url" style={{ display: 'none' }}>
+            <Input type="hidden" />
+          </Form.Item>
+          <Form.Item name="invoice_file_object_name" style={{ display: 'none' }}>
             <Input type="hidden" />
           </Form.Item>
           <Form.Item name="invoice_file_name" style={{ display: 'none' }}>

@@ -39,6 +39,11 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: true,
     comment: '发票文件OSS链接'
   },
+  invoice_file_object_name: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    comment: '发票文件OSS对象名称'
+  },
   invoice_file_name: {
     type: DataTypes.STRING(200),
     allowNull: true,

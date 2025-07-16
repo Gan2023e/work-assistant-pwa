@@ -592,27 +592,122 @@ router.delete('/invoices/:id', async (req, res) => {
     }
     
     let ossDeleteResult = { success: false, message: '无文件需要删除' };
+    let screenshotDeleteResult = { success: false, message: '无截图需要删除' };
     
-    // 1. 先删除OSS上的文件（如果有的话）
+    // 1. 先删除金额差异截图（如果有的话）
+    if (invoice.amount_difference_screenshot) {
+      try {
+        const screenshots = JSON.parse(invoice.amount_difference_screenshot);
+        let deletedScreenshots = 0;
+        let failedScreenshots = 0;
+        
+        console.log(`🗑️ 开始删除 ${screenshots.length} 个金额差异截图...`);
+        console.log('📷 截图数据结构:', JSON.stringify(screenshots, null, 2));
+        
+        // 删除OSS中的截图文件
+        for (const screenshot of screenshots) {
+          console.log('🔍 处理截图:', JSON.stringify(screenshot, null, 2));
+          
+          // 获取OSS对象名，优先使用objectName，其次从URL解析
+          let objectName = null;
+          
+          if (screenshot.objectName) {
+            objectName = screenshot.objectName;
+            console.log('📋 使用objectName字段:', objectName);
+          } else if (screenshot.url) {
+            // 从URL中提取对象名
+            try {
+              if (screenshot.url.includes('screenshot-proxy?path=')) {
+                // 从代理URL中提取路径参数
+                const urlObj = new URL(screenshot.url);
+                objectName = decodeURIComponent(urlObj.searchParams.get('path') || '');
+                console.log('🔗 从代理URL解析对象名:', objectName);
+              } else if (screenshot.url.includes('aliyuncs.com')) {
+                // 从OSS直接URL中提取对象名
+                const urlObj = new URL(screenshot.url);
+                objectName = urlObj.pathname.substring(1); // 去掉开头的 /
+                console.log('🔗 从OSS URL解析对象名:', objectName);
+              }
+            } catch (urlError) {
+              console.warn('⚠️ 从URL解析对象名失败:', screenshot.url, urlError.message);
+            }
+          }
+          
+          if (objectName) {
+            try {
+              console.log('🗑️ 尝试删除OSS文件:', objectName);
+              const deleteResult = await deleteFromOSS(objectName);
+              if (deleteResult.success) {
+                console.log('✅ 删除OSS截图文件成功:', objectName);
+                deletedScreenshots++;
+              } else {
+                console.warn('⚠️ 删除OSS截图文件失败:', objectName, deleteResult.message);
+                failedScreenshots++;
+              }
+            } catch (ossError) {
+              console.warn('⚠️ 删除OSS截图文件异常:', objectName, ossError.message);
+              failedScreenshots++;
+            }
+          } else {
+            console.warn('⚠️ 无法确定截图文件的对象名:', screenshot);
+            failedScreenshots++;
+          }
+        }
+        
+        screenshotDeleteResult = {
+          success: deletedScreenshots > 0,
+          message: `删除截图：成功${deletedScreenshots}个，失败${failedScreenshots}个`,
+          deletedCount: deletedScreenshots,
+          failedCount: failedScreenshots
+        };
+        
+      } catch (parseError) {
+        console.warn('⚠️ 解析截图数据失败:', parseError.message);
+        screenshotDeleteResult = { success: false, message: '解析截图数据失败' };
+      }
+    }
+    
+    // 2. 删除发票文件（如果有的话）
     if (invoice.invoice_file_url) {
       // 检查OSS配置
       if (checkOSSConfig()) {
         try {
-          // 从URL中提取对象名称
+          // 获取OSS对象名称，优先使用数据库中保存的对象名
           let objectName = '';
-          if (invoice.invoice_file_url.includes('aliyuncs.com')) {
+          
+          if (invoice.invoice_file_object_name) {
+            // 优先使用数据库中保存的对象名
+            objectName = invoice.invoice_file_object_name;
+            console.log('📋 使用数据库中保存的对象名:', objectName);
+          } else if (invoice.invoice_file_url.includes('aliyuncs.com')) {
+            // OSS直接URL格式，从URL解析
             const url = new URL(invoice.invoice_file_url);
             objectName = url.pathname.substring(1); // 去掉开头的 /
+            console.log('🔗 从OSS URL解析对象名:', objectName);
+          } else if (invoice.invoice_file_url.includes('/api/purchase-invoice/invoices/') && invoice.invoice_file_url.includes('/file')) {
+            // 代理URL格式，无法提取对象名
+            console.warn('⚠️ 代理URL格式且无数据库对象名，跳过OSS删除:', invoice.invoice_file_url);
+            ossDeleteResult = { success: false, message: '代理URL格式且无数据库对象名' };
           } else {
-            // 如果是本地文件路径，直接使用文件名
+            // 其他格式，尝试使用文件名作为后备
             objectName = path.basename(invoice.invoice_file_url);
+            console.warn('⚠️ 未知URL格式，尝试使用文件名作为对象名:', objectName);
           }
           
           if (objectName) {
+            console.log('🗑️ 尝试删除OSS文件:', objectName);
             ossDeleteResult = await deleteFromOSS(objectName);
+            if (ossDeleteResult.success) {
+              console.log('✅ OSS文件删除成功:', objectName);
+            } else {
+              console.warn('⚠️ OSS文件删除失败:', objectName, ossDeleteResult.message);
+            }
+          } else {
+            ossDeleteResult = { success: false, message: '无法从URL提取对象名' };
+            console.warn('⚠️ 无法从URL提取对象名:', invoice.invoice_file_url);
           }
         } catch (ossError) {
-          console.error('OSS文件删除出错:', ossError);
+          console.error('❌ OSS文件删除出错:', ossError);
           ossDeleteResult = { success: false, message: ossError.message };
           // 不阻止删除流程，只记录错误
         }
@@ -621,7 +716,7 @@ router.delete('/invoices/:id', async (req, res) => {
       }
     }
     
-    // 2. 将相关订单的状态重置为"未开票"，并清除invoice_id
+    // 3. 将相关订单的状态重置为"未开票"，并清除invoice_id
     const relatedOrders = await PurchaseOrder.findAll({
       where: { invoice_id: id }
     });
@@ -639,7 +734,7 @@ router.delete('/invoices/:id', async (req, res) => {
       );
     }
     
-    // 3. 删除发票记录
+    // 4. 删除发票记录
     await invoice.destroy({ transaction });
     
     // 提交事务
@@ -654,9 +749,19 @@ router.delete('/invoices/:id', async (req, res) => {
         invoiceNumber: invoice.invoice_number,
         sellerName: invoice.seller_name,
         ossDelete: ossDeleteResult,
+        screenshotDelete: screenshotDeleteResult,
         operationDetails: {
           hadFile: !!invoice.invoice_file_url,
+          hadScreenshots: !!invoice.amount_difference_screenshot,
           fileName: invoice.invoice_file_name,
+          screenshotCount: invoice.amount_difference_screenshot ? 
+            (() => {
+              try {
+                return JSON.parse(invoice.amount_difference_screenshot).length;
+              } catch {
+                return 0;
+              }
+            })() : 0,
           relatedOrdersCount: relatedOrders.length,
           relatedOrderNumbers: relatedOrders.map(o => o.order_number)
         }
@@ -1595,6 +1700,7 @@ router.post('/invoices/:id/upload-file', upload.single('file'), async (req, res)
     if (uploadResult) {
       await invoice.update({
         invoice_file_url: uploadResult.url,
+        invoice_file_object_name: uploadResult.name,
         invoice_file_name: uploadResult.originalName,
         file_size: uploadResult.size
       });
@@ -1829,63 +1935,7 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
   }
 });
 
-// 删除发票的金额差异截图
-router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
-  try {
-    const { invoiceId } = req.params;
-    
-    // 获取发票信息
-    const invoice = await Invoice.findByPk(invoiceId);
-    if (!invoice) {
-      return res.status(404).json({
-        code: 1,
-        message: '发票不存在'
-      });
-    }
-    
-    // 如果有截图，先删除OSS中的文件
-    if (invoice.amount_difference_screenshot) {
-      try {
-        const screenshots = JSON.parse(invoice.amount_difference_screenshot);
-        
-        // 删除OSS中的截图文件
-        for (const screenshot of screenshots) {
-          if (screenshot.uid) {
-            try {
-              await deleteFromOSS(screenshot.uid);
-              console.log('✅ 删除OSS截图文件成功:', screenshot.uid);
-            } catch (ossError) {
-              console.warn('⚠️ 删除OSS截图文件失败:', screenshot.uid, ossError.message);
-            }
-          }
-        }
-      } catch (parseError) {
-        console.warn('⚠️ 解析截图数据失败:', parseError.message);
-      }
-    }
-    
-    // 更新数据库，清除截图信息
-    await invoice.update({
-      amount_difference_screenshot: null
-    });
-    
-    res.json({
-      code: 0,
-      message: '截图删除成功',
-      data: {
-        invoiceId: invoice.id
-      }
-    });
-    
-  } catch (error) {
-    console.error('删除截图失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '删除截图失败',
-      error: error.message
-    });
-  }
-});
+
 
 // 截图代理路由 - 解决CORS和权限问题
 router.get('/screenshot-proxy', async (req, res) => {
