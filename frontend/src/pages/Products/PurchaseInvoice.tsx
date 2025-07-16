@@ -855,19 +855,26 @@ const PurchaseInvoice: React.FC = () => {
 
   // 查看金额差异截图
   const handleViewScreenshots = (screenshotData: string) => {
+    console.log('🔍 handleViewScreenshots 被调用');
+    console.log('📨 接收到的数据类型:', typeof screenshotData);
+    console.log('📨 数据长度:', screenshotData?.length);
+    
     try {
-      console.log('原始截图数据:', screenshotData);
+      console.log('📋 原始截图数据:', screenshotData);
       
       let screenshots: any;
       try {
         screenshots = JSON.parse(screenshotData);
+        console.log('✅ JSON解析成功');
       } catch (parseError) {
-        console.error('JSON解析失败:', parseError);
+        console.error('❌ JSON解析失败:', parseError);
         message.error('截图数据格式错误，无法解析');
         return;
       }
       
-      console.log('解析后的截图数据:', screenshots);
+      console.log('📊 解析后的截图数据:', screenshots);
+      console.log('📊 数据类型:', typeof screenshots);
+      console.log('📊 是否为数组:', Array.isArray(screenshots));
       
       // 处理不同的数据格式
       let screenshotUrls: string[] = [];
@@ -927,48 +934,73 @@ const PurchaseInvoice: React.FC = () => {
         screenshotUrls = [screenshots];
       }
       
-      console.log('提取的URL列表:', screenshotUrls);
+      console.log('📋 提取的URL列表:', screenshotUrls);
+      console.log('📊 URL数量:', screenshotUrls.length);
       
       if (screenshotUrls.length === 0) {
-        console.warn('没有找到有效的截图URL');
+        console.warn('⚠️ 没有找到有效的截图URL');
+        console.log('🔍 调试信息 - 原始数组:', Array.isArray(screenshots) ? screenshots : '不是数组');
+        if (Array.isArray(screenshots)) {
+          console.log('🔍 数组长度:', screenshots.length);
+          screenshots.forEach((item, idx) => {
+            console.log(`🔍 第${idx + 1}项:`, item);
+            console.log(`  - url字段:`, item.url);
+            console.log(`  - thumbUrl字段:`, item.thumbUrl);
+            console.log(`  - response字段:`, item.response);
+          });
+        }
         message.warning('没有找到有效的截图');
         return;
       }
       
       // 创建一个模态框显示所有截图
+      console.log('🖼️ 准备显示模态框，截图数量:', screenshotUrls.length);
+      console.log('🖼️ 截图URL列表:', screenshotUrls);
+      
       Modal.info({
         title: '金额差异截图',
         width: 800,
+        onOk: () => {
+          console.log('🔚 模态框关闭');
+        },
         content: (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {screenshotUrls.map((url: string, index: number) => (
-              <img
-                key={index}
-                src={url}
-                alt={`截图 ${index + 1}`}
-                style={{ 
-                  maxWidth: '200px', 
-                  maxHeight: '200px', 
-                  objectFit: 'contain',
-                  border: '1px solid #d9d9d9',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-                onClick={() => window.open(url, '_blank')}
-                onError={(e) => {
-                  console.error('图片加载失败:', url);
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                  message.error(`截图 ${index + 1} 加载失败`);
-                }}
-                onLoad={() => {
-                  console.log('图片加载成功:', url);
-                }}
-              />
-            ))}
+            {screenshotUrls.map((url: string, index: number) => {
+              console.log(`🖼️ 渲染第${index + 1}张图片:`, url);
+              return (
+                <img
+                  key={index}
+                  src={url}
+                  alt={`截图 ${index + 1}`}
+                  style={{ 
+                    maxWidth: '200px', 
+                    maxHeight: '200px', 
+                    objectFit: 'contain',
+                    border: '1px solid #d9d9d9',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => {
+                    console.log('🖱️ 点击图片，在新窗口打开:', url);
+                    window.open(url, '_blank');
+                  }}
+                  onError={(e) => {
+                    console.error('❌ 图片加载失败:', url);
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    message.error(`截图 ${index + 1} 加载失败`);
+                  }}
+                  onLoad={() => {
+                    console.log('✅ 图片加载成功:', url);
+                  }}
+                />
+              );
+            })}
           </div>
         )
       });
+      
+      console.log('🎉 模态框创建完成');
     } catch (error) {
       console.error('查看截图时发生错误:', error);
       message.error('查看截图失败: ' + (error instanceof Error ? error.message : String(error)));
