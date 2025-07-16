@@ -1650,13 +1650,18 @@ const PurchaseInvoice: React.FC = () => {
             title={
               parseQuality && parseQuality.completeness < 100
                 ? "PDF解析有误，需修复后再上传"
+                : amountDifference > 0.01 && uploadedScreenshots.length === 0
+                ? "金额不匹配，请上传相关截图后再确认"
                 : ""
             }
           >
             <Button
               type="primary"
               loading={loading}
-              disabled={parseQuality ? parseQuality.completeness < 100 : false}
+              disabled={
+                (parseQuality ? parseQuality.completeness < 100 : false) ||
+                (amountDifference > 0.01 && uploadedScreenshots.length === 0)
+              }
               onClick={() => invoiceForm.submit()}
             >
               确定
