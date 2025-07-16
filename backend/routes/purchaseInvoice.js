@@ -1804,7 +1804,7 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
     console.log('🔗 生成的URL:', uploadResult.url);
     
     // 生成代理URL避免CORS和权限问题
-    const proxyUrl = `${req.protocol}://${req.get('host')}/api/purchase-invoice/screenshot-proxy/${encodeURIComponent(uploadResult.name)}`;
+    const proxyUrl = `${req.protocol}://${req.get('host')}/api/purchase-invoice/screenshot-proxy?path=${encodeURIComponent(uploadResult.name)}`;
     
     const responseData = {
       filename: uploadResult.originalName,
@@ -1898,10 +1898,17 @@ router.delete('/invoices/:invoiceId/screenshots', async (req, res) => {
 });
 
 // 截图代理路由 - 解决CORS和权限问题
-router.get('/screenshot-proxy/*', async (req, res) => {
+router.get('/screenshot-proxy', async (req, res) => {
   try {
-    const objectName = decodeURIComponent(req.params[0]); // 通配符匹配的路径，需要解码
+    const objectName = req.query.path; // 从查询参数获取文件路径
     console.log('🔄 代理请求截图:', objectName);
+    
+    if (!objectName) {
+      return res.status(400).json({
+        code: 1,
+        message: '缺少文件路径参数'
+      });
+    }
     
     // 检查OSS配置
     if (!checkOSSConfig()) {
