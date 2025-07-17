@@ -86,6 +86,27 @@ const Logistics = sequelize.define('Logistics', {
     type: DataTypes.STRING,
     field: 'payment_status',
   },
+  // VAT税单相关字段
+  vatReceiptUrl: {
+    type: DataTypes.STRING,
+    field: 'vat_receipt_url',
+  },
+  vatReceiptObjectName: {
+    type: DataTypes.STRING,
+    field: 'vat_receipt_object_name',
+  },
+  vatReceiptFileName: {
+    type: DataTypes.STRING,
+    field: 'vat_receipt_file_name',
+  },
+  vatReceiptFileSize: {
+    type: DataTypes.INTEGER,
+    field: 'vat_receipt_file_size',
+  },
+  vatReceiptUploadTime: {
+    type: DataTypes.DATE,
+    field: 'vat_receipt_upload_time',
+  },
 }, {
   tableName: 'logistics',
   timestamps: false

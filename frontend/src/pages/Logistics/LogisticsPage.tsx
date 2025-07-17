@@ -69,6 +69,12 @@ interface LogisticsRecord {
   taxDeclarationStatus: string;
   dimensions: string;
   paymentStatus: string;
+  // VAT税单相关字段
+  vatReceiptUrl?: string;
+  vatReceiptObjectName?: string;
+  vatReceiptFileName?: string;
+  vatReceiptFileSize?: number;
+  vatReceiptUploadTime?: string;
 }
 
 // 筛选选项接口
@@ -152,6 +158,8 @@ const LogisticsPage: React.FC = () => {
     unpaidTotalFee: 0,
     pendingWarehouseCount: 0
   });
+  const [vatUploadingIds, setVatUploadingIds] = useState<Set<string>>(new Set());
+  const [vatDeletingIds, setVatDeletingIds] = useState<Set<string>>(new Set());
 
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
@@ -258,6 +266,117 @@ const LogisticsPage: React.FC = () => {
     } catch (error) {
       console.error('获取统计数据失败:', error);
     }
+  };
+
+  // 上传VAT税单
+  const handleUploadVatReceipt = async (shippingId: string, file: File) => {
+    // 添加到上传中状态
+    setVatUploadingIds(prev => new Set(prev).add(shippingId));
+    
+    try {
+      const formData = new FormData();
+      formData.append('vatReceipt', file);
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/logistics/upload-vat-receipt/${shippingId}`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('VAT税单上传成功');
+        // 更新本地数据
+        setData(prevData =>
+          prevData.map(item =>
+            item.shippingId === shippingId
+              ? {
+                  ...item,
+                  vatReceiptUrl: result.data.url,
+                  vatReceiptFileName: result.data.fileName,
+                  vatReceiptFileSize: result.data.fileSize,
+                  vatReceiptUploadTime: result.data.uploadTime
+                }
+              : item
+          )
+        );
+      } else {
+        throw new Error(result.message || 'VAT税单上传失败');
+      }
+    } catch (error) {
+      console.error('VAT税单上传失败:', error);
+      message.error(`VAT税单上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      // 从上传中状态移除
+      setVatUploadingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(shippingId);
+        return newSet;
+      });
+    }
+  };
+
+  // 删除VAT税单
+  const handleDeleteVatReceipt = async (shippingId: string) => {
+    Modal.confirm({
+      title: '确认删除VAT税单',
+      content: '您确定要删除这个VAT税单吗？此操作不可撤销。',
+      okText: '确认删除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        // 添加到删除中状态
+        setVatDeletingIds(prev => new Set(prev).add(shippingId));
+        
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/api/logistics/delete-vat-receipt/${shippingId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            }
+          });
+          
+          const result = await response.json();
+          
+          if (result.code === 0) {
+            message.success('VAT税单删除成功');
+            // 更新本地数据
+            setData(prevData =>
+              prevData.map(item =>
+                item.shippingId === shippingId
+                  ? {
+                      ...item,
+                      vatReceiptUrl: undefined,
+                      vatReceiptObjectName: undefined,
+                      vatReceiptFileName: undefined,
+                      vatReceiptFileSize: undefined,
+                      vatReceiptUploadTime: undefined
+                    }
+                  : item
+              )
+            );
+          } else {
+            throw new Error(result.message || 'VAT税单删除失败');
+          }
+        } catch (error) {
+          console.error('VAT税单删除失败:', error);
+          message.error(`VAT税单删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        } finally {
+          // 从删除中状态移除
+          setVatDeletingIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(shippingId);
+            return newSet;
+          });
+        }
+      }
+    });
   };
 
 
@@ -1749,6 +1868,66 @@ const LogisticsPage: React.FC = () => {
       filters: filterOptions.taxPaymentStatus?.map(item => ({ text: item, value: item })),
       filteredValue: filters.taxPaymentStatus || null,
       filterMode: 'tree',
+    },
+    {
+      title: 'VAT税单',
+      key: 'vatReceipt',
+      width: 120,
+      align: 'center',
+      render: (_, record) => {
+        const isUploading = vatUploadingIds.has(record.shippingId);
+        const isDeleting = vatDeletingIds.has(record.shippingId);
+        
+        return (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+            {record.vatReceiptUrl ? (
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => window.open(record.vatReceiptUrl, '_blank')}
+                  title={`查看VAT税单: ${record.vatReceiptFileName}`}
+                  disabled={isDeleting}
+                >
+                  查看
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={() => handleDeleteVatReceipt(record.shippingId)}
+                  title="删除VAT税单"
+                  loading={isDeleting}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? '删除中' : '删除'}
+                </Button>
+              </>
+            ) : (
+              <Upload
+                accept=".pdf"
+                maxCount={1}
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  handleUploadVatReceipt(record.shippingId, file);
+                  return false;
+                }}
+                disabled={isUploading}
+              >
+                <Button 
+                  type="link" 
+                  size="small" 
+                  title="上传VAT税单PDF"
+                  loading={isUploading}
+                  disabled={isUploading}
+                >
+                  {isUploading ? '上传中' : '上传'}
+                </Button>
+              </Upload>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '物流节点',

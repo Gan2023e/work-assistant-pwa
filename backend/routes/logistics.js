@@ -3,6 +3,24 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const Logistics = require('../models/Logistics');
 const { authenticateToken } = require('./auth');
+const multer = require('multer');
+const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
+
+// 配置multer用于文件上传
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB限制
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('只支持PDF文件'), false);
+    }
+  }
+});
 
 // 搜索物流信息
 router.post('/search', authenticateToken, async (req, res) => {
@@ -685,6 +703,149 @@ router.post('/batch-delete', authenticateToken, async (req, res) => {
     res.status(500).json({
       code: 500,
       message: '服务器错误',
+      error: error.message
+    });
+  }
+});
+
+// 上传VAT税单
+router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single('vatReceipt'), async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到VAT税单上传请求:', req.params.shippingId);
+  
+  try {
+    const { shippingId } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        code: 400,
+        message: '请选择要上传的PDF文件'
+      });
+    }
+    
+    // 验证物流记录是否存在
+    const logisticsRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+    
+    if (!logisticsRecord) {
+      return res.status(404).json({
+        code: 404,
+        message: '物流记录不存在'
+      });
+    }
+    
+    // 如果已有VAT税单，先删除旧文件
+    if (logisticsRecord.vatReceiptObjectName) {
+      try {
+        await deleteFromOSS(logisticsRecord.vatReceiptObjectName);
+        console.log('✅ 删除旧VAT税单文件成功');
+      } catch (error) {
+        console.warn('⚠️ 删除旧VAT税单文件失败:', error.message);
+      }
+    }
+    
+    // 构建文件名，包含shippingId便于识别
+    const fileName = `VAT-${shippingId}-${req.file.originalname}`;
+    
+    // 上传新文件到OSS，使用purchase文件夹
+    const uploadResult = await uploadToOSS(req.file.buffer, fileName, 'purchase');
+    
+    if (!uploadResult.success) {
+      throw new Error('文件上传失败');
+    }
+    
+    // 更新数据库记录
+    await Logistics.update({
+      vatReceiptUrl: uploadResult.url,
+      vatReceiptObjectName: uploadResult.name,
+      vatReceiptFileName: req.file.originalname,
+      vatReceiptFileSize: req.file.size,
+      vatReceiptUploadTime: new Date()
+    }, {
+      where: { shippingId }
+    });
+    
+    console.log('✅ VAT税单上传成功:', uploadResult.name);
+    
+    res.json({
+      code: 0,
+      message: 'VAT税单上传成功',
+      data: {
+        url: uploadResult.url,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        uploadTime: new Date()
+      }
+    });
+    
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', 'VAT税单上传失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: 'VAT税单上传失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除VAT税单
+router.delete('/delete-vat-receipt/:shippingId', authenticateToken, async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到VAT税单删除请求:', req.params.shippingId);
+  
+  try {
+    const { shippingId } = req.params;
+    
+    // 验证物流记录是否存在
+    const logisticsRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+    
+    if (!logisticsRecord) {
+      return res.status(404).json({
+        code: 404,
+        message: '物流记录不存在'
+      });
+    }
+    
+    if (!logisticsRecord.vatReceiptObjectName) {
+      return res.status(404).json({
+        code: 404,
+        message: '该记录没有VAT税单'
+      });
+    }
+    
+    // 从OSS删除文件
+    try {
+      await deleteFromOSS(logisticsRecord.vatReceiptObjectName);
+      console.log('✅ OSS文件删除成功');
+    } catch (error) {
+      console.warn('⚠️ OSS文件删除失败:', error.message);
+      // 继续执行数据库清理，即使OSS删除失败
+    }
+    
+    // 清除数据库中的VAT税单信息
+    await Logistics.update({
+      vatReceiptUrl: null,
+      vatReceiptObjectName: null,
+      vatReceiptFileName: null,
+      vatReceiptFileSize: null,
+      vatReceiptUploadTime: null
+    }, {
+      where: { shippingId }
+    });
+    
+    console.log('✅ VAT税单删除成功');
+    
+    res.json({
+      code: 0,
+      message: 'VAT税单删除成功'
+    });
+    
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', 'VAT税单删除失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: 'VAT税单删除失败',
       error: error.message
     });
   }
