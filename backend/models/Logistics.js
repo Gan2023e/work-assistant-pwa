@@ -66,6 +66,7 @@ const Logistics = sequelize.define('Logistics', {
   },
   mrn: {
     type: DataTypes.STRING,
+    field: 'vat_receipt_mrn',
   },
   customsDuty: {
     type: DataTypes.DECIMAL(10, 2),
