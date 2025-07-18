@@ -5,6 +5,7 @@ const Logistics = require('../models/Logistics');
 const { authenticateToken } = require('./auth');
 const multer = require('multer');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
+const pdf = require('pdf-parse');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -21,6 +22,114 @@ const upload = multer({
     }
   }
 });
+
+// VAT税单PDF解析函数
+const parseVatReceiptPDF = async (buffer) => {
+  try {
+    const data = await pdf(buffer);
+    const text = data.text;
+    
+    console.log('📄 VAT税单PDF解析开始');
+    console.log('📄 PDF文本长度:', text.length);
+    console.log('📄 PDF文本片段 (前1000字符):', text.substring(0, 1000));
+    
+    const extractedData = {
+      mrn: '',
+      taxAmount: null,
+      taxDate: null
+    };
+    
+    // 1. 提取MRN (Movement Reference Number)
+    // MRN通常是25位字符，格式如：25GB7A8H3YNK4P0AR3
+    const mrnPatterns = [
+      /MRN[：:\s]*([A-Z0-9]{25})/i,
+      /Movement Reference Number[：:\s]*([A-Z0-9]{25})/i,
+      /([A-Z]{2}[A-Z0-9]{23})/i, // 2位国家代码 + 23位字符
+      /([A-Z0-9]{25})/i // 25位字母数字组合
+    ];
+    
+    for (const pattern of mrnPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        extractedData.mrn = match[1];
+        console.log('✅ MRN提取成功:', extractedData.mrn);
+        break;
+      }
+    }
+    
+    // 2. 提取税金金额
+    // 查找VAT相关的金额信息
+    const taxAmountPatterns = [
+      /VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /VAT \(PVA\)[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /\[B00\] VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Payable amount[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Total tax assessed[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Tax base[^0-9]*([0-9,]+\.?[0-9]*)/i
+    ];
+    
+    for (const pattern of taxAmountPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const amountStr = match[1].replace(/,/g, '');
+        const amount = parseFloat(amountStr);
+        if (!isNaN(amount) && amount > 0) {
+          extractedData.taxAmount = amount;
+          console.log('✅ 税金金额提取成功:', extractedData.taxAmount);
+          break;
+        }
+      }
+    }
+    
+    // 3. 提取税金日期
+    const datePatterns = [
+      /Acceptance date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
+      /Status date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
+      /\[54\] Place and date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
+      /(\d{2}\/\d{2}\/\d{4})/i, // 通用日期格式
+      /(\d{4}-\d{2}-\d{2})/i, // ISO日期格式
+      /(\d{2}\.\d{2}\.\d{4})/i // 点分隔日期格式
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        let dateStr = match[1];
+        // 标准化日期格式
+        if (dateStr.includes('/')) {
+          // 转换 DD/MM/YYYY 为 YYYY-MM-DD
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        } else if (dateStr.includes('.')) {
+          // 转换 DD.MM.YYYY 为 YYYY-MM-DD
+          const parts = dateStr.split('.');
+          if (parts.length === 3) {
+            dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        }
+        
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          extractedData.taxDate = dateStr;
+          console.log('✅ 税金日期提取成功:', extractedData.taxDate);
+          break;
+        }
+      }
+    }
+    
+    console.log('📄 VAT税单解析结果:', extractedData);
+    return extractedData;
+    
+  } catch (error) {
+    console.error('❌ VAT税单PDF解析失败:', error);
+    return {
+      mrn: '',
+      taxAmount: null,
+      taxDate: null
+    };
+  }
+};
 
 // 搜索物流信息
 router.post('/search', authenticateToken, async (req, res) => {
@@ -69,6 +178,17 @@ router.post('/search', authenticateToken, async (req, res) => {
             { [Op.lte]: `${currentYear}-12-31` }
           ]
         };
+      } else if (filters.specialQuery === 'unuploadedVatReceipt') {
+        // 查询目的地为英国且未上传VAT税单的记录
+        where[Op.and] = [
+          { destinationCountry: '英国' },
+          {
+            [Op.or]: [
+              { vatReceiptUrl: null },
+              { vatReceiptUrl: '' }
+            ]
+          }
+        ];
       } else {
         // 处理状态筛选
         if (filters.status) {
@@ -584,12 +704,28 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
+    // 6. 未上传VAT税单数量（目的地为英国且没有VAT税单的记录）
+    const unuploadedVatReceiptCount = await Logistics.count({
+      where: {
+        [Op.and]: [
+          { destinationCountry: '英国' },
+          {
+            [Op.or]: [
+              { vatReceiptUrl: null },
+              { vatReceiptUrl: '' }
+            ]
+          }
+        ]
+      }
+    });
+
     const result = {
       yearlyCount,
       transitProductCount,
       transitPackageCount,
       unpaidTotalFee: Math.round(unpaidTotalFee * 100) / 100, // 保留两位小数
-      pendingWarehouseCount
+      pendingWarehouseCount,
+      unuploadedVatReceiptCount
     };
 
     console.log('\x1b[32m%s\x1b[0m', '统计数据:', result);
@@ -744,6 +880,9 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
       }
     }
     
+    // 解析PDF提取MRN、税金和时间
+    const extractedData = await parseVatReceiptPDF(req.file.buffer);
+    
     // 构建文件名，包含shippingId便于识别
     const fileName = `VAT-${shippingId}-${req.file.originalname}`;
     
@@ -754,18 +893,37 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
       throw new Error('文件上传失败');
     }
     
-    // 更新数据库记录
-    await Logistics.update({
+    // 准备更新数据
+    const updateData = {
       vatReceiptUrl: uploadResult.url,
       vatReceiptObjectName: uploadResult.name,
       vatReceiptFileName: req.file.originalname,
       vatReceiptFileSize: req.file.size,
       vatReceiptUploadTime: new Date()
-    }, {
+    };
+    
+    // 如果解析到了MRN，更新MRN字段
+    if (extractedData.mrn) {
+      updateData.mrn = extractedData.mrn;
+    }
+    
+    // 如果解析到了税金金额，更新vatReceiptTaxAmount字段
+    if (extractedData.taxAmount) {
+      updateData.vatReceiptTaxAmount = extractedData.taxAmount;
+    }
+    
+    // 如果解析到了税金日期，更新vatReceiptTaxDate字段
+    if (extractedData.taxDate) {
+      updateData.vatReceiptTaxDate = extractedData.taxDate;
+    }
+    
+    // 更新数据库记录
+    await Logistics.update(updateData, {
       where: { shippingId }
     });
     
     console.log('✅ VAT税单上传成功:', uploadResult.name);
+    console.log('✅ 提取的数据:', extractedData);
     
     res.json({
       code: 0,
@@ -774,7 +932,8 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
         url: uploadResult.url,
         fileName: req.file.originalname,
         fileSize: req.file.size,
-        uploadTime: new Date()
+        uploadTime: new Date(),
+        extractedData: extractedData
       }
     });
     
@@ -851,4 +1010,4 @@ router.delete('/delete-vat-receipt/:shippingId', authenticateToken, async (req, 
   }
 });
 
-module.exports = router; 
+module.exports = router;

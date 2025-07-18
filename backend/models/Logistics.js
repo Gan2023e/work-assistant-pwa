@@ -108,6 +108,14 @@ const Logistics = sequelize.define('Logistics', {
     type: DataTypes.DATE,
     field: 'vat_receipt_upload_time',
   },
+  vatReceiptTaxAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    field: 'vat_receipt_tax_amount',
+  },
+  vatReceiptTaxDate: {
+    type: DataTypes.DATE,
+    field: 'vat_receipt_tax_date',
+  },
 }, {
   tableName: 'logistics',
   timestamps: false

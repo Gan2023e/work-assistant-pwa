@@ -34,7 +34,8 @@ import {
   SaveOutlined,
   CloseOutlined,
   DatabaseOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
@@ -75,6 +76,8 @@ interface LogisticsRecord {
   vatReceiptFileName?: string;
   vatReceiptFileSize?: number;
   vatReceiptUploadTime?: string;
+  vatReceiptTaxAmount?: number;
+  vatReceiptTaxDate?: string;
 }
 
 // 筛选选项接口
@@ -156,7 +159,8 @@ const LogisticsPage: React.FC = () => {
     transitProductCount: 0,
     transitPackageCount: 0,
     unpaidTotalFee: 0,
-    pendingWarehouseCount: 0
+    pendingWarehouseCount: 0,
+    unuploadedVatReceiptCount: 0
   });
   const [vatUploadingIds, setVatUploadingIds] = useState<Set<string>>(new Set());
   const [vatDeletingIds, setVatDeletingIds] = useState<Set<string>>(new Set());
@@ -260,11 +264,15 @@ const LogisticsPage: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/logistics/statistics`);
       const result = await response.json();
+      
       if (result.code === 0) {
         setStatisticsData(result.data);
+      } else {
+        throw new Error(result.message || '获取统计数据失败');
       }
     } catch (error) {
       console.error('获取统计数据失败:', error);
+      message.error(`获取统计数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -299,7 +307,13 @@ const LogisticsPage: React.FC = () => {
                   vatReceiptUrl: result.data.url,
                   vatReceiptFileName: result.data.fileName,
                   vatReceiptFileSize: result.data.fileSize,
-                  vatReceiptUploadTime: result.data.uploadTime
+                  vatReceiptUploadTime: result.data.uploadTime,
+                  // 如果后端返回了提取的数据，更新相关字段
+                  ...(result.data.extractedData && {
+                    mrn: result.data.extractedData.mrn,
+                    vatReceiptTaxAmount: result.data.extractedData.taxAmount,
+                    vatReceiptTaxDate: result.data.extractedData.taxDate
+                  })
                 }
               : item
           )
@@ -453,6 +467,13 @@ const LogisticsPage: React.FC = () => {
       case 'pendingWarehouse':
         // 查询即将到仓的记录（只统计状态为"在途"的记录）
         params.filters = { specialQuery: 'pendingWarehouse' };
+        break;
+      case 'unuploadedVatReceipt':
+        // 查询目的地为英国且未上传VAT税单的记录
+        params.filters = { 
+          destinationCountry: ['英国'],
+          specialQuery: 'unuploadedVatReceipt'
+        };
         break;
     }
     
@@ -1875,6 +1896,11 @@ const LogisticsPage: React.FC = () => {
       width: 120,
       align: 'center',
       render: (_, record) => {
+        // 只有目的地为英国的记录才显示VAT税单操作
+        if (record.destinationCountry !== '英国') {
+          return <span style={{ color: '#d9d9d9' }}>-</span>;
+        }
+
         const isUploading = vatUploadingIds.has(record.shippingId);
         const isDeleting = vatDeletingIds.has(record.shippingId);
         
@@ -1993,7 +2019,7 @@ const LogisticsPage: React.FC = () => {
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={5}>
+        <Col span={4}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('yearly')}>
             <Statistic
               title="今年发货票数"
@@ -2003,7 +2029,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={5}>
+        <Col span={4}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transit')}>
             <Statistic
               title="在途产品数"
@@ -2013,7 +2039,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={5}>
+        <Col span={4}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transitPackage')}>
             <Statistic
               title="在途箱数"
@@ -2023,7 +2049,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={5}>
+        <Col span={4}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unpaid')}>
             <Statistic
               title="未付总运费"
@@ -2044,7 +2070,16 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-
+        <Col span={4}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unuploadedVatReceipt')}>
+            <Statistic
+              title="未上传VAT税单"
+              value={statisticsData.unuploadedVatReceiptCount}
+              prefix={<FileTextOutlined />}
+              valueStyle={{ color: '#f5222d' }}
+            />
+          </Card>
+        </Col>
       </Row>
 
       {/* 搜索区域 */}
