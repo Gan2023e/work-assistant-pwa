@@ -1983,7 +1983,29 @@ const LogisticsPage: React.FC = () => {
                   <Button
                     type="link"
                     size="small"
-                    onClick={() => window.open(record.vatReceiptUrl, '_blank')}
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('token');
+                        const fileUrl = `${API_BASE_URL}/api/logistics/vat-receipt/${record.shippingId}/file`;
+                        
+                        const response = await fetch(fileUrl, {
+                          headers: {
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                          }
+                        });
+                        
+                        if (!response.ok) {
+                          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        window.open(url, '_blank');
+                      } catch (error) {
+                        console.error('获取VAT税单文件失败:', error);
+                        message.error(`获取VAT税单文件失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                      }
+                    }}
                     title={`查看VAT税单: ${record.vatReceiptFileName}`}
                     disabled={isDeleting}
                   >

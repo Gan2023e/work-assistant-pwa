@@ -1043,4 +1043,75 @@ router.delete('/delete-vat-receipt/:shippingId', authenticateToken, async (req, 
   }
 });
 
+// 获取VAT税单文件（代理方式）
+router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到VAT税单文件获取请求:', req.params.shippingId);
+  
+  try {
+    const { shippingId } = req.params;
+    
+    // 获取物流记录信息
+    const logisticsRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+    
+    if (!logisticsRecord) {
+      return res.status(404).json({
+        code: 404,
+        message: '物流记录不存在'
+      });
+    }
+    
+    // 检查是否有VAT税单
+    if (!logisticsRecord.vatReceiptUrl || !logisticsRecord.vatReceiptObjectName) {
+      return res.status(404).json({
+        code: 404,
+        message: 'VAT税单不存在'
+      });
+    }
+    
+    // 从OSS获取文件
+    try {
+      const OSS = require('ali-oss');
+      const client = new OSS({
+        region: process.env.OSS_REGION,
+        accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+        accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+        bucket: process.env.OSS_BUCKET,
+        endpoint: process.env.OSS_ENDPOINT
+      });
+      
+      console.log('正在获取OSS文件:', logisticsRecord.vatReceiptObjectName);
+      
+      // 直接获取文件内容
+      const result = await client.get(logisticsRecord.vatReceiptObjectName);
+      
+      // 设置响应头
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${logisticsRecord.vatReceiptFileName || 'VAT税单.pdf'}"`
+      });
+      
+      // 返回文件内容
+      res.send(result.content);
+      console.log('✅ VAT税单文件获取成功');
+      
+    } catch (error) {
+      console.error('❌ 从OSS获取VAT税单文件失败:', error);
+      return res.status(500).json({
+        code: 500,
+        message: '获取VAT税单文件失败: ' + error.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '获取VAT税单文件失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '获取VAT税单文件失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
