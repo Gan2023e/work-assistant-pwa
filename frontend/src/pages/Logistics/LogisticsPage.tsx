@@ -2088,44 +2088,6 @@ const LogisticsPage: React.FC = () => {
                   <Button
                     type="link"
                     size="small"
-                    onClick={async () => {
-                      try {
-                        message.loading('正在测试OSS连接...', 0);
-                        
-                        const token = localStorage.getItem('token');
-                        const testUrl = `${API_BASE_URL}/api/logistics/oss-test`;
-                        
-                        const response = await fetch(testUrl, {
-                          headers: {
-                            ...(token ? { Authorization: `Bearer ${token}` } : {})
-                          }
-                        });
-                        
-                        const result = await response.json();
-                        message.destroy();
-                        
-                        if (result.code === 0) {
-                          message.success('OSS连接正常');
-                          console.log('OSS连接测试成功:', result.data);
-                        } else {
-                          message.error(`OSS连接失败: ${result.message}`);
-                          console.error('OSS连接测试失败:', result);
-                        }
-                      } catch (error) {
-                        message.destroy();
-                        message.error(`OSS连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`);
-                        console.error('OSS连接测试失败:', error);
-                      }
-                    }}
-                    title="测试OSS连接"
-                    disabled={isDeleting}
-                    style={{ fontSize: '10px', padding: '0 4px' }}
-                  >
-                    测试
-                  </Button>
-                  <Button
-                    type="link"
-                    size="small"
                     danger
                     onClick={() => handleDeleteVatReceipt(record.shippingId)}
                     title="删除VAT税单"
@@ -2223,79 +2185,6 @@ const LogisticsPage: React.FC = () => {
       <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
         默认显示状态为"在途"和"入库中"的物流记录，按预计到港日升序排列
       </Text>
-
-      {/* 调试面板 - 仅在开发环境显示 */}
-      {process.env.NODE_ENV === 'development' && (
-        <Card style={{ marginBottom: 16, backgroundColor: '#f0f8ff' }}>
-          <Title level={4} style={{ marginBottom: 8 }}>
-            🐛 调试面板
-          </Title>
-          <Space>
-            <Button
-              size="small"
-              onClick={async () => {
-                try {
-                  message.loading('正在测试OSS连接...', 0);
-                  
-                  const token = localStorage.getItem('token');
-                  const testUrl = `${API_BASE_URL}/api/logistics/oss-test`;
-                  
-                  const response = await fetch(testUrl, {
-                    headers: {
-                      ...(token ? { Authorization: `Bearer ${token}` } : {})
-                    }
-                  });
-                  
-                  const result = await response.json();
-                  message.destroy();
-                  
-                  if (result.code === 0) {
-                    message.success('OSS连接正常');
-                    console.log('OSS连接测试成功:', result.data);
-                  } else {
-                    message.error(`OSS连接失败: ${result.message}`);
-                    console.error('OSS连接测试失败:', result);
-                  }
-                } catch (error) {
-                  message.destroy();
-                  message.error(`OSS连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`);
-                  console.error('OSS连接测试失败:', error);
-                }
-              }}
-            >
-              测试OSS连接
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                console.log('当前API配置:', {
-                  API_BASE_URL,
-                  NODE_ENV: process.env.NODE_ENV
-                });
-                console.log('认证Token:', localStorage.getItem('token') ? '已存在' : '不存在');
-                message.info('调试信息已输出到控制台');
-              }}
-            >
-              检查配置
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                const vatRecords = data.filter(record => record.vatReceiptUrl);
-                console.log('有VAT税单的记录:', vatRecords.map(r => ({
-                  shippingId: r.shippingId,
-                  vatReceiptUrl: r.vatReceiptUrl,
-                  vatReceiptObjectName: r.vatReceiptObjectName,
-                  vatReceiptFileName: r.vatReceiptFileName
-                })));
-                message.info(`找到 ${vatRecords.length} 条有VAT税单的记录`);
-              }}
-            >
-              检查VAT记录
-            </Button>
-          </Space>
-        </Card>
-      )}
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
