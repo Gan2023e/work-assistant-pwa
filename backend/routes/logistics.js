@@ -32,6 +32,7 @@ const parseVatReceiptPDF = async (buffer) => {
     console.log('📄 VAT税单PDF解析开始');
     console.log('📄 PDF文本长度:', text.length);
     console.log('📄 PDF文本片段 (前1000字符):', text.substring(0, 1000));
+    console.log('📄 PDF文本片段 (后1000字符):', text.substring(text.length - 1000));
     
     const extractedData = {
       mrn: '',
@@ -40,26 +41,77 @@ const parseVatReceiptPDF = async (buffer) => {
     };
     
     // 1. 提取MRN (Movement Reference Number)
-    // MRN通常是25位字符，格式如：25GB7A8H3YNK4P0AR3
-    const mrnPatterns = [
-      /MRN[：:\s]*([A-Z0-9]{25})/i,
-      /Movement Reference Number[：:\s]*([A-Z0-9]{25})/i,
-      /([A-Z]{2}[A-Z0-9]{23})/i, // 2位国家代码 + 23位字符
-      /([A-Z0-9]{25})/i // 25位字母数字组合
-    ];
+    // MRN通常是25位字符，格式如：25GB7A8H3YNK4PØAR3（注意可能包含特殊字符如Ø）
+    console.log('🔍 开始搜索MRN...');
     
-    for (const pattern of mrnPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        extractedData.mrn = match[1];
+    // 首先尝试直接匹配MRN行
+    const mrnLineMatch = text.match(/MRN:\s*([A-Z0-9Ø]+)/i);
+    if (mrnLineMatch) {
+      let mrn = mrnLineMatch[1];
+      console.log('🔍 从MRN行提取到:', mrn);
+      // 将Ø转换为0，然后清理其他特殊字符
+      mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
+      if (mrn.length >= 20 && mrn.length <= 30) {
+        extractedData.mrn = mrn;
         console.log('✅ MRN提取成功:', extractedData.mrn);
-        break;
       }
     }
     
-    // 2. 提取税金金额
-    // 查找VAT相关的金额信息
+    if (!extractedData.mrn) {
+      const mrnPatterns = [
+        /MRN[：:\s]*([A-Z0-9Ø]{25})/i,
+        /Movement Reference Number[：:\s]*([A-Z0-9Ø]{25})/i,
+        /([A-Z]{2}[A-Z0-9Ø]{23})/i, // 2位国家代码 + 23位字符
+        /([A-Z0-9Ø]{25})/i, // 25位字母数字组合（包含特殊字符）
+        // 更宽松的模式，处理OCR识别可能的错误
+        /([A-Z0-9Ø]{20,30})/i // 20-30位字符，适应OCR可能的识别误差
+      ];
+      
+      for (const pattern of mrnPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          let mrn = match[1];
+          console.log('🔍 找到可能的MRN:', mrn);
+          // 将Ø转换为0，然后清理其他特殊字符
+          mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
+          console.log('🔍 清理后的MRN:', mrn, '长度:', mrn.length);
+          // 如果长度接近25位，认为是有效的MRN
+          if (mrn.length >= 20 && mrn.length <= 30) {
+            extractedData.mrn = mrn;
+            console.log('✅ MRN提取成功:', extractedData.mrn);
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!extractedData.mrn) {
+      console.log('⚠️ 未找到MRN，尝试搜索所有可能的25位字符组合...');
+      // 搜索所有可能的25位字符组合
+      const allMatches = text.match(/[A-Z0-9Ø]{20,30}/gi);
+      if (allMatches) {
+        console.log('🔍 找到的所有可能MRN:', allMatches);
+        for (const match of allMatches) {
+          // 将Ø转换为0，然后清理其他特殊字符
+          const cleaned = match.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
+          if (cleaned.length >= 20 && cleaned.length <= 30) {
+            extractedData.mrn = cleaned;
+            console.log('✅ MRN提取成功 (备用方法):', extractedData.mrn);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 2. 提取税金金额 - 重点查找Amount Payable相关的内容
     const taxAmountPatterns = [
+      // 优先查找Amount Payable相关
+      /Amount Payable[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Amount Payable[^0-9]*\n[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      // 查找表格中的金额，通常在右下角
+      /([0-9,]+\.?[0-9]*)\s*$/m, // 行末的金额
+      /([0-9,]+\.?[0-9]*)\s*\n\s*$/m, // 文档末尾的金额
+      // VAT相关金额
       /VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
       /VAT \(PVA\)[^0-9]*([0-9,]+\.?[0-9]*)/i,
       /\[B00\] VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
@@ -68,52 +120,140 @@ const parseVatReceiptPDF = async (buffer) => {
       /Tax base[^0-9]*([0-9,]+\.?[0-9]*)/i
     ];
     
-    for (const pattern of taxAmountPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        const amountStr = match[1].replace(/,/g, '');
+    console.log('🔍 开始搜索税金金额...');
+    // 按行分割文本，查找右下角的金额
+    const lines = text.split('\n');
+    let foundAmount = false;
+    
+    console.log('📊 文档总行数:', lines.length);
+    console.log('📊 最后10行内容:');
+    for (let i = Math.max(0, lines.length - 10); i < lines.length; i++) {
+      console.log(`  行${i + 1}: "${lines[i]}"`);
+    }
+    
+    // 从后往前查找，优先查找文档末尾的金额
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      // 跳过包含日期的行
+      if (line.match(/\d{2}\/\d{2}\/\d{4}/)) {
+        console.log(`🔍 跳过日期行${i + 1}: "${line}"`);
+        continue;
+      }
+      // 跳过包含[54]的行
+      if (line.includes('[54]')) {
+        console.log(`🔍 跳过[54]行${i + 1}: "${line}"`);
+        continue;
+      }
+      // 查找包含数字的行
+      const amountMatch = line.match(/([0-9,]+\.?[0-9]*)/);
+      if (amountMatch) {
+        const amountStr = amountMatch[1].replace(/,/g, '');
         const amount = parseFloat(amountStr);
-        if (!isNaN(amount) && amount > 0) {
+        console.log(`🔍 行${i + 1}找到金额: ${amountStr} -> ${amount}`);
+        if (!isNaN(amount) && amount > 0 && amount < 10000) { // 合理的税金范围
           extractedData.taxAmount = amount;
-          console.log('✅ 税金金额提取成功:', extractedData.taxAmount);
+          console.log('✅ 税金金额提取成功 (从行尾):', extractedData.taxAmount);
+          foundAmount = true;
           break;
         }
       }
     }
     
-    // 3. 提取税金日期
+    // 如果从行尾没找到，使用正则表达式查找
+    if (!foundAmount) {
+      console.log('🔍 从行尾未找到金额，使用正则表达式查找...');
+      for (const pattern of taxAmountPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const amountStr = match[1].replace(/,/g, '');
+          const amount = parseFloat(amountStr);
+          console.log(`🔍 正则匹配到金额: ${amountStr} -> ${amount}`);
+          if (!isNaN(amount) && amount > 0 && amount < 10000) {
+            extractedData.taxAmount = amount;
+            console.log('✅ 税金金额提取成功:', extractedData.taxAmount);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 3. 提取税金日期 - 重点查找Place and date部分
     const datePatterns = [
+      // 优先查找Place and date相关
+      /\[54\] Place and date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
+      /Place and date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
+      // 查找包含地点和日期的行
+      /([A-Za-z]+)\s+(\d{2}\/\d{2}\/\d{4})/i, // 地点 日期格式
+      // 其他日期格式
       /Acceptance date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
       /Status date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
-      /\[54\] Place and date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
       /(\d{2}\/\d{2}\/\d{4})/i, // 通用日期格式
       /(\d{4}-\d{2}-\d{2})/i, // ISO日期格式
       /(\d{2}\.\d{2}\.\d{4})/i // 点分隔日期格式
     ];
     
-    for (const pattern of datePatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        let dateStr = match[1];
-        // 标准化日期格式
-        if (dateStr.includes('/')) {
-          // 转换 DD/MM/YYYY 为 YYYY-MM-DD
-          const parts = dateStr.split('/');
-          if (parts.length === 3) {
-            dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    console.log('🔍 开始搜索税金日期...');
+    // 查找包含"Place and date"的行
+    const placeAndDateLine = lines.find(line => 
+      line.includes('Place and date') || line.includes('[54]')
+    );
+    
+    if (placeAndDateLine) {
+      console.log('📅 找到Place and date行:', placeAndDateLine);
+      // 查找下一行的日期
+      const lineIndex = lines.findIndex(line => line.includes('Place and date') || line.includes('[54]'));
+      if (lineIndex >= 0 && lineIndex + 1 < lines.length) {
+        const nextLine = lines[lineIndex + 1].trim();
+        console.log('📅 下一行内容:', nextLine);
+        const dateMatch = nextLine.match(/(\d{2}\/\d{2}\/\d{4})/);
+        if (dateMatch) {
+          let dateStr = dateMatch[1];
+          console.log('📅 提取到日期:', dateStr);
+          // 标准化日期格式
+          if (dateStr.includes('/')) {
+            // 转换 DD/MM/YYYY 为 YYYY-MM-DD
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+              dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
           }
-        } else if (dateStr.includes('.')) {
-          // 转换 DD.MM.YYYY 为 YYYY-MM-DD
-          const parts = dateStr.split('.');
-          if (parts.length === 3) {
-            dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            extractedData.taxDate = dateStr;
+            console.log('✅ 税金日期提取成功 (从Place and date):', extractedData.taxDate);
           }
         }
-        
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          extractedData.taxDate = dateStr;
-          console.log('✅ 税金日期提取成功:', extractedData.taxDate);
-          break;
+      }
+    }
+    
+    // 如果没找到，使用正则表达式查找
+    if (!extractedData.taxDate) {
+      console.log('🔍 从Place and date未找到日期，使用正则表达式查找...');
+      for (const pattern of datePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          let dateStr = match[1];
+          console.log('📅 正则匹配到日期:', dateStr);
+          // 标准化日期格式
+          if (dateStr.includes('/')) {
+            // 转换 DD/MM/YYYY 为 YYYY-MM-DD
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+              dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+          } else if (dateStr.includes('.')) {
+            // 转换 DD.MM.YYYY 为 YYYY-MM-DD
+            const parts = dateStr.split('.');
+            if (parts.length === 3) {
+              dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+          }
+          
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            extractedData.taxDate = dateStr;
+            console.log('✅ 税金日期提取成功:', extractedData.taxDate);
+            break;
+          }
         }
       }
     }
