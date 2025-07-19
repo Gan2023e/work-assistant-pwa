@@ -2053,58 +2053,137 @@ const LogisticsPage: React.FC = () => {
       key: 'vatReceipt',
       width: 200,
       align: 'center',
-      filters: [
-        {
-          text: '已上传',
-          value: 'uploaded',
-        },
-        {
-          text: '未上传',
-          value: 'notUploaded',
-        },
-        {
-          text: '本周上传',
-          value: 'thisWeek',
-        },
-        {
-          text: '本月上传',
-          value: 'thisMonth',
-        },
-        {
-          text: '上月上传',
-          value: 'lastMonth',
-        },
-      ],
-      filteredValue: filters.vatReceiptStatus || null,
-      onFilter: (value, record) => {
-        if (value === 'uploaded') {
-          return !!record.vatReceiptUrl;
-        } else if (value === 'notUploaded') {
-          return !record.vatReceiptUrl;
-        } else if (value === 'thisWeek') {
-          if (!record.vatReceiptUploadTime) return false;
-          const uploadTime = new Date(record.vatReceiptUploadTime);
-          const now = new Date();
-          const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-          const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-          return uploadTime >= weekStart && uploadTime < weekEnd;
-        } else if (value === 'thisMonth') {
-          if (!record.vatReceiptUploadTime) return false;
-          const uploadTime = new Date(record.vatReceiptUploadTime);
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-          return uploadTime >= monthStart && uploadTime < monthEnd;
-        } else if (value === 'lastMonth') {
-          if (!record.vatReceiptUploadTime) return false;
-          const uploadTime = new Date(record.vatReceiptUploadTime);
-          const now = new Date();
-          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
-          return uploadTime >= lastMonthStart && uploadTime < lastMonthEnd;
-        }
-        return true;
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => {
+        const selectedKeysStr = selectedKeys.map(key => String(key));
+        
+        return (
+          <div style={{ padding: 8 }}>
+            <div style={{ marginBottom: 8 }}>
+              <Text strong>上传状态：</Text>
+              <Select
+                style={{ width: '100%', marginBottom: 8 }}
+                placeholder="选择上传状态"
+                value={selectedKeysStr.find(key => key.startsWith('status:'))?.replace('status:', '')}
+                onChange={(value) => {
+                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('status:'));
+                  if (value) {
+                    newKeys.push(`status:${value}`);
+                  }
+                  setSelectedKeys(newKeys);
+                }}
+                allowClear
+              >
+                <Option value="uploaded">已上传</Option>
+                <Option value="notUploaded">未上传</Option>
+              </Select>
+            </div>
+            
+            <div style={{ marginBottom: 8 }}>
+              <Text strong>时间范围：</Text>
+              <Select
+                style={{ width: '100%', marginBottom: 8 }}
+                placeholder="选择时间范围"
+                value={selectedKeysStr.find(key => key.startsWith('time:'))?.replace('time:', '')}
+                onChange={(value) => {
+                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('time:'));
+                  if (value) {
+                    newKeys.push(`time:${value}`);
+                  }
+                  setSelectedKeys(newKeys);
+                }}
+                allowClear
+              >
+                <Option value="thisWeek">本周上传</Option>
+                <Option value="thisMonth">本月上传</Option>
+                <Option value="lastMonth">上月上传</Option>
+              </Select>
+            </div>
+            
+            <div style={{ marginBottom: 8 }}>
+              <Text strong>起始时间：</Text>
+              <DatePicker
+                style={{ width: '100%', marginBottom: 8 }}
+                placeholder="选择起始时间"
+                value={selectedKeysStr.find(key => key.startsWith('start:'))?.replace('start:', '') ? 
+                  dayjs(selectedKeysStr.find(key => key.startsWith('start:'))?.replace('start:', '')) : null}
+                onChange={(date) => {
+                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('start:'));
+                  if (date) {
+                    newKeys.push(`start:${date.format('YYYY-MM-DD')}`);
+                  }
+                  setSelectedKeys(newKeys);
+                }}
+                format="YYYY-MM-DD"
+                allowClear
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button
+                type="primary"
+                size="small"
+                onClick={() => {
+                  confirm();
+                }}
+              >
+                确定
+              </Button>
+              <Button
+                size="small"
+                onClick={() => {
+                  clearFilters?.();
+                }}
+              >
+                重置
+              </Button>
+            </div>
+          </div>
+        );
       },
+              onFilter: (value, record) => {
+          const valueStr = Array.isArray(value) ? value.map(v => String(v)) : value ? [String(value)] : [];
+          
+          // 检查上传状态筛选
+          const statusFilter = valueStr.find(v => v.startsWith('status:'));
+          if (statusFilter) {
+            const status = statusFilter.replace('status:', '');
+            if (status === 'uploaded' && !record.vatReceiptUrl) return false;
+            if (status === 'notUploaded' && record.vatReceiptUrl) return false;
+          }
+          
+          // 检查时间范围筛选
+          const timeFilter = valueStr.find(v => v.startsWith('time:'));
+          if (timeFilter && record.vatReceiptUploadTime) {
+            const timeType = timeFilter.replace('time:', '');
+            const uploadTime = new Date(record.vatReceiptUploadTime);
+            const now = new Date();
+            
+            if (timeType === 'thisWeek') {
+              const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+              const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+              if (uploadTime < weekStart || uploadTime >= weekEnd) return false;
+            } else if (timeType === 'thisMonth') {
+              const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+              const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+              if (uploadTime < monthStart || uploadTime >= monthEnd) return false;
+            } else if (timeType === 'lastMonth') {
+              const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+              const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+              if (uploadTime < lastMonthStart || uploadTime >= lastMonthEnd) return false;
+            }
+          }
+          
+          // 检查起始时间筛选
+          const startFilter = valueStr.find(v => v.startsWith('start:'));
+          if (startFilter && record.vatReceiptUploadTime) {
+            const startDate = startFilter.replace('start:', '');
+            const uploadTime = new Date(record.vatReceiptUploadTime);
+            const startDateTime = new Date(startDate);
+            if (uploadTime < startDateTime) return false;
+          }
+          
+          return true;
+        },
       render: (_, record) => {
         // 只有目的地为英国的记录才显示VAT税单操作
         if (record.destinationCountry !== '英国') {
