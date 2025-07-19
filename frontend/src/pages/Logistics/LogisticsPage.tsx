@@ -177,6 +177,7 @@ const LogisticsPage: React.FC = () => {
   } | null>(null);
   const [vatUploadStep, setVatUploadStep] = useState<'select' | 'confirm' | 'uploading'>('select');
   const [vatForm] = Form.useForm();
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
@@ -296,6 +297,7 @@ const LogisticsPage: React.FC = () => {
     setVatUploadStep('select');
     setSelectedVatFile(null);
     setVatExtractedData(null);
+    setIsDragOver(false);
     vatForm.resetFields();
   };
 
@@ -420,7 +422,38 @@ const LogisticsPage: React.FC = () => {
     setSelectedVatFile(null);
     setVatExtractedData(null);
     setSelectedShippingId('');
+    setIsDragOver(false);
     vatForm.resetFields();
+  };
+
+  // 处理拖拽事件
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!vatUploadModalLoading) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    if (vatUploadModalLoading) return;
+    
+    const files = Array.from(e.dataTransfer.files);
+    const pdfFile = files.find(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+    
+    if (pdfFile) {
+      setSelectedVatFile(pdfFile);
+      handleParseVatReceipt(pdfFile);
+    } else {
+      message.error('请拖拽PDF文件');
+    }
   };
 
   // 删除VAT税单
@@ -2770,28 +2803,56 @@ const LogisticsPage: React.FC = () => {
         {vatUploadStep === 'select' && (
           <div>
             <div style={{ marginBottom: 16 }}>
-              <Text>请选择VAT税单PDF文件，系统将自动解析其中的信息：</Text>
+              <Text>请选择或拖拽VAT税单PDF文件，系统将自动解析其中的信息：</Text>
             </div>
-            <Upload
-              accept=".pdf"
-              maxCount={1}
-              showUploadList={false}
-              beforeUpload={(file) => {
-                setSelectedVatFile(file);
-                handleParseVatReceipt(file);
-                return false;
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{ 
+                padding: '20px',
+                border: `2px dashed ${isDragOver ? '#1890ff' : vatUploadModalLoading ? '#d9d9d9' : '#d9d9d9'}`,
+                borderRadius: '6px',
+                backgroundColor: isDragOver ? '#e6f7ff' : vatUploadModalLoading ? '#f5f5f5' : '#fafafa',
+                cursor: vatUploadModalLoading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease'
               }}
-              disabled={vatUploadModalLoading}
             >
-              <Button 
-                type="primary" 
-                loading={vatUploadModalLoading}
+              <Upload.Dragger
+                accept=".pdf"
+                maxCount={1}
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  setSelectedVatFile(file);
+                  handleParseVatReceipt(file);
+                  return false;
+                }}
                 disabled={vatUploadModalLoading}
+                style={{ 
+                  border: 'none',
+                  backgroundColor: 'transparent'
+                }}
               >
-                {vatUploadModalLoading ? '解析中...' : '选择PDF文件'}
-              </Button>
-            </Upload>
-            <div style={{ marginTop: 8 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <FileTextOutlined style={{ fontSize: '48px', color: '#1890ff', marginBottom: '16px' }} />
+                  <p style={{ fontSize: '16px', marginBottom: '8px', color: vatUploadModalLoading ? '#bfbfbf' : '#262626' }}>
+                    {vatUploadModalLoading ? '正在解析PDF...' : '点击或拖拽PDF文件到此区域上传'}
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+                    支持PDF格式，自动识别发票信息并填充表单
+                  </p>
+                  <Button 
+                    type="primary" 
+                    loading={vatUploadModalLoading}
+                    disabled={vatUploadModalLoading}
+                    icon={<FileTextOutlined />}
+                  >
+                    {vatUploadModalLoading ? '解析中...' : '选择PDF文件'}
+                  </Button>
+                </div>
+              </Upload.Dragger>
+            </div>
+            <div style={{ marginTop: 16 }}>
               <Text type="secondary">
                 支持解析MRN号码、税金金额、税金日期等信息
               </Text>
