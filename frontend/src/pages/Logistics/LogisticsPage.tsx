@@ -1373,6 +1373,7 @@ const LogisticsPage: React.FC = () => {
   const renderStatusTag = (status: string) => {
     const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
       '在途': { color: 'processing', icon: <TruckOutlined /> },
+      '查验中': { color: 'orange', icon: <SearchOutlined /> },
       '完成': { color: 'success', icon: <BoxPlotOutlined /> },
       '入库中': { color: 'warning', icon: <ClockCircleOutlined /> },
     };
@@ -1593,6 +1594,7 @@ const LogisticsPage: React.FC = () => {
                 onSelect={handleSaveEdit}
               >
                 <Option value="在途">在途</Option>
+                <Option value="查验中">查验中</Option>
                 <Option value="入库中">入库中</Option>
                 <Option value="完成">完成</Option>
               </Select>
@@ -2409,6 +2411,7 @@ const LogisticsPage: React.FC = () => {
                 loading={batchLoading}
               >
                 <Option value="在途">在途</Option>
+                <Option value="查验中">查验中</Option>
                 <Option value="入库中">入库中</Option>
                 <Option value="完成">完成</Option>
               </Select>

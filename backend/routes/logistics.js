@@ -710,10 +710,10 @@ router.post('/batch-update-status', authenticateToken, async (req, res) => {
       });
     }
     
-    if (!status || !['在途', '入库中', '完成'].includes(status)) {
+    if (!status || !['在途', '查验中', '入库中', '完成'].includes(status)) {
       return res.status(400).json({
         code: 400,
-        message: '状态必须是：在途、入库中、完成 中的一种'
+        message: '状态必须是：在途、查验中、入库中、完成 中的一种'
       });
     }
 
