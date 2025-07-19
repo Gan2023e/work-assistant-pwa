@@ -1991,8 +1991,14 @@ const LogisticsPage: React.FC = () => {
                     size="small"
                     onClick={async () => {
                       try {
+                        // 添加加载状态
+                        message.loading('正在获取VAT税单文件...', 0);
+                        
                         const token = localStorage.getItem('token');
                         const fileUrl = `${API_BASE_URL}/api/logistics/vat-receipt/${record.shippingId}/file`;
+                        
+                        console.log('正在获取VAT税单文件:', fileUrl);
+                        console.log('认证Token:', token ? '已提供' : '未提供');
                         
                         const response = await fetch(fileUrl, {
                           headers: {
@@ -2000,22 +2006,122 @@ const LogisticsPage: React.FC = () => {
                           }
                         });
                         
+                        console.log('响应状态:', response.status);
+                        console.log('响应头:', Object.fromEntries(response.headers.entries()));
+                        
                         if (!response.ok) {
-                          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                          const errorText = await response.text();
+                          console.error('服务器响应错误:', response.status, errorText);
+                          throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
+                        }
+                        
+                        // 检查响应类型
+                        const contentType = response.headers.get('content-type');
+                        console.log('响应内容类型:', contentType);
+                        
+                        if (!contentType || !contentType.includes('application/pdf')) {
+                          console.warn('响应内容类型不是PDF:', contentType);
                         }
                         
                         const blob = await response.blob();
+                        console.log('获取到文件大小:', blob.size, '字节');
+                        
+                        if (blob.size === 0) {
+                          throw new Error('获取到的文件为空');
+                        }
+                        
                         const url = window.URL.createObjectURL(blob);
-                        window.open(url, '_blank');
+                        console.log('创建的文件URL:', url);
+                        
+                        // 关闭加载消息
+                        message.destroy();
+                        message.success('VAT税单文件获取成功');
+                        
+                        // 在新窗口打开文件
+                        const newWindow = window.open(url, '_blank');
+                        
+                        // 如果新窗口被阻止，提供下载链接
+                        if (!newWindow) {
+                          message.warning('弹窗被阻止，请允许弹窗后重试');
+                          // 创建下载链接
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = record.vatReceiptFileName || 'VAT税单.pdf';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }
+                        
+                        // 清理URL对象
+                        setTimeout(() => {
+                          window.URL.revokeObjectURL(url);
+                        }, 60000); // 1分钟后清理
+                        
                       } catch (error) {
                         console.error('获取VAT税单文件失败:', error);
-                        message.error(`获取VAT税单文件失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                        message.destroy(); // 关闭加载消息
+                        
+                        // 提供更详细的错误信息
+                        let errorMessage = '获取VAT税单文件失败';
+                        if (error instanceof Error) {
+                          if (error.message.includes('HTTP 401')) {
+                            errorMessage = '认证失败，请重新登录';
+                          } else if (error.message.includes('HTTP 404')) {
+                            errorMessage = 'VAT税单文件不存在';
+                          } else if (error.message.includes('HTTP 500')) {
+                            errorMessage = '服务器内部错误，请联系管理员';
+                          } else if (error.message.includes('Failed to fetch')) {
+                            errorMessage = '网络连接失败，请检查网络连接';
+                          } else {
+                            errorMessage = `获取VAT税单文件失败: ${error.message}`;
+                          }
+                        }
+                        
+                        message.error(errorMessage);
                       }
                     }}
                     title={`查看VAT税单: ${record.vatReceiptFileName}`}
                     disabled={isDeleting}
                   >
                     查看
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={async () => {
+                      try {
+                        message.loading('正在测试OSS连接...', 0);
+                        
+                        const token = localStorage.getItem('token');
+                        const testUrl = `${API_BASE_URL}/api/logistics/oss-test`;
+                        
+                        const response = await fetch(testUrl, {
+                          headers: {
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                          }
+                        });
+                        
+                        const result = await response.json();
+                        message.destroy();
+                        
+                        if (result.code === 0) {
+                          message.success('OSS连接正常');
+                          console.log('OSS连接测试成功:', result.data);
+                        } else {
+                          message.error(`OSS连接失败: ${result.message}`);
+                          console.error('OSS连接测试失败:', result);
+                        }
+                      } catch (error) {
+                        message.destroy();
+                        message.error(`OSS连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                        console.error('OSS连接测试失败:', error);
+                      }
+                    }}
+                    title="测试OSS连接"
+                    disabled={isDeleting}
+                    style={{ fontSize: '10px', padding: '0 4px' }}
+                  >
+                    测试
                   </Button>
                   <Button
                     type="link"
@@ -2117,6 +2223,79 @@ const LogisticsPage: React.FC = () => {
       <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
         默认显示状态为"在途"和"入库中"的物流记录，按预计到港日升序排列
       </Text>
+
+      {/* 调试面板 - 仅在开发环境显示 */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card style={{ marginBottom: 16, backgroundColor: '#f0f8ff' }}>
+          <Title level={4} style={{ marginBottom: 8 }}>
+            🐛 调试面板
+          </Title>
+          <Space>
+            <Button
+              size="small"
+              onClick={async () => {
+                try {
+                  message.loading('正在测试OSS连接...', 0);
+                  
+                  const token = localStorage.getItem('token');
+                  const testUrl = `${API_BASE_URL}/api/logistics/oss-test`;
+                  
+                  const response = await fetch(testUrl, {
+                    headers: {
+                      ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    }
+                  });
+                  
+                  const result = await response.json();
+                  message.destroy();
+                  
+                  if (result.code === 0) {
+                    message.success('OSS连接正常');
+                    console.log('OSS连接测试成功:', result.data);
+                  } else {
+                    message.error(`OSS连接失败: ${result.message}`);
+                    console.error('OSS连接测试失败:', result);
+                  }
+                } catch (error) {
+                  message.destroy();
+                  message.error(`OSS连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`);
+                  console.error('OSS连接测试失败:', error);
+                }
+              }}
+            >
+              测试OSS连接
+            </Button>
+            <Button
+              size="small"
+              onClick={() => {
+                console.log('当前API配置:', {
+                  API_BASE_URL,
+                  NODE_ENV: process.env.NODE_ENV
+                });
+                console.log('认证Token:', localStorage.getItem('token') ? '已存在' : '不存在');
+                message.info('调试信息已输出到控制台');
+              }}
+            >
+              检查配置
+            </Button>
+            <Button
+              size="small"
+              onClick={() => {
+                const vatRecords = data.filter(record => record.vatReceiptUrl);
+                console.log('有VAT税单的记录:', vatRecords.map(r => ({
+                  shippingId: r.shippingId,
+                  vatReceiptUrl: r.vatReceiptUrl,
+                  vatReceiptObjectName: r.vatReceiptObjectName,
+                  vatReceiptFileName: r.vatReceiptFileName
+                })));
+                message.info(`找到 ${vatRecords.length} 条有VAT税单的记录`);
+              }}
+            >
+              检查VAT记录
+            </Button>
+          </Space>
+        </Card>
+      )}
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>

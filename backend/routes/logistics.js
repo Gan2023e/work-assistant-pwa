@@ -1310,12 +1310,93 @@ router.delete('/delete-vat-receipt/:shippingId', authenticateToken, async (req, 
   }
 });
 
+// OSS连接测试接口
+router.get('/oss-test', authenticateToken, async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到OSS连接测试请求');
+  
+  try {
+    const OSS = require('ali-oss');
+    
+    // 检查OSS配置
+    const ossConfig = {
+      region: process.env.OSS_REGION,
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+      bucket: process.env.OSS_BUCKET,
+      endpoint: process.env.OSS_ENDPOINT
+    };
+    
+    console.log('OSS配置:', {
+      region: ossConfig.region,
+      accessKeyId: ossConfig.accessKeyId ? '已配置' : '未配置',
+      accessKeySecret: ossConfig.accessKeySecret ? '已配置' : '未配置',
+      bucket: ossConfig.bucket,
+      endpoint: ossConfig.endpoint
+    });
+    
+    // 验证必要的OSS配置
+    const requiredConfig = ['OSS_REGION', 'OSS_ACCESS_KEY_ID', 'OSS_ACCESS_KEY_SECRET', 'OSS_BUCKET'];
+    const missingConfig = requiredConfig.filter(key => !process.env[key]);
+    
+    if (missingConfig.length > 0) {
+      return res.status(500).json({
+        code: 500,
+        message: 'OSS配置不完整',
+        missingConfig
+      });
+    }
+    
+    const client = new OSS(ossConfig);
+    
+    // 测试OSS连接
+    try {
+      const bucketInfo = await client.getBucketInfo();
+      console.log('✅ OSS连接成功:', bucketInfo);
+      
+      res.json({
+        code: 0,
+        message: 'OSS连接测试成功',
+        data: {
+          bucket: bucketInfo.bucket,
+          region: bucketInfo.region,
+          creationDate: bucketInfo.creationDate
+        }
+      });
+    } catch (ossError) {
+      console.error('❌ OSS连接失败:', ossError);
+      res.status(500).json({
+        code: 500,
+        message: 'OSS连接失败',
+        error: ossError.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ OSS测试失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: 'OSS测试失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取VAT税单文件（代理方式）
 router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到VAT税单文件获取请求:', req.params.shippingId);
+  console.log('用户信息:', req.user);
   
   try {
     const { shippingId } = req.params;
+    
+    // 验证shippingId格式
+    if (!shippingId || typeof shippingId !== 'string') {
+      console.error('❌ 无效的shippingId:', shippingId);
+      return res.status(400).json({
+        code: 400,
+        message: '无效的货件ID'
+      });
+    }
     
     // 获取物流记录信息
     const logisticsRecord = await Logistics.findOne({
@@ -1323,14 +1404,26 @@ router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) 
     });
     
     if (!logisticsRecord) {
+      console.error('❌ 物流记录不存在:', shippingId);
       return res.status(404).json({
         code: 404,
         message: '物流记录不存在'
       });
     }
     
+    console.log('✅ 找到物流记录:', {
+      shippingId: logisticsRecord.shippingId,
+      destinationCountry: logisticsRecord.destinationCountry,
+      vatReceiptUrl: logisticsRecord.vatReceiptUrl ? '存在' : '不存在',
+      vatReceiptObjectName: logisticsRecord.vatReceiptObjectName ? '存在' : '不存在'
+    });
+    
     // 检查是否有VAT税单
     if (!logisticsRecord.vatReceiptUrl || !logisticsRecord.vatReceiptObjectName) {
+      console.error('❌ VAT税单不存在:', {
+        vatReceiptUrl: !!logisticsRecord.vatReceiptUrl,
+        vatReceiptObjectName: !!logisticsRecord.vatReceiptObjectName
+      });
       return res.status(404).json({
         code: 404,
         message: 'VAT税单不存在'
@@ -1340,34 +1433,106 @@ router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) 
     // 从OSS获取文件
     try {
       const OSS = require('ali-oss');
-      const client = new OSS({
+      
+      // 检查OSS配置
+      const ossConfig = {
         region: process.env.OSS_REGION,
         accessKeyId: process.env.OSS_ACCESS_KEY_ID,
         accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
         bucket: process.env.OSS_BUCKET,
         endpoint: process.env.OSS_ENDPOINT
+      };
+      
+      console.log('OSS配置检查:', {
+        region: !!ossConfig.region,
+        accessKeyId: !!ossConfig.accessKeyId,
+        accessKeySecret: !!ossConfig.accessKeySecret,
+        bucket: !!ossConfig.bucket,
+        endpoint: !!ossConfig.endpoint
       });
       
+      // 验证必要的OSS配置
+      const requiredConfig = ['OSS_REGION', 'OSS_ACCESS_KEY_ID', 'OSS_ACCESS_KEY_SECRET', 'OSS_BUCKET'];
+      const missingConfig = requiredConfig.filter(key => !process.env[key]);
+      
+      if (missingConfig.length > 0) {
+        console.error('❌ OSS配置缺失:', missingConfig);
+        return res.status(500).json({
+          code: 500,
+          message: 'OSS配置不完整，请联系管理员'
+        });
+      }
+      
+      const client = new OSS(ossConfig);
+      
       console.log('正在获取OSS文件:', logisticsRecord.vatReceiptObjectName);
+      
+      // 检查文件是否存在
+      try {
+        const existsResult = await client.head(logisticsRecord.vatReceiptObjectName);
+        console.log('✅ OSS文件存在:', {
+          size: existsResult.res.headers['content-length'],
+          lastModified: existsResult.res.headers['last-modified']
+        });
+      } catch (headError) {
+        console.error('❌ OSS文件不存在:', headError.message);
+        return res.status(404).json({
+          code: 404,
+          message: 'VAT税单文件在OSS中不存在'
+        });
+      }
       
       // 直接获取文件内容
       const result = await client.get(logisticsRecord.vatReceiptObjectName);
       
+      console.log('✅ 成功获取OSS文件:', {
+        size: result.content.length,
+        type: result.res.headers['content-type']
+      });
+      
+      // 验证文件内容
+      if (!result.content || result.content.length === 0) {
+        console.error('❌ 获取到的文件内容为空');
+        return res.status(500).json({
+          code: 500,
+          message: 'VAT税单文件内容为空'
+        });
+      }
+      
       // 设置响应头
+      const fileName = logisticsRecord.vatReceiptFileName || 'VAT税单.pdf';
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${logisticsRecord.vatReceiptFileName || 'VAT税单.pdf'}"`
+        'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Length': result.content.length,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       });
       
       // 返回文件内容
       res.send(result.content);
-      console.log('✅ VAT税单文件获取成功');
+      console.log('✅ VAT税单文件获取成功，已发送给客户端');
       
-    } catch (error) {
-      console.error('❌ 从OSS获取VAT税单文件失败:', error);
+    } catch (ossError) {
+      console.error('❌ 从OSS获取VAT税单文件失败:', ossError);
+      
+      // 提供更详细的错误信息
+      let errorMessage = '获取VAT税单文件失败';
+      if (ossError.code === 'AccessDenied') {
+        errorMessage = 'OSS访问权限不足，请联系管理员';
+      } else if (ossError.code === 'NoSuchKey') {
+        errorMessage = 'VAT税单文件在OSS中不存在';
+      } else if (ossError.code === 'NetworkingError') {
+        errorMessage = 'OSS网络连接失败，请稍后重试';
+      } else {
+        errorMessage = `获取VAT税单文件失败: ${ossError.message}`;
+      }
+      
       return res.status(500).json({
         code: 500,
-        message: '获取VAT税单文件失败: ' + error.message
+        message: errorMessage,
+        error: ossError.message
       });
     }
     
