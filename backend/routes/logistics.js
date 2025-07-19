@@ -1180,7 +1180,12 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
       }
     }
     
-    // 解析PDF提取MRN、税金和时间
+    // 获取前端发送的解析数据
+    const frontendMrn = req.body.mrn;
+    const frontendTaxAmount = req.body.taxAmount;
+    const frontendTaxDate = req.body.taxDate;
+    
+    // 解析PDF提取MRN、税金和时间（作为备用）
     const extractedData = await parseVatReceiptPDF(req.file.buffer);
     
     // 构建文件名，包含shippingId便于识别
@@ -1202,18 +1207,22 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
       vatReceiptUploadTime: new Date()
     };
     
-    // 如果解析到了MRN，更新MRN字段
-    if (extractedData.mrn) {
+    // 优先使用前端发送的数据，如果没有则使用PDF解析的数据
+    if (frontendMrn && frontendMrn.trim()) {
+      updateData.mrn = frontendMrn.trim();
+    } else if (extractedData.mrn) {
       updateData.mrn = extractedData.mrn;
     }
     
-    // 如果解析到了税金金额，更新vatReceiptTaxAmount字段
-    if (extractedData.taxAmount) {
+    if (frontendTaxAmount && !isNaN(parseFloat(frontendTaxAmount))) {
+      updateData.vatReceiptTaxAmount = parseFloat(frontendTaxAmount);
+    } else if (extractedData.taxAmount) {
       updateData.vatReceiptTaxAmount = extractedData.taxAmount;
     }
     
-    // 如果解析到了税金日期，更新vatReceiptTaxDate字段
-    if (extractedData.taxDate) {
+    if (frontendTaxDate && frontendTaxDate.trim()) {
+      updateData.vatReceiptTaxDate = frontendTaxDate.trim();
+    } else if (extractedData.taxDate) {
       updateData.vatReceiptTaxDate = extractedData.taxDate;
     }
     

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'work-assistant-pwa-v2.0.4';
-const APP_VERSION = '2.0.4';
+const CACHE_NAME = 'work-assistant-pwa-v2.0.5';
+const APP_VERSION = '2.0.5';
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',

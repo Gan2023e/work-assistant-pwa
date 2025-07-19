@@ -176,6 +176,7 @@ const LogisticsPage: React.FC = () => {
     taxDate: string | null;
   } | null>(null);
   const [vatUploadStep, setVatUploadStep] = useState<'select' | 'confirm' | 'uploading'>('select');
+  const [vatForm] = Form.useForm();
 
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
@@ -295,6 +296,7 @@ const LogisticsPage: React.FC = () => {
     setVatUploadStep('select');
     setSelectedVatFile(null);
     setVatExtractedData(null);
+    vatForm.resetFields();
   };
 
   // 解析VAT税单PDF
@@ -317,8 +319,14 @@ const LogisticsPage: React.FC = () => {
       
       if (result.code === 0) {
         setVatExtractedData(result.data);
+        // 将解析的数据填入表单
+        vatForm.setFieldsValue({
+          mrn: result.data.mrn || '',
+          taxAmount: result.data.taxAmount || null,
+          taxDate: result.data.taxDate ? dayjs(result.data.taxDate) : null
+        });
         setVatUploadStep('confirm');
-        message.success('PDF解析成功，请确认信息');
+        message.success('PDF解析成功，请确认并编辑信息');
       } else {
         throw new Error(result.message || 'PDF解析失败');
       }
@@ -337,12 +345,19 @@ const LogisticsPage: React.FC = () => {
       return;
     }
 
+    // 获取表单数据
+    const formData = await vatForm.validateFields();
+    
     setVatUploadStep('uploading');
     setVatUploadModalLoading(true);
     
     try {
-      const formData = new FormData();
-      formData.append('vatReceipt', selectedVatFile);
+      const uploadFormData = new FormData();
+      uploadFormData.append('vatReceipt', selectedVatFile);
+      // 添加解析的数据
+      uploadFormData.append('mrn', formData.mrn || '');
+      uploadFormData.append('taxAmount', formData.taxAmount?.toString() || '');
+      uploadFormData.append('taxDate', formData.taxDate?.format('YYYY-MM-DD') || '');
       
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/logistics/upload-vat-receipt/${selectedShippingId}`, {
@@ -350,7 +365,7 @@ const LogisticsPage: React.FC = () => {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: formData
+        body: uploadFormData
       });
       
       const result = await response.json();
@@ -367,12 +382,10 @@ const LogisticsPage: React.FC = () => {
                   vatReceiptFileName: result.data.fileName,
                   vatReceiptFileSize: result.data.fileSize,
                   vatReceiptUploadTime: result.data.uploadTime,
-                  // 如果后端返回了提取的数据，更新相关字段
-                  ...(result.data.extractedData && {
-                    mrn: result.data.extractedData.mrn,
-                    vatReceiptTaxAmount: result.data.extractedData.taxAmount,
-                    vatReceiptTaxDate: result.data.extractedData.taxDate
-                  })
+                  // 使用表单数据更新相关字段
+                  mrn: formData.mrn || result.data.extractedData?.mrn,
+                  vatReceiptTaxAmount: formData.taxAmount || result.data.extractedData?.taxAmount,
+                  vatReceiptTaxDate: formData.taxDate?.format('YYYY-MM-DD') || result.data.extractedData?.taxDate
                 }
               : item
           )
@@ -387,6 +400,7 @@ const LogisticsPage: React.FC = () => {
         setSelectedVatFile(null);
         setVatExtractedData(null);
         setSelectedShippingId('');
+        vatForm.resetFields();
       } else {
         throw new Error(result.message || 'VAT税单上传失败');
       }
@@ -406,6 +420,7 @@ const LogisticsPage: React.FC = () => {
     setSelectedVatFile(null);
     setVatExtractedData(null);
     setSelectedShippingId('');
+    vatForm.resetFields();
   };
 
   // 删除VAT税单
@@ -2787,26 +2802,81 @@ const LogisticsPage: React.FC = () => {
         {vatUploadStep === 'confirm' && vatExtractedData && (
           <div>
             <div style={{ marginBottom: 16 }}>
-              <Text strong>PDF解析结果：</Text>
+              <Text strong>PDF解析结果 - 请确认并编辑信息：</Text>
             </div>
-            <Card size="small" style={{ marginBottom: 16 }}>
+            
+            <Form
+              form={vatForm}
+              layout="vertical"
+              style={{ marginBottom: 16 }}
+            >
               <Row gutter={16}>
                 <Col span={12}>
-                  <Text strong>MRN号码：</Text>
-                  <Text>{vatExtractedData.mrn || '未解析到'}</Text>
+                  <Form.Item
+                    name="mrn"
+                    label="MRN号码"
+                    rules={[
+                      { required: true, message: '请输入MRN号码' },
+                      { pattern: /^[A-Z0-9Ø]+$/i, message: 'MRN号码只能包含字母和数字' }
+                    ]}
+                  >
+                    <Input 
+                      placeholder="请输入MRN号码" 
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Text strong>税金金额：</Text>
-                  <Text>{vatExtractedData.taxAmount ? `£${vatExtractedData.taxAmount}` : '未解析到'}</Text>
+                  <Form.Item
+                    name="taxAmount"
+                    label="税金金额 (£)"
+                    rules={[
+                      { required: true, message: '请输入税金金额' },
+                      { type: 'number', min: 0, message: '税金金额必须大于等于0' }
+                    ]}
+                  >
+                    <InputNumber
+                      placeholder="请输入税金金额"
+                      style={{ width: '100%' }}
+                      precision={2}
+                      min={0}
+                      addonBefore="£"
+                    />
+                  </Form.Item>
                 </Col>
               </Row>
-              <Row style={{ marginTop: 8 }}>
+              
+              <Row gutter={16}>
                 <Col span={12}>
-                  <Text strong>税金日期：</Text>
-                  <Text>{vatExtractedData.taxDate ? formatVatDate(vatExtractedData.taxDate) : '未解析到'}</Text>
+                  <Form.Item
+                    name="taxDate"
+                    label="税金日期"
+                    rules={[
+                      { required: true, message: '请选择税金日期' }
+                    ]}
+                  >
+                    <DatePicker
+                      placeholder="请选择税金日期"
+                      style={{ width: '100%' }}
+                      format="YYYY-MM-DD"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <div style={{ paddingTop: 32 }}>
+                    <Text type="secondary">
+                      原始解析结果：
+                    </Text>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: 4 }}>
+                      {vatExtractedData.mrn && <div>MRN: {vatExtractedData.mrn}</div>}
+                      {vatExtractedData.taxAmount && <div>税金: £{vatExtractedData.taxAmount}</div>}
+                      {vatExtractedData.taxDate && <div>日期: {formatVatDate(vatExtractedData.taxDate)}</div>}
+                    </div>
+                  </div>
                 </Col>
               </Row>
-            </Card>
+            </Form>
+            
             <div style={{ marginBottom: 16 }}>
               <Text>请确认以上信息无误后点击上传：</Text>
             </div>

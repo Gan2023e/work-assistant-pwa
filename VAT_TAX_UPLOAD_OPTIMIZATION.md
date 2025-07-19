@@ -1,126 +1,101 @@
 # VAT税单上传功能优化
 
-## 功能概述
+## 优化内容
 
-本次优化改进了"头程物流管理"页面的VAT税单上传功能，提供了更好的用户体验和信息展示。
+本次优化主要改进了"头程物流管理"中的"上传VAT税单"对话框功能，将原来只读显示的解析结果改为可编辑的输入框，提升了用户体验。
 
 ## 主要改进
 
-### 1. 上传流程优化
-- **点击"上传"按钮**：现在会打开一个对话框，而不是直接上传
-- **PDF解析**：选择PDF文件后，系统会自动解析其中的信息
-- **信息确认**：解析完成后显示提取的信息，用户可以确认无误后再上传
-- **自动上传**：确认后自动上传到阿里云OSS
+### 1. 前端优化 (frontend/src/pages/Logistics/LogisticsPage.tsx)
 
-### 2. 信息展示优化
-- **VAT税单列**：现在会显示解析到的关键信息
-  - MRN号码（Movement Reference Number）
-  - 税金金额
-  - 税金日期
-- **信息格式**：以清晰的小字体显示在VAT税单列中
+#### 新增功能：
+- 添加了 `vatForm` 表单实例用于管理VAT税单数据
+- 在PDF解析成功后，自动将解析结果填入可编辑的输入框
+- 将确认页面从只读显示改为可编辑表单
 
-### 3. 用户体验改进
-- **分步操作**：选择文件 → 解析信息 → 确认上传
-- **错误处理**：完善的错误提示和状态管理
-- **加载状态**：清晰的上传进度提示
+#### 表单字段：
+- **MRN号码**：文本输入框，支持字母和数字，必填
+- **税金金额**：数字输入框，支持小数点后两位，必填，带£符号前缀
+- **税金日期**：日期选择器，必填
 
-## 技术实现
+#### 验证规则：
+- MRN号码：必填，只能包含字母和数字
+- 税金金额：必填，必须大于等于0
+- 税金日期：必填
 
-### 前端改进
-1. **新增状态管理**：
-   - `vatUploadModalVisible`：对话框显示状态
-   - `vatUploadStep`：上传步骤（select/confirm/uploading）
-   - `vatExtractedData`：解析到的数据
+### 2. 后端优化 (backend/routes/logistics.js)
 
-2. **新增API调用**：
-   - `/api/logistics/parse-vat-receipt`：仅解析PDF，不上传
-   - 原有的上传API保持不变
+#### 改进功能：
+- 修改了 `/upload-vat-receipt/:shippingId` 接口
+- 支持接收前端发送的解析数据（MRN、税金金额、税金日期）
+- 优先使用前端发送的数据，如果没有则使用PDF解析的数据作为备用
 
-3. **UI组件**：
-   - 新增VAT税单上传对话框
-   - 优化VAT税单列的显示
-
-### 后端改进
-1. **新增解析API**：
-   - 独立的PDF解析端点
-   - 复用现有的`parseVatReceiptPDF`函数
-
-2. **解析功能优化**：
-   - **MRN号码提取**：支持OCR字体和特殊字符（如Ø）
-   - **税金金额提取**：优先查找Amount Payable列最下方的金额
-   - **税金日期提取**：重点查找Place and date部分的日期
-
-## 最新优化内容
-
-### PDF解析算法改进
-
-#### 1. MRN号码提取优化
-- **支持特殊字符**：现在可以识别包含Ø等特殊字符的MRN
-- **OCR容错处理**：使用更宽松的正则表达式，适应OCR识别可能的错误
-- **备用搜索**：如果常规方法失败，会搜索所有可能的25位字符组合
-- **长度验证**：支持20-30位字符长度，适应OCR识别误差
-
-#### 2. 税金金额提取优化
-- **位置优先**：优先查找文档末尾和Amount Payable相关的金额
-- **行尾搜索**：从文档最后几行开始搜索，通常税金金额在右下角
-- **金额验证**：只接受合理范围内的金额（0-10000）
-- **多模式匹配**：支持多种金额格式和位置
-
-#### 3. 税金日期提取优化
-- **Place and date优先**：重点查找包含"Place and date"或"[54]"的行
-- **地点日期格式**：支持"地点 日期"格式的识别
-- **日期标准化**：自动转换DD/MM/YYYY为YYYY-MM-DD格式
-- **备用搜索**：如果特定位置未找到，使用通用日期模式
-
-#### 4. 调试信息增强
-- **详细日志**：添加了详细的解析过程日志
-- **文本分析**：显示PDF文本的前后1000字符
-- **行级调试**：显示文档最后10行的内容
-- **匹配过程**：记录每个正则表达式的匹配结果
-
-## 使用流程
-
-1. **打开上传对话框**：点击VAT税单列的"上传"按钮
-2. **选择PDF文件**：在对话框中选择VAT税单PDF文件
-3. **等待解析**：系统自动解析PDF中的信息
-4. **确认信息**：查看解析结果，确认无误
-5. **上传文件**：点击"确认上传"按钮完成上传
-6. **查看结果**：上传成功后，解析的信息会显示在VAT税单列中
-
-## 支持的信息类型
-
-- **MRN号码**：25位字符的Movement Reference Number（支持特殊字符）
-- **税金金额**：Amount Payable列最下方的金额
-- **税金日期**：Place and date部分的日期信息
-
-## 注意事项
-
-- 只有目的地为英国的记录才显示VAT税单操作
-- 支持PDF格式文件
-- 文件大小限制为10MB
-- 解析失败时会有相应的错误提示
-- 新增了详细的调试日志，便于问题排查
-
-## 技术细节
-
-### MRN提取正则表达式
+#### 数据处理逻辑：
 ```javascript
-// 支持特殊字符的MRN模式
-/([A-Z0-9Ø]{20,30})/i  // 20-30位字符，适应OCR误差
-```
+// 优先使用前端发送的数据，如果没有则使用PDF解析的数据
+if (frontendMrn && frontendMrn.trim()) {
+  updateData.mrn = frontendMrn.trim();
+} else if (extractedData.mrn) {
+  updateData.mrn = extractedData.mrn;
+}
 
-### 税金金额提取策略
-```javascript
-// 优先从文档末尾查找
-for (let i = lines.length - 1; i >= 0; i--) {
-  // 查找行末的金额
+if (frontendTaxAmount && !isNaN(parseFloat(frontendTaxAmount))) {
+  updateData.vatReceiptTaxAmount = parseFloat(frontendTaxAmount);
+} else if (extractedData.taxAmount) {
+  updateData.vatReceiptTaxAmount = extractedData.taxAmount;
+}
+
+if (frontendTaxDate && frontendTaxDate.trim()) {
+  updateData.vatReceiptTaxDate = frontendTaxDate.trim();
+} else if (extractedData.taxDate) {
+  updateData.vatReceiptTaxDate = extractedData.taxDate;
 }
 ```
 
-### 日期提取策略
-```javascript
-// 优先查找Place and date行
-const placeAndDateLine = lines.find(line => 
-  line.includes('Place and date') || line.includes('[54]')
-);
-``` 
+## 用户体验改进
+
+### 1. 解析结果展示
+- 在确认页面右侧显示原始解析结果，供用户参考
+- 左侧是可编辑的表单，用户可以修改解析结果
+
+### 2. 表单验证
+- 实时验证用户输入的数据
+- 提供清晰的错误提示信息
+
+### 3. 数据流程
+1. 用户选择PDF文件
+2. 系统自动解析PDF并提取信息
+3. 解析结果自动填入表单
+4. 用户可以查看原始解析结果并编辑表单
+5. 确认后上传文件和数据到服务器
+
+## 技术实现
+
+### 前端技术栈：
+- React + TypeScript
+- Ant Design 组件库
+- Form 表单管理
+- Upload 文件上传
+- DatePicker 日期选择
+- InputNumber 数字输入
+
+### 后端技术栈：
+- Node.js + Express
+- Multer 文件上传处理
+- PDF解析库 (pdf-parse)
+- 阿里云OSS文件存储
+
+## 注意事项
+
+1. **数据验证**：前端和后端都进行了数据验证，确保数据完整性
+2. **错误处理**：完善的错误处理机制，提供用户友好的错误提示
+3. **兼容性**：保持与现有功能的兼容性，不影响其他功能
+4. **性能**：优化了文件上传和解析流程，提升响应速度
+
+## 测试建议
+
+1. 测试PDF解析功能是否正常工作
+2. 测试表单验证是否按预期工作
+3. 测试数据上传和保存是否成功
+4. 测试错误处理是否友好
+5. 测试与现有功能的兼容性 
