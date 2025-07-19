@@ -89,6 +89,7 @@ interface FilterOptions {
   taxPaymentStatus?: string[];
   taxDeclarationStatus?: string[];
   paymentStatus?: string[];
+  vatReceiptDateRange?: string[]; // 添加VAT税单时间范围筛选
 }
 
 // 搜索参数接口
@@ -103,6 +104,8 @@ interface SearchParams {
     taxDeclarationStatus?: string[];
     paymentStatus?: string[];
     specialQuery?: string;
+    vatReceiptDateRange?: string[]; // 添加VAT税单时间范围筛选
+    vatReceiptStatus?: string[]; // 添加VAT税单状态筛选
   };
 }
 
@@ -579,12 +582,12 @@ const LogisticsPage: React.FC = () => {
         params.filters = { specialQuery: 'yearlyShipments' };
         break;
       case 'transit':
-        // 查询在途状态的记录
-        params.filters = { status: ['在途'] };
+        // 查询在途状态的记录，包含"查验中"
+        params.filters = { status: ['在途', '查验中'] };
         break;
       case 'transitPackage':
-        // 查询在途状态的记录（显示箱数）
-        params.filters = { status: ['在途'] };
+        // 查询在途状态的记录（显示箱数），包含"查验中"
+        params.filters = { status: ['在途', '查验中'] };
         break;
       case 'unpaid':
         // 查询未付款的记录
@@ -645,6 +648,11 @@ const LogisticsPage: React.FC = () => {
         setEditingKey('');
         setEditingField('');
         setEditingValue('');
+        
+        // 如果更新的是状态字段，自动刷新统计数据
+        if (editingField === 'status') {
+          await fetchStatistics();
+        }
       } else {
         throw new Error(result.message || '更新失败');
       }
@@ -689,6 +697,11 @@ const LogisticsPage: React.FC = () => {
         setEditingKey('');
         setEditingField('');
         setEditingValue('');
+        
+        // 如果更新的是状态字段，自动刷新统计数据
+        if (editingField === 'status') {
+          await fetchStatistics();
+        }
       } else {
         throw new Error(result.message || '更新失败');
       }
@@ -843,6 +856,8 @@ const LogisticsPage: React.FC = () => {
         } else {
           refetchData();
         }
+        // 自动刷新统计数据
+        await fetchStatistics();
         } else {
         throw new Error(result.message || '批量更新失败');
       }
@@ -892,6 +907,8 @@ const LogisticsPage: React.FC = () => {
         } else {
           refetchData();
         }
+        // 自动刷新统计数据
+        await fetchStatistics();
         } else {
         throw new Error(result.message || '批量更新失败');
         }
@@ -1087,9 +1104,10 @@ const LogisticsPage: React.FC = () => {
               setBatchPaymentStatusValue(undefined);
               setBatchTaxStatusValue(undefined);
               
-              // 刷新数据
-              setTimeout(() => {
+              // 刷新数据和统计数据
+              setTimeout(async () => {
                 refetchData();
+                await fetchStatistics();
               }, 300);
             } else {
               const errorMsg = result.message || `删除失败 (HTTP ${response.status})`;
@@ -1154,9 +1172,10 @@ const LogisticsPage: React.FC = () => {
                   setBatchPaymentStatusValue(undefined);
                   setBatchTaxStatusValue(undefined);
                   
-                  // 刷新数据
-                  setTimeout(() => {
+                  // 刷新数据和统计数据
+                  setTimeout(async () => {
                     refetchData();
+                    await fetchStatistics();
                   }, 300);
                 } else {
                   message.error(`删除失败: ${result.message}`);
@@ -1215,8 +1234,9 @@ const LogisticsPage: React.FC = () => {
               setBatchPaymentStatusValue(undefined);
               setBatchTaxStatusValue(undefined);
               
-              setTimeout(() => {
+              setTimeout(async () => {
                 refetchData();
+                await fetchStatistics();
               }, 300);
             } else {
               message.error(`删除失败: ${result.message}`);
@@ -1301,7 +1321,7 @@ const LogisticsPage: React.FC = () => {
       fetchData(currentSearchParams, false); // 不显示加载消息，避免覆盖操作成功消息
     } else {
       // 如果没有保存的搜索参数，使用默认参数
-      fetchData({ filters: { status: ['在途', '入库中'] } }, false);
+      fetchData({ filters: { status: ['在途', '入库中', '查验中'] } }, false);
     }
   };
 
@@ -1313,12 +1333,12 @@ const LogisticsPage: React.FC = () => {
     setBatchTaxStatusValue(undefined);
   };
 
-  // 初始化数据
+  // 组件初始化
   useEffect(() => {
     fetchFilterOptions();
     fetchStatistics();
-    // 默认加载状态不为"完成"的物流记录，按预计到港日排序
-    fetchData({ filters: { status: ['在途', '入库中'] } });
+    // 默认加载状态不为"完成"的物流记录，按预计到港日排序，包含"查验中"状态
+    fetchData({ filters: { status: ['在途', '入库中', '查验中'] } });
   }, []);
 
   // 搜索处理
@@ -1350,7 +1370,7 @@ const LogisticsPage: React.FC = () => {
     setFilters({});
     setSelectedRowKeys([]);
     setBatchStatusValue(undefined);
-    fetchData({ filters: { status: ['在途', '入库中'] } });
+    fetchData({ filters: { status: ['在途', '入库中', '查验中'] } });
   };
 
   // 查询所有数据
@@ -2033,6 +2053,25 @@ const LogisticsPage: React.FC = () => {
       key: 'vatReceipt',
       width: 200,
       align: 'center',
+      filters: [
+        {
+          text: '已上传',
+          value: 'uploaded',
+        },
+        {
+          text: '未上传',
+          value: 'notUploaded',
+        },
+      ],
+      filteredValue: filters.vatReceiptStatus || null,
+      onFilter: (value, record) => {
+        if (value === 'uploaded') {
+          return !!record.vatReceiptUrl;
+        } else if (value === 'notUploaded') {
+          return !record.vatReceiptUrl;
+        }
+        return true;
+      },
       render: (_, record) => {
         // 只有目的地为英国的记录才显示VAT税单操作
         if (record.destinationCountry !== '英国') {
@@ -2220,6 +2259,7 @@ const LogisticsPage: React.FC = () => {
       destinationCountry: tableFilters.destinationCountry,
       taxPaymentStatus: tableFilters.taxPaymentStatus,
       paymentStatus: tableFilters.paymentStatus,
+      vatReceiptStatus: tableFilters.vatReceipt,
     };
     
     setFilters(newFilters);
@@ -2244,7 +2284,7 @@ const LogisticsPage: React.FC = () => {
         头程物流管理
       </Title>
       <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
-        默认显示状态为"在途"和"入库中"的物流记录，按预计到港日升序排列
+        默认显示状态为"在途"、"入库中"和"查验中"的物流记录，按预计到港日升序排列
       </Text>
 
       {/* 统计卡片 */}
