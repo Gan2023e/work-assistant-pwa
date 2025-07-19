@@ -41,10 +41,10 @@ const parseVatReceiptPDF = async (buffer) => {
     };
     
     // 1. 提取MRN (Movement Reference Number)
-    // MRN通常是25位字符，格式如：25GB7A8H3YNK4PØAR3（注意可能包含特殊字符如Ø）
+    // MRN通常是25位字符，格式如：25GB7A8H3YNK4P0AR3
     console.log('🔍 开始搜索MRN...');
     
-    // 首先尝试直接匹配MRN行
+    // 首先尝试直接匹配MRN行，优先查找文档开头的MRN
     const mrnLineMatch = text.match(/MRN:\s*([A-Z0-9Ø]+)/i);
     if (mrnLineMatch) {
       let mrn = mrnLineMatch[1];
@@ -57,7 +57,58 @@ const parseVatReceiptPDF = async (buffer) => {
       }
     }
     
+    // 如果没找到，尝试更精确的搜索
     if (!extractedData.mrn) {
+      console.log('🔍 尝试更精确的MRN搜索...');
+      
+      // 按行分割文本，优先查找文档前几行的MRN
+      const lines = text.split('\n');
+      console.log('📊 文档总行数:', lines.length);
+      console.log('📊 前10行内容:');
+      for (let i = 0; i < Math.min(10, lines.length); i++) {
+        console.log(`  行${i + 1}: "${lines[i]}"`);
+      }
+      
+      // 优先查找前20行中的MRN
+      for (let i = 0; i < Math.min(20, lines.length); i++) {
+        const line = lines[i].trim();
+        
+        // 查找包含MRN的行
+        if (line.includes('MRN') || line.includes('Movement Reference Number')) {
+          console.log(`🔍 找到MRN相关行${i + 1}: "${line}"`);
+          
+                  // 尝试提取MRN号码 - 使用更精确的正则表达式
+        let mrnMatch = line.match(/Movement Reference Number \(MRN\): ([A-Z0-9Ø]+)/i);
+        if (!mrnMatch) {
+          mrnMatch = line.match(/MRN: ([A-Z0-9Ø]+)/i);
+        }
+        if (!mrnMatch) {
+          mrnMatch = line.match(/([A-Z0-9Ø]{25})/i);
+        }
+        
+        if (mrnMatch) {
+          let mrn = mrnMatch[1];
+          console.log('🔍 从行中提取到MRN:', mrn);
+          // 将Ø转换为0，然后清理其他特殊字符
+          mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
+          if (mrn.length >= 15 && mrn.length <= 30) {
+            // 排除Bank Reference（通常以GB开头且包含BARC）
+            if (!mrn.includes('BARC') && !mrn.startsWith('GB16')) {
+              extractedData.mrn = mrn;
+              console.log('✅ MRN提取成功 (从行搜索):', extractedData.mrn);
+              break;
+            } else {
+              console.log('🔍 跳过Bank Reference:', mrn);
+            }
+          }
+        }
+        }
+      }
+    }
+    
+    // 如果还是没找到，使用正则表达式模式匹配
+    if (!extractedData.mrn) {
+      console.log('🔍 使用正则表达式模式匹配MRN...');
       const mrnPatterns = [
         /MRN[：:\s]*([A-Z0-9Ø]{25})/i,
         /Movement Reference Number[：:\s]*([A-Z0-9Ø]{25})/i,
@@ -71,22 +122,28 @@ const parseVatReceiptPDF = async (buffer) => {
         const match = text.match(pattern);
         if (match) {
           let mrn = match[1];
-          console.log('🔍 找到可能的MRN:', mrn);
+          console.log('🔍 正则匹配到可能的MRN:', mrn);
           // 将Ø转换为0，然后清理其他特殊字符
           mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
           console.log('🔍 清理后的MRN:', mrn, '长度:', mrn.length);
           // 如果长度接近25位，认为是有效的MRN
-          if (mrn.length >= 20 && mrn.length <= 30) {
-            extractedData.mrn = mrn;
-            console.log('✅ MRN提取成功:', extractedData.mrn);
-            break;
+          if (mrn.length >= 15 && mrn.length <= 30) {
+            // 排除Bank Reference（通常以GB开头且包含BARC）
+            if (!mrn.includes('BARC') && !mrn.startsWith('GB16')) {
+              extractedData.mrn = mrn;
+              console.log('✅ MRN提取成功 (正则匹配):', extractedData.mrn);
+              break;
+            } else {
+              console.log('🔍 跳过Bank Reference:', mrn);
+            }
           }
         }
       }
     }
     
+    // 最后备用方法：搜索所有可能的25位字符组合，但排除Bank Reference
     if (!extractedData.mrn) {
-      console.log('⚠️ 未找到MRN，尝试搜索所有可能的25位字符组合...');
+      console.log('⚠️ 未找到MRN，尝试搜索所有可能的25位字符组合（排除Bank Reference）...');
       // 搜索所有可能的25位字符组合
       const allMatches = text.match(/[A-Z0-9Ø]{20,30}/gi);
       if (allMatches) {
@@ -94,10 +151,15 @@ const parseVatReceiptPDF = async (buffer) => {
         for (const match of allMatches) {
           // 将Ø转换为0，然后清理其他特殊字符
           const cleaned = match.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
-          if (cleaned.length >= 20 && cleaned.length <= 30) {
-            extractedData.mrn = cleaned;
-            console.log('✅ MRN提取成功 (备用方法):', extractedData.mrn);
-            break;
+          if (cleaned.length >= 15 && cleaned.length <= 30) {
+            // 排除Bank Reference（通常以GB开头且包含BARC）
+            if (!cleaned.includes('BARC') && !cleaned.startsWith('GB16')) {
+              extractedData.mrn = cleaned;
+              console.log('✅ MRN提取成功 (备用方法):', extractedData.mrn);
+              break;
+            } else {
+              console.log('🔍 跳过Bank Reference:', cleaned);
+            }
           }
         }
       }
