@@ -1346,6 +1346,12 @@ const LogisticsPage: React.FC = () => {
     return showYear ? dayjs(dateString).format('YYYY-MM-DD') : dayjs(dateString).format('MM-DD');
   };
 
+  // VAT税单日期格式化 - 始终显示年月日格式
+  const formatVatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    return dayjs(dateString).format('YYYY-MM-DD');
+  };
+
   // 可编辑单元格渲染
   const renderEditableCell = (text: any, record: LogisticsRecord, field: string) => {
     const isEditing = editingKey === record.shippingId && editingField === field;
@@ -2028,7 +2034,7 @@ const LogisticsPage: React.FC = () => {
                   <div style={{ fontSize: '12px', color: '#666', textAlign: 'center' }}>
                     {record.mrn && <div>MRN: {record.mrn}</div>}
                     {record.vatReceiptTaxAmount && <div>税金: £{record.vatReceiptTaxAmount}</div>}
-                    {record.vatReceiptTaxDate && <div>日期: {formatDate(record.vatReceiptTaxDate)}</div>}
+                    {record.vatReceiptTaxDate && <div>日期: {formatVatDate(record.vatReceiptTaxDate)}</div>}
                   </div>
                 )}
               </>
@@ -2720,7 +2726,7 @@ const LogisticsPage: React.FC = () => {
               <Row style={{ marginTop: 8 }}>
                 <Col span={12}>
                   <Text strong>税金日期：</Text>
-                  <Text>{vatExtractedData.taxDate ? formatDate(vatExtractedData.taxDate) : '未解析到'}</Text>
+                  <Text>{vatExtractedData.taxDate ? formatVatDate(vatExtractedData.taxDate) : '未解析到'}</Text>
                 </Col>
               </Row>
             </Card>

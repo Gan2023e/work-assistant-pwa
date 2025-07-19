@@ -77,31 +77,31 @@ const parseVatReceiptPDF = async (buffer) => {
         if (line.includes('MRN') || line.includes('Movement Reference Number')) {
           console.log(`🔍 找到MRN相关行${i + 1}: "${line}"`);
           
-                  // 尝试提取MRN号码 - 使用更精确的正则表达式
-        let mrnMatch = line.match(/Movement Reference Number \(MRN\): ([A-Z0-9Ø]+)/i);
-        if (!mrnMatch) {
-          mrnMatch = line.match(/MRN: ([A-Z0-9Ø]+)/i);
-        }
-        if (!mrnMatch) {
-          mrnMatch = line.match(/([A-Z0-9Ø]{25})/i);
-        }
-        
-        if (mrnMatch) {
-          let mrn = mrnMatch[1];
-          console.log('🔍 从行中提取到MRN:', mrn);
-          // 将Ø转换为0，然后清理其他特殊字符
-          mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
-          if (mrn.length >= 15 && mrn.length <= 30) {
-            // 排除Bank Reference（通常以GB开头且包含BARC）
-            if (!mrn.includes('BARC') && !mrn.startsWith('GB16')) {
-              extractedData.mrn = mrn;
-              console.log('✅ MRN提取成功 (从行搜索):', extractedData.mrn);
-              break;
-            } else {
-              console.log('🔍 跳过Bank Reference:', mrn);
+          // 尝试提取MRN号码 - 使用更精确的正则表达式
+          let mrnMatch = line.match(/Movement Reference Number \(MRN\): ([A-Z0-9Ø]+)/i);
+          if (!mrnMatch) {
+            mrnMatch = line.match(/MRN: ([A-Z0-9Ø]+)/i);
+          }
+          if (!mrnMatch) {
+            mrnMatch = line.match(/([A-Z0-9Ø]{25})/i);
+          }
+          
+          if (mrnMatch) {
+            let mrn = mrnMatch[1];
+            console.log('🔍 从行中提取到MRN:', mrn);
+            // 将Ø转换为0，然后清理其他特殊字符
+            mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
+            if (mrn.length >= 15 && mrn.length <= 30) {
+              // 排除Bank Reference（通常以GB开头且包含BARC）
+              if (!mrn.includes('BARC') && !mrn.startsWith('GB16')) {
+                extractedData.mrn = mrn;
+                console.log('✅ MRN提取成功 (从行搜索):', extractedData.mrn);
+                break;
+              } else {
+                console.log('🔍 跳过Bank Reference:', mrn);
+              }
             }
           }
-        }
         }
       }
     }
@@ -165,24 +165,9 @@ const parseVatReceiptPDF = async (buffer) => {
       }
     }
     
-    // 2. 提取税金金额 - 重点查找Amount Payable相关的内容
-    const taxAmountPatterns = [
-      // 优先查找Amount Payable相关
-      /Amount Payable[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /Amount Payable[^0-9]*\n[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      // 查找表格中的金额，通常在右下角
-      /([0-9,]+\.?[0-9]*)\s*$/m, // 行末的金额
-      /([0-9,]+\.?[0-9]*)\s*\n\s*$/m, // 文档末尾的金额
-      // VAT相关金额
-      /VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /VAT \(PVA\)[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /\[B00\] VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /Payable amount[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /Total tax assessed[^0-9]*([0-9,]+\.?[0-9]*)/i,
-      /Tax base[^0-9]*([0-9,]+\.?[0-9]*)/i
-    ];
-    
+    // 2. 提取税金金额 - 重点查找Amount Payable列最下面的金额
     console.log('🔍 开始搜索税金金额...');
+    
     // 按行分割文本，查找右下角的金额
     const lines = text.split('\n');
     let foundAmount = false;
@@ -193,37 +178,117 @@ const parseVatReceiptPDF = async (buffer) => {
       console.log(`  行${i + 1}: "${lines[i]}"`);
     }
     
-    // 从后往前查找，优先查找文档末尾的金额
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      // 跳过包含日期的行
-      if (line.match(/\d{2}\/\d{2}\/\d{4}/)) {
-        console.log(`🔍 跳过日期行${i + 1}: "${line}"`);
-        continue;
-      }
-      // 跳过包含[54]的行
-      if (line.includes('[54]')) {
-        console.log(`🔍 跳过[54]行${i + 1}: "${line}"`);
-        continue;
-      }
-      // 查找包含数字的行
-      const amountMatch = line.match(/([0-9,]+\.?[0-9]*)/);
-      if (amountMatch) {
-        const amountStr = amountMatch[1].replace(/,/g, '');
+    // 优先查找Amount Payable相关的金额
+    console.log('🔍 优先查找Amount Payable相关金额...');
+    
+    // 首先尝试查找Amount Payable列最下面的金额
+    const amountPayablePatterns = [
+      /Amount Payable[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Amount Payable[^0-9]*\n[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Payable amount[^0-9]*([0-9,]+\.?[0-9]*)/i,
+      /Total amount payable[^0-9]*([0-9,]+\.?[0-9]*)/i
+    ];
+    
+    for (const pattern of amountPayablePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const amountStr = match[1].replace(/,/g, '');
         const amount = parseFloat(amountStr);
-        console.log(`🔍 行${i + 1}找到金额: ${amountStr} -> ${amount}`);
-        if (!isNaN(amount) && amount > 0 && amount < 10000) { // 合理的税金范围
+        console.log(`🔍 Amount Payable匹配到金额: ${amountStr} -> ${amount}`);
+        if (!isNaN(amount) && amount > 0 && amount < 10000) {
           extractedData.taxAmount = amount;
-          console.log('✅ 税金金额提取成功 (从行尾):', extractedData.taxAmount);
+          console.log('✅ 税金金额提取成功 (Amount Payable):', extractedData.taxAmount);
           foundAmount = true;
           break;
         }
       }
     }
     
-    // 如果从行尾没找到，使用正则表达式查找
+    // 如果没找到，尝试查找文档中所有金额，优先选择最下面的
     if (!foundAmount) {
-      console.log('🔍 从行尾未找到金额，使用正则表达式查找...');
+      console.log('🔍 查找文档中所有金额，优先选择最下面的...');
+      const allAmountMatches = text.match(/[0-9,]+\.?[0-9]*/g);
+      if (allAmountMatches) {
+        console.log('🔍 找到的所有金额:', allAmountMatches);
+        // 从后往前查找，优先选择最下面的金额
+        for (let i = allAmountMatches.length - 1; i >= 0; i--) {
+          const amountStr = allAmountMatches[i].replace(/,/g, '');
+          const amount = parseFloat(amountStr);
+          console.log(`🔍 检查金额${i + 1}: ${amountStr} -> ${amount}`);
+          if (!isNaN(amount) && amount > 0 && amount < 10000) {
+            // 检查这个金额是否在文档的后面部分
+            const amountIndex = text.lastIndexOf(allAmountMatches[i]);
+            const textLength = text.length;
+            // 如果金额在文档的后30%部分，认为是Amount Payable列最下面的金额
+            if (amountIndex > textLength * 0.7) {
+              extractedData.taxAmount = amount;
+              console.log('✅ 税金金额提取成功 (最下面金额):', extractedData.taxAmount);
+              foundAmount = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // 如果没找到Amount Payable，从后往前查找，优先查找文档末尾的金额
+    if (!foundAmount) {
+      console.log('🔍 从后往前查找金额...');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        
+        // 跳过包含日期的行
+        if (line.match(/\d{2}\/\d{2}\/\d{4}/)) {
+          console.log(`🔍 跳过日期行${i + 1}: "${line}"`);
+          continue;
+        }
+        // 跳过包含[54]的行
+        if (line.includes('[54]')) {
+          console.log(`🔍 跳过[54]行${i + 1}: "${line}"`);
+          continue;
+        }
+        // 跳过包含"Generated by"的行
+        if (line.includes('Generated by')) {
+          console.log(`🔍 跳过Generated by行${i + 1}: "${line}"`);
+          continue;
+        }
+        // 跳过包含"Bank Reference"的行
+        if (line.includes('Bank Reference')) {
+          console.log(`🔍 跳过Bank Reference行${i + 1}: "${line}"`);
+          continue;
+        }
+        
+        // 查找包含数字的行
+        const amountMatch = line.match(/([0-9,]+\.?[0-9]*)/);
+        if (amountMatch) {
+          const amountStr = amountMatch[1].replace(/,/g, '');
+          const amount = parseFloat(amountStr);
+          console.log(`🔍 行${i + 1}找到金额: ${amountStr} -> ${amount}`);
+          if (!isNaN(amount) && amount > 0 && amount < 10000) { // 合理的税金范围
+            extractedData.taxAmount = amount;
+            console.log('✅ 税金金额提取成功 (从行尾):', extractedData.taxAmount);
+            foundAmount = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    // 如果还是没找到，使用其他正则表达式查找
+    if (!foundAmount) {
+      console.log('🔍 使用其他正则表达式查找金额...');
+      const taxAmountPatterns = [
+        // VAT相关金额
+        /VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
+        /VAT \(PVA\)[^0-9]*([0-9,]+\.?[0-9]*)/i,
+        /\[B00\] VAT[^0-9]*([0-9,]+\.?[0-9]*)/i,
+        /Total tax assessed[^0-9]*([0-9,]+\.?[0-9]*)/i,
+        /Tax base[^0-9]*([0-9,]+\.?[0-9]*)/i,
+        // 查找表格中的金额，通常在右下角
+        /([0-9,]+\.?[0-9]*)\s*$/m, // 行末的金额
+        /([0-9,]+\.?[0-9]*)\s*\n\s*$/m, // 文档末尾的金额
+      ];
+      
       for (const pattern of taxAmountPatterns) {
         const match = text.match(pattern);
         if (match) {
@@ -239,7 +304,7 @@ const parseVatReceiptPDF = async (buffer) => {
       }
     }
     
-    // 3. 提取税金日期 - 重点查找Place and date部分
+    // 3. 提取税金日期 - 重点查找Place and date部分，确保格式为YYYY-MM-DD
     const datePatterns = [
       // 优先查找Place and date相关
       /\[54\] Place and date[^0-9]*(\d{2}\/\d{2}\/\d{4})/i,
@@ -271,7 +336,7 @@ const parseVatReceiptPDF = async (buffer) => {
         if (dateMatch) {
           let dateStr = dateMatch[1];
           console.log('📅 提取到日期:', dateStr);
-          // 标准化日期格式
+          // 标准化日期格式为YYYY-MM-DD
           if (dateStr.includes('/')) {
             // 转换 DD/MM/YYYY 为 YYYY-MM-DD
             const parts = dateStr.split('/');
@@ -296,7 +361,7 @@ const parseVatReceiptPDF = async (buffer) => {
         if (match) {
           let dateStr = match[1];
           console.log('📅 正则匹配到日期:', dateStr);
-          // 标准化日期格式
+          // 标准化日期格式为YYYY-MM-DD
           if (dateStr.includes('/')) {
             // 转换 DD/MM/YYYY 为 YYYY-MM-DD
             const parts = dateStr.split('/');
