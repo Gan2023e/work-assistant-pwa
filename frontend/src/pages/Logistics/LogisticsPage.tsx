@@ -165,6 +165,18 @@ const LogisticsPage: React.FC = () => {
   const [vatUploadingIds, setVatUploadingIds] = useState<Set<string>>(new Set());
   const [vatDeletingIds, setVatDeletingIds] = useState<Set<string>>(new Set());
 
+  // VAT税单上传对话框相关状态
+  const [vatUploadModalVisible, setVatUploadModalVisible] = useState(false);
+  const [vatUploadModalLoading, setVatUploadModalLoading] = useState(false);
+  const [selectedVatFile, setSelectedVatFile] = useState<File | null>(null);
+  const [selectedShippingId, setSelectedShippingId] = useState<string>('');
+  const [vatExtractedData, setVatExtractedData] = useState<{
+    mrn: string;
+    taxAmount: number | null;
+    taxDate: string | null;
+  } | null>(null);
+  const [vatUploadStep, setVatUploadStep] = useState<'select' | 'confirm' | 'uploading'>('select');
+
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
     setLoading(true);
@@ -276,17 +288,64 @@ const LogisticsPage: React.FC = () => {
     }
   };
 
-  // 上传VAT税单
-  const handleUploadVatReceipt = async (shippingId: string, file: File) => {
-    // 添加到上传中状态
-    setVatUploadingIds(prev => new Set(prev).add(shippingId));
-    
+  // 打开VAT税单上传对话框
+  const handleOpenVatUploadModal = (shippingId: string) => {
+    setSelectedShippingId(shippingId);
+    setVatUploadModalVisible(true);
+    setVatUploadStep('select');
+    setSelectedVatFile(null);
+    setVatExtractedData(null);
+  };
+
+  // 解析VAT税单PDF
+  const handleParseVatReceipt = async (file: File) => {
+    setVatUploadModalLoading(true);
     try {
       const formData = new FormData();
       formData.append('vatReceipt', file);
       
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/api/logistics/upload-vat-receipt/${shippingId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/logistics/parse-vat-receipt`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setVatExtractedData(result.data);
+        setVatUploadStep('confirm');
+        message.success('PDF解析成功，请确认信息');
+      } else {
+        throw new Error(result.message || 'PDF解析失败');
+      }
+    } catch (error) {
+      console.error('VAT税单解析失败:', error);
+      message.error(`PDF解析失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setVatUploadModalLoading(false);
+    }
+  };
+
+  // 确认并上传VAT税单
+  const handleConfirmAndUploadVatReceipt = async () => {
+    if (!selectedVatFile) {
+      message.error('请选择要上传的文件');
+      return;
+    }
+
+    setVatUploadStep('uploading');
+    setVatUploadModalLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('vatReceipt', selectedVatFile);
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/logistics/upload-vat-receipt/${selectedShippingId}`, {
         method: 'POST',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -301,7 +360,7 @@ const LogisticsPage: React.FC = () => {
         // 更新本地数据
         setData(prevData =>
           prevData.map(item =>
-            item.shippingId === shippingId
+            item.shippingId === selectedShippingId
               ? {
                   ...item,
                   vatReceiptUrl: result.data.url,
@@ -318,20 +377,32 @@ const LogisticsPage: React.FC = () => {
               : item
           )
         );
+        
+        // 关闭对话框
+        setVatUploadModalVisible(false);
+        setVatUploadStep('select');
+        setSelectedVatFile(null);
+        setVatExtractedData(null);
+        setSelectedShippingId('');
       } else {
         throw new Error(result.message || 'VAT税单上传失败');
       }
     } catch (error) {
       console.error('VAT税单上传失败:', error);
       message.error(`VAT税单上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setVatUploadStep('confirm');
     } finally {
-      // 从上传中状态移除
-      setVatUploadingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(shippingId);
-        return newSet;
-      });
+      setVatUploadModalLoading(false);
     }
+  };
+
+  // 取消VAT税单上传
+  const handleCancelVatUpload = () => {
+    setVatUploadModalVisible(false);
+    setVatUploadStep('select');
+    setSelectedVatFile(null);
+    setVatExtractedData(null);
+    setSelectedShippingId('');
   };
 
   // 删除VAT税单
@@ -1893,7 +1964,7 @@ const LogisticsPage: React.FC = () => {
     {
       title: 'VAT税单',
       key: 'vatReceipt',
-      width: 120,
+      width: 200,
       align: 'center',
       render: (_, record) => {
         // 只有目的地为英国的记录才显示VAT税单操作
@@ -1905,51 +1976,50 @@ const LogisticsPage: React.FC = () => {
         const isDeleting = vatDeletingIds.has(record.shippingId);
         
         return (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             {record.vatReceiptUrl ? (
               <>
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={() => window.open(record.vatReceiptUrl, '_blank')}
-                  title={`查看VAT税单: ${record.vatReceiptFileName}`}
-                  disabled={isDeleting}
-                >
-                  查看
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  danger
-                  onClick={() => handleDeleteVatReceipt(record.shippingId)}
-                  title="删除VAT税单"
-                  loading={isDeleting}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? '删除中' : '删除'}
-                </Button>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => window.open(record.vatReceiptUrl, '_blank')}
+                    title={`查看VAT税单: ${record.vatReceiptFileName}`}
+                    disabled={isDeleting}
+                  >
+                    查看
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    onClick={() => handleDeleteVatReceipt(record.shippingId)}
+                    title="删除VAT税单"
+                    loading={isDeleting}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? '删除中' : '删除'}
+                  </Button>
+                </div>
+                {/* 显示解析到的信息 */}
+                {(record.mrn || record.vatReceiptTaxAmount || record.vatReceiptTaxDate) && (
+                  <div style={{ fontSize: '12px', color: '#666', textAlign: 'center' }}>
+                    {record.mrn && <div>MRN: {record.mrn}</div>}
+                    {record.vatReceiptTaxAmount && <div>税金: £{record.vatReceiptTaxAmount}</div>}
+                    {record.vatReceiptTaxDate && <div>日期: {formatDate(record.vatReceiptTaxDate)}</div>}
+                  </div>
+                )}
               </>
             ) : (
-              <Upload
-                accept=".pdf"
-                maxCount={1}
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  handleUploadVatReceipt(record.shippingId, file);
-                  return false;
-                }}
+              <Button 
+                type="link" 
+                size="small" 
+                title="上传VAT税单PDF"
+                onClick={() => handleOpenVatUploadModal(record.shippingId)}
                 disabled={isUploading}
               >
-                <Button 
-                  type="link" 
-                  size="small" 
-                  title="上传VAT税单PDF"
-                  loading={isUploading}
-                  disabled={isUploading}
-                >
-                  {isUploading ? '上传中' : '上传'}
-                </Button>
-              </Upload>
+                上传
+              </Button>
             )}
           </div>
         );
@@ -2566,6 +2636,104 @@ const LogisticsPage: React.FC = () => {
             </Form.Item>
           </Form>
         </div>
+      </Modal>
+
+      {/* VAT税单上传对话框 */}
+      <Modal
+        title="上传VAT税单"
+        open={vatUploadModalVisible}
+        onCancel={handleCancelVatUpload}
+        footer={null}
+        width={600}
+        destroyOnClose
+      >
+        {vatUploadStep === 'select' && (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text>请选择VAT税单PDF文件，系统将自动解析其中的信息：</Text>
+            </div>
+            <Upload
+              accept=".pdf"
+              maxCount={1}
+              showUploadList={false}
+              beforeUpload={(file) => {
+                setSelectedVatFile(file);
+                handleParseVatReceipt(file);
+                return false;
+              }}
+              disabled={vatUploadModalLoading}
+            >
+              <Button 
+                type="primary" 
+                loading={vatUploadModalLoading}
+                disabled={vatUploadModalLoading}
+              >
+                {vatUploadModalLoading ? '解析中...' : '选择PDF文件'}
+              </Button>
+            </Upload>
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary">
+                支持解析MRN号码、税金金额、税金日期等信息
+              </Text>
+            </div>
+          </div>
+        )}
+
+        {vatUploadStep === 'confirm' && vatExtractedData && (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <Text strong>PDF解析结果：</Text>
+            </div>
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Text strong>MRN号码：</Text>
+                  <Text>{vatExtractedData.mrn || '未解析到'}</Text>
+                </Col>
+                <Col span={12}>
+                  <Text strong>税金金额：</Text>
+                  <Text>{vatExtractedData.taxAmount ? `£${vatExtractedData.taxAmount}` : '未解析到'}</Text>
+                </Col>
+              </Row>
+              <Row style={{ marginTop: 8 }}>
+                <Col span={12}>
+                  <Text strong>税金日期：</Text>
+                  <Text>{vatExtractedData.taxDate ? formatDate(vatExtractedData.taxDate) : '未解析到'}</Text>
+                </Col>
+              </Row>
+            </Card>
+            <div style={{ marginBottom: 16 }}>
+              <Text>请确认以上信息无误后点击上传：</Text>
+            </div>
+            <Space>
+              <Button 
+                type="primary" 
+                onClick={handleConfirmAndUploadVatReceipt}
+                loading={vatUploadModalLoading}
+                disabled={vatUploadModalLoading}
+              >
+                {vatUploadModalLoading ? '上传中...' : '确认上传'}
+              </Button>
+              <Button onClick={() => setVatUploadStep('select')}>
+                重新选择文件
+              </Button>
+              <Button onClick={handleCancelVatUpload}>
+                取消
+              </Button>
+            </Space>
+          </div>
+        )}
+
+        {vatUploadStep === 'uploading' && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{ marginBottom: 16 }}>
+              <Text>正在上传VAT税单到阿里云OSS...</Text>
+            </div>
+            <div>
+              <Text type="secondary">请稍候，上传完成后将自动关闭对话框</Text>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <style>{`

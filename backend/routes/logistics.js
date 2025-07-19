@@ -844,6 +844,39 @@ router.post('/batch-delete', authenticateToken, async (req, res) => {
   }
 });
 
+// 解析VAT税单PDF（仅解析，不上传）
+router.post('/parse-vat-receipt', authenticateToken, upload.single('vatReceipt'), async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到VAT税单解析请求');
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        code: 400,
+        message: '请选择要解析的PDF文件'
+      });
+    }
+    
+    // 解析PDF提取MRN、税金和时间
+    const extractedData = await parseVatReceiptPDF(req.file.buffer);
+    
+    console.log('✅ VAT税单解析成功:', extractedData);
+    
+    res.json({
+      code: 0,
+      message: 'VAT税单解析成功',
+      data: extractedData
+    });
+    
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', 'VAT税单解析失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: 'VAT税单解析失败',
+      error: error.message
+    });
+  }
+});
+
 // 上传VAT税单
 router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single('vatReceipt'), async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到VAT税单上传请求:', req.params.shippingId);
