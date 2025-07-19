@@ -378,6 +378,9 @@ const LogisticsPage: React.FC = () => {
           )
         );
         
+        // 刷新统计数据以更新"未上传VAT税单"卡片
+        await fetchStatistics();
+        
         // 关闭对话框
         setVatUploadModalVisible(false);
         setVatUploadStep('select');
@@ -446,6 +449,9 @@ const LogisticsPage: React.FC = () => {
                   : item
               )
             );
+            
+            // 刷新统计数据以更新"未上传VAT税单"卡片
+            await fetchStatistics();
           } else {
             throw new Error(result.message || 'VAT税单删除失败');
           }
