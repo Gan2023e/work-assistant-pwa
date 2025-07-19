@@ -51,7 +51,7 @@ const parseVatReceiptPDF = async (buffer) => {
       console.log('🔍 从MRN行提取到:', mrn);
       // 将Ø转换为0，然后清理其他特殊字符
       mrn = mrn.replace(/Ø/g, '0').replace(/[^A-Z0-9]/gi, '');
-      if (mrn.length >= 20 && mrn.length <= 30) {
+      if (mrn.length >= 15 && mrn.length <= 30) {
         extractedData.mrn = mrn;
         console.log('✅ MRN提取成功:', extractedData.mrn);
       }
