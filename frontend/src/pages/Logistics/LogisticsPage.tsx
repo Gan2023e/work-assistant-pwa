@@ -2034,6 +2034,9 @@ const LogisticsPage: React.FC = () => {
                   <div style={{ fontSize: '12px', color: '#666', textAlign: 'center' }}>
                     {record.mrn && <div>MRN: {record.mrn}</div>}
                     {record.vatReceiptTaxAmount && <div>税金: £{record.vatReceiptTaxAmount}</div>}
+                    {record.vatReceiptTaxAmount && record.productCount && record.productCount > 0 && (
+                      <div>平均税金: £{(record.vatReceiptTaxAmount / record.productCount).toFixed(2)}</div>
+                    )}
                     {record.vatReceiptTaxDate && <div>日期: {formatVatDate(record.vatReceiptTaxDate)}</div>}
                   </div>
                 )}
