@@ -2062,6 +2062,18 @@ const LogisticsPage: React.FC = () => {
           text: '未上传',
           value: 'notUploaded',
         },
+        {
+          text: '本周上传',
+          value: 'thisWeek',
+        },
+        {
+          text: '本月上传',
+          value: 'thisMonth',
+        },
+        {
+          text: '上月上传',
+          value: 'lastMonth',
+        },
       ],
       filteredValue: filters.vatReceiptStatus || null,
       onFilter: (value, record) => {
@@ -2069,6 +2081,27 @@ const LogisticsPage: React.FC = () => {
           return !!record.vatReceiptUrl;
         } else if (value === 'notUploaded') {
           return !record.vatReceiptUrl;
+        } else if (value === 'thisWeek') {
+          if (!record.vatReceiptUploadTime) return false;
+          const uploadTime = new Date(record.vatReceiptUploadTime);
+          const now = new Date();
+          const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+          const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+          return uploadTime >= weekStart && uploadTime < weekEnd;
+        } else if (value === 'thisMonth') {
+          if (!record.vatReceiptUploadTime) return false;
+          const uploadTime = new Date(record.vatReceiptUploadTime);
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          return uploadTime >= monthStart && uploadTime < monthEnd;
+        } else if (value === 'lastMonth') {
+          if (!record.vatReceiptUploadTime) return false;
+          const uploadTime = new Date(record.vatReceiptUploadTime);
+          const now = new Date();
+          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+          return uploadTime >= lastMonthStart && uploadTime < lastMonthEnd;
         }
         return true;
       },

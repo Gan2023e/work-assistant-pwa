@@ -920,17 +920,25 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
-    // 2. 在途产品数
+    // 2. 在途产品数（包含"查验中"状态）
     const transitRecords = await Logistics.findAll({
-      where: { status: '在途' },
+      where: { 
+        status: {
+          [Op.in]: ['在途', '查验中']
+        }
+      },
       attributes: ['productCount'],
       raw: true
     });
     const transitProductCount = transitRecords.reduce((sum, record) => sum + (Number(record.productCount) || 0), 0);
 
-    // 3. 在途箱数
+    // 3. 在途箱数（包含"查验中"状态）
     const transitPackageRecords = await Logistics.findAll({
-      where: { status: '在途' },
+      where: { 
+        status: {
+          [Op.in]: ['在途', '查验中']
+        }
+      },
       attributes: ['packageCount'],
       raw: true
     });
