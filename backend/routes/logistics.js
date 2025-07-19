@@ -986,13 +986,19 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
+    // 7. 查验中记录数量
+    const inspectingCount = await Logistics.count({
+      where: { status: '查验中' }
+    });
+
     const result = {
       yearlyCount,
       transitProductCount,
       transitPackageCount,
       unpaidTotalFee: Math.round(unpaidTotalFee * 100) / 100, // 保留两位小数
       pendingWarehouseCount,
-      unuploadedVatReceiptCount
+      unuploadedVatReceiptCount,
+      inspectingCount
     };
 
     console.log('\x1b[32m%s\x1b[0m', '统计数据:', result);

@@ -160,7 +160,8 @@ const LogisticsPage: React.FC = () => {
     transitPackageCount: 0,
     unpaidTotalFee: 0,
     pendingWarehouseCount: 0,
-    unuploadedVatReceiptCount: 0
+    unuploadedVatReceiptCount: 0,
+    inspectingCount: 0
   });
   const [vatUploadingIds, setVatUploadingIds] = useState<Set<string>>(new Set());
   const [vatDeletingIds, setVatDeletingIds] = useState<Set<string>>(new Set());
@@ -599,6 +600,10 @@ const LogisticsPage: React.FC = () => {
           destinationCountry: ['英国'],
           specialQuery: 'unuploadedVatReceipt'
         };
+        break;
+      case 'inspecting':
+        // 查询查验中状态的记录
+        params.filters = { status: ['查验中'] };
         break;
     }
     
@@ -2244,7 +2249,7 @@ const LogisticsPage: React.FC = () => {
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={4}>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('yearly')}>
             <Statistic
               title="今年发货票数"
@@ -2254,7 +2259,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transit')}>
             <Statistic
               title="在途产品数"
@@ -2264,7 +2269,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('transitPackage')}>
             <Statistic
               title="在途箱数"
@@ -2274,7 +2279,17 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={3}>
+          <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('inspecting')}>
+            <Statistic
+              title="查验中"
+              value={statisticsData.inspectingCount}
+              prefix={<SearchOutlined />}
+              valueStyle={{ color: '#fa8c16' }}
+            />
+          </Card>
+        </Col>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unpaid')}>
             <Statistic
               title="未付总运费"
@@ -2285,7 +2300,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('pendingWarehouse')}>
             <Statistic
               title="待调整到仓日货件数"
@@ -2295,7 +2310,7 @@ const LogisticsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('unuploadedVatReceipt')}>
             <Statistic
               title="未上传VAT税单"
@@ -2304,6 +2319,9 @@ const LogisticsPage: React.FC = () => {
               valueStyle={{ color: '#f5222d' }}
             />
           </Card>
+        </Col>
+        <Col span={3}>
+          <div></div>
         </Col>
       </Row>
 
