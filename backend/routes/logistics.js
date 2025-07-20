@@ -1498,6 +1498,32 @@ router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) 
   }
 });
 
+// 安全处理中文文件名的函数
+const sanitizeFileName = (fileName) => {
+  if (!fileName) return null;
+  
+  // 移除或替换不安全的字符
+  let safeName = fileName
+    .replace(/[<>:"/\\|?*]/g, '_') // 替换Windows不允许的字符
+    .replace(/\s+/g, '_') // 替换空格为下划线
+    .replace(/[^\x00-\x7F]/g, (char) => {
+      // 保留中文字符，但确保编码正确
+      return char;
+    });
+  
+  // 确保文件名不为空
+  if (!safeName || safeName.trim() === '') {
+    return 'VAT税单.pdf';
+  }
+  
+  // 确保以.pdf结尾
+  if (!safeName.toLowerCase().endsWith('.pdf')) {
+    safeName += '.pdf';
+  }
+  
+  return safeName;
+};
+
 // 导出VAT税单
 router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到导出VAT税单请求:', JSON.stringify(req.body, null, 2));
@@ -1636,7 +1662,8 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
     // 创建ZIP文件
     const archiver = require('archiver');
     const archive = archiver('zip', {
-      zlib: { level: 9 } // 设置压缩级别
+      zlib: { level: 9 }, // 设置压缩级别
+      forceZip64: true // 强制使用ZIP64格式以支持大文件
     });
 
     // 设置响应头
@@ -1644,14 +1671,17 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
     const zipFileName = `${folderName}.zip`;
     res.set({
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(zipFileName)}"`,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(zipFileName)}`,
     });
 
     // 将ZIP流连接到响应
     archive.pipe(res);
 
     // 添加Excel文件到ZIP
-    archive.append(excelBuffer, { name: `${folderName}/VAT税单列表.xlsx` });
+    archive.append(excelBuffer, { 
+      name: `${folderName}/VAT税单列表.xlsx`,
+      type: 'file'
+    });
 
     // 从OSS获取PDF文件并添加到ZIP
     console.log('\x1b[35m%s\x1b[0m', '开始从OSS获取PDF文件...');
@@ -1694,12 +1724,13 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
             
             if (result.content && result.content.length > 0) {
               // 生成安全的文件名
-              const safeFileName = record.vatReceiptFileName || 
+              const safeFileName = sanitizeFileName(record.vatReceiptFileName) || 
                 `${record.shippingId}_VAT税单.pdf`;
               
-              // 添加到ZIP
+              // 添加到ZIP，使用UTF-8编码
               archive.append(result.content, { 
-                name: `${folderName}/PDF文件/${safeFileName}` 
+                name: `${folderName}/PDF文件/${safeFileName}`,
+                type: 'file'
               });
               
               pdfCount++;
