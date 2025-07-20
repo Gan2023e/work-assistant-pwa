@@ -30,7 +30,6 @@ import {
   BoxPlotOutlined,
   ClockCircleOutlined,
   DollarOutlined,
-  EditOutlined,
   SaveOutlined,
   CloseOutlined,
   DatabaseOutlined,
@@ -39,8 +38,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
-import HsCodeManagement from './HsCodeManagement';
-import WarehouseManagement from './WarehouseManagement';
+
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -145,15 +143,8 @@ const LogisticsPage: React.FC = () => {
   const [batchUpdateModalVisible, setBatchUpdateModalVisible] = useState(false);
   const [batchUpdateText, setBatchUpdateText] = useState('');
   const [parsedBatchData, setParsedBatchData] = useState<BatchUpdateData[]>([]);
-  const [warehouseModalVisible, setWarehouseModalVisible] = useState(false);
-  const [hsCodeModalVisible, setHsCodeModalVisible] = useState(false);
-  const [newShipmentModalVisible, setNewShipmentModalVisible] = useState(false);
-  const [pdfExtracting, setPdfExtracting] = useState(false);
-  const [extractedData, setExtractedData] = useState<any>(null);
-  const [logisticsProviders, setLogisticsProviders] = useState<any[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<string>('');
+
   const [form] = Form.useForm();
-  const [shipmentForm] = Form.useForm();
   const [statisticsData, setStatisticsData] = useState({
     yearlyCount: 0,
     transitProductCount: 0,
@@ -594,51 +585,7 @@ const LogisticsPage: React.FC = () => {
 
 
 
-  // 获取物流商列表
-  const fetchLogisticsProviders = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/shipments/providers`);
-      const result = await response.json();
-      if (result.code === 0) {
-        setLogisticsProviders(result.data);
-      }
-    } catch (error) {
-      console.error('获取物流商列表失败:', error);
-      message.error('获取物流商列表失败');
-    }
-  };
 
-  // 处理PDF上传和解析
-  const handlePdfUpload = async (file: File) => {
-    setPdfExtracting(true);
-    try {
-      const formData = new FormData();
-      formData.append('pdf', file);
-
-      const response = await fetch(`${API_BASE_URL}/api/shipments/extract-pdf`, {
-          method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-      if (result.code === 0) {
-        setExtractedData(result.data);
-        shipmentForm.setFieldsValue({
-          packageCount: result.data.packageCount,
-          destinationWarehouse: result.data.destinationWarehouse,
-          destinationCountry: result.data.destinationCountry
-        });
-        message.success('PDF解析成功');
-      } else {
-        message.error(result.message || 'PDF解析失败');
-      }
-    } catch (error) {
-      console.error('PDF解析失败:', error);
-      message.error('PDF解析失败');
-    } finally {
-      setPdfExtracting(false);
-    }
-  };
 
   // 点击统计卡片时查询对应数据
   const handleStatisticClick = (type: string) => {
@@ -2464,32 +2411,8 @@ const LogisticsPage: React.FC = () => {
                   >
                     批量更新货件详情
           </Button>
-                  <Button
-                    icon={<BoxPlotOutlined />}
-                    onClick={() => setWarehouseModalVisible(true)}
-                  >
-                    亚马逊仓库管理
-                  </Button>
-                  <Button
-                    icon={<EditOutlined />}
-                    onClick={() => {
-                      setHsCodeModalVisible(true);
-                    }}
-                  >
-                    HSCODE编码管理
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<TruckOutlined />}
-                    onClick={() => {
-                      setNewShipmentModalVisible(true);
-                      fetchLogisticsProviders();
-                      setExtractedData(null);
-                      shipmentForm.resetFields();
-                    }}
-                  >
-                    新建货件及发票
-                  </Button>
+
+
                   <Button
                     type="default"
                     icon={<ExportOutlined />}
@@ -2684,229 +2607,9 @@ const LogisticsPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* 亚马逊仓库管理模态框 */}
-      <Modal
-        title="亚马逊仓库管理"
-        open={warehouseModalVisible}
-        onCancel={() => setWarehouseModalVisible(false)}
-        width="95%"
-        style={{ maxWidth: '1600px', top: 20 }}
-        footer={null}
-        destroyOnClose
-      >
-        <WarehouseManagement />
-      </Modal>
 
-            {/* HSCODE编码管理模态框 */}
-      <Modal
-        title="HSCODE编码管理"
-        open={hsCodeModalVisible}
-        onCancel={() => setHsCodeModalVisible(false)}
-        width="95%"
-        style={{ maxWidth: '1600px', top: 20 }}
-        footer={null}
-        destroyOnClose
-      >
-        <HsCodeManagement />
-      </Modal>
 
-      {/* 新建货件及发票模态框 */}
-      <Modal
-        title="新建货件及发票"
-        open={newShipmentModalVisible}
-        onCancel={() => {
-          setNewShipmentModalVisible(false);
-          setExtractedData(null);
-          setSelectedProvider('');
-          shipmentForm.resetFields();
-        }}
-        width={900}
-        footer={null}
-      >
-        <div>
-          <Form
-            form={shipmentForm}
-            layout="vertical"
-            onFinish={async (values) => {
-              try {
-                const shipmentData = {
-                  ...values,
-                  packageNumbers: extractedData?.packageNumbers || [],
-                  products: extractedData?.products || []
-                };
 
-                const response = await fetch(`${API_BASE_URL}/api/shipments`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(shipmentData)
-                });
-
-                const result = await response.json();
-                if (result.code === 0) {
-                  message.success('货件创建成功');
-                  setNewShipmentModalVisible(false);
-                  setExtractedData(null);
-                  shipmentForm.resetFields();
-                  // 刷新物流列表
-                  fetchData({ filters });
-                } else {
-                  message.error(result.message || '创建失败');
-                }
-              } catch (error) {
-                message.error('创建失败');
-              }
-            }}
-          >
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="logisticsProvider" label="物流商" rules={[{ required: true }]}>
-                  <Select
-                    placeholder="请选择物流商"
-                    onChange={(value) => {
-                      setSelectedProvider(value);
-                      shipmentForm.setFieldsValue({ channel: undefined });
-                    }}
-                  >
-                    {logisticsProviders.map(provider => (
-                      <Option key={provider.name} value={provider.name}>
-                        {provider.name}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="channel" label="物流渠道" rules={[{ required: true }]}>
-                  <Select placeholder="请选择物流渠道">
-                    {selectedProvider && logisticsProviders
-                      .find(p => p.name === selectedProvider)
-                      ?.channels.map((channel: string) => (
-                        <Option key={channel} value={channel}>
-                          {channel}
-                        </Option>
-                      ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col span={24}>
-                <Form.Item label="上传发货单PDF">
-                  <Upload
-                    accept=".pdf"
-                    maxCount={1}
-                    beforeUpload={(file) => {
-                      handlePdfUpload(file);
-                      return false; // 阻止自动上传
-                    }}
-                    showUploadList={false}
-                  >
-                    <Button loading={pdfExtracting}>
-                      {pdfExtracting ? '解析中...' : '选择PDF文件'}
-                    </Button>
-                  </Upload>
-                  <Text type="secondary" style={{ marginLeft: 8 }}>
-                    支持自动提取箱数、产品SKU、目的仓库等信息
-                  </Text>
-                </Form.Item>
-              </Col>
-            </Row>
-
-            {extractedData && (
-              <Card title="PDF解析结果" size="small" style={{ marginBottom: 16 }}>
-                <Row gutter={16}>
-                  <Col span={6}>
-                    <Text strong>箱数：</Text>
-                    <Text>{extractedData.packageCount || 0}</Text>
-                  </Col>
-                  <Col span={6}>
-                    <Text strong>目的国：</Text>
-                    <Text>{extractedData.destinationCountry || '-'}</Text>
-                  </Col>
-                  <Col span={12}>
-                    <Text strong>目的仓库：</Text>
-                    <Text>{extractedData.destinationWarehouse || '-'}</Text>
-                  </Col>
-                </Row>
-                {extractedData.packageNumbers?.length > 0 && (
-                  <Row style={{ marginTop: 8 }}>
-                    <Col span={24}>
-                      <Text strong>箱号：</Text>
-                      <Text>{extractedData.packageNumbers.join(', ')}</Text>
-                    </Col>
-                  </Row>
-                )}
-                {extractedData.products?.length > 0 && (
-                  <Row style={{ marginTop: 8 }}>
-                    <Col span={24}>
-                      <Text strong>产品SKU：</Text>
-                      <Text>{extractedData.products.join(', ')}</Text>
-                    </Col>
-                  </Row>
-                )}
-              </Card>
-            )}
-
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item name="packageCount" label="箱数" rules={[{ required: true }]}>
-                  <InputNumber 
-                    placeholder="箱数" 
-                    style={{ width: '100%' }} 
-                    min={1}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="destinationCountry" label="目的国" rules={[{ required: true }]}>
-                  <Input placeholder="目的国" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="destinationWarehouse" label="目的仓库" rules={[{ required: true }]}>
-                  <Input placeholder="目的仓库" />
-                </Form.Item>
-              </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col span={24}>
-                <Form.Item name="notes" label="备注">
-                  <TextArea rows={3} placeholder="请输入备注信息" />
-                </Form.Item>
-              </Col>
-            </Row>
-
-            <Form.Item>
-              <Space>
-                <Button type="primary" htmlType="submit">
-                  创建货件
-                </Button>
-          <Button 
-                  onClick={async () => {
-                    if (!selectedProvider) {
-                      message.warning('请先选择物流商');
-                      return;
-                    }
-                    // 这里可以实现发票生成功能
-                    message.info('发票生成功能开发中...');
-                  }}
-                >
-                  生成发票
-                </Button>
-                <Button onClick={() => {
-                  setNewShipmentModalVisible(false);
-                  setExtractedData(null);
-                  shipmentForm.resetFields();
-                }}>
-                  取消
-          </Button>
-        </Space>
-            </Form.Item>
-          </Form>
-        </div>
-      </Modal>
 
       {/* VAT税单上传对话框 */}
       <Modal

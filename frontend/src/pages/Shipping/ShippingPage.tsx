@@ -31,7 +31,9 @@ import {
   UploadOutlined,
   DownloadOutlined,
   FileExcelOutlined,
-  BarChartOutlined
+  BarChartOutlined,
+  BoxPlotOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -39,6 +41,8 @@ import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import OrderManagementPage from './OrderManagementPage';
+import WarehouseManagement from '../Logistics/WarehouseManagement';
+import HsCodeManagement from '../Logistics/HsCodeManagement';
 
 // 自定义样式
 const customStyles = `
@@ -315,6 +319,10 @@ const ShippingPage: React.FC = () => {
   
   // Sheet页选择相关状态
   const [availableSheets, setAvailableSheets] = useState<string[]>([]);
+
+  // 仓库管理和HSCODE管理相关状态
+  const [warehouseModalVisible, setWarehouseModalVisible] = useState(false);
+  const [hsCodeModalVisible, setHsCodeModalVisible] = useState(false);
 
   // 国家选项配置
   const countryTemplateOptions = [
@@ -1718,6 +1726,24 @@ const ShippingPage: React.FC = () => {
             {logisticsInvoiceConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
           </Button>
         </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<BoxPlotOutlined />}
+            onClick={() => setWarehouseModalVisible(true)}
+          >
+            亚马逊仓库管理
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<EditOutlined />}
+            onClick={() => setHsCodeModalVisible(true)}
+          >
+            HSCODE编码管理
+          </Button>
+        </Col>
       </Row>
 
       {/* 国家库存卡片栏 */}
@@ -2445,6 +2471,67 @@ const ShippingPage: React.FC = () => {
                 </div>
               )}
             </Card>
+
+            {/* 亚马逊仓库管理 */}
+            <Card 
+              title={
+                <Space>
+                  <BoxPlotOutlined />
+                  <span>亚马逊仓库管理</span>
+                </Space>
+              }
+              size="small" 
+              style={{ marginBottom: 16 }}
+            >
+              <div>
+                <Alert 
+                  message="亚马逊仓库管理功能"
+                  description="管理亚马逊各站点的仓库信息，包括仓库地址、联系人等信息。"
+                  type="info" 
+                  style={{ marginBottom: 16 }}
+                />
+                <Space>
+                  <Button 
+                    type="primary" 
+                    icon={<SettingOutlined />} 
+                    onClick={() => setWarehouseModalVisible(true)}
+                  >
+                    管理仓库信息
+                  </Button>
+                </Space>
+              </div>
+            </Card>
+
+            {/* HSCODE编码管理 */}
+            <Card 
+              title={
+                <Space>
+                  <EditOutlined />
+                  <span>HSCODE编码管理</span>
+                </Space>
+              }
+              size="small" 
+              style={{ marginBottom: 16 }}
+            >
+              <div>
+                <Alert 
+                  message="HSCODE编码管理功能"
+                  description="管理产品的HSCODE编码信息，包括英国和美国的编码配置。"
+                  type="info" 
+                  style={{ marginBottom: 16 }}
+                />
+                <Space>
+                  <Button 
+                    type="primary" 
+                    icon={<SettingOutlined />} 
+                    onClick={() => setHsCodeModalVisible(true)}
+                  >
+                    管理HSCODE编码
+                  </Button>
+                </Space>
+              </div>
+            </Card>
+
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
@@ -3392,6 +3479,32 @@ const ShippingPage: React.FC = () => {
         {orderModalNeedNum && (
           <OrderManagementPage needNum={orderModalNeedNum} />
         )}
+      </Modal>
+
+      {/* 亚马逊仓库管理模态框 */}
+      <Modal
+        title="亚马逊仓库管理"
+        open={warehouseModalVisible}
+        onCancel={() => setWarehouseModalVisible(false)}
+        width="95%"
+        style={{ maxWidth: '1600px', top: 20 }}
+        footer={null}
+        destroyOnClose
+      >
+        <WarehouseManagement />
+      </Modal>
+
+      {/* HSCODE编码管理模态框 */}
+      <Modal
+        title="HSCODE编码管理"
+        open={hsCodeModalVisible}
+        onCancel={() => setHsCodeModalVisible(false)}
+        width="95%"
+        style={{ maxWidth: '1600px', top: 20 }}
+        footer={null}
+        destroyOnClose
+      >
+        <HsCodeManagement />
       </Modal>
 
     </div>
