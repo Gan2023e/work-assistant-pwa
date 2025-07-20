@@ -89,7 +89,6 @@ interface FilterOptions {
   taxPaymentStatus?: string[];
   taxDeclarationStatus?: string[];
   paymentStatus?: string[];
-  vatReceiptDateRange?: string[]; // 添加VAT税单时间范围筛选
 }
 
 // 搜索参数接口
@@ -104,8 +103,6 @@ interface SearchParams {
     taxDeclarationStatus?: string[];
     paymentStatus?: string[];
     specialQuery?: string;
-    vatReceiptDateRange?: string[]; // 添加VAT税单时间范围筛选
-    vatReceiptStatus?: string[]; // 添加VAT税单状态筛选
   };
 }
 
@@ -182,6 +179,7 @@ const LogisticsPage: React.FC = () => {
   const [vatUploadStep, setVatUploadStep] = useState<'select' | 'confirm' | 'uploading'>('select');
   const [vatForm] = Form.useForm();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [exportVatLoading, setExportVatLoading] = useState(false);
 
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
@@ -428,6 +426,76 @@ const LogisticsPage: React.FC = () => {
     setSelectedShippingId('');
     setIsDragOver(false);
     vatForm.resetFields();
+  };
+
+  // 导出上季VAT税单
+  const handleExportLastQuarterVat = async () => {
+    setExportVatLoading(true);
+    try {
+      // 计算上季度的时间范围
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // 1-12月
+      let startDate: string;
+      let endDate: string;
+      let quarterName: string;
+
+      if (currentMonth >= 4 && currentMonth <= 6) {
+        // 4-6月，导出1-3月
+        startDate = `${now.getFullYear()}-01-01`;
+        endDate = `${now.getFullYear()}-03-31`;
+        quarterName = `${now.getFullYear()}年第一季度`;
+      } else if (currentMonth >= 7 && currentMonth <= 9) {
+        // 7-9月，导出4-6月
+        startDate = `${now.getFullYear()}-04-01`;
+        endDate = `${now.getFullYear()}-06-30`;
+        quarterName = `${now.getFullYear()}年第二季度`;
+      } else if (currentMonth >= 10 && currentMonth <= 12) {
+        // 10-12月，导出7-9月
+        startDate = `${now.getFullYear()}-07-01`;
+        endDate = `${now.getFullYear()}-09-30`;
+        quarterName = `${now.getFullYear()}年第三季度`;
+      } else {
+        // 1-3月，导出上一年10-12月
+        startDate = `${now.getFullYear() - 1}-10-01`;
+        endDate = `${now.getFullYear() - 1}-12-31`;
+        quarterName = `${now.getFullYear() - 1}年第四季度`;
+      }
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/logistics/export-vat-receipts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          destinationCountry: '英国'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `英国VAT税单_${quarterName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      message.success(`成功导出${quarterName}的英国VAT税单包（包含Excel和PDF文件）`);
+    } catch (error) {
+      console.error('导出VAT税单失败:', error);
+      message.error(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setExportVatLoading(false);
+    }
   };
 
   // 处理拖拽事件
@@ -2053,137 +2121,6 @@ const LogisticsPage: React.FC = () => {
       key: 'vatReceipt',
       width: 200,
       align: 'center',
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => {
-        const selectedKeysStr = selectedKeys.map(key => String(key));
-        
-        return (
-          <div style={{ padding: 8 }}>
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>上传状态：</Text>
-              <Select
-                style={{ width: '100%', marginBottom: 8 }}
-                placeholder="选择上传状态"
-                value={selectedKeysStr.find(key => key.startsWith('status:'))?.replace('status:', '')}
-                onChange={(value) => {
-                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('status:'));
-                  if (value) {
-                    newKeys.push(`status:${value}`);
-                  }
-                  setSelectedKeys(newKeys);
-                }}
-                allowClear
-              >
-                <Option value="uploaded">已上传</Option>
-                <Option value="notUploaded">未上传</Option>
-              </Select>
-            </div>
-            
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>时间范围：</Text>
-              <Select
-                style={{ width: '100%', marginBottom: 8 }}
-                placeholder="选择时间范围"
-                value={selectedKeysStr.find(key => key.startsWith('time:'))?.replace('time:', '')}
-                onChange={(value) => {
-                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('time:'));
-                  if (value) {
-                    newKeys.push(`time:${value}`);
-                  }
-                  setSelectedKeys(newKeys);
-                }}
-                allowClear
-              >
-                <Option value="thisWeek">本周上传</Option>
-                <Option value="thisMonth">本月上传</Option>
-                <Option value="lastMonth">上月上传</Option>
-              </Select>
-            </div>
-            
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>起始时间：</Text>
-              <DatePicker
-                style={{ width: '100%', marginBottom: 8 }}
-                placeholder="选择起始时间"
-                value={selectedKeysStr.find(key => key.startsWith('start:'))?.replace('start:', '') ? 
-                  dayjs(selectedKeysStr.find(key => key.startsWith('start:'))?.replace('start:', '')) : null}
-                onChange={(date) => {
-                  const newKeys = selectedKeysStr.filter(key => !key.startsWith('start:'));
-                  if (date) {
-                    newKeys.push(`start:${date.format('YYYY-MM-DD')}`);
-                  }
-                  setSelectedKeys(newKeys);
-                }}
-                format="YYYY-MM-DD"
-                allowClear
-              />
-            </div>
-            
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => {
-                  confirm();
-                }}
-              >
-                确定
-              </Button>
-              <Button
-                size="small"
-                onClick={() => {
-                  clearFilters?.();
-                }}
-              >
-                重置
-              </Button>
-            </div>
-          </div>
-        );
-      },
-              onFilter: (value, record) => {
-          const valueStr = Array.isArray(value) ? value.map(v => String(v)) : value ? [String(value)] : [];
-          
-          // 检查上传状态筛选
-          const statusFilter = valueStr.find(v => v.startsWith('status:'));
-          if (statusFilter) {
-            const status = statusFilter.replace('status:', '');
-            if (status === 'uploaded' && !record.vatReceiptUrl) return false;
-            if (status === 'notUploaded' && record.vatReceiptUrl) return false;
-          }
-          
-          // 检查时间范围筛选
-          const timeFilter = valueStr.find(v => v.startsWith('time:'));
-          if (timeFilter && record.vatReceiptUploadTime) {
-            const timeType = timeFilter.replace('time:', '');
-            const uploadTime = new Date(record.vatReceiptUploadTime);
-            const now = new Date();
-            
-            if (timeType === 'thisWeek') {
-              const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-              const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-              if (uploadTime < weekStart || uploadTime >= weekEnd) return false;
-            } else if (timeType === 'thisMonth') {
-              const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-              const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-              if (uploadTime < monthStart || uploadTime >= monthEnd) return false;
-            } else if (timeType === 'lastMonth') {
-              const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-              const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
-              if (uploadTime < lastMonthStart || uploadTime >= lastMonthEnd) return false;
-            }
-          }
-          
-          // 检查起始时间筛选
-          const startFilter = valueStr.find(v => v.startsWith('start:'));
-          if (startFilter && record.vatReceiptUploadTime) {
-            const startDate = startFilter.replace('start:', '');
-            const uploadTime = new Date(record.vatReceiptUploadTime);
-            const startDateTime = new Date(startDate);
-            if (uploadTime < startDateTime) return false;
-          }
-          
-          return true;
-        },
       render: (_, record) => {
         // 只有目的地为英国的记录才显示VAT税单操作
         if (record.destinationCountry !== '英国') {
@@ -2371,7 +2308,6 @@ const LogisticsPage: React.FC = () => {
       destinationCountry: tableFilters.destinationCountry,
       taxPaymentStatus: tableFilters.taxPaymentStatus,
       paymentStatus: tableFilters.paymentStatus,
-      vatReceiptStatus: tableFilters.vatReceipt,
     };
     
     setFilters(newFilters);
@@ -2553,6 +2489,14 @@ const LogisticsPage: React.FC = () => {
                     }}
                   >
                     新建货件及发票
+                  </Button>
+                  <Button
+                    type="default"
+                    icon={<ExportOutlined />}
+                    onClick={handleExportLastQuarterVat}
+                    loading={exportVatLoading}
+                  >
+                    导出上季VAT税单
                   </Button>
         </Space>
                 <Text type="secondary">

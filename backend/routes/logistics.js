@@ -1498,4 +1498,243 @@ router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) 
   }
 });
 
+// 导出VAT税单
+router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到导出VAT税单请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { startDate, endDate, destinationCountry = '英国' } = req.body;
+    
+    // 验证参数
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        code: 400,
+        message: '开始日期和结束日期是必需的'
+      });
+    }
+
+    console.log('\x1b[35m%s\x1b[0m', '查询条件:', {
+      startDate,
+      endDate,
+      destinationCountry
+    });
+
+    // 查询符合条件的VAT税单记录（包含OSS对象名）
+    const vatReceipts = await Logistics.findAll({
+      where: {
+        [Op.and]: [
+          { destinationCountry: destinationCountry },
+          { vatReceiptUrl: { [Op.ne]: null } },
+          { vatReceiptUrl: { [Op.ne]: '' } },
+          {
+            vatReceiptTaxDate: {
+              [Op.and]: [
+                { [Op.ne]: null },
+                { [Op.gte]: startDate },
+                { [Op.lte]: endDate }
+              ]
+            }
+          }
+        ]
+      },
+      order: [['vatReceiptTaxDate', 'ASC']],
+      attributes: [
+        'shippingId',
+        'logisticsProvider',
+        'channel',
+        'trackingNumber',
+        'packageCount',
+        'productCount',
+        'departureDate',
+        'sailingDate',
+        'estimatedArrivalDate',
+        'estimatedWarehouseDate',
+        'destinationWarehouse',
+        'price',
+        'billingWeight',
+        'mrn',
+        'customsDuty',
+        'vatReceiptTaxAmount',
+        'vatReceiptTaxDate',
+        'vatReceiptFileName',
+        'vatReceiptUploadTime',
+        'vatReceiptObjectName' // 添加OSS对象名
+      ]
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', '查询结果数量:', vatReceipts.length);
+
+    if (vatReceipts.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: '在指定时间范围内没有找到VAT税单记录'
+      });
+    }
+
+    // 生成Excel文件
+    const XLSX = require('xlsx');
+    
+    // 准备Excel数据
+    const excelData = vatReceipts.map((record, index) => ({
+      '序号': index + 1,
+      'Shipping ID': record.shippingId,
+      '物流商': record.logisticsProvider,
+      '渠道': record.channel,
+      '跟踪号': record.trackingNumber,
+      '箱数': record.packageCount,
+      '产品数': record.productCount,
+      '发出日期': record.departureDate ? new Date(record.departureDate).toLocaleDateString('zh-CN') : '',
+      '开航日': record.sailingDate ? new Date(record.sailingDate).toLocaleDateString('zh-CN') : '',
+      '预计到港日': record.estimatedArrivalDate ? new Date(record.estimatedArrivalDate).toLocaleDateString('zh-CN') : '',
+      '预计到仓日': record.estimatedWarehouseDate ? new Date(record.estimatedWarehouseDate).toLocaleDateString('zh-CN') : '',
+      '目的地仓库': record.destinationWarehouse,
+      '运费': record.price,
+      '计费重量': record.billingWeight,
+      'MRN': record.mrn,
+      '关税': record.customsDuty,
+      'VAT税额': record.vatReceiptTaxAmount,
+      'VAT税单日期': record.vatReceiptTaxDate ? new Date(record.vatReceiptTaxDate).toLocaleDateString('zh-CN') : '',
+      'VAT税单文件名': record.vatReceiptFileName,
+      'VAT税单上传时间': record.vatReceiptUploadTime ? new Date(record.vatReceiptUploadTime).toLocaleDateString('zh-CN') : ''
+    }));
+
+    // 创建工作簿
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // 设置列宽
+    const columnWidths = [
+      { wch: 8 },   // 序号
+      { wch: 15 },  // Shipping ID
+      { wch: 12 },  // 物流商
+      { wch: 15 },  // 渠道
+      { wch: 15 },  // 跟踪号
+      { wch: 8 },   // 箱数
+      { wch: 8 },   // 产品数
+      { wch: 12 },  // 发出日期
+      { wch: 12 },  // 开航日
+      { wch: 12 },  // 预计到港日
+      { wch: 12 },  // 预计到仓日
+      { wch: 15 },  // 目的地仓库
+      { wch: 10 },  // 运费
+      { wch: 10 },  // 计费重量
+      { wch: 20 },  // MRN
+      { wch: 10 },  // 关税
+      { wch: 12 },  // VAT税额
+      { wch: 12 },  // VAT税单日期
+      { wch: 20 },  // VAT税单文件名
+      { wch: 15 }   // VAT税单上传时间
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // 添加工作表到工作簿
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'VAT税单列表');
+
+    // 生成Excel文件
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // 创建ZIP文件
+    const archiver = require('archiver');
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // 设置压缩级别
+    });
+
+    // 设置响应头
+    const folderName = `英国VAT税单_${startDate}_${endDate}`;
+    const zipFileName = `${folderName}.zip`;
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(zipFileName)}"`,
+    });
+
+    // 将ZIP流连接到响应
+    archive.pipe(res);
+
+    // 添加Excel文件到ZIP
+    archive.append(excelBuffer, { name: `${folderName}/VAT税单列表.xlsx` });
+
+    // 从OSS获取PDF文件并添加到ZIP
+    console.log('\x1b[35m%s\x1b[0m', '开始从OSS获取PDF文件...');
+    
+    try {
+      const OSS = require('ali-oss');
+      
+      // 检查OSS配置
+      const ossConfig = {
+        region: process.env.OSS_REGION,
+        accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+        accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+        bucket: process.env.OSS_BUCKET,
+        endpoint: process.env.OSS_ENDPOINT
+      };
+      
+      // 验证必要的OSS配置
+      const requiredConfig = ['OSS_REGION', 'OSS_ACCESS_KEY_ID', 'OSS_ACCESS_KEY_SECRET', 'OSS_BUCKET'];
+      const missingConfig = requiredConfig.filter(key => !process.env[key]);
+      
+      if (missingConfig.length > 0) {
+        console.error('❌ OSS配置缺失:', missingConfig);
+        throw new Error('OSS配置不完整，无法获取PDF文件');
+      }
+      
+      const client = new OSS(ossConfig);
+      
+      // 为每个有OSS对象名的记录获取PDF文件
+      let pdfCount = 0;
+      for (const record of vatReceipts) {
+        if (record.vatReceiptObjectName) {
+          try {
+            console.log(`📄 正在获取PDF文件: ${record.shippingId} -> ${record.vatReceiptObjectName}`);
+            
+            // 检查文件是否存在
+            await client.head(record.vatReceiptObjectName);
+            
+            // 获取文件内容
+            const result = await client.get(record.vatReceiptObjectName);
+            
+            if (result.content && result.content.length > 0) {
+              // 生成安全的文件名
+              const safeFileName = record.vatReceiptFileName || 
+                `${record.shippingId}_VAT税单.pdf`;
+              
+              // 添加到ZIP
+              archive.append(result.content, { 
+                name: `${folderName}/PDF文件/${safeFileName}` 
+              });
+              
+              pdfCount++;
+              console.log(`✅ 成功添加PDF文件: ${safeFileName}`);
+            } else {
+              console.warn(`⚠️ PDF文件内容为空: ${record.shippingId}`);
+            }
+          } catch (pdfError) {
+            console.error(`❌ 获取PDF文件失败 ${record.shippingId}:`, pdfError.message);
+            // 继续处理其他文件，不中断整个流程
+          }
+        }
+      }
+      
+      console.log(`📊 PDF文件处理完成: 成功添加 ${pdfCount}/${vatReceipts.length} 个PDF文件`);
+      
+    } catch (ossError) {
+      console.error('❌ OSS操作失败:', ossError);
+      // 即使OSS失败，也要完成ZIP文件的创建
+      console.log('⚠️ 继续创建ZIP文件，但不包含PDF文件');
+    }
+
+    // 完成ZIP文件
+    await archive.finalize();
+    
+    console.log('\x1b[32m%s\x1b[0m', 'VAT税单ZIP包导出成功');
+
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '导出VAT税单失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: '导出VAT税单失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
