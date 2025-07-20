@@ -29,7 +29,6 @@ import {
   ReloadOutlined,
   EnvironmentOutlined,
   UserOutlined,
-  PhoneOutlined,
   InfoCircleOutlined,
   FilterOutlined,
   ClearOutlined,
@@ -56,7 +55,7 @@ interface AmzWarehouse {
   state_province?: string;
   postal_code: string;
   country: string;
-  phone?: string;
+  is_remote?: boolean;
   status: 'active' | 'inactive';
   notes?: string;
   created_at?: string;
@@ -201,7 +200,8 @@ const WarehouseManagement: React.FC = () => {
         item.address_line1.toLowerCase().includes(searchLower) ||
         item.city.toLowerCase().includes(searchLower) ||
         item.country.toLowerCase().includes(searchLower) ||
-        (item.postal_code && item.postal_code.toLowerCase().includes(searchLower))
+        (item.postal_code && item.postal_code.toLowerCase().includes(searchLower)) ||
+        (item.is_remote !== undefined && (item.is_remote ? '偏远地区' : '普通地区').includes(searchLower))
       );
     }
     
@@ -211,6 +211,10 @@ const WarehouseManagement: React.FC = () => {
     
     if (params.country) {
       filtered = filtered.filter(item => item.country === params.country);
+    }
+
+    if (params.is_remote !== undefined) {
+      filtered = filtered.filter(item => item.is_remote === params.is_remote);
     }
     
     setFilteredData(filtered);
@@ -225,7 +229,7 @@ const WarehouseManagement: React.FC = () => {
   // 导出数据
   const handleExport = () => {
     const csvContent = [
-      ['仓库代码', '收件人', '地址一', '地址二', '城市', '州/省', '邮编', '国家', '电话', '状态', '备注', '创建时间'].join(','),
+      ['仓库代码', '收件人', '地址一', '地址二', '城市', '州/省', '邮编', '国家', '是否偏远', '状态', '备注', '创建时间'].join(','),
       ...filteredData.map(item => [
         item.warehouse_code,
         item.recipient_name,
@@ -235,7 +239,7 @@ const WarehouseManagement: React.FC = () => {
         item.state_province || '',
         item.postal_code,
         item.country,
-        item.phone || '',
+        item.is_remote ? '偏远地区' : '普通地区',
         item.status === 'active' ? '启用' : '禁用',
         item.notes || '',
         item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : ''
@@ -331,17 +335,18 @@ const WarehouseManagement: React.FC = () => {
       ),
     },
     {
-      title: '电话',
-      dataIndex: 'phone',
-      key: 'phone',
-      width: 120,
+      title: '是否偏远',
+      dataIndex: 'is_remote',
+      key: 'is_remote',
+      width: 100,
       align: 'center',
-      render: (phone: string) => (
-        phone ? (
-          <a href={`tel:${phone}`} style={{ color: '#1890ff' }}>
-            {phone}
-          </a>
-        ) : '-'
+      render: (isRemote: boolean) => (
+        <Tag 
+          color={isRemote ? 'orange' : 'default'}
+          icon={isRemote ? <EnvironmentOutlined /> : null}
+        >
+          {isRemote ? '偏远地区' : '普通地区'}
+        </Tag>
       ),
     },
     {
@@ -480,6 +485,12 @@ const WarehouseManagement: React.FC = () => {
                     {getUniqueCountries().map(country => (
                       <Option key={country} value={country}>{country}</Option>
                     ))}
+                  </Select>
+                </Form.Item>
+                <Form.Item name="is_remote">
+                  <Select placeholder="筛选是否偏远" style={{ width: 120 }} allowClear>
+                    <Option value={true}>偏远地区</Option>
+                    <Option value={false}>普通地区</Option>
                   </Select>
                 </Form.Item>
               </>
@@ -737,17 +748,14 @@ const WarehouseManagement: React.FC = () => {
             </Col>
             <Col span={12}>
               <Form.Item
-                name="phone"
-                label="电话"
-                rules={[
-                  { max: 50, message: '电话长度不能超过50个字符' }
-                ]}
+                name="is_remote"
+                label="是否偏远"
+                rules={[{ required: true, message: '请选择是否偏远' }]}
               >
-                <Input 
-                  placeholder="请输入联系电话" 
-                  prefix={<PhoneOutlined />}
-                  maxLength={50}
-                />
+                <Select placeholder="选择是否偏远">
+                  <Option value={true}>是</Option>
+                  <Option value={false}>否</Option>
+                </Select>
               </Form.Item>
             </Col>
           </Row>
@@ -864,13 +872,13 @@ const WarehouseManagement: React.FC = () => {
                   {viewingRecord.recipient_name}
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="电话">
-                {viewingRecord.phone ? (
-                  <Space>
-                    <PhoneOutlined />
-                    <a href={`tel:${viewingRecord.phone}`}>{viewingRecord.phone}</a>
-                  </Space>
-                ) : '-'}
+              <Descriptions.Item label="是否偏远">
+                <Tag 
+                  color={viewingRecord.is_remote ? 'orange' : 'default'}
+                  icon={viewingRecord.is_remote ? <EnvironmentOutlined /> : null}
+                >
+                  {viewingRecord.is_remote ? '偏远地区' : '普通地区'}
+                </Tag>
               </Descriptions.Item>
             </Descriptions>
 

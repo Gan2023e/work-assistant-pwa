@@ -43,10 +43,11 @@ const AmzWarehouse = sequelize.define('AmzWarehouse', {
     allowNull: false,
     comment: '国家'
   },
-  phone: {
-    type: DataTypes.STRING(50),
+  is_remote: {
+    type: DataTypes.BOOLEAN,
     allowNull: true,
-    comment: '电话'
+    defaultValue: false,
+    comment: '是否偏远地区：true-是，false-否'
   },
   status: {
     type: DataTypes.ENUM('active', 'inactive'),
@@ -89,6 +90,10 @@ const AmzWarehouse = sequelize.define('AmzWarehouse', {
     {
       fields: ['status'],
       name: 'idx_status'
+    },
+    {
+      fields: ['is_remote'],
+      name: 'idx_is_remote'
     },
     {
       fields: ['created_at'],
