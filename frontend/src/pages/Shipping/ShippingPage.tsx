@@ -2238,7 +2238,27 @@ const ShippingPage: React.FC = () => {
           <div>
             <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
             
-            {/* 物流商选择和装箱表上传 */}
+            {/* 亚马逊仓库管理和HSCODE编码管理按钮 */}
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Button 
+                  icon={<BoxPlotOutlined />} 
+                  onClick={() => setWarehouseModalVisible(true)}
+                  type="default"
+                >
+                  亚马逊仓库管理
+                </Button>
+                <Button 
+                  icon={<EditOutlined />} 
+                  onClick={() => setHsCodeModalVisible(true)}
+                  type="default"
+                >
+                  HSCODE编码管理
+                </Button>
+              </Space>
+            </div>
+            
+            {/* 物流商选择和功能按钮 */}
             <div style={{ marginBottom: 16 }}>
               <Space>
                 <Text strong>物流商：</Text>
@@ -2250,19 +2270,41 @@ const ShippingPage: React.FC = () => {
                   placeholder="选择物流商"
                 />
                 <Button 
-                  icon={<FileExcelOutlined />} 
-                  onClick={() => setPackingListModalVisible(true)}
+                  icon={<DownloadOutlined />} 
+                  onClick={generateAmazonFile}
+                  loading={generateLoading}
                   type="default"
                 >
-                  上传装箱表
+                  生成亚马逊发货文件
                 </Button>
                 <Button 
-                  icon={<FileExcelOutlined />} 
+                  icon={<SettingOutlined />} 
+                  onClick={() => setTemplateModalVisible(true)}
+                  type="default"
+                >
+                  管理模板
+                </Button>
+                <Button 
+                  icon={<DownloadOutlined />} 
                   onClick={generateInvoice}
                   loading={generateInvoiceLoading}
                   type="default"
                 >
                   生成发票
+                </Button>
+                <Button 
+                  icon={<SettingOutlined />} 
+                  onClick={() => setInvoiceTemplateModalVisible(true)}
+                  type="default"
+                >
+                  管理发票模板
+                </Button>
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => setPackingListModalVisible(true)}
+                  type="default"
+                >
+                  上传装箱表
                 </Button>
               </Space>
             </div>
@@ -2278,259 +2320,6 @@ const ShippingPage: React.FC = () => {
               size="small"
               rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
             />
-
-            {/* 亚马逊发货文件 */}
-            <Card 
-              title={
-                <Space>
-                  <FileExcelOutlined />
-                  <span>亚马逊发货文件</span>
-                </Space>
-              }
-              size="small" 
-              style={{ marginBottom: 16 }}
-            >
-              {amazonTemplateConfig.hasTemplate && amazonTemplateConfig.countries && amazonTemplateConfig.countries.length > 0 ? (
-                <div>
-                  <Alert 
-                    message={`已配置 ${amazonTemplateConfig.countries.length} 个国家的模板`}
-                    description={`配置的国家：${amazonTemplateConfig.countries.join('、')}`}
-                    type="success" 
-                    style={{ marginBottom: 16 }}
-                  />
-                  
-                  {/* 显示各国家模板配置 */}
-                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {amazonTemplateConfig.countries.map(country => {
-                      const template = amazonTemplateConfig.templates?.[country];
-                      if (!template) return null;
-                      
-                      return (
-                        <Card key={country} size="small" style={{ marginBottom: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ flex: 1 }}>
-                              <Descriptions size="small" column={2}>
-                                <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
-                                <Descriptions.Item label="模板文件">{template.originalName}</Descriptions.Item>
-                                <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
-                                <Descriptions.Item label="SKU列">{template.merchantSkuColumn}</Descriptions.Item>
-                                <Descriptions.Item label="数量列">{template.quantityColumn}</Descriptions.Item>
-                                <Descriptions.Item label="开始行">{template.startRow}</Descriptions.Item>
-                              </Descriptions>
-                            </div>
-                            <Button 
-                              size="small"
-                              danger
-                              onClick={() => {
-                                setDeleteTargetCountry(country);
-                                setDeleteTargetTemplate(template);
-                                setDeleteConfirmVisible(true);
-                              }}
-                            >
-                              删除
-                            </Button>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                  
-                  <div style={{ marginTop: 16 }}>
-                    <Space>
-                      <Button 
-                        type="primary" 
-                        icon={<DownloadOutlined />} 
-                        onClick={generateAmazonFile}
-                        loading={generateLoading}
-                      >
-                        生成亚马逊发货文件
-                      </Button>
-                      <Button 
-                        icon={<SettingOutlined />} 
-                        onClick={() => setTemplateModalVisible(true)}
-                      >
-                        管理模板
-                      </Button>
-                    </Space>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <Alert 
-                    message="尚未配置亚马逊模板" 
-                    description="请先上传亚马逊批量上传产品表模板，以便自动生成发货文件。"
-                    type="warning" 
-                    style={{ marginBottom: 16 }}
-                  />
-                  <Space>
-                    <Button 
-                      type="primary" 
-                      icon={<UploadOutlined />} 
-                      onClick={() => setTemplateModalVisible(true)}
-                    >
-                      上传亚马逊模板
-                    </Button>
-                  </Space>
-                </div>
-              )}
-            </Card>
-
-            {/* 物流商发票管理 */}
-            <Card 
-              title={
-                <Space>
-                  <FileExcelOutlined />
-                  <span>物流商发票管理</span>
-                </Space>
-              }
-              size="small" 
-              style={{ marginBottom: 16 }}
-            >
-              {logisticsInvoiceConfig.hasTemplate && logisticsInvoiceConfig.logisticsProviders && logisticsInvoiceConfig.logisticsProviders.length > 0 ? (
-                <div>
-                  <Alert 
-                    message={`已配置 ${logisticsInvoiceConfig.logisticsProviders.length} 个物流商的发票模板`}
-                    description={`配置的物流商：${logisticsInvoiceConfig.logisticsProviders.join('、')}`}
-                    type="success" 
-                    style={{ marginBottom: 16 }}
-                  />
-                  
-                  {/* 显示各物流商发票模板配置 */}
-                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {logisticsInvoiceConfig.logisticsProviders.map(provider => {
-                      const providerTemplates = logisticsInvoiceConfig.templates?.[provider];
-                      if (!providerTemplates) return null;
-                      
-                      return (
-                        <div key={provider} style={{ marginBottom: 16 }}>
-                          <Text strong>{provider}</Text>
-                          {Object.entries(providerTemplates).map(([country, template]) => (
-                            <Card key={`${provider}-${country}`} size="small" style={{ marginTop: 8, marginLeft: 16 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ flex: 1 }}>
-                                  <Descriptions size="small" column={2}>
-                                    <Descriptions.Item label="国家">{template.countryName}</Descriptions.Item>
-                                    <Descriptions.Item label="模板文件">{template.originalName}</Descriptions.Item>
-                                    <Descriptions.Item label="Sheet页">{template.sheetName}</Descriptions.Item>
-                                    <Descriptions.Item label="上传时间" span={2}>
-                                      {new Date(template.uploadTime).toLocaleString('zh-CN')}
-                                    </Descriptions.Item>
-                                  </Descriptions>
-                                </div>
-                                <Button 
-                                  size="small"
-                                  danger
-                                  onClick={() => deleteInvoiceTemplateConfig(provider, country)}
-                                >
-                                  删除
-                                </Button>
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  <div style={{ marginTop: 16 }}>
-                    <Space>
-                      <Button 
-                        type="primary" 
-                        icon={<DownloadOutlined />} 
-                        onClick={generateInvoice}
-                        loading={generateInvoiceLoading}
-                      >
-                        生成发票
-                      </Button>
-                      <Button 
-                        icon={<SettingOutlined />} 
-                        onClick={() => setInvoiceTemplateModalVisible(true)}
-                      >
-                        管理发票模板
-                      </Button>
-                    </Space>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <Alert 
-                    message="尚未配置发票模板" 
-                    description="请先上传物流商发票模板，以便自动生成发票文件。"
-                    type="warning" 
-                    style={{ marginBottom: 16 }}
-                  />
-                  <Space>
-                    <Button 
-                      type="primary" 
-                      icon={<UploadOutlined />} 
-                      onClick={() => setInvoiceTemplateModalVisible(true)}
-                    >
-                      上传发票模板
-                    </Button>
-                  </Space>
-                </div>
-              )}
-            </Card>
-
-            {/* 亚马逊仓库管理 */}
-            <Card 
-              title={
-                <Space>
-                  <BoxPlotOutlined />
-                  <span>亚马逊仓库管理</span>
-                </Space>
-              }
-              size="small" 
-              style={{ marginBottom: 16 }}
-            >
-              <div>
-                <Alert 
-                  message="亚马逊仓库管理功能"
-                  description="管理亚马逊各站点的仓库信息，包括仓库地址、联系人等信息。"
-                  type="info" 
-                  style={{ marginBottom: 16 }}
-                />
-                <Space>
-                  <Button 
-                    type="primary" 
-                    icon={<SettingOutlined />} 
-                    onClick={() => setWarehouseModalVisible(true)}
-                  >
-                    管理仓库信息
-                  </Button>
-                </Space>
-              </div>
-            </Card>
-
-            {/* HSCODE编码管理 */}
-            <Card 
-              title={
-                <Space>
-                  <EditOutlined />
-                  <span>HSCODE编码管理</span>
-                </Space>
-              }
-              size="small" 
-              style={{ marginBottom: 16 }}
-            >
-              <div>
-                <Alert 
-                  message="HSCODE编码管理功能"
-                  description="管理产品的HSCODE编码信息，包括英国和美国的编码配置。"
-                  type="info" 
-                  style={{ marginBottom: 16 }}
-                />
-                <Space>
-                  <Button 
-                    type="primary" 
-                    icon={<SettingOutlined />} 
-                    onClick={() => setHsCodeModalVisible(true)}
-                  >
-                    管理HSCODE编码
-                  </Button>
-                </Space>
-              </div>
-            </Card>
 
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
