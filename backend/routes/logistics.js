@@ -1498,30 +1498,68 @@ router.get('/vat-receipt/:shippingId/file', authenticateToken, async (req, res) 
   }
 });
 
+// 修复编码问题的函数
+const fixEncoding = (text) => {
+  if (!text) return text;
+  
+  try {
+    // 检测是否包含乱码字符
+    const hasMojibake = /[\u00C0-\u00FF]/.test(text);
+    
+    if (hasMojibake) {
+      // 尝试多种编码修复方法
+      const encodings = ['latin1', 'iso-8859-1', 'cp1252'];
+      
+      for (const encoding of encodings) {
+        try {
+          const fixed = Buffer.from(text, encoding).toString('utf8');
+          if (!/[\u00C0-\u00FF]/.test(fixed)) {
+            console.log(`✅ 编码修复成功: ${encoding} -> utf8`);
+            return fixed;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    return text;
+  } catch (error) {
+    console.error('编码修复失败:', error);
+    return text;
+  }
+};
+
 // 安全处理中文文件名的函数
 const sanitizeFileName = (fileName) => {
   if (!fileName) return null;
   
-  // 移除或替换不安全的字符
-  let safeName = fileName
-    .replace(/[<>:"/\\|?*]/g, '_') // 替换Windows不允许的字符
-    .replace(/\s+/g, '_') // 替换空格为下划线
-    .replace(/[^\x00-\x7F]/g, (char) => {
-      // 保留中文字符，但确保编码正确
-      return char;
-    });
-  
-  // 确保文件名不为空
-  if (!safeName || safeName.trim() === '') {
-    return 'VAT税单.pdf';
+  try {
+    // 首先尝试修复编码问题
+    let safeName = fixEncoding(fileName);
+    
+    // 移除或替换不安全的字符
+    safeName = safeName
+      .replace(/[<>:"/\\|?*]/g, '_') // 替换Windows不允许的字符
+      .replace(/\s+/g, '_') // 替换空格为下划线
+      .replace(/\u0000/g, '') // 移除null字符
+      .trim();
+    
+    // 确保文件名不为空
+    if (!safeName || safeName === '') {
+      return 'VAT税单.pdf';
+    }
+    
+    // 确保以.pdf结尾
+    if (!safeName.toLowerCase().endsWith('.pdf')) {
+      safeName += '.pdf';
+    }
+    
+    return safeName;
+  } catch (error) {
+    console.error('文件名处理错误:', error);
+    return `${Date.now()}_VAT税单.pdf`;
   }
-  
-  // 确保以.pdf结尾
-  if (!safeName.toLowerCase().endsWith('.pdf')) {
-    safeName += '.pdf';
-  }
-  
-  return safeName;
 };
 
 // 导出VAT税单
@@ -1663,7 +1701,8 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
     const archiver = require('archiver');
     const archive = archiver('zip', {
       zlib: { level: 9 }, // 设置压缩级别
-      forceZip64: true // 强制使用ZIP64格式以支持大文件
+      forceZip64: true, // 强制使用ZIP64格式以支持大文件
+      store: false // 不存储，使用压缩
     });
 
     // 设置响应头
@@ -1672,6 +1711,8 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
     res.set({
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(zipFileName)}`,
+      'Content-Transfer-Encoding': 'binary',
+      'Cache-Control': 'no-cache'
     });
 
     // 将ZIP流连接到响应
