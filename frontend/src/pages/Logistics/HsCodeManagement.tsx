@@ -412,6 +412,18 @@ const HsCodeManagement: React.FC = () => {
     fetchHsCodes();
   }, []);
 
+  // 在组件顶层批量预加载签名URL
+  useEffect(() => {
+    const keys = filteredData
+      .map(item => item.declared_image)
+      .filter((key): key is string => Boolean(key))
+      .filter(key => !signedImageUrls[key]);
+    if (keys.length > 0) {
+      keys.forEach(key => fetchSignedImageUrl(key));
+    }
+    // eslint-disable-next-line
+  }, [filteredData]);
+
   // 行选择配置
   const rowSelection = {
     selectedRowKeys,
@@ -517,14 +529,8 @@ const HsCodeManagement: React.FC = () => {
       width: 100,
       align: 'center',
       render: (_, record) => {
-        const objectKey = record.declared_image;
-        const signedUrl = objectKey && signedImageUrls[objectKey];
-        // 自动获取签名URL
-        useEffect(() => {
-          if (objectKey && !signedImageUrls[objectKey]) {
-            fetchSignedImageUrl(objectKey);
-          }
-        }, [objectKey]);
+        const objectKey = record.declared_image as string | undefined;
+        const signedUrl = objectKey ? signedImageUrls[objectKey] : undefined;
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
             {objectKey ? (
