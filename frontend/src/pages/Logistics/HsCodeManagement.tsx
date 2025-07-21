@@ -461,25 +461,19 @@ const HsCodeManagement: React.FC = () => {
       width: 150,
       align: 'center',
       render: (_, record) => (
-        <Space direction="vertical" size="small">
+        <div style={{ position: 'relative', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {record.declared_image && record.declared_image.startsWith('http') ? (
-            <Space>
-              {/* 缩略图 */}
+            <>
               <img
                 src={record.declared_image}
                 alt="申报图片"
-                style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', cursor: 'pointer' }}
+                style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa' }}
                 onClick={() => handlePreviewImage(record.declared_image!)}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                onError={e => {
+                  (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="%23f5f5f5"/><text x="20" y="22" font-size="10" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                }}
               />
-              <Button
-                type="text"
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() => handlePreviewImage(record.declared_image!)}
-              >
-                预览
-              </Button>
+              {/* 删除按钮悬浮在右上角 */}
               <Popconfirm
                 title="确定要删除这张申报图片吗？"
                 onConfirm={() => handleDeleteImage(record.parent_sku)}
@@ -487,15 +481,26 @@ const HsCodeManagement: React.FC = () => {
                 cancelText="取消"
               >
                 <Button
-                  type="text"
+                  type="primary"
+                  shape="circle"
+                  icon={<DeleteOutlined style={{ fontSize: 12 }} />}
                   size="small"
-                  icon={<DeleteOutlined />}
                   danger
-                >
-                  删除
-                </Button>
+                  style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    zIndex: 2,
+                    width: 22,
+                    height: 22,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                  }}
+                />
               </Popconfirm>
-            </Space>
+            </>
           ) : (
             <Upload
               accept="image/*"
@@ -516,7 +521,7 @@ const HsCodeManagement: React.FC = () => {
               </Button>
             </Upload>
           )}
-        </Space>
+        </div>
       ),
     },
     {
