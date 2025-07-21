@@ -8,6 +8,7 @@ const fs = require('fs');
 const pdf = require('pdf-parse');
 const XLSX = require('xlsx');
 const { uploadToOSS, deleteFromOSS, getSignedUrl, checkOSSConfig } = require('../utils/oss');
+const dayjs = require('dayjs');
 
 // 配置文件上传中间件
 const storage = multer.memoryStorage();
@@ -113,9 +114,12 @@ router.get('/orders', async (req, res) => {
       };
     }
     
+    // 日期区间筛选，强制格式化为 YYYY-MM-DD
     if (start_date && end_date) {
+      const start = dayjs(start_date).format('YYYY-MM-DD');
+      const end = dayjs(end_date).format('YYYY-MM-DD');
       whereCondition.order_date = {
-        [Op.between]: [start_date, end_date]
+        [Op.between]: [start, end]
       };
     }
 
