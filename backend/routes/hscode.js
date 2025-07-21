@@ -5,6 +5,7 @@ const HsCode = require('../models/HsCode');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { uploadToOSS } = require('../utils/oss');
 
 // 创建上传目录
 const uploadDir = path.join(__dirname, '../uploads/hscode-images');
@@ -110,8 +111,7 @@ router.get('/:parentSku', async (req, res) => {
 // 创建新HSCODE
 router.post('/', async (req, res) => {
   try {
-    const { parent_sku, weblink, uk_hscode, us_hscode, declared_value, declared_value_currency } = req.body;
-    
+    const { parent_sku, weblink, uk_hscode, us_hscode, declared_value_usd, declared_value_gbp, declared_image } = req.body;
     // 验证必填字段
     if (!parent_sku || !weblink || !uk_hscode || !us_hscode) {
       return res.status(400).json({
@@ -119,7 +119,6 @@ router.post('/', async (req, res) => {
         message: '缺少必填字段'
       });
     }
-    
     // 检查parent_sku是否已存在
     const existingHsCode = await HsCode.findByPk(parent_sku);
     if (existingHsCode) {
@@ -128,17 +127,15 @@ router.post('/', async (req, res) => {
         message: '该父SKU已存在'
       });
     }
-    
     const hsCode = await HsCode.create({
       parent_sku,
       weblink,
       uk_hscode,
       us_hscode,
-      declared_value,
-      declared_value_currency: declared_value_currency || 'USD',
-      declared_image: req.body.declared_image
+      declared_value_usd,
+      declared_value_gbp,
+      declared_image
     });
-    
     res.json({
       code: 0,
       message: '创建成功',
@@ -158,30 +155,23 @@ router.post('/', async (req, res) => {
 router.put('/:parentSku', async (req, res) => {
   try {
     const parentSku = decodeURIComponent(req.params.parentSku);
-    console.log('📝 更新HSCODE请求 - parent_sku:', parentSku);
-    
-    const { weblink, uk_hscode, us_hscode, declared_value, declared_value_currency, declared_image } = req.body;
-    
-    // 验证必填字段
+    const { weblink, uk_hscode, us_hscode, declared_value_usd, declared_value_gbp, declared_image } = req.body;
     if (!weblink || !uk_hscode || !us_hscode) {
       return res.status(400).json({
         code: 1,
         message: '缺少必填字段'
       });
     }
-    
     const [updated] = await HsCode.update({
       weblink,
       uk_hscode,
       us_hscode,
-      declared_value,
-      declared_value_currency,
-      declared_image,
-      updated_at: new Date()
+      declared_value_usd,
+      declared_value_gbp,
+      declared_image
     }, {
       where: { parent_sku: parentSku }
     });
-    
     if (updated) {
       const hsCode = await HsCode.findByPk(parentSku);
       res.json({
@@ -274,62 +264,49 @@ router.delete('/:parentSku', async (req, res) => {
   }
 });
 
-// 上传申报图片
+// 上传申报图片（改为OSS）
 router.post('/:parentSku/upload-image', upload.single('image'), async (req, res) => {
   try {
     const parentSku = decodeURIComponent(req.params.parentSku);
-    
     if (!req.file) {
       return res.status(400).json({
         code: 1,
         message: '请选择要上传的图片文件'
       });
     }
-    
     // 检查记录是否存在
     const hsCode = await HsCode.findByPk(parentSku);
     if (!hsCode) {
-      // 删除已上传的文件
-      fs.unlinkSync(req.file.path);
       return res.status(404).json({
         code: 1,
         message: 'HSCODE记录不存在'
       });
     }
-    
-    // 如果之前有图片，删除旧图片
-    if (hsCode.declared_image) {
-      const oldImagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath);
-      }
-    }
-    
+    // 上传到OSS
+    const fs = require('fs');
+    const buffer = fs.readFileSync(req.file.path);
+    const ossResult = await uploadToOSS(buffer, req.file.originalname, 'hscode-images');
+    // 删除本地临时文件
+    fs.unlinkSync(req.file.path);
     // 更新数据库记录
-    const imagePath = `/uploads/hscode-images/${req.file.filename}`;
     await HsCode.update({
-      declared_image: imagePath,
-      updated_at: new Date()
+      declared_image: ossResult.url
     }, {
       where: { parent_sku: parentSku }
     });
-    
-    // 获取更新后的记录
     const updatedHsCode = await HsCode.findByPk(parentSku);
-    
     res.json({
       code: 0,
       message: '图片上传成功',
       data: {
-        declared_image: imagePath,
+        declared_image: ossResult.url,
         record: updatedHsCode
       }
     });
   } catch (error) {
     console.error('上传申报图片失败:', error);
-    // 如果有上传的文件，删除它
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.file && req.file.path && require('fs').existsSync(req.file.path)) {
+      require('fs').unlinkSync(req.file.path);
     }
     res.status(500).json({
       code: 1,

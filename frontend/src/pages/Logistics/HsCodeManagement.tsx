@@ -55,11 +55,10 @@ interface HsCode {
   weblink: string;
   uk_hscode: string;
   us_hscode: string;
-  declared_value?: number;
-  declared_value_currency?: string;
+  declared_value_usd?: number;
+  declared_value_gbp?: number;
   declared_image?: string;
   created_at?: string;
-  updated_at?: string;
 }
 
 // 搜索参数接口
@@ -220,7 +219,15 @@ const HsCodeManagement: React.FC = () => {
     
     // 货币筛选
     if (params.currency) {
-      filtered = filtered.filter(item => item.declared_value_currency === params.currency);
+      // This part needs to be updated to filter by declared_value_usd or declared_value_gbp
+      // For now, we'll keep it simple as the new form only has USD and GBP
+      // If a currency filter is needed, it should be based on declared_value_usd or declared_value_gbp
+      // For example, if USD is selected, filter for declared_value_usd
+      if (params.currency === 'USD') {
+        filtered = filtered.filter(item => item.declared_value_usd !== undefined);
+      } else if (params.currency === 'GBP') {
+        filtered = filtered.filter(item => item.declared_value_gbp !== undefined);
+      }
     }
     
     setFilteredData(filtered);
@@ -236,14 +243,14 @@ const HsCodeManagement: React.FC = () => {
   // 导出数据
   const handleExport = () => {
     const csvContent = [
-      ['父SKU', '产品链接', '英国HSCODE', '美国HSCODE', '申报价值', '货币', '创建时间'].join(','),
+      ['父SKU', '产品链接', '英国HSCODE', '美国HSCODE', '美元申报价值', '英镑申报价值', '创建时间'].join(','),
       ...filteredData.map(item => [
         item.parent_sku,
         item.weblink,
         item.uk_hscode,
         item.us_hscode,
-        item.declared_value || '',
-        item.declared_value_currency || '',
+        item.declared_value_usd || '',
+        item.declared_value_gbp || '',
         item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : ''
       ].join(','))
     ].join('\n');
@@ -266,7 +273,8 @@ const HsCodeManagement: React.FC = () => {
     setEditingRecord(null);
     form.resetFields();
     form.setFieldsValue({
-      declared_value_currency: 'USD'
+      declared_value_usd: 6,
+      declared_value_gbp: 7
     });
     setEditModalVisible(true);
   };
@@ -417,15 +425,19 @@ const HsCodeManagement: React.FC = () => {
         </Space>
       ),
       key: 'declared_value',
-      width: 120,
+      width: 160,
       align: 'right',
       render: (_, record) => {
-        if (!record.declared_value) return '-';
+        if (!record.declared_value_usd && !record.declared_value_gbp) return '-';
         return (
-                     <Space>
-             <Text strong>{record.declared_value}</Text>
-             <Tag style={{ fontSize: '12px', padding: '0 4px' }}>{record.declared_value_currency}</Tag>
-           </Space>
+          <Space direction="vertical" size={0}>
+            {record.declared_value_usd !== undefined && (
+              <span><Text strong>{record.declared_value_usd}</Text> <Tag color="blue">USD</Tag></span>
+            )}
+            {record.declared_value_gbp !== undefined && (
+              <span><Text strong>{record.declared_value_gbp}</Text> <Tag color="purple">GBP</Tag></span>
+            )}
+          </Space>
         );
       },
     },
@@ -494,16 +506,6 @@ const HsCodeManagement: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 120,
-      align: 'center',
-      render: (date: string) => (
-        date ? dayjs(date).format('YYYY-MM-DD') : '-'
-      ),
-    },
-    {
-      title: '更新时间',
-      dataIndex: 'updated_at',
-      key: 'updated_at',
       width: 120,
       align: 'center',
       render: (date: string) => (
@@ -715,7 +717,8 @@ const HsCodeManagement: React.FC = () => {
           layout="vertical"
           onFinish={handleSaveHsCode}
           initialValues={{
-            declared_value_currency: 'USD'
+            declared_value_usd: 6,
+            declared_value_gbp: 7
           }}
         >
           <Row gutter={16}>
@@ -733,20 +736,6 @@ const HsCodeManagement: React.FC = () => {
                   disabled={!!editingRecord}
                   maxLength={10}
                 />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="declared_value_currency"
-                label="申报货币"
-                rules={[{ required: true, message: '请选择货币' }]}
-              >
-                <Select placeholder="选择货币">
-                  <Option value="USD">美元 (USD)</Option>
-                  <Option value="EUR">欧元 (EUR)</Option>
-                  <Option value="GBP">英镑 (GBP)</Option>
-                  <Option value="CNY">人民币 (CNY)</Option>
-                </Select>
               </Form.Item>
             </Col>
           </Row>
@@ -800,21 +789,42 @@ const HsCodeManagement: React.FC = () => {
             </Col>
           </Row>
 
-          <Form.Item
-            name="declared_value"
-            label="申报价值"
-            rules={[
-              { type: 'number', min: 0, message: '申报价值必须大于等于0' }
-            ]}
-          >
-            <InputNumber
-              placeholder="请输入申报价值"
-              style={{ width: '100%' }}
-              min={0}
-              precision={2}
-              step={0.01}
-            />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="declared_value_usd"
+                label="美元申报价值 (USD)"
+                rules={[
+                  { type: 'number', min: 0, message: '申报价值必须大于等于0' }
+                ]}
+              >
+                <InputNumber
+                  placeholder="请输入美元申报价值"
+                  style={{ width: '100%' }}
+                  min={0}
+                  precision={2}
+                  step={0.01}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="declared_value_gbp"
+                label="英镑申报价值 (GBP)"
+                rules={[
+                  { type: 'number', min: 0, message: '申报价值必须大于等于0' }
+                ]}
+              >
+                <InputNumber
+                  placeholder="请输入英镑申报价值"
+                  style={{ width: '100%' }}
+                  min={0}
+                  precision={2}
+                  step={0.01}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item
             label="申报图片"

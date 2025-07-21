@@ -23,33 +23,26 @@ const HsCode = sequelize.define('HsCode', {
     allowNull: false,
     comment: '美国HSCODE编码'
   },
-  declared_value: {
+  declared_value_usd: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
-    comment: '申报价值'
+    comment: '美元申报价值'
   },
-  declared_value_currency: {
-    type: DataTypes.STRING(10),
+  declared_value_gbp: {
+    type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
-    defaultValue: 'USD',
-    comment: '申报价值货币'
+    comment: '英镑申报价值'
   },
   declared_image: {
     type: DataTypes.STRING(500),
     allowNull: true,
-    comment: '申报图片路径'
+    comment: '申报图片OSS链接'
   },
   created_at: {
     type: DataTypes.DATE,
     allowNull: false,
     defaultValue: DataTypes.NOW,
     comment: '创建时间'
-  },
-  updated_at: {
-    type: DataTypes.DATE,
-    allowNull: false,
-    defaultValue: DataTypes.NOW,
-    comment: '更新时间'
   }
 }, {
   tableName: 'hscode',
