@@ -347,7 +347,7 @@ const HsCodeManagement: React.FC = () => {
 
   // 预览图片
   const handlePreviewImage = (imageUrl: string) => {
-    setPreviewImageUrl(`${API_BASE_URL}${imageUrl}`);
+    setPreviewImageUrl(imageUrl); // 直接用OSS链接
     setImagePreviewVisible(true);
   };
 
@@ -464,6 +464,13 @@ const HsCodeManagement: React.FC = () => {
         <Space direction="vertical" size="small">
           {record.declared_image ? (
             <Space>
+              {/* 缩略图 */}
+              <img
+                src={record.declared_image}
+                alt="申报图片"
+                style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', cursor: 'pointer' }}
+                onClick={() => handlePreviewImage(record.declared_image!)}
+              />
               <Button
                 type="text"
                 size="small"
@@ -843,7 +850,7 @@ const HsCodeManagement: React.FC = () => {
               {editingRecord?.declared_image ? (
                 <div style={{ marginBottom: 16 }}>
                   <img
-                    src={`${API_BASE_URL}${editingRecord.declared_image}`}
+                    src={editingRecord.declared_image}
                     alt="当前申报图片"
                     style={{
                       maxWidth: '200px',

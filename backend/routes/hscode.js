@@ -320,7 +320,7 @@ router.post('/:parentSku/upload-image', upload.single('image'), async (req, res)
 router.delete('/:parentSku/image', async (req, res) => {
   try {
     const parentSku = decodeURIComponent(req.params.parentSku);
-    
+    const { deleteFromOSS } = require('../utils/oss');
     // 查找记录
     const hsCode = await HsCode.findByPk(parentSku);
     if (!hsCode) {
@@ -329,20 +329,34 @@ router.delete('/:parentSku/image', async (req, res) => {
         message: 'HSCODE记录不存在'
       });
     }
-    
     if (!hsCode.declared_image) {
       return res.status(400).json({
         code: 1,
         message: '该记录没有申报图片'
       });
     }
-    
-    // 删除文件
-    const imagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
-    if (fs.existsSync(imagePath)) {
-      fs.unlinkSync(imagePath);
+    // 判断是否为OSS图片链接
+    let ossDeleteResult = null;
+    if (/aliyuncs\.com\//.test(hsCode.declared_image)) {
+      // 提取objectName
+      const url = hsCode.declared_image;
+      // 只取域名后的路径
+      const match = url.match(/aliyuncs\.com\/(.+)$/);
+      if (match && match[1]) {
+        const objectName = match[1];
+        try {
+          ossDeleteResult = await deleteFromOSS(objectName);
+        } catch (e) {
+          console.warn('OSS图片删除失败:', e.message);
+        }
+      }
+    } else {
+      // 删除本地文件
+      const imagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
     }
-    
     // 更新数据库记录
     await HsCode.update({
       declared_image: null,
@@ -350,10 +364,10 @@ router.delete('/:parentSku/image', async (req, res) => {
     }, {
       where: { parent_sku: parentSku }
     });
-    
     res.json({
       code: 0,
-      message: '申报图片删除成功'
+      message: '申报图片删除成功',
+      ossDeleteResult
     });
   } catch (error) {
     console.error('删除申报图片失败:', error);
