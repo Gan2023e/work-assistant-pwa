@@ -81,6 +81,8 @@ const HsCodeManagement: React.FC = () => {
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [uploadingParentSku, setUploadingParentSku] = useState<string | null>(null);
+  // 1. 新增图片缓存状态
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   
   // Form实例
   const [form] = Form.useForm();
@@ -138,6 +140,13 @@ const HsCodeManagement: React.FC = () => {
         setEditingRecord(null);
         form.resetFields();
         await fetchHsCodes(searchParams);
+        // 新增成功后自动上传图片
+        if (!isEditing && pendingImageFile && values.parent_sku) {
+          setTimeout(() => {
+            handleImageUpload(values.parent_sku, pendingImageFile);
+            setPendingImageFile(null);
+          }, 500); // 等待数据刷新后再上传
+        }
       } else {
         throw new Error(result.message || '操作失败');
       }
@@ -706,6 +715,7 @@ const HsCodeManagement: React.FC = () => {
           setEditModalVisible(false);
           setEditingRecord(null);
           form.resetFields();
+          setPendingImageFile(null);
         }}
         footer={null}
         width={700}
@@ -871,26 +881,46 @@ const HsCodeManagement: React.FC = () => {
                   </div>
                 </div>
               ) : null}
-              
+              {/* 新增时允许选择图片，保存后自动上传 */}
               <Upload
                 accept="image/*"
                 showUploadList={false}
                 beforeUpload={(file) => {
-                  if (editingRecord) {
+                  if (!editingRecord) {
+                    setPendingImageFile(file);
+                    message.info('图片已选择，保存记录后将自动上传');
+                  } else {
                     handleImageUpload(editingRecord.parent_sku, file);
                   }
                   return false;
                 }}
-                disabled={!editingRecord || uploadingParentSku === editingRecord?.parent_sku}
+                disabled={uploadingParentSku === editingRecord?.parent_sku}
               >
                 <Button
                   icon={<UploadOutlined />}
                   loading={uploadingParentSku === editingRecord?.parent_sku}
-                  disabled={!editingRecord}
                 >
                   {editingRecord?.declared_image ? '替换图片' : '上传图片'}
                 </Button>
               </Upload>
+              {/* 新增时已选图片预览 */}
+              {!editingRecord && pendingImageFile && (
+                <div style={{ marginTop: 8 }}>
+                  <img
+                    src={URL.createObjectURL(pendingImageFile)}
+                    alt="待上传图片"
+                    style={{
+                      maxWidth: '200px',
+                      maxHeight: '150px',
+                      objectFit: 'contain',
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      padding: '8px'
+                    }}
+                  />
+                  <div style={{ color: '#faad14', fontSize: 12 }}>保存记录后将自动上传图片</div>
+                </div>
+              )}
               <div style={{ marginTop: 8, color: '#666', fontSize: '12px' }}>
                 支持格式：JPG、PNG、GIF等图片格式，文件大小不超过5MB
               </div>
