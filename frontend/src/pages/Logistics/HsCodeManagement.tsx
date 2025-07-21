@@ -90,58 +90,9 @@ const HsCodeManagement: React.FC = () => {
   const [uploadingParentSku, setUploadingParentSku] = useState<string | null>(null);
   // 1. 新增图片缓存状态
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
-  // 修复：将 signedImageUrls useState 移到组件内部
-  const [signedImageUrls, setSignedImageUrls] = useState<Record<string, string>>({});
   // Form实例
   const [form] = Form.useForm();
   const [searchForm] = Form.useForm();
-
-  // 获取签名URL（带缓存）
-  const fetchSignedImageUrl = async (objectKey: string) => {
-    if (!objectKey) return '';
-    if (signedImageUrls[objectKey]) return signedImageUrls[objectKey];
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(objectKey)}`);
-      const data = await res.json();
-      if (data.code === 0) {
-        setSignedImageUrls((prev: Record<string, string>) => ({ ...prev, [objectKey]: data.url }));
-        return data.url;
-      }
-    } catch {}
-    return '';
-  };
-
-  // 申报图片预览，统一用签名URL
-  const handlePreviewDeclaredImage = async (imageObjectKeyOrUrl: string) => {
-    let url = imageObjectKeyOrUrl;
-    if (url && !url.startsWith('http')) {
-      url = await fetchSignedImageUrl(url);
-      if (!url) {
-        message.error('获取图片预览链接失败');
-        return;
-      }
-    }
-    Modal.info({
-      title: '申报图片预览',
-      width: 600,
-      content: (
-        <div style={{ textAlign: 'center' }}>
-          <img
-            src={url}
-            alt="申报图片"
-            style={{
-              maxWidth: '100%',
-              maxHeight: '400px',
-              objectFit: 'contain',
-              border: '1px solid #d9d9d9',
-              borderRadius: '4px'
-            }}
-            onError={() => message.error('图片加载失败')}
-          />
-        </div>
-      )
-    });
-  };
 
   // 获取HSCODE列表
   const fetchHsCodes = async (params?: SearchParams) => {
@@ -406,22 +357,35 @@ const HsCodeManagement: React.FC = () => {
     setImagePreviewVisible(true);
   };
 
+  // 申报图片预览，统一通过后端代理接口
+  const handlePreviewDeclaredImage = (imageUrl: string) => {
+    const url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    Modal.info({
+      title: '申报图片预览',
+      width: 600,
+      content: (
+        <div style={{ textAlign: 'center' }}>
+          <img
+            src={url}
+            alt="申报图片"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '400px',
+              objectFit: 'contain',
+              border: '1px solid #d9d9d9',
+              borderRadius: '4px'
+            }}
+            onError={() => message.error('图片加载失败')}
+          />
+        </div>
+      )
+    });
+  };
+
   // 初始化
   useEffect(() => {
     fetchHsCodes();
   }, []);
-
-  // 在组件顶层批量预加载签名URL
-  useEffect(() => {
-    const keys = filteredData
-      .map(item => item.declared_image)
-      .filter((key): key is string => Boolean(key))
-      .filter(key => !signedImageUrls[key]);
-    if (keys.length > 0) {
-      keys.forEach(key => fetchSignedImageUrl(key));
-    }
-    // eslint-disable-next-line
-  }, [filteredData]);
 
   // 行选择配置
   const rowSelection = {
@@ -528,53 +492,49 @@ const HsCodeManagement: React.FC = () => {
       width: 100,
       align: 'center',
       render: (_, record) => {
-        const objectKey = record.declared_image as string | undefined;
-        const signedUrl = objectKey ? signedImageUrls[objectKey] : undefined;
+        const imageUrl = record.declared_image;
+        const url = imageUrl ? `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}` : '';
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
-            {objectKey ? (
-              signedUrl ? (
-                <>
-                  <img
-                    src={signedUrl}
-                    alt="申报图片"
-                    style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
-                    onClick={() => handlePreviewDeclaredImage(objectKey)}
-                    onError={e => {
-                      (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+            {imageUrl ? (
+              <>
+                <img
+                  src={url}
+                  alt="申报图片"
+                  style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
+                  onClick={() => handlePreviewDeclaredImage(imageUrl)}
+                  onError={e => {
+                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                  }}
+                />
+                {/* 删除按钮悬浮在右上角 */}
+                <Popconfirm
+                  title="确定要删除这张申报图片吗？"
+                  onConfirm={() => handleDeleteImage(record.parent_sku)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    icon={<DeleteOutlined style={{ fontSize: 14 }} />}
+                    size="small"
+                    danger
+                    style={{
+                      position: 'absolute',
+                      top: -10,
+                      right: -10,
+                      zIndex: 2,
+                      width: 28,
+                      height: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                     }}
                   />
-                  {/* 删除按钮悬浮在右上角 */}
-                  <Popconfirm
-                    title="确定要删除这张申报图片吗？"
-                    onConfirm={() => handleDeleteImage(record.parent_sku)}
-                    okText="确定"
-                    cancelText="取消"
-                  >
-                    <Button
-                      type="primary"
-                      shape="circle"
-                      icon={<DeleteOutlined style={{ fontSize: 14 }} />}
-                      size="small"
-                      danger
-                      style={{
-                        position: 'absolute',
-                        top: -10,
-                        right: -10,
-                        zIndex: 2,
-                        width: 28,
-                        height: 28,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                      }}
-                    />
-                  </Popconfirm>
-                </>
-              ) : (
-                <Spin size="small" />
-              )
+                </Popconfirm>
+              </>
             ) : (
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <Upload
@@ -934,7 +894,7 @@ const HsCodeManagement: React.FC = () => {
               {editingRecord?.declared_image ? (
                 <div style={{ marginBottom: 16 }}>
                   <img
-                    src={editingRecord.declared_image}
+                    src={`${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(editingRecord.declared_image)}`}
                     alt="当前申报图片"
                     style={{
                       maxWidth: '200px',

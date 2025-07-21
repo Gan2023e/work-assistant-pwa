@@ -422,4 +422,64 @@ router.post('/batch', async (req, res) => {
   }
 });
 
+// 图片代理接口，支持私有OSS图片访问
+router.get('/image-proxy', async (req, res) => {
+  try {
+    let { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ code: 1, message: '缺少图片url参数' });
+    }
+    url = decodeURIComponent(url);
+    // 判断是完整OSS链接还是objectKey
+    let objectKey = '';
+    if (url.startsWith('http')) {
+      // 解析OSS链接，获取objectKey
+      try {
+        const u = new URL(url);
+        objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
+      } catch (e) {
+        return res.status(400).json({ code: 1, message: 'url格式不正确' });
+      }
+    } else {
+      // 直接就是objectKey
+      objectKey = url;
+    }
+    // OSS配置
+    const OSS = require('ali-oss');
+    const client = new OSS({
+      region: process.env.OSS_REGION,
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+      bucket: process.env.OSS_BUCKET,
+      endpoint: process.env.OSS_ENDPOINT,
+      secure: true
+    });
+    // 获取图片内容
+    const result = await client.get(objectKey);
+    // 根据扩展名设置Content-Type
+    const ext = objectKey.toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) contentType = 'image/jpeg';
+    else if (ext.endsWith('.png')) contentType = 'image/png';
+    else if (ext.endsWith('.gif')) contentType = 'image/gif';
+    else if (ext.endsWith('.webp')) contentType = 'image/webp';
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': result.content.length,
+      'Cache-Control': 'public, max-age=31536000',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    res.send(result.content);
+  } catch (error) {
+    console.error('图片代理失败:', error.message);
+    if (error.code === 'NoSuchKey') {
+      res.status(404).json({ code: 1, message: '图片不存在' });
+    } else {
+      res.status(500).json({ code: 1, message: '图片获取失败: ' + error.message });
+    }
+  }
+});
+
 module.exports = router; 
