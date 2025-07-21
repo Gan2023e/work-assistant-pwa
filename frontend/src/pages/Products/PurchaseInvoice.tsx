@@ -1646,11 +1646,11 @@ const PurchaseInvoice: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                label="发票号"
+                label="订单编号"
                 name="order_number"
-                rules={[{ required: true, message: '请输入发票号' }]}
+                rules={[{ required: true, message: '请输入订单编号' }]}
               >
-                <Input placeholder="请输入发票号" />
+                <Input placeholder="请输入订单编号" />
               </Form.Item>
             </Col>
             <Col span={12}>
