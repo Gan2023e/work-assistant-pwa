@@ -388,7 +388,7 @@ const PurchaseInvoice: React.FC = () => {
         invoice_number: processMultiLineInput(filters.invoice_number),
         ...(filters.date_range ? {
           start_date: filters.date_range[0],
-          end_date: filters.date_range[1]
+          end_date: dayjs(filters.date_range[1]).add(1, 'day').format('YYYY-MM-DD')
         } : {})
       };
       
