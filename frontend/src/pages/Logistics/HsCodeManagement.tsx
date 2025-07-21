@@ -75,21 +75,29 @@ const getImageUrl = (url: string) => {
   return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
-// 申报图片预览，兼容私有OSS签名URL
+const [signedImageUrls, setSignedImageUrls] = useState<Record<string, string>>({});
+
+// 获取签名URL（带缓存）
+const fetchSignedImageUrl = async (objectKey: string) => {
+  if (!objectKey) return '';
+  if (signedImageUrls[objectKey]) return signedImageUrls[objectKey];
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(objectKey)}`);
+    const data = await res.json();
+    if (data.code === 0) {
+      setSignedImageUrls(prev => ({ ...prev, [objectKey]: data.url }));
+      return data.url;
+    }
+  } catch {}
+  return '';
+};
+
+// 申报图片预览，统一用签名URL
 const handlePreviewDeclaredImage = async (imageObjectKeyOrUrl: string) => {
   let url = imageObjectKeyOrUrl;
-  // 不是http开头，认为是OSS objectKey，需要后端签名
   if (url && !url.startsWith('http')) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (data.code === 0) {
-        url = data.url;
-      } else {
-        message.error('获取图片预览链接失败');
-        return;
-      }
-    } catch (e) {
+    url = await fetchSignedImageUrl(url);
+    if (!url) {
       message.error('获取图片预览链接失败');
       return;
     }
@@ -508,72 +516,86 @@ const HsCodeManagement: React.FC = () => {
       key: 'declared_image',
       width: 100,
       align: 'center',
-      render: (_, record) => (
-        <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
-          {record.declared_image ? (
-            <>
-              <img
-                src={getImageUrl(record.declared_image)}
-                alt="申报图片"
-                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
-                onClick={() => handlePreviewDeclaredImage(record.declared_image!)}
-                onError={e => {
-                  (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
-                }}
-              />
-              {/* 删除按钮悬浮在右上角 */}
-              <Popconfirm
-                title="确定要删除这张申报图片吗？"
-                onConfirm={() => handleDeleteImage(record.parent_sku)}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button
-                  type="primary"
-                  shape="circle"
-                  icon={<DeleteOutlined style={{ fontSize: 14 }} />}
-                  size="small"
-                  danger
-                  style={{
-                    position: 'absolute',
-                    top: -10,
-                    right: -10,
-                    zIndex: 2,
-                    width: 28,
-                    height: 28,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+      render: (_, record) => {
+        const objectKey = record.declared_image;
+        const signedUrl = objectKey && signedImageUrls[objectKey];
+        // 自动获取签名URL
+        useEffect(() => {
+          if (objectKey && !signedImageUrls[objectKey]) {
+            fetchSignedImageUrl(objectKey);
+          }
+        }, [objectKey]);
+        return (
+          <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+            {objectKey ? (
+              signedUrl ? (
+                <>
+                  <img
+                    src={signedUrl}
+                    alt="申报图片"
+                    style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
+                    onClick={() => handlePreviewDeclaredImage(objectKey)}
+                    onError={e => {
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                    }}
+                  />
+                  {/* 删除按钮悬浮在右上角 */}
+                  <Popconfirm
+                    title="确定要删除这张申报图片吗？"
+                    onConfirm={() => handleDeleteImage(record.parent_sku)}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button
+                      type="primary"
+                      shape="circle"
+                      icon={<DeleteOutlined style={{ fontSize: 14 }} />}
+                      size="small"
+                      danger
+                      style={{
+                        position: 'absolute',
+                        top: -10,
+                        right: -10,
+                        zIndex: 2,
+                        width: 28,
+                        height: 28,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                      }}
+                    />
+                  </Popconfirm>
+                </>
+              ) : (
+                <Spin size="small" />
+              )
+            ) : (
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Upload
+                  accept="image/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    handleImageUpload(record.parent_sku, file);
+                    return false;
                   }}
-                />
-              </Popconfirm>
-            </>
-          ) : (
-            <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <Upload
-                accept="image/*"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  handleImageUpload(record.parent_sku, file);
-                  return false;
-                }}
-                disabled={uploadingParentSku === record.parent_sku}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<UploadOutlined />}
-                  loading={uploadingParentSku === record.parent_sku}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
+                  disabled={uploadingParentSku === record.parent_sku}
                 >
-                  上传
-                </Button>
-              </Upload>
-            </div>
-          )}
-        </div>
-      ),
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<UploadOutlined />}
+                    loading={uploadingParentSku === record.parent_sku}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
+                  >
+                    上传
+                  </Button>
+                </Upload>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '创建时间',
