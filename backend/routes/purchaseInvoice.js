@@ -2085,7 +2085,8 @@ router.post('/export-orders', async (req, res) => {
       start_date,
       end_date,
       order_number,
-      invoice_number
+      invoice_number,
+      selected_ids
     } = req.body;
 
     const whereCondition = {};
@@ -2127,6 +2128,11 @@ router.post('/export-orders', async (req, res) => {
       whereCondition.order_date = {
         [Op.between]: [start_date, end_date]
       };
+    }
+    
+    // 如果有选中的ID，优先使用选中的ID
+    if (selected_ids && selected_ids.length > 0) {
+      whereCondition.id = { [Op.in]: selected_ids };
     }
     
     // 获取所有匹配的数据

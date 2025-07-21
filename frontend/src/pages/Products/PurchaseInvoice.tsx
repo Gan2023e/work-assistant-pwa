@@ -200,6 +200,10 @@ const PurchaseInvoice: React.FC = () => {
         ...(filters.date_range ? {
           start_date: filters.date_range[0],
           end_date: filters.date_range[1]
+        } : {}),
+        // 如果有选中的记录，传递选中的ID
+        ...(selectedRowKeys.length > 0 ? {
+          selected_ids: selectedRowKeys
         } : {})
       };
       
@@ -236,7 +240,10 @@ const PurchaseInvoice: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      message.success('导出成功');
+      const exportMessage = selectedRowKeys.length > 0 
+        ? `成功导出 ${selectedRowKeys.length} 条选中记录`
+        : '成功导出所有筛选记录';
+      message.success(exportMessage);
     } catch (error) {
       console.error('导出失败:', error);
       message.error('导出失败，请重试');
@@ -1559,13 +1566,21 @@ const PurchaseInvoice: React.FC = () => {
               >
                 刷新
               </Button>
-              <Button 
-                icon={<DownloadOutlined />}
-                loading={exportLoading}
-                onClick={handleExport}
+              <Tooltip
+                title={
+                  selectedRowKeys.length > 0 
+                    ? `导出 ${selectedRowKeys.length} 条选中的记录`
+                    : '导出当前筛选条件下的所有记录'
+                }
               >
-                导出
-              </Button>
+                <Button 
+                  icon={<DownloadOutlined />}
+                  loading={exportLoading}
+                  onClick={handleExport}
+                >
+                  导出{selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}
+                </Button>
+              </Tooltip>
 
             </Space>
           </Col>
