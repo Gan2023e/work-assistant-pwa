@@ -458,19 +458,19 @@ const HsCodeManagement: React.FC = () => {
         </Space>
       ),
       key: 'declared_image',
-      width: 150,
+      width: 100,
       align: 'center',
       render: (_, record) => (
-        <div style={{ position: 'relative', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
           {record.declared_image && record.declared_image.startsWith('http') ? (
             <>
               <img
                 src={record.declared_image}
                 alt="申报图片"
-                style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa' }}
+                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
                 onClick={() => handlePreviewImage(record.declared_image!)}
                 onError={e => {
-                  (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="%23f5f5f5"/><text x="20" y="22" font-size="10" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                  (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
                 }}
               />
               {/* 删除按钮悬浮在右上角 */}
@@ -483,16 +483,16 @@ const HsCodeManagement: React.FC = () => {
                 <Button
                   type="primary"
                   shape="circle"
-                  icon={<DeleteOutlined style={{ fontSize: 12 }} />}
+                  icon={<DeleteOutlined style={{ fontSize: 14 }} />}
                   size="small"
                   danger
                   style={{
                     position: 'absolute',
-                    top: -8,
-                    right: -8,
+                    top: -10,
+                    right: -10,
                     zIndex: 2,
-                    width: 22,
-                    height: 22,
+                    width: 28,
+                    height: 28,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -502,24 +502,27 @@ const HsCodeManagement: React.FC = () => {
               </Popconfirm>
             </>
           ) : (
-            <Upload
-              accept="image/*"
-              showUploadList={false}
-              beforeUpload={(file) => {
-                handleImageUpload(record.parent_sku, file);
-                return false;
-              }}
-              disabled={uploadingParentSku === record.parent_sku}
-            >
-              <Button
-                type="text"
-                size="small"
-                icon={<UploadOutlined />}
-                loading={uploadingParentSku === record.parent_sku}
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  handleImageUpload(record.parent_sku, file);
+                  return false;
+                }}
+                disabled={uploadingParentSku === record.parent_sku}
               >
-                上传
-              </Button>
-            </Upload>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<UploadOutlined />}
+                  loading={uploadingParentSku === record.parent_sku}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
+                >
+                  上传
+                </Button>
+              </Upload>
+            </div>
           )}
         </div>
       ),
