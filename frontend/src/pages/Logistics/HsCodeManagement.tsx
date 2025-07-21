@@ -75,6 +75,47 @@ const getImageUrl = (url: string) => {
   return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
+// 申报图片预览，兼容私有OSS签名URL
+const handlePreviewDeclaredImage = async (imageObjectKeyOrUrl: string) => {
+  let url = imageObjectKeyOrUrl;
+  // 不是http开头，认为是OSS objectKey，需要后端签名
+  if (url && !url.startsWith('http')) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      if (data.code === 0) {
+        url = data.url;
+      } else {
+        message.error('获取图片预览链接失败');
+        return;
+      }
+    } catch (e) {
+      message.error('获取图片预览链接失败');
+      return;
+    }
+  }
+  Modal.info({
+    title: '申报图片预览',
+    width: 600,
+    content: (
+      <div style={{ textAlign: 'center' }}>
+        <img
+          src={url}
+          alt="申报图片"
+          style={{
+            maxWidth: '100%',
+            maxHeight: '400px',
+            objectFit: 'contain',
+            border: '1px solid #d9d9d9',
+            borderRadius: '4px'
+          }}
+          onError={() => message.error('图片加载失败')}
+        />
+      </div>
+    )
+  });
+};
+
 const HsCodeManagement: React.FC = () => {
   // 状态管理
   const [data, setData] = useState<HsCode[]>([]);
@@ -475,7 +516,7 @@ const HsCodeManagement: React.FC = () => {
                 src={getImageUrl(record.declared_image)}
                 alt="申报图片"
                 style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
-                onClick={() => handlePreviewImage(getImageUrl(record.declared_image!))}
+                onClick={() => handlePreviewDeclaredImage(record.declared_image!)}
                 onError={e => {
                   (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
                 }}
@@ -882,7 +923,7 @@ const HsCodeManagement: React.FC = () => {
                       <Button
                         size="small"
                         icon={<EyeOutlined />}
-                        onClick={() => handlePreviewImage(editingRecord.declared_image!)}
+                        onClick={() => handlePreviewDeclaredImage(editingRecord.declared_image!)}
                       >
                         预览
                       </Button>
