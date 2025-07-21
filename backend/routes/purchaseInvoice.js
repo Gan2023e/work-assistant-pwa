@@ -2075,6 +2075,131 @@ router.post('/upload-amount-difference-screenshot', imageUpload.single('screensh
 
 
 
+// 导出采购订单数据
+router.post('/export-orders', async (req, res) => {
+  try {
+    const { 
+      seller_name, 
+      invoice_status, 
+      payment_account,
+      start_date,
+      end_date,
+      order_number,
+      invoice_number
+    } = req.body;
+
+    const whereCondition = {};
+    const includeCondition = [{
+      model: Invoice,
+      as: 'invoice',
+      required: false
+    }];
+    
+    if (seller_name) {
+      whereCondition.seller_name = { [Op.like]: `%${seller_name}%` };
+    }
+    
+    if (invoice_status) {
+      whereCondition.invoice_status = invoice_status;
+    }
+    
+    if (payment_account) {
+      whereCondition.payment_account = { [Op.like]: `%${payment_account}%` };
+    }
+    
+    if (order_number) {
+      const orderNumbers = order_number.split(',').map(num => num.trim()).filter(num => num);
+      if (orderNumbers.length > 0) {
+        whereCondition.order_number = { [Op.in]: orderNumbers };
+      }
+    }
+    
+    if (invoice_number) {
+      const invoiceNumbers = invoice_number.split(',').map(num => num.trim()).filter(num => num);
+      if (invoiceNumbers.length > 0) {
+        includeCondition[0].where = {
+          invoice_number: { [Op.in]: invoiceNumbers }
+        };
+      }
+    }
+    
+    if (start_date && end_date) {
+      whereCondition.order_date = {
+        [Op.between]: [start_date, end_date]
+      };
+    }
+    
+    // 获取所有匹配的数据
+    const orders = await PurchaseOrder.findAll({
+      where: whereCondition,
+      include: includeCondition,
+      order: [['order_date', 'DESC'], ['created_at', 'DESC']]
+    });
+    
+    // 准备Excel数据
+    const excelData = orders.map(order => ({
+      '订单编号': order.order_number,
+      '订单日期': order.order_date,
+      '卖家公司名': order.seller_name,
+      '买家公司名': order.payment_account,
+      '实付款(元)': order.amount,
+      '开票状态': order.invoice_status,
+      '发票号': order.invoice?.invoice_number || '',
+      '开票日期': order.invoice?.invoice_date || '',
+      '发票金额': order.invoice?.total_amount || '',
+      '税额': order.invoice?.tax_amount || '',
+      '税率': order.invoice?.tax_rate || '',
+      '发票类型': order.invoice?.invoice_type || '',
+      '发票状态': order.invoice?.status || '',
+      '备注': order.remarks || ''
+    }));
+    
+    // 创建工作簿
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 15 }, // 订单编号
+      { wch: 12 }, // 订单日期
+      { wch: 20 }, // 卖家公司名
+      { wch: 20 }, // 买家公司名
+      { wch: 12 }, // 实付款
+      { wch: 10 }, // 开票状态
+      { wch: 15 }, // 发票号
+      { wch: 12 }, // 开票日期
+      { wch: 12 }, // 发票金额
+      { wch: 10 }, // 税额
+      { wch: 8 },  // 税率
+      { wch: 15 }, // 发票类型
+      { wch: 10 }, // 发票状态
+      { wch: 30 }  // 备注
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    // 添加工作表到工作簿
+    XLSX.utils.book_append_sheet(workbook, worksheet, '采购订单数据');
+    
+    // 生成Excel文件
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    
+    // 设置响应头
+    const filename = `采购订单数据_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Length', excelBuffer.length);
+    
+    res.send(excelBuffer);
+    
+  } catch (error) {
+    console.error('导出失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '导出失败: ' + error.message
+    });
+  }
+});
+
 // 截图代理路由 - 解决CORS和权限问题
 router.get('/screenshot-proxy', async (req, res) => {
   try {

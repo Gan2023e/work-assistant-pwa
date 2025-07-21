@@ -34,7 +34,8 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   EyeOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload';
@@ -172,6 +173,77 @@ const PurchaseInvoice: React.FC = () => {
   const [batchImportModalVisible, setBatchImportModalVisible] = useState(false);
   const [batchImportResult, setBatchImportResult] = useState<any>(null);
   const [batchImportLoading, setBatchImportLoading] = useState(false);
+  
+  // 导出相关状态
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // 处理导出功能
+  const handleExport = async () => {
+    try {
+      setExportLoading(true);
+      
+      // 处理多行输入，将每行作为一个搜索条件
+      const processMultiLineInput = (input: string) => {
+        if (!input || input.trim() === '') return '';
+        return input.split('\n')
+          .map(line => line.trim())
+          .filter(line => line !== '')
+          .join(',');
+      };
+
+      const exportData = {
+        seller_name: filters.seller_name,
+        invoice_status: filters.invoice_status,
+        payment_account: filters.payment_account,
+        order_number: processMultiLineInput(filters.order_number),
+        invoice_number: processMultiLineInput(filters.invoice_number),
+        ...(filters.date_range ? {
+          start_date: filters.date_range[0],
+          end_date: filters.date_range[1]
+        } : {})
+      };
+      
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/export-orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(exportData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // 获取文件名
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = '采购订单数据.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+      
+      // 下载文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('导出成功');
+    } catch (error) {
+      console.error('导出失败:', error);
+      message.error('导出失败，请重试');
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   // 处理批量录入订单
   const handleBatchImport = async (file: File) => {
@@ -1486,6 +1558,13 @@ const PurchaseInvoice: React.FC = () => {
                 onClick={() => fetchPurchaseOrders()}
               >
                 刷新
+              </Button>
+              <Button 
+                icon={<DownloadOutlined />}
+                loading={exportLoading}
+                onClick={handleExport}
+              >
+                导出
               </Button>
 
             </Space>
