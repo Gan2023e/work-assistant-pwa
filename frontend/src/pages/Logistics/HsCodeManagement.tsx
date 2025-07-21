@@ -68,6 +68,13 @@ interface SearchParams {
   country?: string;
 }
 
+// 1. 增加图片URL处理函数
+const getImageUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const HsCodeManagement: React.FC = () => {
   // 状态管理
   const [data, setData] = useState<HsCode[]>([]);
@@ -462,13 +469,13 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => (
         <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
-          {record.declared_image && record.declared_image.startsWith('http') ? (
+          {record.declared_image ? (
             <>
               <img
-                src={record.declared_image}
+                src={getImageUrl(record.declared_image)}
                 alt="申报图片"
                 style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
-                onClick={() => handlePreviewImage(record.declared_image!)}
+                onClick={() => handlePreviewImage(getImageUrl(record.declared_image!))}
                 onError={e => {
                   (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
                 }}
