@@ -75,55 +75,6 @@ const getImageUrl = (url: string) => {
   return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
-const [signedImageUrls, setSignedImageUrls] = useState<Record<string, string>>({});
-
-// 获取签名URL（带缓存）
-const fetchSignedImageUrl = async (objectKey: string) => {
-  if (!objectKey) return '';
-  if (signedImageUrls[objectKey]) return signedImageUrls[objectKey];
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(objectKey)}`);
-    const data = await res.json();
-    if (data.code === 0) {
-      setSignedImageUrls(prev => ({ ...prev, [objectKey]: data.url }));
-      return data.url;
-    }
-  } catch {}
-  return '';
-};
-
-// 申报图片预览，统一用签名URL
-const handlePreviewDeclaredImage = async (imageObjectKeyOrUrl: string) => {
-  let url = imageObjectKeyOrUrl;
-  if (url && !url.startsWith('http')) {
-    url = await fetchSignedImageUrl(url);
-    if (!url) {
-      message.error('获取图片预览链接失败');
-      return;
-    }
-  }
-  Modal.info({
-    title: '申报图片预览',
-    width: 600,
-    content: (
-      <div style={{ textAlign: 'center' }}>
-        <img
-          src={url}
-          alt="申报图片"
-          style={{
-            maxWidth: '100%',
-            maxHeight: '400px',
-            objectFit: 'contain',
-            border: '1px solid #d9d9d9',
-            borderRadius: '4px'
-          }}
-          onError={() => message.error('图片加载失败')}
-        />
-      </div>
-    )
-  });
-};
-
 const HsCodeManagement: React.FC = () => {
   // 状态管理
   const [data, setData] = useState<HsCode[]>([]);
@@ -139,10 +90,58 @@ const HsCodeManagement: React.FC = () => {
   const [uploadingParentSku, setUploadingParentSku] = useState<string | null>(null);
   // 1. 新增图片缓存状态
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
-  
+  // 修复：将 signedImageUrls useState 移到组件内部
+  const [signedImageUrls, setSignedImageUrls] = useState<Record<string, string>>({});
   // Form实例
   const [form] = Form.useForm();
   const [searchForm] = Form.useForm();
+
+  // 获取签名URL（带缓存）
+  const fetchSignedImageUrl = async (objectKey: string) => {
+    if (!objectKey) return '';
+    if (signedImageUrls[objectKey]) return signedImageUrls[objectKey];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/oss-sign-url?objectKey=${encodeURIComponent(objectKey)}`);
+      const data = await res.json();
+      if (data.code === 0) {
+        setSignedImageUrls((prev: Record<string, string>) => ({ ...prev, [objectKey]: data.url }));
+        return data.url;
+      }
+    } catch {}
+    return '';
+  };
+
+  // 申报图片预览，统一用签名URL
+  const handlePreviewDeclaredImage = async (imageObjectKeyOrUrl: string) => {
+    let url = imageObjectKeyOrUrl;
+    if (url && !url.startsWith('http')) {
+      url = await fetchSignedImageUrl(url);
+      if (!url) {
+        message.error('获取图片预览链接失败');
+        return;
+      }
+    }
+    Modal.info({
+      title: '申报图片预览',
+      width: 600,
+      content: (
+        <div style={{ textAlign: 'center' }}>
+          <img
+            src={url}
+            alt="申报图片"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '400px',
+              objectFit: 'contain',
+              border: '1px solid #d9d9d9',
+              borderRadius: '4px'
+            }}
+            onError={() => message.error('图片加载失败')}
+          />
+        </div>
+      )
+    });
+  };
 
   // 获取HSCODE列表
   const fetchHsCodes = async (params?: SearchParams) => {
