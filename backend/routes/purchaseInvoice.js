@@ -2148,12 +2148,12 @@ router.post('/export-orders', async (req, res) => {
       '订单日期': order.order_date,
       '卖家公司名': order.seller_name,
       '买家公司名': order.payment_account,
-      '实付款(元)': order.amount,
+      '实付款(元)': Number(order.amount) || 0,
       '开票状态': order.invoice_status,
       '发票号': order.invoice?.invoice_number || '',
       '开票日期': order.invoice?.invoice_date || '',
-      '发票金额': order.invoice?.total_amount || '',
-      '税额': order.invoice?.tax_amount || '',
+      '发票金额': Number(order.invoice?.total_amount) || 0,
+      '税额': Number(order.invoice?.tax_amount) || 0,
       '税率': order.invoice?.tax_rate || '',
       '发票类型': order.invoice?.invoice_type || '',
       '发票状态': order.invoice?.status || '',
@@ -2164,7 +2164,7 @@ router.post('/export-orders', async (req, res) => {
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     
-    // 设置列宽
+    // 设置列宽和数字格式
     const colWidths = [
       { wch: 15 }, // 订单编号
       { wch: 12 }, // 订单日期
@@ -2182,6 +2182,31 @@ router.post('/export-orders', async (req, res) => {
       { wch: 30 }  // 备注
     ];
     worksheet['!cols'] = colWidths;
+    
+    // 设置数字列的格式
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+      // 实付款(元)列 (E列，索引4)
+      const amountCell = XLSX.utils.encode_cell({ r: R, c: 4 });
+      if (worksheet[amountCell]) {
+        worksheet[amountCell].t = 'n'; // 数字类型
+        worksheet[amountCell].z = '#,##0.00'; // 数字格式
+      }
+      
+      // 发票金额列 (I列，索引8)
+      const invoiceAmountCell = XLSX.utils.encode_cell({ r: R, c: 8 });
+      if (worksheet[invoiceAmountCell]) {
+        worksheet[invoiceAmountCell].t = 'n'; // 数字类型
+        worksheet[invoiceAmountCell].z = '#,##0.00'; // 数字格式
+      }
+      
+      // 税额列 (J列，索引9)
+      const taxAmountCell = XLSX.utils.encode_cell({ r: R, c: 9 });
+      if (worksheet[taxAmountCell]) {
+        worksheet[taxAmountCell].t = 'n'; // 数字类型
+        worksheet[taxAmountCell].z = '#,##0.00'; // 数字格式
+      }
+    }
     
     // 添加工作表到工作簿
     XLSX.utils.book_append_sheet(workbook, worksheet, '采购订单数据');
