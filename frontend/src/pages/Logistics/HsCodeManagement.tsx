@@ -462,7 +462,7 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          {record.declared_image ? (
+          {record.declared_image && record.declared_image.startsWith('http') ? (
             <Space>
               {/* 缩略图 */}
               <img
@@ -470,6 +470,7 @@ const HsCodeManagement: React.FC = () => {
                 alt="申报图片"
                 style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', cursor: 'pointer' }}
                 onClick={() => handlePreviewImage(record.declared_image!)}
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
               <Button
                 type="text"

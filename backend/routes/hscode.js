@@ -337,18 +337,15 @@ router.delete('/:parentSku/image', async (req, res) => {
     }
     // 判断是否为OSS图片链接
     let ossDeleteResult = null;
-    if (/aliyuncs\.com\//.test(hsCode.declared_image)) {
-      // 提取objectName
-      const url = hsCode.declared_image;
-      // 只取域名后的路径
-      const match = url.match(/aliyuncs\.com\/(.+)$/);
-      if (match && match[1]) {
-        const objectName = match[1];
-        try {
-          ossDeleteResult = await deleteFromOSS(objectName);
-        } catch (e) {
-          console.warn('OSS图片删除失败:', e.message);
-        }
+    if (/aliyuncs\.com[\/:]/.test(hsCode.declared_image)) {
+      // 更健壮地提取objectName
+      try {
+        const urlObj = new URL(hsCode.declared_image);
+        // objectName为pathname去掉开头的/
+        const objectName = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+        ossDeleteResult = await deleteFromOSS(objectName);
+      } catch (e) {
+        console.warn('OSS图片删除失败:', e.message);
       }
     } else {
       // 删除本地文件
