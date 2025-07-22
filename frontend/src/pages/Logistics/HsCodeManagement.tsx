@@ -21,7 +21,8 @@ import {
   Switch,
   Badge,
   Empty,
-  Spin
+  Spin,
+  Image // 添加Image组件
 } from 'antd';
 import {
   SearchOutlined,
@@ -68,12 +69,12 @@ interface SearchParams {
   country?: string;
 }
 
-// 优化图片URL处理函数，统一通过image-proxy代理
-const getImageUrl = (url: string) => {
-  if (!url) return '';
-  // OSS直链或objectKey都走代理
-  return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(url)}`;
-};
+// 1. 增加图片URL处理函数
+// const getImageUrl = (url: string) => {
+//   if (!url) return '';
+//   if (url.startsWith('http')) return url;
+//   return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+// };
 
 const HsCodeManagement: React.FC = () => {
   // 状态管理
@@ -357,19 +358,15 @@ const HsCodeManagement: React.FC = () => {
     setImagePreviewVisible(true);
   };
 
-  // 优化图片预览Modal逻辑，参考采购发票管理
+  // 申报图片预览，统一通过后端代理接口
   const handlePreviewDeclaredImage = (imageUrl: string) => {
-    if (!imageUrl) {
-      message.warning('无图片可预览');
-      return;
-    }
-    const url = getImageUrl(imageUrl);
+    const url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
     Modal.info({
       title: '申报图片预览',
       width: 600,
       content: (
         <div style={{ textAlign: 'center' }}>
-          <img
+          <Image
             src={url}
             alt="申报图片"
             style={{
@@ -379,9 +376,7 @@ const HsCodeManagement: React.FC = () => {
               border: '1px solid #d9d9d9',
               borderRadius: '4px'
             }}
-            onError={e => {
-              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="200" height="150" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="150" fill="%23f5f5f5"/><text x="100" y="80" font-size="18" text-anchor="middle" fill="%23ccc">无图</text></svg>';
-            }}
+            onError={() => message.error('图片加载失败')}
           />
         </div>
       )
@@ -499,18 +494,28 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => {
         const imageUrl = record.declared_image;
-        const url = getImageUrl(imageUrl || '');
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
             {imageUrl ? (
               <>
-                <img
-                  src={url}
+                <Image
+                  width={64}
+                  height={64}
+                  src={`${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`}
                   alt="申报图片"
-                  style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
-                  onClick={() => handlePreviewDeclaredImage(imageUrl)}
-                  onError={e => {
-                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                  style={{ 
+                    objectFit: 'cover', 
+                    borderRadius: 6, 
+                    border: '1px solid #eee', 
+                    cursor: 'pointer', 
+                    background: '#fafafa' 
+                  }}
+                  placeholder={
+                    <Spin size="small" />
+                  }
+                  preview={{
+                    mask: <EyeOutlined style={{ color: '#fff' }} />,
+                    src: `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`
                   }}
                 />
                 {/* 删除按钮悬浮在右上角 */}
@@ -899,16 +904,22 @@ const HsCodeManagement: React.FC = () => {
             <div>
               {editingRecord?.declared_image ? (
                 <div style={{ marginBottom: 16 }}>
-                  <img
+                  <Image
+                    width={200}
                     src={`${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(editingRecord.declared_image)}`}
                     alt="当前申报图片"
                     style={{
-                      maxWidth: '200px',
-                      maxHeight: '150px',
                       objectFit: 'contain',
                       border: '1px solid #d9d9d9',
                       borderRadius: '6px',
                       padding: '8px'
+                    }}
+                    placeholder={
+                      <Spin size="small" />
+                    }
+                    preview={{
+                      mask: <EyeOutlined style={{ color: '#fff' }} />,
+                      src: `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(editingRecord.declared_image)}`
                     }}
                   />
                   <div style={{ marginTop: 8 }}>
