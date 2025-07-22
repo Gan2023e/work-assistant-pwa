@@ -69,9 +69,10 @@ interface SearchParams {
 }
 
 // 1. 增加图片URL处理函数
-const getImageProxyUrl = (url: string) => {
+const getImageUrl = (url: string) => {
   if (!url) return '';
-  return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(url)}`;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 const HsCodeManagement: React.FC = () => {
@@ -492,7 +493,7 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => {
         const imageUrl = record.declared_image;
-        const url = imageUrl ? getImageProxyUrl(imageUrl) : '';
+        const url = imageUrl ? `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}` : '';
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
             {imageUrl ? (
@@ -893,7 +894,7 @@ const HsCodeManagement: React.FC = () => {
               {editingRecord?.declared_image ? (
                 <div style={{ marginBottom: 16 }}>
                   <img
-                    src={getImageProxyUrl(editingRecord.declared_image)}
+                    src={`${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(editingRecord.declared_image)}`}
                     alt="当前申报图片"
                     style={{
                       maxWidth: '200px',
@@ -1011,7 +1012,7 @@ const HsCodeManagement: React.FC = () => {
         {previewImageUrl && (
           <div style={{ textAlign: 'center' }}>
             <img
-              src={getImageProxyUrl(previewImageUrl)}
+              src={previewImageUrl}
               alt="申报图片"
               style={{
                 maxWidth: '100%',
