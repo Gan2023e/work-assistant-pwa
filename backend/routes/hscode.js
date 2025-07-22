@@ -288,9 +288,11 @@ router.post('/:parentSku/upload-image', upload.single('image'), async (req, res)
     const ossResult = await uploadToOSS(buffer, req.file.originalname, 'hscode-images');
     // 删除本地临时文件
     fs.unlinkSync(req.file.path);
+    // 生成代理URL
+    const proxyUrl = `/api/hscode/image-proxy?url=${encodeURIComponent(ossResult.name)}`;
     // 更新数据库记录
     await HsCode.update({
-      declared_image: ossResult.url
+      declared_image: proxyUrl
     }, {
       where: { parent_sku: parentSku }
     });
@@ -299,7 +301,7 @@ router.post('/:parentSku/upload-image', upload.single('image'), async (req, res)
       code: 0,
       message: '图片上传成功',
       data: {
-        declared_image: ossResult.url,
+        declared_image: proxyUrl,
         record: updatedHsCode
       }
     });
