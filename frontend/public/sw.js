@@ -133,14 +133,15 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   } else if (event.data && event.data.type === 'CHECK_UPDATE') {
     // 检查更新
-    if (event.source) {
+    if (event.source && typeof event.source.postMessage === 'function') {
       event.source.postMessage({
         type: 'UPDATE_CHECK_RESULT',
         hasUpdate: true,
         version: APP_VERSION
       });
     } else {
-      console.warn('No source available for message response');
+      console.warn('No source or postMessage for message response', event);
+      return;
     }
   }
 });
