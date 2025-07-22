@@ -562,7 +562,7 @@ const HsCodeManagement: React.FC = () => {
                 <img
                   src={url}
                   alt="申报图片"
-                  style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
+                  style={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
                   onClick={() => handlePreviewDeclaredImage(imageUrl)}
                   onError={e => {
                     const target = e.target as HTMLImageElement;
