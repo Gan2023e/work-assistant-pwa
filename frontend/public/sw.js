@@ -66,8 +66,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // 如果网络请求成功，更新缓存
-          if (response && response.status === 200) {
+          // 如果网络请求成功，且响应可缓存，更新缓存
+          if (
+            response &&
+            response.status === 200 &&
+            (response.type === 'basic' || response.type === 'cors')
+          ) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
@@ -101,7 +105,11 @@ self.addEventListener('fetch', (event) => {
           // 总是尝试从网络获取最新版本
           const fetchPromise = fetch(event.request)
             .then((response) => {
-              if (response && response.status === 200) {
+              if (
+                response &&
+                response.status === 200 &&
+                (response.type === 'basic' || response.type === 'cors')
+              ) {
                 const responseToCache = response.clone();
                 caches.open(CACHE_NAME)
                   .then((cache) => {
