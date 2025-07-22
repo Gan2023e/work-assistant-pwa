@@ -71,12 +71,8 @@ self.addEventListener('fetch', (event) => {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
-                try {
-                  if (event.request.method === 'GET') {
-                    cache.put(event.request, responseToCache);
-                  }
-                } catch (error) {
-                  console.error('Failed to cache resource:', event.request.url, error);
+                if (event.request.method === 'GET') {
+                  cache.put(event.request, responseToCache);
                 }
               });
           }
@@ -91,9 +87,9 @@ self.addEventListener('fetch', (event) => {
               }
               // 如果是导航请求，返回离线页面
               if (event.request.mode === 'navigate') {
-                return caches.match('/offline.html').then(r => r || new Response('Network error', { status: 408, statusText: 'Network error' }));
+                return caches.match('/offline.html');
               }
-              return new Response('Network error', { status: 408, statusText: 'Network error' });
+              return caches.match('/');
             });
         })
     );
@@ -109,18 +105,12 @@ self.addEventListener('fetch', (event) => {
                 const responseToCache = response.clone();
                 caches.open(CACHE_NAME)
                   .then((cache) => {
-                    try {
-                      cache.put(event.request, responseToCache);
-                    } catch (error) {
-                      console.error('Failed to cache resource:', event.request.url, error);
-                    }
+                    cache.put(event.request, responseToCache);
                   });
               }
               return response;
             })
-            .catch(() => {
-              return cachedResponse || new Response('Network error', { status: 408, statusText: 'Network error' });
-            });
+            .catch(() => cachedResponse);
 
           // 如果有缓存，立即返回，同时在后台更新
           return cachedResponse || fetchPromise;
@@ -135,16 +125,11 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   } else if (event.data && event.data.type === 'CHECK_UPDATE') {
     // 检查更新
-    if (event.source && typeof event.source.postMessage === 'function') {
-      event.source.postMessage({
-        type: 'UPDATE_CHECK_RESULT',
-        hasUpdate: true,
-        version: APP_VERSION
-      });
-    } else {
-      console.warn('No source or postMessage for message response', event);
-      return;
-    }
+    event.ports[0].postMessage({
+      type: 'UPDATE_CHECK_RESULT',
+      hasUpdate: true,
+      version: APP_VERSION
+    });
   }
 });
 
