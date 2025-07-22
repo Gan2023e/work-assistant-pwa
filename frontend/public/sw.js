@@ -133,11 +133,13 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   } else if (event.data && event.data.type === 'CHECK_UPDATE') {
     // 检查更新
-    event.ports[0].postMessage({
-      type: 'UPDATE_CHECK_RESULT',
-      hasUpdate: true,
-      version: APP_VERSION
-    });
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({
+        type: 'UPDATE_CHECK_RESULT',
+        hasUpdate: true,
+        version: APP_VERSION
+      });
+    }
   }
 });
 

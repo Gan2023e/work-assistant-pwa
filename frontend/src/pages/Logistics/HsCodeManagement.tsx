@@ -376,10 +376,14 @@ const HsCodeManagement: React.FC = () => {
 
   // 申报图片预览，统一通过后端代理接口
   const handlePreviewDeclaredImage = (imageUrl: string) => {
-    // 兼容OSS直链和objectName，统一通过后端代理接口
+    // 数据库中的declared_image已经是代理URL，直接使用
     let url = imageUrl;
     if (imageUrl) {
-      if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+      if (imageUrl.startsWith('/api/hscode/image-proxy')) {
+        // 已经是代理URL，直接使用
+        url = `${API_BASE_URL}${imageUrl}`;
+      } else if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+        // OSS直链，提取objectKey
         try {
           const u = new URL(imageUrl);
           const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
@@ -388,6 +392,7 @@ const HsCodeManagement: React.FC = () => {
           url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
         }
       } else {
+        // 其他情况当作objectKey处理
         url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
       }
     }
@@ -533,7 +538,11 @@ const HsCodeManagement: React.FC = () => {
         const imageUrl = record.declared_image;
         let url = '';
         if (imageUrl) {
-          if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+          if (imageUrl.startsWith('/api/hscode/image-proxy')) {
+            // 已经是代理URL，直接使用
+            url = `${API_BASE_URL}${imageUrl}`;
+          } else if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+            // OSS直链，提取objectKey
             try {
               const u = new URL(imageUrl);
               const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
@@ -542,6 +551,7 @@ const HsCodeManagement: React.FC = () => {
               url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
             }
           } else {
+            // 其他情况当作objectKey处理
             url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
           }
         }
@@ -950,7 +960,11 @@ const HsCodeManagement: React.FC = () => {
                     src={(() => {
                       const imageUrl = editingRecord.declared_image;
                       if (imageUrl) {
-                        if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+                        if (imageUrl.startsWith('/api/hscode/image-proxy')) {
+                          // 已经是代理URL，直接使用
+                          return `${API_BASE_URL}${imageUrl}`;
+                        } else if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+                          // OSS直链，提取objectKey
                           try {
                             const u = new URL(imageUrl);
                             const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
@@ -959,6 +973,7 @@ const HsCodeManagement: React.FC = () => {
                             return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
                           }
                         } else {
+                          // 其他情况当作objectKey处理
                           return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
                         }
                       }
