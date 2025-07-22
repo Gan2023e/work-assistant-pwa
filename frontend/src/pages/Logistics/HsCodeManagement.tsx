@@ -406,7 +406,14 @@ const HsCodeManagement: React.FC = () => {
               border: '1px solid #d9d9d9',
               borderRadius: '4px'
             }}
-            onError={() => message.error('图片加载失败')}
+            onError={() => {
+              message.error('图片加载失败，可能是OSS配置问题');
+              // 显示占位图片
+              const img = document.querySelector('img[alt="申报图片"]') as HTMLImageElement;
+              if (img) {
+                img.src = 'data:image/svg+xml;utf8,<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="300" fill="%23f5f5f5"/><text x="200" y="150" font-size="16" text-anchor="middle" fill="%23999">OSS配置未完成，请联系管理员</text></svg>';
+              }
+            }}
           />
         </div>
       )
@@ -548,7 +555,9 @@ const HsCodeManagement: React.FC = () => {
                   style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee', cursor: 'pointer', background: '#fafafa', display: 'block', margin: '0 auto' }}
                   onClick={() => handlePreviewDeclaredImage(imageUrl)}
                   onError={e => {
-                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="14" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+                    const target = e.target as HTMLImageElement;
+                    target.src = 'data:image/svg+xml;utf8,<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="%23f5f5f5"/><text x="32" y="36" font-size="12" text-anchor="middle" fill="%23999">OSS未配置</text></svg>';
+                    target.title = 'OSS配置未完成，请联系管理员';
                   }}
                 />
                 {/* 删除按钮悬浮在右上角 */}
