@@ -91,9 +91,9 @@ self.addEventListener('fetch', (event) => {
               }
               // 如果是导航请求，返回离线页面
               if (event.request.mode === 'navigate') {
-                return caches.match('/offline.html');
+                return caches.match('/offline.html').then(r => r || new Response('Network error', { status: 408, statusText: 'Network error' }));
               }
-              return caches.match('/');
+              return new Response('Network error', { status: 408, statusText: 'Network error' });
             });
         })
     );
@@ -118,7 +118,9 @@ self.addEventListener('fetch', (event) => {
               }
               return response;
             })
-            .catch(() => cachedResponse);
+            .catch(() => {
+              return cachedResponse || new Response('Network error', { status: 408, statusText: 'Network error' });
+            });
 
           // 如果有缓存，立即返回，同时在后台更新
           return cachedResponse || fetchPromise;
