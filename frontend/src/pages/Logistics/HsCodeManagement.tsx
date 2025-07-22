@@ -68,11 +68,11 @@ interface SearchParams {
   country?: string;
 }
 
-// 1. 增加图片URL处理函数
+// 优化图片URL处理函数，统一通过image-proxy代理
 const getImageUrl = (url: string) => {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  // OSS直链或objectKey都走代理
+  return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(url)}`;
 };
 
 const HsCodeManagement: React.FC = () => {
@@ -357,9 +357,13 @@ const HsCodeManagement: React.FC = () => {
     setImagePreviewVisible(true);
   };
 
-  // 申报图片预览，统一通过后端代理接口
+  // 优化图片预览Modal逻辑，参考采购发票管理
   const handlePreviewDeclaredImage = (imageUrl: string) => {
-    const url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    if (!imageUrl) {
+      message.warning('无图片可预览');
+      return;
+    }
+    const url = getImageUrl(imageUrl);
     Modal.info({
       title: '申报图片预览',
       width: 600,
@@ -375,7 +379,9 @@ const HsCodeManagement: React.FC = () => {
               border: '1px solid #d9d9d9',
               borderRadius: '4px'
             }}
-            onError={() => message.error('图片加载失败')}
+            onError={e => {
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg width="200" height="150" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="150" fill="%23f5f5f5"/><text x="100" y="80" font-size="18" text-anchor="middle" fill="%23ccc">无图</text></svg>';
+            }}
           />
         </div>
       )
@@ -493,7 +499,7 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => {
         const imageUrl = record.declared_image;
-        const url = imageUrl ? `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}` : '';
+        const url = getImageUrl(imageUrl || '');
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
             {imageUrl ? (
