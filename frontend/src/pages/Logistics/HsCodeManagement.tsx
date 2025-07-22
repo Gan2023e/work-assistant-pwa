@@ -340,7 +340,17 @@ const HsCodeManagement: React.FC = () => {
       const result = await response.json();
       
       if (result.code === 0) {
-        message.success('申报图片删除成功');
+        // 检查OSS删除结果
+        if (result.ossDeleteResult) {
+          if (result.ossDeleteResult.success) {
+            message.success('申报图片删除成功（OSS文件已删除）');
+          } else {
+            message.warning('申报图片已从数据库删除，但OSS文件删除失败，请联系管理员');
+            console.warn('OSS删除失败:', result.ossDeleteResult);
+          }
+        } else {
+          message.success('申报图片删除成功');
+        }
         await fetchHsCodes(searchParams);
       } else {
         throw new Error(result.message || '删除失败');
@@ -573,9 +583,11 @@ const HsCodeManagement: React.FC = () => {
                 {/* 删除按钮悬浮在右上角 */}
                 <Popconfirm
                   title="确定要删除这张申报图片吗？"
+                  description="此操作将同时删除OSS中的文件"
                   onConfirm={() => handleDeleteImage(record.parent_sku)}
-                  okText="确定"
+                  okText="确定删除"
                   cancelText="取消"
+                  okType="danger"
                 >
                   <Button
                     type="primary"
@@ -1000,9 +1012,11 @@ const HsCodeManagement: React.FC = () => {
                       </Button>
                       <Popconfirm
                         title="确定要删除当前图片吗？"
+                        description="此操作将同时删除OSS中的文件"
                         onConfirm={() => handleDeleteImage(editingRecord.parent_sku)}
-                        okText="确定"
+                        okText="确定删除"
                         cancelText="取消"
+                        okType="danger"
                       >
                         <Button
                           size="small"

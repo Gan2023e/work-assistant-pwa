@@ -397,23 +397,47 @@ router.delete('/:parentSku/image', async (req, res) => {
         message: '该记录没有申报图片'
       });
     }
-    // 判断是否为OSS图片链接
+    // 判断是否为OSS图片链接并提取objectName
     let ossDeleteResult = null;
-    if (/aliyuncs\.com[\/:]/.test(hsCode.declared_image)) {
-      // 更健壮地提取objectName
+    let objectName = null;
+    
+    // 检查是否为代理URL格式
+    if (hsCode.declared_image && hsCode.declared_image.includes('/api/hscode/image-proxy')) {
+      try {
+        // 从代理URL中提取objectName
+        const urlParams = new URLSearchParams(hsCode.declared_image.split('?')[1]);
+        objectName = urlParams.get('url');
+        if (objectName) {
+          objectName = decodeURIComponent(objectName);
+        }
+      } catch (e) {
+        console.warn('解析代理URL失败:', e.message);
+      }
+    } else if (/aliyuncs\.com[\/:]/.test(hsCode.declared_image)) {
+      // 直接OSS链接格式
       try {
         const urlObj = new URL(hsCode.declared_image);
-        // objectName为pathname去掉开头的/
-        const objectName = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+        objectName = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+      } catch (e) {
+        console.warn('解析OSS URL失败:', e.message);
+      }
+    }
+    
+    // 如果成功提取到objectName，尝试删除OSS文件
+    if (objectName) {
+      try {
         ossDeleteResult = await deleteFromOSS(objectName);
+        console.log('🗑️ 尝试删除OSS文件:', objectName, '结果:', ossDeleteResult);
       } catch (e) {
         console.warn('OSS图片删除失败:', e.message);
+        ossDeleteResult = { success: false, error: e.message };
       }
     } else {
       // 删除本地文件
       const imagePath = path.join(__dirname, '../uploads/hscode-images', path.basename(hsCode.declared_image));
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath);
+        console.log('🗑️ 删除本地文件:', imagePath);
       }
     }
     // 更新数据库记录
