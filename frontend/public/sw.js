@@ -71,8 +71,12 @@ self.addEventListener('fetch', (event) => {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
-                if (event.request.method === 'GET') {
-                  cache.put(event.request, responseToCache);
+                try {
+                  if (event.request.method === 'GET') {
+                    cache.put(event.request, responseToCache);
+                  }
+                } catch (error) {
+                  console.error('Failed to cache resource:', event.request.url, error);
                 }
               });
           }
@@ -105,7 +109,11 @@ self.addEventListener('fetch', (event) => {
                 const responseToCache = response.clone();
                 caches.open(CACHE_NAME)
                   .then((cache) => {
-                    cache.put(event.request, responseToCache);
+                    try {
+                      cache.put(event.request, responseToCache);
+                    } catch (error) {
+                      console.error('Failed to cache resource:', event.request.url, error);
+                    }
                   });
               }
               return response;
@@ -125,11 +133,15 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   } else if (event.data && event.data.type === 'CHECK_UPDATE') {
     // 检查更新
-    event.ports[0].postMessage({
-      type: 'UPDATE_CHECK_RESULT',
-      hasUpdate: true,
-      version: APP_VERSION
-    });
+    if (event.source) {
+      event.source.postMessage({
+        type: 'UPDATE_CHECK_RESULT',
+        hasUpdate: true,
+        version: APP_VERSION
+      });
+    } else {
+      console.warn('No source available for message response');
+    }
   }
 });
 
