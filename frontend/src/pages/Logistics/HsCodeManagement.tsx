@@ -353,13 +353,44 @@ const HsCodeManagement: React.FC = () => {
 
   // 预览图片
   const handlePreviewImage = (imageUrl: string) => {
-    setPreviewImageUrl(imageUrl); // 直接用OSS链接
+    // 兼容OSS直链和objectName，统一通过后端代理接口
+    let url = imageUrl;
+    if (imageUrl) {
+      if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+        // OSS直链，提取objectKey
+        try {
+          const u = new URL(imageUrl);
+          const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
+          url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(objectKey)}`;
+        } catch {
+          url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+        }
+      } else {
+        // 其他情况直接走代理
+        url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+      }
+    }
+    setPreviewImageUrl(url);
     setImagePreviewVisible(true);
   };
 
   // 申报图片预览，统一通过后端代理接口
   const handlePreviewDeclaredImage = (imageUrl: string) => {
-    const url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    // 兼容OSS直链和objectName，统一通过后端代理接口
+    let url = imageUrl;
+    if (imageUrl) {
+      if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+        try {
+          const u = new URL(imageUrl);
+          const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
+          url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(objectKey)}`;
+        } catch {
+          url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+        }
+      } else {
+        url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+      }
+    }
     Modal.info({
       title: '申报图片预览',
       width: 600,
@@ -493,7 +524,20 @@ const HsCodeManagement: React.FC = () => {
       align: 'center',
       render: (_, record) => {
         const imageUrl = record.declared_image;
-        const url = imageUrl ? `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}` : '';
+        let url = '';
+        if (imageUrl) {
+          if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+            try {
+              const u = new URL(imageUrl);
+              const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
+              url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(objectKey)}`;
+            } catch {
+              url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+            }
+          } else {
+            url = `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+          }
+        }
         return (
           <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
             {imageUrl ? (
@@ -894,7 +938,23 @@ const HsCodeManagement: React.FC = () => {
               {editingRecord?.declared_image ? (
                 <div style={{ marginBottom: 16 }}>
                   <img
-                    src={`${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(editingRecord.declared_image)}`}
+                    src={(() => {
+                      const imageUrl = editingRecord.declared_image;
+                      if (imageUrl) {
+                        if (imageUrl.startsWith('http') && imageUrl.includes('aliyuncs.com')) {
+                          try {
+                            const u = new URL(imageUrl);
+                            const objectKey = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
+                            return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(objectKey)}`;
+                          } catch {
+                            return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+                          }
+                        } else {
+                          return `${API_BASE_URL}/api/hscode/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+                        }
+                      }
+                      return '';
+                    })()}
                     alt="当前申报图片"
                     style={{
                       maxWidth: '200px',
