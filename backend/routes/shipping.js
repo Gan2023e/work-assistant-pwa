@@ -955,19 +955,19 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// 获取合并的发货需求和库存数据 - 优化后的高性能查询
+// 获取Amazon FBA专用发货数据 - 专注FBA渠道的高性能查询
 router.get('/merged-data', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求 - 优化后的批量查询');
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA发货数据查询请求');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 重新设计的三步映射流程 - 批量获取库存和Amazon SKU');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: Amazon FBA专用三步映射流程');
     
-    // 重新设计的映射流程：三步整合成一个SQL语句
-    // 步骤1: 从listings_sku获取包含AMAZON的fulfillment-channel数据
+    // FBA专用映射流程：三步整合成一个SQL语句
+    // 步骤1: 从listings_sku获取包含AMAZON的fulfillment-channel数据（只要FBA渠道）
     // 步骤2: 通过seller-sku与amz_sku、site字段关联pbi_amzsku_sku表
-    // 步骤3: 通过local_sku与sku、country字段关联local_boxes表，得到真正的Amazon SKU
+    // 步骤3: 通过local_sku与sku、country字段关联local_boxes表，得到Amazon FBA库存
     const inventoryWithMappingQuery = `
       SELECT 
         lb.sku as local_sku,
@@ -993,38 +993,11 @@ router.get('/merged-data', async (req, res) => {
     `;
     
     const inventoryWithMapping = await sequelize.query(inventoryWithMappingQuery, {
-      type: sequelize.QueryTypes.SELECT,
-      raw: true
-    });
+            type: sequelize.QueryTypes.SELECT,
+            raw: true
+          });
 
-    console.log('\x1b[33m%s\x1b[0m', `📦 Amazon FBA库存数据: ${inventoryWithMapping.length} 条`);
-    
-    // 1.1. 获取未匹配到Amazon FBA的库存数据（使用LEFT JOIN获取所有库存）
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1.1: 获取未匹配Amazon FBA的库存数据');
-    
-    const allInventoryQuery = `
-      SELECT 
-        lb.sku as local_sku,
-        lb.country,
-        COALESCE(asm.amz_sku, '') as amz_sku,
-        COALESCE(asm.site, '') as site,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
-        SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
-        SUM(lb.total_quantity) as total_available
-      FROM local_boxes lb
-      LEFT JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      WHERE lb.total_quantity != 0
-      GROUP BY lb.sku, lb.country, asm.amz_sku, asm.site
-      HAVING SUM(lb.total_quantity) != 0
-    `;
-    
-    const allInventory = await sequelize.query(allInventoryQuery, {
-      type: sequelize.QueryTypes.SELECT,
-      raw: true
-    });
-    
-    console.log('\x1b[33m%s\x1b[0m', `📦 全部库存数据: ${allInventory.length} 条`);
+        console.log('\x1b[33m%s\x1b[0m', `📦 Amazon FBA库存数据: ${inventoryWithMapping.length} 条`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 批量获取发货需求数据');
     
@@ -1070,12 +1043,12 @@ router.get('/merged-data', async (req, res) => {
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 构建优化的库存映射表');
+        console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 构建Amazon FBA库存映射表');
     
-    // 4. 构建库存映射表，优先使用Amazon FBA数据，然后补充其他库存数据
+    // 4. 专注FBA发货：只使用Amazon FBA库存数据
     const inventoryMap = new Map();
     
-    // 4.1. 首先添加Amazon FBA库存数据（最高优先级）
+    // 只添加Amazon FBA库存数据（专门用于FBA发货）
     inventoryWithMapping.forEach(inv => {
       const key = `${inv.amazon_sku}_${inv.country}`;
       inventoryMap.set(key, {
@@ -1092,37 +1065,6 @@ router.get('/merged-data', async (req, res) => {
         data_source: 'amazon_fba'
       });
       console.log(`✅ Amazon FBA库存: ${key} (${inv.fulfillment_channel})`);
-    });
-    
-    // 4.2. 添加未匹配Amazon FBA的其他库存数据
-    allInventory.forEach(inv => {
-      const fbaKey = inv.amz_sku ? `${inv.amz_sku}_${inv.country}` : null;
-      const localKey = `${inv.local_sku}_${inv.country}`;
-      
-      // 检查这个库存是否已经作为Amazon FBA数据存在
-      const existsAsFBA = fbaKey && inventoryMap.has(fbaKey);
-      
-      if (!existsAsFBA) {
-        // 使用映射的amz_sku或local_sku作为键
-        const key = inv.amz_sku ? `${inv.amz_sku}_${inv.country}` : localKey;
-        
-        if (!inventoryMap.has(key)) {
-          inventoryMap.set(key, {
-            local_sku: inv.local_sku,
-            amz_sku: inv.amz_sku || inv.local_sku,
-            amazon_sku: inv.amz_sku || inv.local_sku,
-            site: inv.site,
-            fulfillment_channel: '',  // 非Amazon FBA数据
-            whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
-            whole_box_count: parseInt(inv.whole_box_count) || 0,
-            mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
-            total_available: parseInt(inv.total_available) || 0,
-            country: inv.country,
-            data_source: inv.amz_sku ? 'mapped' : 'unmapped'
-          });
-          console.log(`📦 其他库存: ${key} (${inv.amz_sku ? '已映射' : '未映射'})`);
-        }
-      }
     });
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 合并发货需求和库存数据 - 实现同SKU库存去重');
@@ -1151,7 +1093,7 @@ router.get('/merged-data', async (req, res) => {
 
       // 从批量查询结果中获取已发货数量
       const shippedQuantity = shippedQuantitiesMap.get(need.record_num) || 0;
-      
+
       // 计算剩余需求数量
       const remainingQuantity = (need.ori_quantity || 0) - shippedQuantity;
 
@@ -1207,24 +1149,15 @@ router.get('/merged-data', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', `🔄 过滤前需求记录: ${mergedFromNeeds.length} 条, 过滤后: ${filteredNeedsData.length} 条`);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤6: 处理仅库存记录');
+        console.log('\x1b[33m%s\x1b[0m', '🔄 步骤6: 处理有FBA库存但无需求的记录');
     
-    // 6. 处理有库存但无需求的记录
+    // 6. 只处理有Amazon FBA库存但无需求的记录
     const needsSkuSet = new Set(filteredNeedsData.map(need => `${need.amz_sku}_${need.country}`));
     const inventoryOnlyRecords = [];
     
     inventoryMap.forEach((inv, key) => {
-      // 检查是否有对应的需求记录
+      // 检查是否有对应的需求记录（只处理Amazon FBA库存）
       if (!needsSkuSet.has(key) && inv.total_available > 0) {
-        let status;
-        if (inv.data_source === 'amazon_fba') {
-          status = '有库存无需求(Amazon FBA)';
-        } else if (inv.data_source === 'mapped') {
-          status = '有库存无需求(已映射)';
-        } else {
-          status = '库存未映射';
-        }
-        
         inventoryOnlyRecords.push({
           record_num: -1 - inventoryOnlyRecords.length,
           need_num: '',
@@ -1237,7 +1170,7 @@ router.get('/merged-data', async (req, res) => {
           shipping_method: '',
           marketplace: '',
           country: inv.country,
-          status: status,
+          status: '有FBA库存无需求',
           created_at: new Date().toISOString(),
           // 库存信息
           whole_box_quantity: inv.whole_box_quantity,
@@ -1246,8 +1179,8 @@ router.get('/merged-data', async (req, res) => {
           total_available: inv.total_available,
           shortage: 0,
           data_source: 'inventory',
-          inventory_source: inv.data_source,
-          mapping_method: 'redesigned_three_step_mapping'
+          inventory_source: 'amazon_fba',
+          mapping_method: 'fba_focused_mapping'
         });
       }
     });
@@ -1255,49 +1188,43 @@ router.get('/merged-data', async (req, res) => {
     // 7. 合并所有数据
     const allMergedData = [...filteredNeedsData, ...inventoryOnlyRecords];
     
-    // 8. 统计信息
+    // 8. 统计信息（专注FBA发货）
     const optimizedStats = {
       发货需求记录: filteredNeedsData.length,
       过滤掉的已发货记录: mergedFromNeeds.length - filteredNeedsData.length,
-      仅库存记录: inventoryOnlyRecords.length,
-      Amazon_FBA库存: inventoryOnlyRecords.filter(r => r.inventory_source === 'amazon_fba').length,
-      已映射库存: inventoryOnlyRecords.filter(r => r.inventory_source === 'mapped').length,
-      未映射库存记录: inventoryOnlyRecords.filter(r => r.inventory_source === 'unmapped').length,
+      仅FBA库存记录: inventoryOnlyRecords.length,
       总记录数: allMergedData.length,
       Amazon_FBA渠道记录数: allMergedData.filter(r => r.fulfillment_channel?.includes('AMAZON')).length,
       需求中Amazon_FBA记录: filteredNeedsData.filter(r => r.inventory_source === 'amazon_fba').length,
       同SKU去重后显示库存的记录: filteredNeedsData.filter(r => r.is_first_sku_appearance).length
     };
 
-    console.log('\x1b[35m%s\x1b[0m', '📊 重新设计映射流程完成统计:', optimizedStats);
-    console.log('\x1b[32m%s\x1b[0m', '✅ 三步映射流程执行成功:', {
-      步骤1_Amazon_FBA数据: inventoryWithMapping.length,
-      步骤2_全部库存数据: allInventory.length,
-      步骤3_合并后映射表: inventoryMap.size,
-      Amazon_FBA优先映射: optimizedStats.Amazon_FBA渠道记录数
+    console.log('\x1b[35m%s\x1b[0m', '📊 FBA专用映射流程完成统计:', optimizedStats);
+    console.log('\x1b[32m%s\x1b[0m', '✅ FBA专用映射流程执行成功:', {
+      Amazon_FBA库存数据: inventoryWithMapping.length,
+      FBA库存映射表: inventoryMap.size,
+      Amazon_FBA渠道记录数: optimizedStats.Amazon_FBA渠道记录数
     });
 
     res.json({
       code: 0,
-      message: '获取成功 - 使用重新设计的三步映射流程',
+      message: '获取成功 - FBA专用发货操作',
       data: {
         list: allMergedData,
         total: allMergedData.length,
         page: parseInt(page),
         limit: parseInt(limit),
-        unmapped_inventory: inventoryOnlyRecords.filter(r => r.inventory_source === 'unmapped'),
-        amazon_fba_inventory: inventoryOnlyRecords.filter(r => r.inventory_source === 'amazon_fba'),
-        mapped_inventory: inventoryOnlyRecords.filter(r => r.inventory_source === 'mapped'),
+        amazon_fba_inventory: inventoryOnlyRecords,
         mapping_stats: optimizedStats,
         summary: optimizedStats,
-        mapping_method: 'redesigned_three_step_mapping'
+        mapping_method: 'fba_focused_mapping'
       }
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 获取合并数据失败（三步映射流程）:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取FBA发货数据失败:', error);
     res.status(500).json({
       code: 1,
-      message: '获取失败 - 三步映射流程异常',
+      message: '获取失败 - FBA发货流程异常',
       error: error.message
     });
   }
