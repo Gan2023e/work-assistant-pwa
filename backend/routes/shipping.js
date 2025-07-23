@@ -984,7 +984,10 @@ router.get('/merged-data', async (req, res) => {
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
       INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
       WHERE lb.total_quantity != 0
-        AND ls.\`fulfillment-channel\` LIKE '%AMAZON%'
+        AND (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
+             OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
+             OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
+             OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
       GROUP BY lb.sku, lb.country, ls.\`seller-sku\`, asm.amz_sku, ls.site, ls.\`fulfillment-channel\`
       HAVING SUM(lb.total_quantity) != 0
     `;
@@ -1025,15 +1028,18 @@ router.get('/merged-data', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 批量获取发货需求数据');
     
-    // 2. 获取发货需求数据
+    // 2. 获取发货需求数据 - 过滤掉已发货的记录
     const whereCondition = {};
     if (status) {
       whereCondition.status = status;
+    } else {
+      // 如果没有指定status，默认过滤掉已发货的记录
+      whereCondition.status = { [Op.not]: '已发货' };
     }
 
     const { count, rows: needsData } = await WarehouseProductsNeed.findAndCountAll({
       where: whereCondition,
-      order: [['record_num', 'DESC']],
+      order: [['create_date', 'ASC'], ['record_num', 'ASC']], // 按创建时间升序，确保最早的需求优先
       limit: parseInt(limit) === 1000 ? undefined : parseInt(limit),
       offset: parseInt(limit) === 1000 ? undefined : (parseInt(page) - 1) * parseInt(limit)
     });
@@ -1119,10 +1125,11 @@ router.get('/merged-data', async (req, res) => {
       }
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 合并发货需求和库存数据');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 合并发货需求和库存数据 - 实现同SKU库存去重');
     
-    // 5. 处理发货需求，与库存信息合并
-    const mergedFromNeeds = needsData.map(need => {
+    // 5. 处理发货需求，与库存信息合并，实现同SKU按时间去重
+    const skuFirstAppearance = new Map(); // 记录每个SKU第一次出现的位置
+    const mergedFromNeeds = needsData.map((need, index) => {
       const key = `${need.sku}_${need.country}`;
       const inventoryInfo = inventoryMap.get(key) || {
         local_sku: '',
@@ -1137,20 +1144,40 @@ router.get('/merged-data', async (req, res) => {
         data_source: 'unknown'
       };
 
+      // 记录SKU第一次出现的位置（时间最早的）
+      if (!skuFirstAppearance.has(key)) {
+        skuFirstAppearance.set(key, index);
+      }
+
       // 从批量查询结果中获取已发货数量
       const shippedQuantity = shippedQuantitiesMap.get(need.record_num) || 0;
       
       // 计算剩余需求数量
       const remainingQuantity = (need.ori_quantity || 0) - shippedQuantity;
 
+      // 只有第一次出现的SKU才显示库存信息，其他相同SKU不显示库存
+      const isFirstAppearance = skuFirstAppearance.get(key) === index;
+      const displayInventory = isFirstAppearance ? inventoryInfo : {
+        local_sku: '',
+        amz_sku: need.sku,
+        amazon_sku: need.sku,
+        site: null,
+        fulfillment_channel: '',
+        whole_box_quantity: 0,
+        whole_box_count: 0,
+        mixed_box_quantity: 0,
+        total_available: 0,
+        data_source: 'duplicate_sku'
+      };
+
       return {
         record_num: need.record_num,
         need_num: need.need_num || '',
         amz_sku: need.sku || '',
-        amazon_sku: inventoryInfo.amazon_sku,
-        local_sku: inventoryInfo.local_sku,
-        site: inventoryInfo.site,
-        fulfillment_channel: inventoryInfo.fulfillment_channel,
+        amazon_sku: displayInventory.amazon_sku,
+        local_sku: displayInventory.local_sku,
+        site: displayInventory.site,
+        fulfillment_channel: displayInventory.fulfillment_channel,
         quantity: remainingQuantity,
         original_quantity: need.ori_quantity || 0,
         shipped_quantity: shippedQuantity,
@@ -1159,23 +1186,31 @@ router.get('/merged-data', async (req, res) => {
         country: need.country || '',
         status: remainingQuantity <= 0 ? '已发货' : (need.status || '待发货'),
         created_at: need.create_date || new Date().toISOString(),
-        // 库存信息
-        whole_box_quantity: inventoryInfo.whole_box_quantity,
-        whole_box_count: inventoryInfo.whole_box_count,
-        mixed_box_quantity: inventoryInfo.mixed_box_quantity,
-        total_available: inventoryInfo.total_available,
+        // 库存信息（只有第一次出现的SKU才显示）
+        whole_box_quantity: displayInventory.whole_box_quantity,
+        whole_box_count: displayInventory.whole_box_count,
+        mixed_box_quantity: displayInventory.mixed_box_quantity,
+        total_available: displayInventory.total_available,
         // 计算缺货情况
-        shortage: Math.max(0, remainingQuantity - inventoryInfo.total_available),
+        shortage: isFirstAppearance ? Math.max(0, remainingQuantity - displayInventory.total_available) : 0,
         data_source: 'need',
-        inventory_source: inventoryInfo.data_source,
-        mapping_method: 'redesigned_three_step_mapping'
+        inventory_source: displayInventory.data_source,
+        mapping_method: 'redesigned_three_step_mapping',
+        is_first_sku_appearance: isFirstAppearance
       };
     });
+    
+    // 5.1. 过滤掉已发货的记录
+    const filteredNeedsData = mergedFromNeeds.filter(item => {
+      return item.status !== '已发货';
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `🔄 过滤前需求记录: ${mergedFromNeeds.length} 条, 过滤后: ${filteredNeedsData.length} 条`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤6: 处理仅库存记录');
     
     // 6. 处理有库存但无需求的记录
-    const needsSkuSet = new Set(needsData.map(need => `${need.sku}_${need.country}`));
+    const needsSkuSet = new Set(filteredNeedsData.map(need => `${need.amz_sku}_${need.country}`));
     const inventoryOnlyRecords = [];
     
     inventoryMap.forEach((inv, key) => {
@@ -1218,18 +1253,20 @@ router.get('/merged-data', async (req, res) => {
     });
 
     // 7. 合并所有数据
-    const allMergedData = [...mergedFromNeeds, ...inventoryOnlyRecords];
+    const allMergedData = [...filteredNeedsData, ...inventoryOnlyRecords];
     
     // 8. 统计信息
     const optimizedStats = {
-      发货需求记录: mergedFromNeeds.length,
+      发货需求记录: filteredNeedsData.length,
+      过滤掉的已发货记录: mergedFromNeeds.length - filteredNeedsData.length,
       仅库存记录: inventoryOnlyRecords.length,
       Amazon_FBA库存: inventoryOnlyRecords.filter(r => r.inventory_source === 'amazon_fba').length,
       已映射库存: inventoryOnlyRecords.filter(r => r.inventory_source === 'mapped').length,
       未映射库存记录: inventoryOnlyRecords.filter(r => r.inventory_source === 'unmapped').length,
       总记录数: allMergedData.length,
       Amazon_FBA渠道记录数: allMergedData.filter(r => r.fulfillment_channel?.includes('AMAZON')).length,
-      需求中Amazon_FBA记录: mergedFromNeeds.filter(r => r.inventory_source === 'amazon_fba').length
+      需求中Amazon_FBA记录: filteredNeedsData.filter(r => r.inventory_source === 'amazon_fba').length,
+      同SKU去重后显示库存的记录: filteredNeedsData.filter(r => r.is_first_sku_appearance).length
     };
 
     console.log('\x1b[35m%s\x1b[0m', '📊 重新设计映射流程完成统计:', optimizedStats);
