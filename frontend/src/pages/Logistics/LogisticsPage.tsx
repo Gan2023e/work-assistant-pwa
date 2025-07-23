@@ -34,7 +34,8 @@ import {
   CloseOutlined,
   DatabaseOutlined,
   DeleteOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
@@ -2338,7 +2339,14 @@ const LogisticsPage: React.FC = () => {
         <Col span={3}>
           <Card style={{ cursor: 'pointer' }} onClick={() => handleStatisticClick('pendingWarehouse')}>
             <Statistic
-              title="待调整到仓日货件数"
+              title={
+                <span>
+                  待调整到仓日货件数
+                  <Tooltip title="统计10天内预计到仓且状态为'在途'的货件数。">
+                    <InfoCircleOutlined style={{ marginLeft: 4, color: '#1890ff', cursor: 'pointer' }} />
+                  </Tooltip>
+                </span>
+              }
               value={statisticsData.pendingWarehouseCount}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#fa8c16' }}
