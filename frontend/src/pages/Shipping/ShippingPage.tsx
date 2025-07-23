@@ -1183,7 +1183,7 @@ const ShippingPage: React.FC = () => {
             </div>
           )}
           {record.mapping_method === 'new_amazon_listings' && (
-            <Tag size="small" color="green">新映射</Tag>
+            <Tag color="green">新映射</Tag>
           )}
         </div>
       ),
@@ -1199,7 +1199,7 @@ const ShippingPage: React.FC = () => {
         <div>
           {site && <div>{site}</div>}
           {record.fulfillment_channel && record.fulfillment_channel.includes('AMAZON') && (
-            <Tag size="small" color="blue">FBA</Tag>
+            <Tag color="blue">FBA</Tag>
           )}
         </div>
       ),
