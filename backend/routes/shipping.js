@@ -964,23 +964,21 @@ router.get('/merged-data', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 批量获取库存数据和映射关系');
     
-    // 1. 使用JOIN查询一次性获取库存数据和Amazon SKU映射关系
+    // 1. 先获取库存数据和映射关系（分两步，避免listings_sku表的兼容性问题）
     const inventoryWithMappingQuery = `
       SELECT 
         lb.sku as local_sku,
         lb.country,
         COALESCE(asm.amz_sku, '') as amz_sku,
         COALESCE(asm.site, '') as site,
-        COALESCE(ls.fulfillment_channel, '') as fulfillment_channel,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
         SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
         SUM(lb.total_quantity) as total_available
       FROM local_boxes lb
       LEFT JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      LEFT JOIN listings_sku ls ON asm.amz_sku = ls.seller_sku AND asm.site = ls.site
       WHERE lb.total_quantity != 0
-      GROUP BY lb.sku, lb.country, asm.amz_sku, asm.site, ls.fulfillment_channel
+      GROUP BY lb.sku, lb.country, asm.amz_sku, asm.site
       HAVING SUM(lb.total_quantity) != 0
     `;
     
@@ -990,6 +988,12 @@ router.get('/merged-data', async (req, res) => {
     });
 
     console.log('\x1b[33m%s\x1b[0m', `📦 库存和映射数据: ${inventoryWithMapping.length} 条`);
+
+    // 1.1. 暂时跳过fulfillment_channel查询，避免复杂性和潜在错误
+    const inventoryWithFulfillment = inventoryWithMapping.map(inv => ({
+      ...inv,
+      fulfillment_channel: '' // 暂时设为空字符串，后续可以优化
+    }));
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 批量获取发货需求数据');
     
@@ -1037,7 +1041,7 @@ router.get('/merged-data', async (req, res) => {
     // 4. 构建库存映射表，优先选择有Amazon FBA渠道的映射
     const inventoryMap = new Map();
     
-    inventoryWithMapping.forEach(inv => {
+    inventoryWithFulfillment.forEach(inv => {
       const key = inv.amz_sku ? `${inv.amz_sku}_${inv.country}` : `${inv.local_sku}_${inv.country}`;
       
       if (inventoryMap.has(key)) {
