@@ -476,11 +476,9 @@ router.post('/mixed-boxes', async (req, res) => {
       let allMappings = [];
       if (skuMappingConditions.length > 0) {
         try {
-          const validAmazonSkus = await getValidAmazonSkus();
           allMappings = await AmzSkuMapping.findAll({
             where: {
-              [Op.or]: skuMappingConditions,
-              amz_sku: validAmazonSkus.length > 0 ? { [sequelize.Op.in]: validAmazonSkus } : undefined
+              [Op.or]: skuMappingConditions
             },
             attributes: ['local_sku', 'country', 'amz_sku'],
             raw: true
@@ -581,11 +579,9 @@ router.post('/mixed-boxes', async (req, res) => {
       
       if (wholeBoxSkus.length > 0) {
         try {
-          const validAmazonSkus = await getValidAmazonSkus();
           const wholeBoxMappings = await AmzSkuMapping.findAll({
             where: {
-              [Op.or]: wholeBoxSkus,
-              amz_sku: validAmazonSkus.length > 0 ? { [sequelize.Op.in]: validAmazonSkus } : undefined
+              [Op.or]: wholeBoxSkus
             },
             attributes: ['local_sku', 'country', 'amz_sku'],
             raw: true
@@ -1000,17 +996,15 @@ router.get('/merged-data', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查找库存对应的Amazon SKU映射');
     
-    // 步骤2: 查找库存对应的Amazon SKU映射
-    const validAmazonSkus = await getValidAmazonSkus();
+    // 2. 对每个库存记录，查找对应的 Amazon SKU（处理多个结果的优先级选择）
     const inventoryWithAmzSku = await Promise.all(
       inventoryStats.map(async (inventory) => {
         try {
-          // 查找所有匹配的映射记录，增加有效Amazon SKU过滤
+          // 查找所有匹配的映射记录
           const skuMappings = await AmzSkuMapping.findAll({
             where: {
               local_sku: inventory.sku,
-              country: inventory.country,
-              amz_sku: validAmazonSkus.length > 0 ? { [sequelize.Op.in]: validAmazonSkus } : undefined
+              country: inventory.country
             },
             raw: true
           });
@@ -1286,11 +1280,7 @@ router.get('/debug-mapping', async (req, res) => {
     console.log('\x1b[33m%s\x1b[0m', '📦 原始库存数据样例:', inventoryData);
 
     // 步骤2: 获取映射表数据
-    const validAmazonSkus = await getValidAmazonSkus();
     const mappingData = await AmzSkuMapping.findAll({
-      where: {
-        amz_sku: validAmazonSkus.length > 0 ? { [sequelize.Op.in]: validAmazonSkus } : undefined
-      },
       limit: 10,
       raw: true
     });
@@ -1334,8 +1324,7 @@ router.get('/debug-mapping', async (req, res) => {
       const mappings = await AmzSkuMapping.findAll({
         where: {
           local_sku: inv.sku,
-          country: inv.country,
-          amz_sku: validAmazonSkus.length > 0 ? { [sequelize.Op.in]: validAmazonSkus } : undefined
+          country: inv.country
         },
         raw: true
       });
@@ -4727,14 +4716,5 @@ router.delete('/logistics-invoice/config', async (req, res) => {
     });
   }
 });
-
-// 工具函数：获取有效Amazon SKU集合
-async function getValidAmazonSkus() {
-  // 查询listings_sku表，获取fulfillment-channel包含'AMAZON'的seller-sku
-  const [results] = await sequelize.query(
-    "SELECT DISTINCT `seller-sku` FROM listings_sku WHERE `fulfillment-channel` LIKE '%AMAZON%'"
-  );
-  return results.map(row => row['seller-sku']);
-}
 
 module.exports = router; 
