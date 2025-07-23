@@ -514,9 +514,9 @@ const ShippingPage: React.FC = () => {
     
     if (shippingData && shippingData.length > 0) {
       // 使用已确认的发货数据，需要补充country信息
-      dataToGenerate = shippingData.map(item => {
+      dataToGenerate = shippingData.map((item: any) => {
         // 从selectedRows中找到对应的国家信息
-        const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+        const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === item.amz_sku);
         return {
           ...item,
           country: selectedRecord?.country || '默认'
@@ -525,8 +525,8 @@ const ShippingPage: React.FC = () => {
     } else {
       // 将mergedData转换为发货数据格式
       dataToGenerate = mergedData
-        .filter(item => item.status === '待发货' && item.amz_sku)
-        .map(item => ({
+        .filter((item: MergedShippingData) => item.status === '待发货' && item.amz_sku)
+        .map((item: MergedShippingData) => ({
           box_num: `AUTO-${item.record_num}`,
           amz_sku: item.amz_sku,
           quantity: item.quantity,
@@ -785,8 +785,8 @@ const ShippingPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          shippingData: shippingData.map(item => {
-            const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+          shippingData: shippingData.map((item: any) => {
+            const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === item.amz_sku);
             return {
               ...item,
               country: selectedRecord?.country || '默认',
@@ -926,8 +926,8 @@ const ShippingPage: React.FC = () => {
                        // 自动填写装箱表
              try {
                // 为发货数据添加国家信息
-               const shippingDataWithCountry = shippingData.map(item => {
-                 const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
+               const shippingDataWithCountry = shippingData.map((item: any) => {
+                 const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === item.amz_sku);
                  return {
                    ...item,
                    country: selectedRecord?.country || '默认'
@@ -1300,7 +1300,7 @@ const ShippingPage: React.FC = () => {
           // 混合箱出库
           const mixedItem = item as MixedBoxItem;
           // 从选中的记录中找到对应的国家和平台信息
-          const selectedRecord = selectedRows.find(row => row.amz_sku === mixedItem.amz_sku);
+          const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === mixedItem.amz_sku);
           
           console.log(`📦 处理混合箱SKU: ${mixedItem.amz_sku}, 找到的记录:`, selectedRecord);
           
@@ -1319,7 +1319,7 @@ const ShippingPage: React.FC = () => {
           // 整箱出库
           const wholeItem = item as WholeBoxConfirmData;
           // 从选中的记录中找到对应的本地SKU、国家和平台信息
-          const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amz_sku);
+          const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === wholeItem.amz_sku);
           
           console.log(`📦 处理整箱SKU: ${wholeItem.amz_sku}, 找到的记录:`, selectedRecord);
           
@@ -1403,7 +1403,7 @@ const ShippingPage: React.FC = () => {
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
         },
         body: JSON.stringify({
-          records: selectedRows.map(row => ({
+          records: selectedRows.map((row: MergedShippingData) => ({
             record_num: row.record_num,
             local_sku: row.local_sku,
             amz_sku: row.amz_sku,
@@ -1454,7 +1454,7 @@ const ShippingPage: React.FC = () => {
     try {
       // 检查当前混合箱是否已经确认过（通过箱号检查）
       const currentBoxNumber = String(nextBoxNumber);
-      const isAlreadyConfirmed = shippingData.some(item => item.box_num === currentBoxNumber);
+      const isAlreadyConfirmed = shippingData.some((item: any) => item.box_num === currentBoxNumber);
       
       if (!isAlreadyConfirmed) {
         const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
@@ -1498,7 +1498,7 @@ const ShippingPage: React.FC = () => {
         for (let i = 0; i < item.confirm_boxes; i++) {
           // 检查箱号是否已存在，避免重复
           const boxNumber = String(currentBoxNum);
-          const existsInShippingData = shippingData.some(existingItem => existingItem.box_num === boxNumber);
+          const existsInShippingData = shippingData.some((existingItem: any) => existingItem.box_num === boxNumber);
           
           if (!existsInShippingData) {
             newShippingData.push({
@@ -1530,7 +1530,7 @@ const ShippingPage: React.FC = () => {
     // 准备Excel数据
     const data = [
       ['箱号', 'Amazon SKU', '发货数量'],
-      ...shippingData.map(item => [item.box_num, item.amz_sku, item.quantity])
+      ...shippingData.map((item: any) => [item.box_num, item.amz_sku, item.quantity])
     ];
     
     // 创建工作簿和工作表
@@ -1591,14 +1591,14 @@ const ShippingPage: React.FC = () => {
 
   // 点击创建映射按钮
   const handleCreateMappingClick = () => {
-    const unmappedSelectedRows = selectedRows.filter(row => row.status === '库存未映射');
+    const unmappedSelectedRows = selectedRows.filter((row: MergedShippingData) => row.status === '库存未映射');
     if (unmappedSelectedRows.length === 0) {
       message.warning('请先选择库存未映射的记录');
       return;
     }
     
     // 转换为UnmappedInventoryItem格式并自动生成Amazon SKU
-    const mappingData = unmappedSelectedRows.map(row => {
+    const mappingData = unmappedSelectedRows.map((row: MergedShippingData) => {
       const prefix = getAmazonSkuPrefix(row.country);
       const autoAmzSku = prefix ? `${prefix}${row.local_sku}` : '';
       return {
@@ -1618,7 +1618,7 @@ const ShippingPage: React.FC = () => {
     
     // 为所有有前缀的国家预填充表单
     const formValues: any = {};
-    mappingData.forEach(item => {
+    mappingData.forEach((item: UnmappedInventoryItem) => {
       if (item.auto_amz_sku) {
         formValues[`amz_sku_${item.local_sku}_${item.country}`] = item.auto_amz_sku;
       }
@@ -1632,12 +1632,12 @@ const ShippingPage: React.FC = () => {
   // 创建SKU映射
   const handleCreateMapping = async (values: any) => {
     try {
-      const mappings = unmappedInventory.map(item => ({
+      const mappings = unmappedInventory.map((item: UnmappedInventoryItem) => ({
         local_sku: item.local_sku,
         amz_sku: values[`amz_sku_${item.local_sku}_${item.country}`],
         country: item.country,
         site: item.site || getAmazonSite(item.country)
-      })).filter(mapping => mapping.amz_sku && mapping.amz_sku.trim() !== '');
+      })).filter((mapping: any) => mapping.amz_sku && mapping.amz_sku.trim() !== '');
 
       if (mappings.length === 0) {
         message.warning('请至少填写一个Amazon SKU映射');
@@ -1734,9 +1734,9 @@ const ShippingPage: React.FC = () => {
           <Button
             type="default"
             onClick={handleCreateMappingClick}
-            disabled={selectedRows.filter(row => row.status === '库存未映射').length === 0}
+            disabled={selectedRows.filter((row: MergedShippingData) => row.status === '库存未映射').length === 0}
           >
-            创建SKU映射 ({selectedRows.filter(row => row.status === '库存未映射').length})
+            创建SKU映射 ({selectedRows.filter((row: MergedShippingData) => row.status === '库存未映射').length})
           </Button>
         </Col>
         <Col>
@@ -1796,7 +1796,7 @@ const ShippingPage: React.FC = () => {
         >
                 <Row gutter={[16, 16]}>
         {/* 各国家库存卡片 */}
-            {countryInventory.map((country) => (
+            {countryInventory.map((country: CountryInventory) => (
               <Col key={country.country}>
                 <div
                   style={{
@@ -1861,7 +1861,7 @@ const ShippingPage: React.FC = () => {
             {(() => {
               // 根据选中的国家筛选数据
               const filteredData = selectedCountry 
-                ? mergedData.filter(item => item.country === selectedCountry)
+                ? mergedData.filter((item: MergedShippingData) => item.country === selectedCountry)
                 : mergedData;
               
               return (
@@ -1876,7 +1876,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="发货需求数"
-                        value={filteredData.filter(item => item.quantity > 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0).length}
                         prefix={<PlusOutlined />}
                         valueStyle={{ color: filterType === 'needs' ? '#1677ff' : undefined }}
                       />
@@ -1892,7 +1892,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="库存充足需求"
-                        value={filteredData.filter(item => item.quantity > 0 && item.shortage === 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage === 0).length}
                         valueStyle={{ color: filterType === 'sufficient' ? '#1677ff' : '#3f8600' }}
                         prefix={<CheckOutlined />}
                       />
@@ -1908,7 +1908,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="库存不足需求"
-                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage > 0).length}
                         valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#cf1322' }}
                         prefix={<CloseOutlined />}
                       />
@@ -1924,7 +1924,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="缺货SKU"
-                        value={filteredData.filter(item => item.quantity > 0 && item.shortage > 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage > 0).length}
                         valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
                       />
                     </div>
@@ -1939,7 +1939,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="有库存无需求"
-                        value={filteredData.filter(item => item.quantity === 0 && item.total_available > 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.quantity === 0 && item.total_available > 0).length}
                         valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
                       />
                     </div>
@@ -1954,7 +1954,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="库存未映射"
-                        value={filteredData.filter(item => item.status === '库存未映射').length}
+                        value={filteredData.filter((item: MergedShippingData) => item.status === '库存未映射').length}
                         valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
                       />
                     </div>
@@ -1993,7 +1993,7 @@ const ShippingPage: React.FC = () => {
 
           <Table
             columns={mergedColumns}
-            dataSource={mergedData.filter(item => {
+            dataSource={mergedData.filter((item: MergedShippingData) => {
               // 首先按国家筛选（新增）
               if (selectedCountry && selectedCountry !== '') {
                 if (item.country !== selectedCountry) {
@@ -3334,15 +3334,22 @@ const ShippingPage: React.FC = () => {
 };
 
 // 整箱确认表单组件
-const WholeBoxConfirmForm: React.FC<{
+interface WholeBoxConfirmFormProps {
   data: WholeBoxConfirmData[];
   onConfirm: (data: WholeBoxConfirmData[]) => void;
   onSkip: () => void;
   loading?: boolean;
-}> = ({ data, onConfirm, onSkip, loading = false }) => {
+}
+
+const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({ 
+  data, 
+  onConfirm, 
+  onSkip, 
+  loading = false 
+}: WholeBoxConfirmFormProps) => {
   const [form] = Form.useForm();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
-    data.map(item => ({
+    data.map((item: WholeBoxConfirmData) => ({
       ...item,
       confirm_boxes: item.total_boxes,
       confirm_quantity: item.total_quantity
@@ -3351,7 +3358,7 @@ const WholeBoxConfirmForm: React.FC<{
 
   useEffect(() => {
     form.setFieldsValue(
-      confirmData.reduce((acc, item, index) => {
+      confirmData.reduce((acc: any, item: WholeBoxConfirmData, index: number) => {
         acc[`confirm_boxes_${index}`] = item.confirm_boxes;
         acc[`confirm_quantity_${index}`] = item.confirm_quantity;
         return acc;
