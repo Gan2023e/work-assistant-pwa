@@ -1020,9 +1020,9 @@ router.get('/merged-data', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', `🔗 建立关联数据: ${flatMappingAssociations.length} 条`);
     console.log('\x1b[33m%s\x1b[0m', '🔗 示例关联数据:', flatMappingAssociations.slice(0, 3));
-
+    
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 获取库存数据并进行最终映射');
-
+    
     // 3. 获取库存数据（按 sku + country 分组）
     const inventoryStats = await LocalBox.findAll({
       attributes: [
@@ -1070,7 +1070,7 @@ router.get('/merged-data', async (req, res) => {
             
             console.log('\x1b[32m%s\x1b[0m', 
               `✅ 库存${inventory.sku}(${inventory.country}) -> Amazon SKU: ${amazonSku}`);
-          } else {
+            } else {
             console.log('\x1b[31m%s\x1b[0m', 
               `❌ 库存${inventory.sku}(${inventory.country}) 未找到对应的Amazon SKU`);
           }
