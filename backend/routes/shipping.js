@@ -955,17 +955,17 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// 获取Amazon FBA专用发货数据 - 专注FBA渠道的高性能查询
+// Amazon FBA库存按需求单时间顺序分配 - 解决相同SKU库存分配问题
 router.get('/merged-data', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA发货数据查询请求');
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA库存顺序分配查询请求');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: Amazon FBA专用三步映射流程');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: Amazon FBA库存查询');
     
-    // FBA专用映射流程：三步整合成一个SQL语句
-    // 步骤1: 从listings_sku获取包含AMAZON的fulfillment-channel数据（只要FBA渠道）
+    // FBA库存查询：三步整合成一个SQL语句
+    // 步骤1: 从listings_sku获取包含AMAZON的fulfillment-channel数据
     // 步骤2: 通过seller-sku与amz_sku、site字段关联pbi_amzsku_sku表
     // 步骤3: 通过local_sku与sku、country字段关联local_boxes表，得到Amazon FBA库存
     const inventoryWithMappingQuery = `
@@ -993,9 +993,9 @@ router.get('/merged-data', async (req, res) => {
     `;
     
     const inventoryWithMapping = await sequelize.query(inventoryWithMappingQuery, {
-            type: sequelize.QueryTypes.SELECT,
-            raw: true
-          });
+      type: sequelize.QueryTypes.SELECT,
+      raw: true
+    });
 
         console.log('\x1b[33m%s\x1b[0m', `📦 Amazon FBA库存数据: ${inventoryWithMapping.length} 条`);
 
@@ -1007,8 +1007,8 @@ router.get('/merged-data', async (req, res) => {
         status: '待发货'
       },
       order: [['create_date', 'ASC'], ['record_num', 'ASC']], // 按创建时间升序，确保最早的需求优先
-      raw: true
-    });
+            raw: true
+          });
 
         console.log('\x1b[33m%s\x1b[0m', `📋 待发货需求数据: ${needsData.length} 条`);
 
@@ -1035,145 +1035,153 @@ router.get('/merged-data', async (req, res) => {
       console.log(`✅ Amazon FBA库存: ${key} - 可用数量: ${inv.total_available}`);
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 构建需求映射表');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 按需求单时间排序，保持独立性');
     
-    // 4. 构建需求映射表（以sku+country为键，合并相同SKU的需求）
-    const needsMap = new Map();
-    
-    needsData.forEach(need => {
-      const key = `${need.sku}_${need.country}`;
-      if (needsMap.has(key)) {
-        // 如果已存在，累加数量，保留最早的记录信息
-        const existing = needsMap.get(key);
-        existing.total_quantity += (need.ori_quantity || 0);
-        existing.records.push(need);
-      } else {
-        needsMap.set(key, {
-          sku: need.sku,
-          country: need.country,
-          total_quantity: need.ori_quantity || 0,
-          records: [need],
-          earliest_record: need
-        });
-      }
+    // 4. 按创建时间排序所有需求记录，保持每个需求单的独立性
+    const sortedNeeds = needsData.sort((a, b) => {
+      return new Date(a.create_date) - new Date(b.create_date);
     });
     
-    console.log('\x1b[33m%s\x1b[0m', `📋 合并后需求: ${needsMap.size} 个SKU`);
+    console.log('\x1b[33m%s\x1b[0m', `📋 待发货需求记录: ${sortedNeeds.length} 条（按时间排序）`);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 根据库存和需求关联分析');
-
-        
-    // 5. 根据库存和需求关联分析，生成四种状态的记录
-    const allRecords = [];
-    const processedKeys = new Set();
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 按时间顺序分配库存给每个需求单');
     
-    // 5.1. 处理需求数据，分析库存状态
-    needsMap.forEach((needInfo, key) => {
+    // 5. 为每个SKU维护剩余库存，按时间顺序分配
+    const skuRemainingInventory = new Map();
+    
+    // 初始化每个SKU的剩余库存
+    inventoryMap.forEach((inv, key) => {
+      skuRemainingInventory.set(key, inv.total_available);
+    });
+
+    
+    // 5.1. 处理每个需求记录，按时间顺序分配库存
+    const allRecords = [];
+    const processedInventoryKeys = new Set();
+    
+    sortedNeeds.forEach((need, index) => {
+      const key = `${need.sku}_${need.country}`;
       const inventoryInfo = inventoryMap.get(key);
-      const needQuantity = needInfo.total_quantity;
+      const needQuantity = need.ori_quantity || 0;
       
       if (inventoryInfo) {
-        const availableQuantity = inventoryInfo.total_available;
+        // 获取当前SKU的剩余库存
+        const remainingInventory = skuRemainingInventory.get(key) || 0;
+        let allocatedQuantity = 0;
         let status, shortageQty = 0;
         
-        if (availableQuantity >= needQuantity) {
+        if (remainingInventory >= needQuantity) {
+          // 库存充足，可以完全满足当前需求
+          allocatedQuantity = needQuantity;
           status = '库存充足';
-        } else if (availableQuantity > 0) {
+          shortageQty = 0;
+          // 更新剩余库存
+          skuRemainingInventory.set(key, remainingInventory - needQuantity);
+        } else if (remainingInventory > 0) {
+          // 库存不足，只能部分满足
+          allocatedQuantity = remainingInventory;
           status = '库存不足';
-          shortageQty = needQuantity - availableQuantity;
+          shortageQty = needQuantity - remainingInventory;
+          // 库存用完
+          skuRemainingInventory.set(key, 0);
         } else {
+          // 库存已用完，缺货
+          allocatedQuantity = 0;
           status = '缺货';
           shortageQty = needQuantity;
         }
         
-        // 为每个需求记录创建条目
-        needInfo.records.forEach(need => {
-          allRecords.push({
-            record_num: need.record_num,
-            need_num: need.need_num || '',
-            amz_sku: need.sku,
-            amazon_sku: inventoryInfo.amazon_sku,
-            local_sku: inventoryInfo.local_sku,
-            site: inventoryInfo.site,
-            fulfillment_channel: inventoryInfo.fulfillment_channel,
-            quantity: need.ori_quantity || 0,
-            shipping_method: need.shipping_method || '',
-            marketplace: need.marketplace || '',
-            country: need.country,
-            status: status,
-            created_at: need.create_date || new Date().toISOString(),
-            // 库存信息
-            whole_box_quantity: inventoryInfo.whole_box_quantity,
-            whole_box_count: inventoryInfo.whole_box_count,
-            mixed_box_quantity: inventoryInfo.mixed_box_quantity,
-            total_available: inventoryInfo.total_available,
-            shortage: shortageQty,
-            data_source: 'need_with_inventory',
-            inventory_source: 'amazon_fba',
-            mapping_method: 'fba_focused_mapping'
-          });
+        allRecords.push({
+          record_num: need.record_num,
+          need_num: need.need_num || '',
+          amz_sku: need.sku,
+          amazon_sku: inventoryInfo.amazon_sku,
+          local_sku: inventoryInfo.local_sku,
+          site: inventoryInfo.site,
+          fulfillment_channel: inventoryInfo.fulfillment_channel,
+          quantity: needQuantity,
+          allocated_quantity: allocatedQuantity, // 实际分配的库存数量
+          shipping_method: need.shipping_method || '',
+          marketplace: need.marketplace || '',
+          country: need.country,
+          status: status,
+          created_at: need.create_date || new Date().toISOString(),
+          // 库存信息
+          whole_box_quantity: inventoryInfo.whole_box_quantity,
+          whole_box_count: inventoryInfo.whole_box_count,
+          mixed_box_quantity: inventoryInfo.mixed_box_quantity,
+          total_available: inventoryInfo.total_available,
+          remaining_inventory: skuRemainingInventory.get(key), // 分配后剩余库存
+          shortage: shortageQty,
+          data_source: 'need_with_inventory',
+          inventory_source: 'amazon_fba',
+          mapping_method: 'sequential_allocation',
+          allocation_order: index + 1 // 分配顺序
         });
         
-        console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
+        console.log(`🔍 ${need.need_num || need.record_num} (${key}): 需求${needQuantity}, 分配${allocatedQuantity}, 剩余${skuRemainingInventory.get(key)} - ${status}`);
+        
+        // 记录已处理的库存
+        processedInventoryKeys.add(key);
       } else {
         // 第二步有，第一步没有 = 缺货
-        needInfo.records.forEach(need => {
-          allRecords.push({
-            record_num: need.record_num,
-            need_num: need.need_num || '',
-            amz_sku: need.sku,
-            amazon_sku: need.sku,
-            local_sku: '',
-            site: '',
-            fulfillment_channel: '',
-            quantity: need.ori_quantity || 0,
-            shipping_method: need.shipping_method || '',
-            marketplace: need.marketplace || '',
-            country: need.country,
-            status: '缺货',
-            created_at: need.create_date || new Date().toISOString(),
-            // 库存信息（全为0）
-            whole_box_quantity: 0,
-            whole_box_count: 0,
-            mixed_box_quantity: 0,
-            total_available: 0,
-            shortage: need.ori_quantity || 0,
-            data_source: 'need_no_inventory',
-            inventory_source: 'none',
-            mapping_method: 'fba_focused_mapping'
-          });
+        allRecords.push({
+          record_num: need.record_num,
+          need_num: need.need_num || '',
+          amz_sku: need.sku,
+          amazon_sku: need.sku,
+          local_sku: '',
+          site: '',
+          fulfillment_channel: '',
+          quantity: needQuantity,
+          allocated_quantity: 0,
+          shipping_method: need.shipping_method || '',
+          marketplace: need.marketplace || '',
+          country: need.country,
+          status: '缺货',
+          created_at: need.create_date || new Date().toISOString(),
+          // 库存信息（全为0）
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          total_available: 0,
+          remaining_inventory: 0,
+          shortage: needQuantity,
+          data_source: 'need_no_inventory',
+          inventory_source: 'none',
+          mapping_method: 'sequential_allocation',
+          allocation_order: index + 1
         });
         
-        console.log(`❌ ${key}: 需求${needQuantity}, 无库存 - 缺货`);
+        console.log(`❌ ${need.need_num || need.record_num} (${key}): 需求${needQuantity}, 无库存 - 缺货`);
       }
-      
-      processedKeys.add(key);
     });
 
-        
+        console.log('\x1b[33m%s\x1b[0m', '🔄 步骤6: 处理有FBA库存但无需求的记录');
+    
     // 6. 处理有Amazon FBA库存但无需求的记录（第一步有，第二步没有）
     inventoryMap.forEach((inv, key) => {
-      if (!processedKeys.has(key) && inv.total_available > 0) {
+      if (!processedInventoryKeys.has(key) && inv.total_available > 0) {
         allRecords.push({
           record_num: -1 - allRecords.length,
-          need_num: '',
+        need_num: '',
           amz_sku: inv.amz_sku,
-          amazon_sku: inv.amazon_sku,
-          local_sku: inv.local_sku,
-          site: inv.site,
-          fulfillment_channel: inv.fulfillment_channel,
-          quantity: 0,
-          shipping_method: '',
-          marketplace: '',
-          country: inv.country,
-          status: '有库存无需求',
-          created_at: new Date().toISOString(),
-          // 库存信息
-          whole_box_quantity: inv.whole_box_quantity,
-          whole_box_count: inv.whole_box_count,
-          mixed_box_quantity: inv.mixed_box_quantity,
-          total_available: inv.total_available,
-          shortage: 0,
+        amazon_sku: inv.amazon_sku,
+        local_sku: inv.local_sku,
+        site: inv.site,
+        fulfillment_channel: inv.fulfillment_channel,
+        quantity: 0,
+        shipping_method: '',
+        marketplace: '',
+        country: inv.country,
+        status: '有库存无需求',
+        created_at: new Date().toISOString(),
+        // 库存信息
+        whole_box_quantity: inv.whole_box_quantity,
+        whole_box_count: inv.whole_box_count,
+        mixed_box_quantity: inv.mixed_box_quantity,
+        total_available: inv.total_available,
+        shortage: 0,
           data_source: 'inventory_no_need',
           inventory_source: 'amazon_fba',
           mapping_method: 'fba_focused_mapping'
@@ -1209,19 +1217,22 @@ router.get('/merged-data', async (req, res) => {
       有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求').length,
       总记录数: sortedRecords.length,
       Amazon_FBA库存SKU数: inventoryMap.size,
-      待发货需求SKU数: needsMap.size
+      待发货需求记录数: sortedNeeds.length,
+      已分配的总库存: sortedRecords.reduce((sum, r) => sum + (r.allocated_quantity || 0), 0),
+      需求总数量: sortedRecords.reduce((sum, r) => sum + (r.quantity || 0), 0)
     };
 
-    console.log('\x1b[35m%s\x1b[0m', '📊 FBA发货分析完成统计:', statsMap);
-    console.log('\x1b[32m%s\x1b[0m', '✅ FBA发货分析成功:', {
+    console.log('\x1b[35m%s\x1b[0m', '📊 FBA库存顺序分配完成统计:', statsMap);
+    console.log('\x1b[32m%s\x1b[0m', '✅ FBA库存顺序分配成功:', {
       Amazon_FBA库存数据: inventoryWithMapping.length,
-      待发货需求数据: needsData.length,
-      分析结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 = ${statsMap.总记录数}条`
+      待发货需求数据: sortedNeeds.length,
+      分配结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 = ${statsMap.总记录数}条`,
+      库存利用率: `${statsMap.已分配的总库存}/${statsMap.需求总数量} (${((statsMap.已分配的总库存 / statsMap.需求总数量) * 100).toFixed(1)}%)`
     });
 
     res.json({
       code: 0,
-      message: '获取成功 - FBA库存需求分析',
+      message: '获取成功 - FBA库存按需求单时间顺序分配',
       data: {
         list: paginatedRecords,
         total: sortedRecords.length,
@@ -1235,14 +1246,14 @@ router.get('/merged-data', async (req, res) => {
           有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求')
         },
         summary: statsMap,
-        mapping_method: 'inventory_need_analysis'
+        mapping_method: 'sequential_allocation_by_need_time'
       }
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ FBA库存需求分析失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ FBA库存顺序分配失败:', error);
     res.status(500).json({
       code: 1,
-      message: '分析失败 - FBA库存需求分析异常',
+      message: '分配失败 - FBA库存顺序分配异常',
       error: error.message
     });
   }
