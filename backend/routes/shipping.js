@@ -955,22 +955,75 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// 获取合并的发货需求和库存数据
+// 获取合并的发货需求和库存数据 - 重新设计SKU映射逻辑
 router.get('/merged-data', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求 - 优化映射流程');
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到合并数据查询请求 - 新的SKU映射流程');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    // 优化的映射流程：
-    // 1. 先获取库存统计数据（去重获取唯一的 sku + country 组合）
-    // 2. 通过库存 SKU + country 在映射表中查找对应的 Amazon SKU
-    // 3. 使用找到的 Amazon SKU 与发货需求进行匹配
-    // 4. 保留所有发货需求记录，同时也保留有库存但无需求的记录
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 从listings_sku表获取Amazon FBA数据');
     
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 获取库存统计数据');
+    // 1. 从listings_sku表获取包含AMAZON的fulfillment-channel数据
+    const amazonListings = await sequelize.query(`
+      SELECT DISTINCT seller_sku, site, fulfillment_channel
+      FROM listings_sku 
+      WHERE fulfillment_channel LIKE '%AMAZON%'
+    `, {
+      type: sequelize.QueryTypes.SELECT,
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `📋 从listings_sku获取Amazon数据: ${amazonListings.length} 条`);
+    console.log('\x1b[33m%s\x1b[0m', '📋 示例Amazon listings:', amazonListings.slice(0, 3));
+
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 建立新的关联表数据');
+
+    // 2. 将Amazon listings数据与pbi_amzsku_sku表建立关联
+    // 通过seller-sku与amz_sku关联，site字段关联
+    const skuMappingAssociations = await Promise.all(
+      amazonListings.map(async (listing) => {
+        try {
+          // 查找对应的映射记录
+          const mappingRecords = await sequelize.query(`
+            SELECT p.amz_sku, p.site, p.country, p.local_sku, p.update_time
+            FROM pbi_amzsku_sku p
+            WHERE p.amz_sku = :sellerSku 
+            AND p.site = :site
+          `, {
+            replacements: { 
+              sellerSku: listing.seller_sku,
+              site: listing.site 
+            },
+            type: sequelize.QueryTypes.SELECT,
+            raw: true
+          });
+
+          return mappingRecords.map(record => ({
+            amazon_seller_sku: listing.seller_sku,
+            site: listing.site,
+            fulfillment_channel: listing.fulfillment_channel,
+            amz_sku: record.amz_sku,
+            country: record.country,
+            local_sku: record.local_sku,
+            update_time: record.update_time
+          }));
+        } catch (error) {
+          console.error(`处理listing映射失败 ${listing.seller_sku}:`, error);
+          return [];
+        }
+      })
+    );
+
+    // 扁平化关联数据
+    const flatMappingAssociations = skuMappingAssociations.flat();
     
-    // 1. 获取库存统计数据 (按 sku + country 分组)
+    console.log('\x1b[33m%s\x1b[0m', `🔗 建立关联数据: ${flatMappingAssociations.length} 条`);
+    console.log('\x1b[33m%s\x1b[0m', '🔗 示例关联数据:', flatMappingAssociations.slice(0, 3));
+
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 获取库存数据并进行最终映射');
+
+    // 3. 获取库存数据（按 sku + country 分组）
     const inventoryStats = await LocalBox.findAll({
       attributes: [
         'sku',
@@ -987,121 +1040,94 @@ router.get('/merged-data', async (req, res) => {
         [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
       ],
       group: ['sku', 'country'],
-      having: sequelize.literal('SUM(total_quantity) != 0'), // 过滤掉零库存
+      having: sequelize.literal('SUM(total_quantity) != 0'),
       raw: true
     });
 
-    console.log('\x1b[33m%s\x1b[0m', `📦 库存统计数据: ${inventoryStats.length} 条`, 
-      inventoryStats.slice(0, 3).map(i => `${i.sku}(${i.country}): ${i.total_quantity}`));
+    console.log('\x1b[33m%s\x1b[0m', `📦 库存统计数据: ${inventoryStats.length} 条`);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查找库存对应的Amazon SKU映射');
-    
-    // 2. 对每个库存记录，查找对应的 Amazon SKU（处理多个结果的优先级选择）
-    const inventoryWithAmzSku = await Promise.all(
+    // 4. 使用local_sku表的sku和country与关联表的local_sku和country进行关联
+    // 查询出对应的Amazon SKU（listings_sku表中的seller-sku）
+    const inventoryWithAmazonSku = await Promise.all(
       inventoryStats.map(async (inventory) => {
         try {
-          // 查找所有匹配的映射记录
-          const skuMappings = await AmzSkuMapping.findAll({
-            where: {
-              local_sku: inventory.sku,
-              country: inventory.country
-            },
-            raw: true
-          });
+          // 在关联表中查找匹配的记录
+          const matchingAssociations = flatMappingAssociations.filter(assoc => 
+            assoc.local_sku === inventory.sku && 
+            assoc.country === inventory.country
+          );
 
-          console.log('\x1b[36m%s\x1b[0m', `🔍 库存${inventory.sku}(${inventory.country})找到${skuMappings.length}个映射:`, 
-            skuMappings.map(m => m.amz_sku));
+          let selectedAssociation = null;
+          let amazonSku = null;
 
-          let selectedMapping = null;
-
-          if (skuMappings.length > 0) {
-            // 优先选择有特定前缀的记录
-            const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU', 'UW'];
+          if (matchingAssociations.length > 0) {
+            // 如果有多个匹配，选择最新的或按优先级选择
+            selectedAssociation = matchingAssociations.sort((a, b) => 
+              new Date(b.update_time || 0) - new Date(a.update_time || 0)
+            )[0];
             
-            // 查找有优先前缀的映射
-            const priorityMappings = skuMappings.filter(mapping => {
-              const amzSku = mapping.amz_sku || '';
-              return priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
-            });
-
-            if (priorityMappings.length > 0) {
-              // 如果有多个优先级映射，选择第一个
-              selectedMapping = priorityMappings[0];
-              console.log('\x1b[32m%s\x1b[0m', `✅ 选择优先前缀映射: ${selectedMapping.amz_sku}`);
-            } else {
-              // 如果没有优先前缀，选择第一个可用的
-              selectedMapping = skuMappings[0];
-              console.log('\x1b[33m%s\x1b[0m', `⚠️ 选择普通映射: ${selectedMapping.amz_sku}`);
-            }
+            amazonSku = selectedAssociation.amazon_seller_sku; // 这就是Amazon SKU
+            
+            console.log('\x1b[32m%s\x1b[0m', 
+              `✅ 库存${inventory.sku}(${inventory.country}) -> Amazon SKU: ${amazonSku}`);
+          } else {
+            console.log('\x1b[31m%s\x1b[0m', 
+              `❌ 库存${inventory.sku}(${inventory.country}) 未找到对应的Amazon SKU`);
           }
 
           return {
             local_sku: inventory.sku,
             country: inventory.country,
-            amz_sku: selectedMapping?.amz_sku || null,
+            amazon_sku: amazonSku, // 新的Amazon SKU字段
+            amz_sku_from_mapping: selectedAssociation?.amz_sku || null, // 保留原映射表的amz_sku
+            site: selectedAssociation?.site || null,
+            fulfillment_channel: selectedAssociation?.fulfillment_channel || null,
             whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
             whole_box_count: parseInt(inventory.whole_box_count) || 0,
             mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
             total_available: parseInt(inventory.total_quantity) || 0,
             mapping_info: {
-              total_mappings: skuMappings.length,
-              selected_mapping: selectedMapping,
-              all_mappings: skuMappings
+              total_associations: matchingAssociations.length,
+              selected_association: selectedAssociation,
+              all_associations: matchingAssociations
             }
           };
         } catch (error) {
-          console.error(`处理库存映射失败 ${inventory.sku}:`, error);
+          console.error(`处理库存Amazon SKU映射失败 ${inventory.sku}:`, error);
           return {
             local_sku: inventory.sku,
             country: inventory.country,
-            amz_sku: null,
+            amazon_sku: null,
+            amz_sku_from_mapping: null,
+            site: null,
+            fulfillment_channel: null,
             whole_box_quantity: parseInt(inventory.whole_box_quantity) || 0,
             whole_box_count: parseInt(inventory.whole_box_count) || 0,
             mixed_box_quantity: parseInt(inventory.mixed_box_quantity) || 0,
             total_available: parseInt(inventory.total_quantity) || 0,
             mapping_info: {
-              total_mappings: 0,
-              selected_mapping: null,
-              all_mappings: []
+              total_associations: 0,
+              selected_association: null,
+              all_associations: []
             }
           };
         }
       })
     );
 
-    // 统计映射情况
-    const mappingStats = {
-      总库存记录: inventoryWithAmzSku.length,
-      有映射记录: inventoryWithAmzSku.filter(i => i.amz_sku).length,
-      无映射记录: inventoryWithAmzSku.filter(i => !i.amz_sku).length,
-      优先前缀映射: 0,
-      普通映射: 0,
-      多映射记录: 0
+    // 统计新映射情况
+    const newMappingStats = {
+      总库存记录: inventoryWithAmazonSku.length,
+      有Amazon_SKU映射: inventoryWithAmazonSku.filter(i => i.amazon_sku).length,
+      无Amazon_SKU映射: inventoryWithAmazonSku.filter(i => !i.amazon_sku).length,
+      Amazon_FBA渠道: inventoryWithAmazonSku.filter(i => i.fulfillment_channel?.includes('AMAZON')).length
     };
 
-    inventoryWithAmzSku.forEach(inv => {
-      if (inv.mapping_info && inv.mapping_info.total_mappings > 0) {
-        const amzSku = inv.amz_sku || '';
-        const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU'];
-        const hasPriorityPrefix = priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
-        
-        if (hasPriorityPrefix) {
-          mappingStats.优先前缀映射++;
-        } else {
-          mappingStats.普通映射++;
-        }
-        
-        if (inv.mapping_info.total_mappings > 1) {
-          mappingStats.多映射记录++;
-        }
-      }
-    });
+    console.log('\x1b[33m%s\x1b[0m', '🆕 新映射统计:', newMappingStats);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔗 映射统计完成:', mappingStats);
-
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 获取发货需求数据');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 获取发货需求数据');
     
-    // 3. 获取发货需求数据
+    // 5. 获取发货需求数据
     const whereCondition = {};
     if (status) {
       whereCondition.status = status;
@@ -1110,28 +1136,31 @@ router.get('/merged-data', async (req, res) => {
     const { count, rows: needsData } = await WarehouseProductsNeed.findAndCountAll({
       where: whereCondition,
       order: [['record_num', 'DESC']],
-      limit: parseInt(limit) === 1000 ? undefined : parseInt(limit), // 如果是1000，表示要全部数据
+      limit: parseInt(limit) === 1000 ? undefined : parseInt(limit),
       offset: parseInt(limit) === 1000 ? undefined : (parseInt(page) - 1) * parseInt(limit)
     });
 
     console.log('\x1b[33m%s\x1b[0m', `📋 发货需求数据: ${needsData.length} 条`);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 合并发货需求和库存数据');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 合并发货需求和库存数据');
     
-    // 4. 创建一个 Map 来快速查找库存信息
-    const inventoryMap = new Map();
-    inventoryWithAmzSku.forEach(inv => {
-      if (inv.amz_sku) {
-        const key = `${inv.amz_sku}_${inv.country}`;
-        inventoryMap.set(key, inv);
+    // 6. 创建新的库存映射表，使用Amazon SKU作为键
+    const newInventoryMap = new Map();
+    inventoryWithAmazonSku.forEach(inv => {
+      if (inv.amazon_sku) {
+        const key = `${inv.amazon_sku}_${inv.country}`;
+        newInventoryMap.set(key, inv);
       }
     });
 
-    // 5. 处理发货需求，与库存信息合并
+    // 7. 处理发货需求，与新的库存信息合并
     const mergedFromNeeds = await Promise.all(needsData.map(async need => {
       const key = `${need.sku}_${need.country}`;
-      const inventoryInfo = inventoryMap.get(key) || {
+      const inventoryInfo = newInventoryMap.get(key) || {
         local_sku: '',
+        amazon_sku: need.sku, // 保持原来的Amazon SKU显示
+        site: null,
+        fulfillment_channel: null,
         whole_box_quantity: 0,
         whole_box_count: 0,
         mixed_box_quantity: 0,
@@ -1149,36 +1178,43 @@ router.get('/merged-data', async (req, res) => {
       return {
         record_num: need.record_num,
         need_num: need.need_num || '',
-        amz_sku: need.sku || '',
+        amz_sku: need.sku || '', // 保持原字段名便于前端兼容
+        amazon_sku: inventoryInfo.amazon_sku, // 新的Amazon SKU字段
         local_sku: inventoryInfo.local_sku,
-        quantity: remainingQuantity, // 修改：使用剩余数量而不是原始数量
-        original_quantity: need.ori_quantity || 0, // 新增：保留原始数量用于显示
-        shipped_quantity: shippedQuantity, // 新增：已发货数量
+        site: inventoryInfo.site,
+        fulfillment_channel: inventoryInfo.fulfillment_channel,
+        quantity: remainingQuantity,
+        original_quantity: need.ori_quantity || 0,
+        shipped_quantity: shippedQuantity,
         shipping_method: need.shipping_method || '',
         marketplace: need.marketplace || '',
         country: need.country || '',
-        status: remainingQuantity <= 0 ? '已发货' : (need.status || '待发货'), // 修改：根据剩余数量更新状态
+        status: remainingQuantity <= 0 ? '已发货' : (need.status || '待发货'),
         created_at: need.create_date || new Date().toISOString(),
         // 库存信息
         whole_box_quantity: inventoryInfo.whole_box_quantity,
         whole_box_count: inventoryInfo.whole_box_count,
         mixed_box_quantity: inventoryInfo.mixed_box_quantity,
         total_available: inventoryInfo.total_available,
-        // 计算缺货情况（基于剩余需求数量）
+        // 计算缺货情况
         shortage: Math.max(0, remainingQuantity - inventoryInfo.total_available),
-        data_source: 'need' // 标记数据来源
+        data_source: 'need',
+        mapping_method: 'new_amazon_listings' // 标记使用新的映射方法
       };
     }));
 
-    // 6. 处理有库存但无需求的记录
-    const needsAmzSkuSet = new Set(needsData.map(need => `${need.sku}_${need.country}`));
-    const inventoryOnlyRecords = inventoryWithAmzSku
-      .filter(inv => inv.amz_sku && !needsAmzSkuSet.has(`${inv.amz_sku}_${inv.country}`))
+    // 8. 处理有库存但无需求的记录（使用新的Amazon SKU）
+    const needsAmazonSkuSet = new Set(needsData.map(need => `${need.sku}_${need.country}`));
+    const inventoryOnlyRecords = inventoryWithAmazonSku
+      .filter(inv => inv.amazon_sku && !needsAmazonSkuSet.has(`${inv.amazon_sku}_${inv.country}`))
       .map((inv, index) => ({
-        record_num: -1 - index, // 使用负数作为临时ID
+        record_num: -1 - index,
         need_num: '',
-        amz_sku: inv.amz_sku,
+        amz_sku: inv.amazon_sku, // 使用新的Amazon SKU
+        amazon_sku: inv.amazon_sku,
         local_sku: inv.local_sku,
+        site: inv.site,
+        fulfillment_channel: inv.fulfillment_channel,
         quantity: 0,
         shipping_method: '',
         marketplace: '',
@@ -1190,24 +1226,25 @@ router.get('/merged-data', async (req, res) => {
         whole_box_count: inv.whole_box_count,
         mixed_box_quantity: inv.mixed_box_quantity,
         total_available: inv.total_available,
-        shortage: 0, // 无需求，所以无缺货
-        data_source: 'inventory' // 标记数据来源
+        shortage: 0,
+        data_source: 'inventory',
+        mapping_method: 'new_amazon_listings'
       }));
 
-    // 7. 检测库存中没有映射的记录
-    const unmappedInventory = inventoryWithAmzSku.filter(inv => !inv.amz_sku && inv.total_available > 0);
+    // 9. 检测库存中没有映射的记录
+    const unmappedInventory = inventoryWithAmazonSku.filter(inv => !inv.amazon_sku && inv.total_available > 0);
     
-    console.log('\x1b[31m%s\x1b[0m', '⚠️ 发现未映射的库存记录:', unmappedInventory.length);
-    if (unmappedInventory.length > 0) {
-      console.log('\x1b[31m%s\x1b[0m', '📋 未映射记录详情:', unmappedInventory.slice(0, 5));
-    }
+    console.log('\x1b[31m%s\x1b[0m', '⚠️ 发现未映射到Amazon SKU的库存记录:', unmappedInventory.length);
 
-    // 8. 为未映射的库存创建记录显示在表格中
+    // 10. 为未映射的库存创建记录
     const unmappedRecords = unmappedInventory.map((inv, index) => ({
-      record_num: -1000 - index, // 使用更小的负数作为临时ID
+      record_num: -1000 - index,
       need_num: '',
-      amz_sku: '', // 空的，表示未映射
+      amz_sku: '',
+      amazon_sku: null,
       local_sku: inv.local_sku,
+      site: null,
+      fulfillment_channel: null,
       quantity: 0,
       shipping_method: '',
       marketplace: '',
@@ -1220,47 +1257,194 @@ router.get('/merged-data', async (req, res) => {
       mixed_box_quantity: inv.mixed_box_quantity,
       total_available: inv.total_available,
       shortage: 0,
-      data_source: 'unmapped_inventory' // 标记为未映射库存
+      data_source: 'unmapped_inventory',
+      mapping_method: 'new_amazon_listings'
     }));
 
-    // 9. 合并所有数据
+    // 11. 合并所有数据
     const allMergedData = [...mergedFromNeeds, ...inventoryOnlyRecords, ...unmappedRecords];
 
-    console.log('\x1b[35m%s\x1b[0m', '📊 合并完成统计:', {
+    console.log('\x1b[35m%s\x1b[0m', '📊 新映射方法合并完成统计:', {
       发货需求记录: mergedFromNeeds.length,
       仅库存记录: inventoryOnlyRecords.length,
       未映射库存记录: unmappedRecords.length,
       总计: allMergedData.length,
-      有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
-      无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
+      使用新映射方法的记录: allMergedData.filter(r => r.mapping_method === 'new_amazon_listings').length,
+      有Amazon_SKU映射的需求: mergedFromNeeds.filter(r => r.amazon_sku).length,
+      Amazon_FBA渠道记录: allMergedData.filter(r => r.fulfillment_channel?.includes('AMAZON')).length
     });
-
-    console.log('\x1b[35m%s\x1b[0m', '📊 合并数据示例（前3条）:', allMergedData.slice(0, 3));
 
     res.json({
       code: 0,
-      message: '获取成功',
+      message: '获取成功 - 使用新的Amazon SKU映射方法',
       data: {
         list: allMergedData,
-        total: allMergedData.length, // 注意：这里返回实际合并后的总数
+        total: allMergedData.length,
         page: parseInt(page),
         limit: parseInt(limit),
-        unmapped_inventory: unmappedInventory, // 返回未映射的库存记录
+        unmapped_inventory: unmappedInventory,
+        mapping_stats: newMappingStats,
         summary: {
           需求记录数: mergedFromNeeds.length,
           库存记录数: inventoryOnlyRecords.length,
           未映射库存记录: unmappedRecords.length,
           总记录数: allMergedData.length,
-          有映射需求: mergedFromNeeds.filter(r => r.local_sku).length,
-          无映射需求: mergedFromNeeds.filter(r => !r.local_sku).length
+          新映射方法记录数: allMergedData.filter(r => r.mapping_method === 'new_amazon_listings').length,
+          Amazon_FBA渠道记录数: allMergedData.filter(r => r.fulfillment_channel?.includes('AMAZON')).length
         }
       }
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 获取合并数据失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取合并数据失败（新映射方法）:', error);
     res.status(500).json({
       code: 1,
-      message: '获取失败',
+      message: '获取失败 - 新映射方法异常',
+      error: error.message
+    });
+  }
+});
+
+// 新的映射逻辑调试端点
+router.get('/debug-new-mapping', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔧 开始调试新的Amazon SKU映射流程');
+  
+  try {
+    // 步骤1: 检查listings_sku表
+    console.log('\x1b[33m%s\x1b[0m', '🔍 步骤1: 检查listings_sku表结构和数据');
+    
+    let listingsTableExists = false;
+    let amazonListings = [];
+    
+    try {
+      const tableCheck = await sequelize.query(`
+        SELECT COUNT(*) as count FROM listings_sku LIMIT 1
+      `, {
+        type: sequelize.QueryTypes.SELECT,
+        raw: true
+      });
+      
+      listingsTableExists = true;
+      console.log('\x1b[32m%s\x1b[0m', '✅ listings_sku表存在');
+      
+      // 获取Amazon数据样例
+      amazonListings = await sequelize.query(`
+        SELECT seller_sku, site, fulfillment_channel
+        FROM listings_sku 
+        WHERE fulfillment_channel LIKE '%AMAZON%'
+        LIMIT 10
+      `, {
+        type: sequelize.QueryTypes.SELECT,
+        raw: true
+      });
+      
+      console.log('\x1b[33m%s\x1b[0m', `📋 Amazon listings数据样例 (${amazonListings.length}条):`, amazonListings);
+      
+    } catch (error) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ listings_sku表不存在或无权限:', error.message);
+    }
+
+    // 步骤2: 检查pbi_amzsku_sku表数据
+    console.log('\x1b[33m%s\x1b[0m', '🔍 步骤2: 检查pbi_amzsku_sku表数据');
+    
+    const mappingData = await AmzSkuMapping.findAll({
+      limit: 10,
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `🔗 映射表数据样例 (${mappingData.length}条):`, mappingData);
+
+    // 步骤3: 测试关联逻辑
+    console.log('\x1b[33m%s\x1b[0m', '🔍 步骤3: 测试Amazon listings与映射表的关联');
+    
+    let associationTests = [];
+    if (amazonListings.length > 0) {
+      for (const listing of amazonListings.slice(0, 3)) {
+        try {
+          const matchingMappings = await sequelize.query(`
+            SELECT p.amz_sku, p.site, p.country, p.local_sku, p.update_time
+            FROM pbi_amzsku_sku p
+            WHERE p.amz_sku = :sellerSku 
+            AND p.site = :site
+          `, {
+            replacements: { 
+              sellerSku: listing.seller_sku,
+              site: listing.site 
+            },
+            type: sequelize.QueryTypes.SELECT,
+            raw: true
+          });
+          
+          associationTests.push({
+            listing: listing,
+            匹配的映射数量: matchingMappings.length,
+            匹配的映射: matchingMappings
+          });
+        } catch (error) {
+          associationTests.push({
+            listing: listing,
+            错误: error.message
+          });
+        }
+      }
+    }
+    
+    console.log('\x1b[35m%s\x1b[0m', '🔗 关联测试结果:', associationTests);
+
+    // 步骤4: 检查库存数据样例
+    console.log('\x1b[33m%s\x1b[0m', '🔍 步骤4: 检查库存数据');
+    
+    const inventoryStats = await LocalBox.findAll({
+      attributes: [
+        'sku',
+        'country',
+        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
+      ],
+      group: ['sku', 'country'],
+      limit: 5,
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `📦 库存数据样例 (${inventoryStats.length}条):`, inventoryStats);
+
+    // 步骤5: 模拟完整的新映射流程
+    console.log('\x1b[33m%s\x1b[0m', '🔍 步骤5: 模拟完整的新映射流程');
+    
+    let simulationResult = {
+      listings_sku表存在: listingsTableExists,
+      Amazon_listings数量: amazonListings.length,
+      映射表记录数量: mappingData.length,
+      库存记录数量: inventoryStats.length,
+      关联测试结果: associationTests,
+      建议操作: []
+    };
+
+    if (!listingsTableExists) {
+      simulationResult.建议操作.push('需要创建或确认listings_sku表的存在和权限');
+    }
+    
+    if (amazonListings.length === 0) {
+      simulationResult.建议操作.push('listings_sku表中没有包含AMAZON的fulfillment_channel数据');
+    }
+    
+    if (mappingData.length === 0) {
+      simulationResult.建议操作.push('pbi_amzsku_sku映射表为空，需要先填充映射数据');
+    }
+    
+    if (associationTests.length > 0 && associationTests.every(test => test.匹配的映射数量 === 0)) {
+      simulationResult.建议操作.push('listings_sku和pbi_amzsku_sku表之间没有找到匹配的关联数据');
+    }
+
+    res.json({
+      code: 0,
+      message: '新映射逻辑调试完成',
+      data: simulationResult
+    });
+
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 新映射逻辑调试失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '调试失败',
       error: error.message
     });
   }

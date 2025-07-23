@@ -91,13 +91,17 @@ interface MergedShippingData {
   record_num: number;
   need_num: string;
   amz_sku: string;
+  amazon_sku?: string; // 新的Amazon SKU字段
   local_sku: string;
+  site?: string; // Amazon站点字段
+  fulfillment_channel?: string; // 履行渠道字段
   quantity: number;
   shipping_method?: string;
   marketplace: string;
   country: string;
   status: '待发货' | '已发货' | '已取消' | '有库存无需求' | '库存未映射';
   created_at: string;
+  mapping_method?: string; // 映射方法标记
   whole_box_quantity: number;
   whole_box_count: number;
   mixed_box_quantity: number;
@@ -1170,6 +1174,35 @@ const ShippingPage: React.FC = () => {
       width: 130,
       ellipsis: true,
       sorter: true,
+      render: (amzSku: string, record: MergedShippingData) => (
+        <div>
+          <div>{amzSku}</div>
+          {record.amazon_sku && record.amazon_sku !== amzSku && (
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              新映射: {record.amazon_sku}
+            </div>
+          )}
+          {record.mapping_method === 'new_amazon_listings' && (
+            <Tag size="small" color="green">新映射</Tag>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: '站点/渠道',
+      dataIndex: 'site',
+      key: 'site',
+      width: 100,
+      ellipsis: true,
+      sorter: true,
+      render: (site: string, record: MergedShippingData) => (
+        <div>
+          {site && <div>{site}</div>}
+          {record.fulfillment_channel && record.fulfillment_channel.includes('AMAZON') && (
+            <Tag size="small" color="blue">FBA</Tag>
+          )}
+        </div>
+      ),
     },
     {
       title: '需求数量',
