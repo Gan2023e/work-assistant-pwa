@@ -664,11 +664,8 @@ const LogisticsPage: React.FC = () => {
         setEditingKey('');
         setEditingField('');
         setEditingValue('');
-        
-        // 如果更新的是状态字段，自动刷新统计数据
-        if (editingField === 'status') {
-          await fetchStatistics();
-        }
+        // 修改：无论编辑哪个字段都刷新统计卡片
+        await fetchStatistics();
       } else {
         throw new Error(result.message || '更新失败');
       }
