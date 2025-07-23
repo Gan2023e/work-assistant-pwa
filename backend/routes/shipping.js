@@ -966,9 +966,9 @@ router.get('/merged-data', async (req, res) => {
     
     // 1. 从listings_sku表获取包含AMAZON的fulfillment-channel数据
     const amazonListings = await sequelize.query(`
-      SELECT DISTINCT seller_sku, site, fulfillment_channel
+      SELECT DISTINCT \`seller-sku\`, site, \`fulfillment-channel\`
       FROM listings_sku 
-      WHERE fulfillment_channel LIKE '%AMAZON%'
+      WHERE \`fulfillment-channel\` LIKE '%AMAZON%'
     `, {
       type: sequelize.QueryTypes.SELECT,
       raw: true
@@ -992,7 +992,7 @@ router.get('/merged-data', async (req, res) => {
             AND p.site = :site
           `, {
             replacements: { 
-              sellerSku: listing.seller_sku,
+              sellerSku: listing['seller-sku'],
               site: listing.site 
             },
             type: sequelize.QueryTypes.SELECT,
@@ -1000,9 +1000,9 @@ router.get('/merged-data', async (req, res) => {
           });
 
           return mappingRecords.map(record => ({
-            amazon_seller_sku: listing.seller_sku,
+            amazon_seller_sku: listing['seller-sku'],
             site: listing.site,
-            fulfillment_channel: listing.fulfillment_channel,
+            fulfillment_channel: listing['fulfillment-channel'],
             amz_sku: record.amz_sku,
             country: record.country,
             local_sku: record.local_sku,
