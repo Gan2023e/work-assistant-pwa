@@ -1189,22 +1189,6 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '站点/渠道',
-      dataIndex: 'site',
-      key: 'site',
-      width: 100,
-      ellipsis: true,
-      sorter: true,
-      render: (site: string, record: MergedShippingData) => (
-        <div>
-          {site && <div>{site}</div>}
-          {record.fulfillment_channel && record.fulfillment_channel.includes('AMAZON') && (
-            <Tag color="blue">FBA</Tag>
-          )}
-        </div>
-      ),
-    },
-    {
       title: '需求数量',
       dataIndex: 'quantity',
       key: 'quantity',
@@ -1254,13 +1238,6 @@ const ShippingPage: React.FC = () => {
       align: 'center',
       sorter: true,
       render: (value: number) => value || '-',
-    },
-    {
-      title: '平台',
-      dataIndex: 'marketplace',
-      key: 'marketplace',
-      width: 90,
-      sorter: true,
     },
     {
       title: '国家',
