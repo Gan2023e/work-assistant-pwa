@@ -394,6 +394,21 @@ const Purchase: React.FC = () => {
       
       // 刷新统计信息
       fetchAllDataStatistics();
+
+      // 新增：批量更新后自动刷新数据
+      if (
+        filters.status ||
+        filters.cpc_status ||
+        filters.cpc_submit ||
+        filters.seller_name ||
+        filters.dateRange
+      ) {
+        // 有筛选条件，重新筛选
+        applyFilters(filters);
+      } else {
+        // 无筛选，重新拉取全部数据
+        handleSearch();
+      }
     } catch (e) {
       console.error('批量更新失败:', e);
       message.error('批量更新失败');
