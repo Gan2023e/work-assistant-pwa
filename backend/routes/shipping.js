@@ -4911,7 +4911,7 @@ router.get('/mixed-box-inventory', async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     
     // 查询本地箱子数据
-    const { count, rows } = await LocalBox.findAll({
+    const rows = await LocalBox.findAll({
       where: whereCondition,
       order: [['time', 'DESC'], ['记录号', 'DESC']],
       raw: true
