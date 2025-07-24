@@ -451,6 +451,76 @@ router.post('/orders', async (req, res) => {
   }
 });
 
+// 检查SKU冲突
+router.post('/check-conflicts', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 检查SKU冲突请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { skus, country, marketplace } = req.body;
+    
+    if (!skus || !Array.isArray(skus) || skus.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU列表不能为空'
+      });
+    }
+
+    // 查询待发货的需求单中是否有相同的SKU
+    const existingNeeds = await WarehouseProductsNeed.findAll({
+      where: {
+        sku: { [Op.in]: skus },
+        country: country,
+        marketplace: marketplace,
+        status: { [Op.in]: ['待发货', '部分发出'] }
+      },
+      attributes: ['record_num', 'need_num', 'sku', 'ori_quantity', 'status']
+    });
+
+    // 查询每个SKU的已发货数量
+    const conflicts = [];
+    for (const need of existingNeeds) {
+      const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
+        where: { order_item_id: need.record_num }
+      }) || 0;
+
+      // 只有剩余数量大于0的才算冲突
+      const remainingQuantity = need.ori_quantity - shippedQuantity;
+      if (remainingQuantity > 0) {
+        conflicts.push({
+          sku: need.sku,
+          needNum: need.need_num,
+          recordNum: need.record_num,
+          existingQuantity: remainingQuantity,
+          totalQuantity: need.ori_quantity,
+          shippedQuantity: shippedQuantity
+        });
+      }
+    }
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 SKU冲突检查结果:', {
+      totalSkus: skus.length,
+      conflictsFound: conflicts.length,
+      conflicts: conflicts.map(c => ({ sku: c.sku, needNum: c.needNum, remaining: c.existingQuantity }))
+    });
+
+    res.json({
+      code: 0,
+      message: '检查完成',
+      data: {
+        conflicts: conflicts,
+        hasConflicts: conflicts.length > 0
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 检查SKU冲突失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '检查失败',
+      error: error.message
+    });
+  }
+});
+
 // 修改需求单中SKU的数量
 router.put('/orders/:needNum/items/:recordNum', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔄 修改需求数量:', {

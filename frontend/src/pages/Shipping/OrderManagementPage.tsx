@@ -106,6 +106,14 @@ interface OrderDetails {
   shipment_history: ShipmentHistory[];
 }
 
+interface ConflictSku {
+  sku: string;
+  existingQuantity: number;
+  needNum: string;
+  recordNum: number;
+  newQuantity: number;
+}
+
 // 新增props类型
 interface OrderManagementPageProps {
   needNum?: string;
@@ -132,6 +140,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   // 添加需求单Modal相关状态
   const [addOrderModalVisible, setAddOrderModalVisible] = useState(false);
   const [addOrderForm] = Form.useForm();
+  
+  // SKU冲突相关状态
+  const [conflictModalVisible, setConflictModalVisible] = useState(false);
+  const [conflictSkus, setConflictSkus] = useState<any[]>([]);
+  const [currentConflictIndex, setCurrentConflictIndex] = useState(0);
+  const [conflictResolutions, setConflictResolutions] = useState<{[key: string]: string}>({});
+  const [pendingOrderData, setPendingOrderData] = useState<any>(null);
 
   // 分页状态
   const [pagination, setPagination] = useState({
@@ -273,14 +288,206 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
-  // 添加需求单处理函数
-  const handleAddOrder = async (values: any) => {
+  // 检查SKU冲突
+  const checkSkuConflicts = async (skuData: string, orderInfo: any) => {
     try {
-      // 处理日期字段格式
+      // 解析SKU数据
+      const skuLines = skuData.trim().split('\n').filter(line => line.trim());
+      const skus = skuLines.map(line => {
+        const parts = line.trim().split(/\s+/);
+        return {
+          sku: parts[0],
+          quantity: parseInt(parts[1]) || 0
+        };
+      }).filter(item => item.sku && item.quantity > 0);
+
+      if (skus.length === 0) {
+        message.error('请输入有效的SKU和数量');
+        return;
+      }
+
+      // 检查每个SKU是否有待发需求
+      const response = await fetch(`${API_BASE_URL}/api/order-management/check-conflicts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          skus: skus.map(s => s.sku),
+          country: orderInfo.country,
+          marketplace: orderInfo.marketplace
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        const conflicts = result.data.conflicts || [];
+        
+        if (conflicts.length > 0) {
+          // 有冲突，开始冲突解决流程
+          const conflictSkuData = conflicts.map((conflict: any) => {
+            const inputSku = skus.find(s => s.sku === conflict.sku);
+            return {
+              ...conflict,
+              newQuantity: inputSku?.quantity || 0
+            };
+          });
+          
+          setConflictSkus(conflictSkuData);
+          setCurrentConflictIndex(0);
+          setConflictResolutions({});
+          setPendingOrderData({
+            orderInfo,
+            allSkus: skus,
+            nonConflictSkus: skus.filter(s => !conflicts.some((c: any) => c.sku === s.sku))
+          });
+          setConflictModalVisible(true);
+        } else {
+          // 没有冲突，直接创建需求单
+          await createNewOrder({
+            ...orderInfo,
+            sku_data: skuData
+          });
+        }
+      } else {
+        message.error(result.message || '检查SKU冲突失败');
+      }
+    } catch (error) {
+      console.error('检查SKU冲突失败:', error);
+      message.error('检查SKU冲突失败');
+    }
+  };
+
+  // 处理冲突解决选择
+  const handleConflictResolution = (resolution: string) => {
+    const currentSku = conflictSkus[currentConflictIndex];
+    const newResolutions = {
+      ...conflictResolutions,
+      [currentSku.sku]: resolution
+    };
+    setConflictResolutions(newResolutions);
+
+    if (currentConflictIndex < conflictSkus.length - 1) {
+      // 继续下一个冲突
+      setCurrentConflictIndex(currentConflictIndex + 1);
+    } else {
+      // 所有冲突都已处理，执行批量操作
+      setConflictModalVisible(false);
+      executeConflictResolutions(newResolutions);
+    }
+  };
+
+  // 执行冲突解决方案
+  const executeConflictResolutions = async (resolutions: {[key: string]: string}) => {
+    try {
+      const updatePromises: Promise<any>[] = [];
+      const newOrderSkus: any[] = [];
+      const notificationData: any[] = [];
+
+      for (const conflictSku of conflictSkus) {
+        const resolution = resolutions[conflictSku.sku];
+        const newQuantity = conflictSku.newQuantity;
+
+        switch (resolution) {
+          case 'add':
+            // 在原基础上添加
+            const addQuantity = conflictSku.existingQuantity + newQuantity;
+            updatePromises.push(
+              fetch(`${API_BASE_URL}/api/order-management/orders/${conflictSku.needNum}/items/${conflictSku.recordNum}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                },
+                body: JSON.stringify({ quantity: addQuantity }),
+              })
+            );
+            notificationData.push({
+              sku: conflictSku.sku,
+              action: '累加',
+              oldQuantity: conflictSku.existingQuantity,
+              newQuantity: addQuantity,
+              needNum: conflictSku.needNum
+            });
+            break;
+
+          case 'replace':
+            // 用新数量覆盖
+            updatePromises.push(
+              fetch(`${API_BASE_URL}/api/order-management/orders/${conflictSku.needNum}/items/${conflictSku.recordNum}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                },
+                body: JSON.stringify({ quantity: newQuantity }),
+              })
+            );
+            notificationData.push({
+              sku: conflictSku.sku,
+              action: '覆盖',
+              oldQuantity: conflictSku.existingQuantity,
+              newQuantity: newQuantity,
+              needNum: conflictSku.needNum
+            });
+            break;
+
+          case 'new':
+            // 加入新需求单
+            newOrderSkus.push({
+              sku: conflictSku.sku,
+              quantity: newQuantity
+            });
+            break;
+        }
+      }
+
+      // 执行更新操作
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        
+        // 发送钉钉通知
+        await sendDingTalkNotification(notificationData);
+      }
+
+      // 创建新需求单（包含选择新建的SKU和原本没有冲突的SKU）
+      const allNewSkus = [...newOrderSkus, ...pendingOrderData.nonConflictSkus];
+      if (allNewSkus.length > 0) {
+        const newSkuData = allNewSkus.map(s => `${s.sku} ${s.quantity}`).join('\n');
+        await createNewOrder({
+          ...pendingOrderData.orderInfo,
+          sku_data: newSkuData
+        });
+      }
+
+      message.success('需求单处理完成');
+      
+      // 刷新页面数据
+      await fetchOrders(pagination.current, pagination.pageSize);
+      
+      // 清理状态
+      setAddOrderModalVisible(false);
+      addOrderForm.resetFields();
+      setConflictSkus([]);
+      setCurrentConflictIndex(0);
+      setConflictResolutions({});
+      setPendingOrderData(null);
+
+    } catch (error) {
+      console.error('执行冲突解决方案失败:', error);
+      message.error('处理失败，请稍后重试');
+    }
+  };
+
+  // 创建新需求单
+  const createNewOrder = async (orderData: any) => {
+    try {
       const formattedValues = {
-        ...values,
-        send_out_date: values.send_out_date ? dayjs(values.send_out_date).format('YYYY-MM-DD') : null,
-        expect_sold_out_date: values.expect_sold_out_date ? dayjs(values.expect_sold_out_date).format('YYYY-MM-DD') : null
+        ...orderData,
+        send_out_date: orderData.send_out_date ? dayjs(orderData.send_out_date).format('YYYY-MM-DD') : null,
+        expect_sold_out_date: orderData.expect_sold_out_date ? dayjs(orderData.expect_sold_out_date).format('YYYY-MM-DD') : null
       };
 
       const response = await fetch(`${API_BASE_URL}/api/order-management/orders`, {
@@ -296,18 +503,58 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       
       if (result.code === 0) {
         message.success('需求单创建成功');
-        setAddOrderModalVisible(false);
-        addOrderForm.resetFields();
-        
-        // 刷新需求单列表
-        await fetchOrders(pagination.current, pagination.pageSize);
+        return result.data;
       } else {
         message.error(result.message || '创建失败');
+        throw new Error(result.message);
       }
     } catch (error) {
-      console.error('添加需求单失败:', error);
-      message.error('创建失败，请稍后重试');
+      console.error('创建需求单失败:', error);
+      throw error;
     }
+  };
+
+  // 发送钉钉通知
+  const sendDingTalkNotification = async (notificationData: any[]) => {
+    try {
+      let message_content = '📦 海外仓补货需求更新通知\n\n';
+      
+      notificationData.forEach(item => {
+        message_content += `🔹 SKU: ${item.sku}\n`;
+        message_content += `   操作: ${item.action}\n`;
+        message_content += `   原数量: ${item.oldQuantity} → 新数量: ${item.newQuantity}\n`;
+        message_content += `   需求单号: ${item.needNum}\n\n`;
+      });
+      
+      message_content += `⏰ 更新时间: ${new Date().toLocaleString('zh-CN')}\n`;
+      message_content += `👤 操作员: ${user?.username || '未知'}`;
+
+      const response = await fetch(`${API_BASE_URL}/api/dingtalk/send-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          message: message_content,
+          type: 'warehouse_demand_update'
+        })
+      });
+
+      const result = await response.json();
+      if (result.code === 0) {
+        message.success('通知已发送到钉钉群');
+      }
+    } catch (error) {
+      console.error('发送钉钉通知失败:', error);
+      // 不影响主流程，只记录错误
+    }
+  };
+
+  // 添加需求单处理函数
+  const handleAddOrder = async (values: any) => {
+    // 检查SKU冲突
+    await checkSkuConflicts(values.sku_data, values);
   };
 
   // 获取状态颜色
@@ -1085,6 +1332,103 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* SKU冲突解决对话框 */}
+      <Modal
+        title="SKU冲突检测"
+        open={conflictModalVisible}
+        onCancel={() => {
+          setConflictModalVisible(false);
+          setConflictSkus([]);
+          setCurrentConflictIndex(0);
+          setConflictResolutions({});
+          setPendingOrderData(null);
+        }}
+        footer={null}
+        width={600}
+        maskClosable={false}
+      >
+        {conflictSkus.length > 0 && (
+          <div>
+            <Alert
+              message={`发现 ${conflictSkus.length} 个SKU冲突`}
+              description={`正在处理第 ${currentConflictIndex + 1} 个冲突 (共 ${conflictSkus.length} 个)`}
+              type="warning"
+              style={{ marginBottom: 16 }}
+            />
+            
+            {conflictSkus[currentConflictIndex] && (
+              <div>
+                <Descriptions column={1} bordered size="small">
+                  <Descriptions.Item label="SKU">
+                    <Text strong>{conflictSkus[currentConflictIndex].sku}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="原需求单号">
+                    {conflictSkus[currentConflictIndex].needNum}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="原需求数量">
+                    <Text type="secondary">{conflictSkus[currentConflictIndex].existingQuantity}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="新增数量">
+                    <Text type="primary">{conflictSkus[currentConflictIndex].newQuantity}</Text>
+                  </Descriptions.Item>
+                </Descriptions>
+
+                <Divider />
+
+                <div style={{ textAlign: 'center' }}>
+                  <Text strong>请选择处理方式：</Text>
+                  <div style={{ marginTop: 16 }}>
+                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      <Button
+                        type="primary"
+                        size="large"
+                        style={{ width: '100%', height: '60px' }}
+                        onClick={() => handleConflictResolution('add')}
+                      >
+                        <div>
+                          <div><strong>累加数量</strong></div>
+                          <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                            {conflictSkus[currentConflictIndex].existingQuantity} + {conflictSkus[currentConflictIndex].newQuantity} = {conflictSkus[currentConflictIndex].existingQuantity + conflictSkus[currentConflictIndex].newQuantity}
+                          </div>
+                        </div>
+                      </Button>
+
+                      <Button
+                        type="default"
+                        size="large"
+                        style={{ width: '100%', height: '60px' }}
+                        onClick={() => handleConflictResolution('replace')}
+                      >
+                        <div>
+                          <div><strong>覆盖数量</strong></div>
+                          <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                            使用新数量 {conflictSkus[currentConflictIndex].newQuantity} 替换原数量
+                          </div>
+                        </div>
+                      </Button>
+
+                      <Button
+                        type="dashed"
+                        size="large"
+                        style={{ width: '100%', height: '60px' }}
+                        onClick={() => handleConflictResolution('new')}
+                      >
+                        <div>
+                          <div><strong>创建新需求单</strong></div>
+                          <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                            保持原需求单不变，新数量加入新需求单
+                          </div>
+                        </div>
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );
