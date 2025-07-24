@@ -173,6 +173,12 @@ const LogisticsPage: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [exportVatLoading, setExportVatLoading] = useState(false);
 
+  // VAT税单编辑相关状态
+  const [vatEditModalVisible, setVatEditModalVisible] = useState(false);
+  const [editingVatRecord, setEditingVatRecord] = useState<LogisticsRecord | null>(null);
+  const [vatEditForm] = Form.useForm();
+  const [vatEditLoading, setVatEditLoading] = useState(false);
+
   // API调用函数
   const fetchData = async (params: SearchParams, showMessage: boolean = true) => {
     setLoading(true);
@@ -2182,6 +2188,15 @@ const LogisticsPage: React.FC = () => {
                   <Button
                     type="link"
                     size="small"
+                    onClick={() => handleOpenVatEditModal(record)}
+                    title="编辑VAT税单信息"
+                    disabled={isDeleting}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
                     danger
                     onClick={() => handleDeleteVatReceipt(record.shippingId)}
                     title="删除VAT税单"
@@ -2268,6 +2283,79 @@ const LogisticsPage: React.FC = () => {
     };
     
     fetchData(updatedParams);
+  };
+
+  // 打开VAT税单编辑对话框
+  const handleOpenVatEditModal = (record: LogisticsRecord) => {
+    setEditingVatRecord(record);
+    setVatEditModalVisible(true);
+    vatEditForm.setFieldsValue({
+      mrn: record.mrn || '',
+      taxAmount: record.vatReceiptTaxAmount || null,
+      taxDate: record.vatReceiptTaxDate ? dayjs(record.vatReceiptTaxDate) : null
+    });
+  };
+
+  // 保存VAT税单编辑
+  const handleSaveVatEdit = async () => {
+    if (!editingVatRecord) return;
+    
+    try {
+      setVatEditLoading(true);
+      const formData = await vatEditForm.validateFields();
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/logistics/update-vat-receipt/${editingVatRecord.shippingId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          mrn: formData.mrn || '',
+          taxAmount: formData.taxAmount || null,
+          taxDate: formData.taxDate?.format('YYYY-MM-DD') || null
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('VAT税单信息更新成功');
+        // 更新本地数据
+        setData(prevData =>
+          prevData.map(item =>
+            item.shippingId === editingVatRecord.shippingId
+              ? {
+                  ...item,
+                  mrn: formData.mrn || '',
+                  vatReceiptTaxAmount: formData.taxAmount || null,
+                  vatReceiptTaxDate: formData.taxDate?.format('YYYY-MM-DD') || null
+                }
+              : item
+          )
+        );
+        
+        // 关闭对话框
+        setVatEditModalVisible(false);
+        setEditingVatRecord(null);
+        vatEditForm.resetFields();
+      } else {
+        throw new Error(result.message || 'VAT税单信息更新失败');
+      }
+    } catch (error) {
+      console.error('VAT税单信息更新失败:', error);
+      message.error(`VAT税单信息更新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setVatEditLoading(false);
+    }
+  };
+
+  // 取消VAT税单编辑
+  const handleCancelVatEdit = () => {
+    setVatEditModalVisible(false);
+    setEditingVatRecord(null);
+    vatEditForm.resetFields();
   };
 
   return (
@@ -2615,6 +2703,78 @@ const LogisticsPage: React.FC = () => {
 
 
 
+
+      {/* VAT税单编辑对话框 */}
+      <Modal
+        title="编辑VAT税单信息"
+        open={vatEditModalVisible}
+        onCancel={handleCancelVatEdit}
+        width={500}
+        footer={[
+          <Button key="cancel" onClick={handleCancelVatEdit}>
+            取消
+          </Button>,
+          <Button 
+            key="save" 
+            type="primary" 
+            loading={vatEditLoading}
+            onClick={handleSaveVatEdit}
+          >
+            保存
+          </Button>
+        ]}
+      >
+        <Form
+          form={vatEditForm}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="mrn"
+            label="MRN号码"
+            rules={[
+              { required: true, message: '请输入MRN号码' },
+              { pattern: /^[A-Z0-9Ø]+$/i, message: 'MRN号码只能包含字母和数字' }
+            ]}
+          >
+            <Input 
+              placeholder="请输入MRN号码" 
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          
+          <Form.Item
+            name="taxAmount"
+            label="税金金额 (£)"
+            rules={[
+              { required: true, message: '请输入税金金额' },
+              { type: 'number', min: 0, message: '税金金额必须大于等于0' }
+            ]}
+          >
+            <InputNumber
+              placeholder="请输入税金金额"
+              style={{ width: '100%' }}
+              precision={2}
+              min={0}
+              addonBefore="£"
+            />
+          </Form.Item>
+          
+          <Form.Item
+            name="taxDate"
+            label="税金日期"
+            rules={[
+              { required: true, message: '请选择税金日期' }
+            ]}
+          >
+            <DatePicker
+              placeholder="请选择税金日期"
+              style={{ width: '100%' }}
+              format="YYYY-MM-DD"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* VAT税单上传对话框 */}
       <Modal

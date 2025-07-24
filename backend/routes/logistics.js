@@ -1270,6 +1270,63 @@ router.post('/upload-vat-receipt/:shippingId', authenticateToken, upload.single(
   }
 });
 
+// 更新VAT税单信息
+router.put('/update-vat-receipt/:shippingId', authenticateToken, async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '收到VAT税单信息更新请求:', req.params.shippingId);
+  
+  try {
+    const { shippingId } = req.params;
+    const { mrn, taxAmount, taxDate } = req.body;
+    
+    // 验证物流记录是否存在
+    const logisticsRecord = await Logistics.findOne({
+      where: { shippingId }
+    });
+    
+    if (!logisticsRecord) {
+      return res.status(404).json({
+        code: 404,
+        message: '物流记录不存在'
+      });
+    }
+    
+    // 更新VAT税单信息
+    const updateData = {};
+    
+    if (mrn !== undefined) {
+      updateData.mrn = mrn;
+    }
+    
+    if (taxAmount !== undefined) {
+      updateData.vatReceiptTaxAmount = taxAmount;
+    }
+    
+    if (taxDate !== undefined) {
+      updateData.vatReceiptTaxDate = taxDate;
+    }
+    
+    await Logistics.update(updateData, {
+      where: { shippingId }
+    });
+    
+    console.log('✅ VAT税单信息更新成功');
+    
+    res.json({
+      code: 0,
+      message: 'VAT税单信息更新成功',
+      data: updateData
+    });
+    
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', 'VAT税单信息更新失败:', error);
+    res.status(500).json({
+      code: 500,
+      message: 'VAT税单信息更新失败',
+      error: error.message
+    });
+  }
+});
+
 // 删除VAT税单
 router.delete('/delete-vat-receipt/:shippingId', authenticateToken, async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '收到VAT税单删除请求:', req.params.shippingId);
