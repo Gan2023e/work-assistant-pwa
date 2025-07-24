@@ -417,7 +417,7 @@ router.post('/search', authenticateToken, async (req, res) => {
     if (filters) {
       // 处理特殊查询
       if (filters.specialQuery === 'pendingWarehouse') {
-        // 查询10天内即将到仓的记录，只统计状态为"在途"的记录
+        // 查询10天内即将到仓的记录，统计状态为"在途"和"查验中"的记录
         const tenDaysFromNow = new Date();
         tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
         
@@ -432,7 +432,9 @@ router.post('/search', authenticateToken, async (req, res) => {
             }
           },
           {
-            status: '在途'
+            status: {
+              [Op.in]: ['在途', '查验中']
+            }
           }
         ];
       } else if (filters.specialQuery === 'yearlyShipments') {
@@ -956,7 +958,7 @@ router.get('/statistics', async (req, res) => {
       return sum + (price * weight);
     }, 0);
 
-    // 5. 待调整到仓日货件数（10天内，只统计状态为"在途"的记录）
+    // 5. 待调整到仓日货件数（10天内，统计状态为"在途"和"查验中"的记录）
     const tenDaysFromNow = new Date();
     tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
     
@@ -973,7 +975,9 @@ router.get('/statistics', async (req, res) => {
             }
           },
           {
-            status: '在途'
+            status: {
+              [Op.in]: ['在途', '查验中']
+            }
           }
         ]
       }

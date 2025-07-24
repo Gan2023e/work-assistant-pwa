@@ -2427,7 +2427,7 @@ const LogisticsPage: React.FC = () => {
               title={
                 <span>
                   待调整到仓日货件数
-                  <Tooltip title="统计10天内预计到仓且状态为'在途'的货件数。">
+                  <Tooltip title="统计10天内预计到仓且状态为'在途'或'查验中'的货件数。">
                     <InfoCircleOutlined style={{ marginLeft: 4, color: '#1890ff', cursor: 'pointer' }} />
                   </Tooltip>
                 </span>
