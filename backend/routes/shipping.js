@@ -999,18 +999,42 @@ router.get('/merged-data', async (req, res) => {
 
         console.log('\x1b[33m%s\x1b[0m', `📦 Amazon FBA库存数据: ${inventoryWithMapping.length} 条`);
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查询待发货需求数据');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查询待发货需求数据并计算剩余需求');
     
-    // 2. 查询pbi_warehouse_products_need表中status为"待发货"的记录
-    const needsData = await WarehouseProductsNeed.findAll({
+    // 2. 查询待发货需求数据，并计算每个需求的剩余量
+    const needsDataRaw = await WarehouseProductsNeed.findAll({
       where: {
         status: '待发货'
       },
       order: [['create_date', 'ASC'], ['record_num', 'ASC']], // 按创建时间升序，确保最早的需求优先
-            raw: true
-          });
+      raw: true
+    });
 
-        console.log('\x1b[33m%s\x1b[0m', `📋 待发货需求数据: ${needsData.length} 条`);
+    console.log('\x1b[33m%s\x1b[0m', `📋 原始待发货需求数据: ${needsDataRaw.length} 条`);
+
+    // 2.1 查询每个需求记录的已发货数量，过滤掉已全部发出的记录
+    const needsData = [];
+    for (const need of needsDataRaw) {
+      // 查询该需求记录的已发货数量
+      const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
+        where: { order_item_id: need.record_num }
+      }) || 0;
+      
+      // 计算剩余需求量
+      const remainingQuantity = need.ori_quantity - shippedQuantity;
+      
+      // 只有剩余需求量大于0的记录才参与发货操作
+      if (remainingQuantity > 0) {
+        needsData.push({
+          ...need,
+          shipped_quantity: shippedQuantity,
+          remaining_quantity: remainingQuantity,
+          ori_quantity: remainingQuantity // 用剩余量替换原始需求量进行后续计算
+        });
+      }
+    }
+
+    console.log('\x1b[33m%s\x1b[0m', `📋 过滤后待发货需求数据: ${needsData.length} 条（已排除全部发出的记录）`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 构建Amazon FBA库存映射表');
     
