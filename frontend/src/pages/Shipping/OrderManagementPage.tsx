@@ -21,8 +21,7 @@ import {
   Popconfirm,
   Input,
   Select,
-  DatePicker,
-  Checkbox
+  DatePicker
 } from 'antd';
 import { 
   EyeOutlined,
@@ -1005,6 +1004,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           onFinish={handleAddOrder}
           layout="vertical"
           style={{ paddingTop: 16 }}
+          initialValues={{
+            country: '美国',
+            shipping_method: '盐田海运',
+            marketplace: '亚马逊',
+            send_out_date: dayjs().add(7, 'day'),
+            expect_sold_out_date: dayjs().add(3, 'month')
+          }}
         >
           <Form.Item
             label="目的国"
@@ -1077,10 +1083,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               rows={6}
               placeholder="请输入多行文本内容，希望输入SKU及数量&#10;例如：&#10;AGXB362D1 44&#10;NAXBA968H 32"
             />
-          </Form.Item>
-
-          <Form.Item>
-            <Checkbox name="remember">记住内容</Checkbox>
           </Form.Item>
         </Form>
       </Modal>
