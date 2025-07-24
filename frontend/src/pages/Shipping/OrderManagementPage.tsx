@@ -64,6 +64,7 @@ interface OrderItem {
   need_num: string;
   sku: string;
   amz_sku: string;
+  local_sku: string;
   ori_quantity: number;
   country: string;
   marketplace: string;
@@ -427,16 +428,16 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   // SKU明细表格列定义
   const itemColumns: ColumnsType<OrderItem> = [
     {
-      title: '本地SKU',
-      dataIndex: 'sku',
-      key: 'sku',
+      title: 'Amazon SKU',
+      dataIndex: 'amz_sku',
+      key: 'amz_sku',
       width: 120,
       render: (text: string) => <Text>{text}</Text>
     },
     {
-      title: 'Amazon SKU',
-      dataIndex: 'amz_sku',
-      key: 'amz_sku',
+      title: '本地SKU',
+      dataIndex: 'local_sku',
+      key: 'local_sku',
       width: 120,
       render: (text: string) => <Text>{text}</Text>
     },
@@ -782,8 +783,8 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
             layout="vertical"
           >
             <Descriptions size="small" column={1}>
-              <Descriptions.Item label="SKU">{editingItem.sku}</Descriptions.Item>
               <Descriptions.Item label="Amazon SKU">{editingItem.amz_sku}</Descriptions.Item>
+              <Descriptions.Item label="本地SKU">{editingItem.local_sku}</Descriptions.Item>
               <Descriptions.Item label="已发货数量">{editingItem.shipped_quantity}</Descriptions.Item>
             </Descriptions>
             

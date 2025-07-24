@@ -158,15 +158,15 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 查询SKU映射
+        // 查询SKU映射 - 通过Amazon SKU查找本地SKU
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            local_sku: item.sku,
+            amz_sku: item.sku,
             country: item.country
           }
         });
 
-        // 查询库存
+        // 查询库存 - 使用本地SKU查询库存
         const inventory = await LocalBox.findAll({
           where: {
             sku: mapping ? mapping.local_sku : item.sku,
@@ -207,7 +207,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         return {
           ...item.toJSON(),
-          amz_sku: mapping?.amz_sku || item.sku,
+          amz_sku: item.sku, // Amazon SKU显示原始的sku字段
+          local_sku: mapping?.local_sku || item.sku, // 本地SKU显示映射表的local_sku字段
           whole_box_quantity: wholeBoxQuantity,
           whole_box_count: wholeBoxCount,
           mixed_box_quantity: mixedBoxQuantity,
