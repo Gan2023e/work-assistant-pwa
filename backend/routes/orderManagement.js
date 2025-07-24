@@ -195,6 +195,16 @@ router.get('/orders/:needNum/details', async (req, res) => {
           where: { order_item_id: item.record_num }
         }) || 0;
 
+        // 动态计算SKU状态
+        let skuStatus = '待发货';
+        if (shipped > 0) {
+          if (shipped >= item.ori_quantity) {
+            skuStatus = '全部发出';
+          } else {
+            skuStatus = '部分发出';
+          }
+        }
+
         return {
           ...item.toJSON(),
           amz_sku: mapping?.amz_sku || item.sku,
@@ -204,7 +214,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
           total_available: wholeBoxQuantity + mixedBoxQuantity,
           shipped_quantity: shipped,
           remaining_quantity: item.ori_quantity - shipped,
-          shortage: Math.max(0, item.ori_quantity - shipped - (wholeBoxQuantity + mixedBoxQuantity))
+          shortage: Math.max(0, item.ori_quantity - shipped - (wholeBoxQuantity + mixedBoxQuantity)),
+          status: skuStatus  // 使用动态计算的状态，而不是数据库中的status字段
         };
       })
     );
