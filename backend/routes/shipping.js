@@ -4876,6 +4876,24 @@ router.get('/mixed-box-inventory', async (req, res) => {
   try {
     const { country, mix_box_num, page = 1, limit = 50 } = req.query;
     
+    // 第一步：查询所有已发货的需求记录（与国家库存汇总保持一致）
+    const shippedNeeds = await WarehouseProductsNeed.findAll({
+      where: {
+        status: '已发货'
+      },
+      attributes: ['sku', 'country'],
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 已发货需求数量:', shippedNeeds.length);
+
+    // 创建已发货SKU的查找集合，用于快速排除
+    const shippedSkuSet = new Set();
+    shippedNeeds.forEach(need => {
+      const key = `${need.sku}_${need.country}`;
+      shippedSkuSet.add(key);
+    });
+    
     let whereCondition = {
       total_quantity: { [Op.gt]: 0 } // 只显示库存大于0的记录
     };
@@ -4893,17 +4911,41 @@ router.get('/mixed-box-inventory', async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     
     // 查询本地箱子数据
-    const { count, rows } = await LocalBox.findAndCountAll({
+    const { count, rows } = await LocalBox.findAll({
       where: whereCondition,
       order: [['time', 'DESC'], ['记录号', 'DESC']],
-      limit: parseInt(limit),
-      offset: offset,
       raw: true
     });
     
-    // 分别统计混合箱和整箱数据
-    const mixedBoxes = rows.filter(item => item.mix_box_num && item.mix_box_num.trim() !== '');
-    const wholeBoxes = rows.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '');
+    // 分别统计混合箱和整箱数据，并排除已发货的SKU（与国家库存汇总保持一致）
+    const mixedBoxes = rows.filter(item => {
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') return false;
+      
+      // 排除已发货的SKU
+      const skuKey = `${item.sku}_${item.country}`;
+      if (shippedSkuSet.has(skuKey)) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货混合箱SKU: ${item.sku} (${item.country}) 混合箱:${item.mix_box_num}`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    const wholeBoxes = rows.filter(item => {
+      if (item.mix_box_num && item.mix_box_num.trim() !== '') return false;
+      
+      // 排除已发货的SKU
+      const skuKey = `${item.sku}_${item.country}`;
+      if (shippedSkuSet.has(skuKey)) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货整箱SKU: ${item.sku} (${item.country})`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '🔍 过滤后混合箱记录数:', mixedBoxes.length);
+    console.log('\x1b[33m%s\x1b[0m', '🔍 过滤后整箱记录数:', wholeBoxes.length);
     
     // 按混合箱号分组统计
     const mixedBoxSummary = {};
@@ -4965,27 +5007,48 @@ router.get('/mixed-box-inventory', async (req, res) => {
       }
     });
     
+    // 筛选有效的混合箱（总数量大于0）和整箱
+    const validMixedBoxes = Object.values(mixedBoxSummary).filter(box => box.total_quantity > 0);
+    const validWholeBoxes = Object.values(wholeBoxSummary).filter(box => box.total_quantity > 0);
+    
+    // 实现分页逻辑
+    const allValidBoxes = [...validMixedBoxes, ...validWholeBoxes];
+    const totalCount = allValidBoxes.length;
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    
+    // 分页后的混合箱和整箱数据
+    const paginatedMixedBoxes = validMixedBoxes.slice(Math.max(0, startIndex), Math.min(validMixedBoxes.length, endIndex));
+    const remainingSlots = parseInt(limit) - paginatedMixedBoxes.length;
+    const mixedBoxEndIndex = Math.min(validMixedBoxes.length, endIndex);
+    const wholeBoxStartIndex = Math.max(0, startIndex - validMixedBoxes.length);
+    const paginatedWholeBoxes = remainingSlots > 0 ? validWholeBoxes.slice(wholeBoxStartIndex, wholeBoxStartIndex + remainingSlots) : [];
+    
     console.log('\x1b[32m%s\x1b[0m', '📊 混合箱库存统计:', {
-      totalRecords: count,
-      mixedBoxCount: Object.keys(mixedBoxSummary).length,
-      wholeBoxCount: Object.keys(wholeBoxSummary).length
+      originalTotalRecords: rows.length,
+      validMixedBoxes: validMixedBoxes.length,
+      validWholeBoxes: validWholeBoxes.length,
+      totalValidBoxes: totalCount,
+      currentPage: parseInt(page),
+      pageSize: parseInt(limit)
     });
     
     res.json({
       code: 0,
       message: '获取混合箱库存成功',
       data: {
-        mixed_boxes: Object.values(mixedBoxSummary),
-        whole_boxes: Object.values(wholeBoxSummary),
+        mixed_boxes: paginatedMixedBoxes,
+        whole_boxes: paginatedWholeBoxes,
         pagination: {
           current: parseInt(page),
           pageSize: parseInt(limit),
-          total: count
+          total: totalCount
         },
         stats: {
-          total_records: count,
-          mixed_box_count: Object.keys(mixedBoxSummary).length,
-          whole_box_count: Object.keys(wholeBoxSummary).length
+          total_records: totalCount,
+          mixed_box_count: validMixedBoxes.length,
+          whole_box_count: validWholeBoxes.length,
+          filtered_out_shipped: rows.length - (mixedBoxes.length + wholeBoxes.length)
         }
       }
     });
@@ -5007,6 +5070,22 @@ router.get('/mixed-box-details/:mix_box_num', async (req, res) => {
     const { mix_box_num } = req.params;
     const { country } = req.query;
     
+    // 查询所有已发货的需求记录（与国家库存汇总保持一致）
+    const shippedNeeds = await WarehouseProductsNeed.findAll({
+      where: {
+        status: '已发货'
+      },
+      attributes: ['sku', 'country'],
+      raw: true
+    });
+
+    // 创建已发货SKU的查找集合
+    const shippedSkuSet = new Set();
+    shippedNeeds.forEach(need => {
+      const key = `${need.sku}_${need.country}`;
+      shippedSkuSet.add(key);
+    });
+    
     let whereCondition = {
       mix_box_num: mix_box_num,
       total_quantity: { [Op.gt]: 0 }
@@ -5016,10 +5095,20 @@ router.get('/mixed-box-details/:mix_box_num', async (req, res) => {
       whereCondition.country = country;
     }
     
-    const items = await LocalBox.findAll({
+    const allItems = await LocalBox.findAll({
       where: whereCondition,
       order: [['time', 'DESC']],
       raw: true
+    });
+    
+    // 排除已发货的SKU
+    const items = allItems.filter(item => {
+      const skuKey = `${item.sku}_${item.country}`;
+      if (shippedSkuSet.has(skuKey)) {
+        console.log('\x1b[31m%s\x1b[0m', `🚫 跳过已发货的混合箱SKU: ${item.sku} (${item.country})`);
+        return false;
+      }
+      return true;
     });
     
     // 查询对应的Amazon SKU映射
@@ -5052,7 +5141,9 @@ router.get('/mixed-box-details/:mix_box_num', async (req, res) => {
     
     console.log('\x1b[32m%s\x1b[0m', '📊 混合箱详情:', {
       mix_box_num,
-      itemCount: itemsWithMapping.length
+      originalItemCount: allItems.length,
+      filteredItemCount: itemsWithMapping.length,
+      filteredOutCount: allItems.length - items.length
     });
     
     res.json({
