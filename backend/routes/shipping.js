@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { WarehouseProductsNeed, LocalBox, AmzSkuMapping, sequelize, ShipmentRecord, ShipmentItem, OrderShipmentRelation } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
+const { shipInventoryRecords, cancelShipment } = require('../utils/inventoryUtils');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
@@ -2705,10 +2706,20 @@ router.delete('/shipment-history', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
     
-    // 1. 删除local_boxes表中对应的出库记录
-    const deletedLocalBoxes = await LocalBox.destroy({
+    // 1. 恢复local_boxes表中对应的库存状态（从已出库改为待出库）
+    const restoredLocalBoxes = await LocalBox.update({
+      status: '待出库',
+      shipped_at: null,
+      shipment_id: null,
+      last_updated_at: new Date(),
+      remark: sequelize.fn('CONCAT', 
+        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+        `;\n${new Date().toISOString()} 删除发货记录，恢复库存状态`
+      )
+    }, {
       where: {
-        shipment_id: { [Op.in]: shipment_ids }
+        shipment_id: { [Op.in]: shipment_ids },
+        status: '已出库'
       },
       transaction
     });
@@ -2743,7 +2754,7 @@ router.delete('/shipment-history', async (req, res) => {
       deletedRecords,
       deletedItems,
       deletedRelations,
-      deletedLocalBoxes
+      restoredLocalBoxes: restoredLocalBoxes[0]
     });
     
     res.json({
@@ -2753,7 +2764,7 @@ router.delete('/shipment-history', async (req, res) => {
         deleted_records: deletedRecords,
         deleted_items: deletedItems,
         deleted_relations: deletedRelations,
-        deleted_local_boxes: deletedLocalBoxes
+        restored_local_boxes: restoredLocalBoxes[0]
       }
     });
   } catch (error) {
@@ -4911,7 +4922,7 @@ router.get('/mixed-box-inventory', async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     
     // 查询本地箱子数据
-    const rows = await LocalBox.findAll({
+    const { count, rows } = await LocalBox.findAll({
       where: whereCondition,
       order: [['time', 'DESC'], ['记录号', 'DESC']],
       raw: true
@@ -5257,12 +5268,19 @@ router.delete('/mixed-box-item/:record_num', async (req, res) => {
       });
     }
     
-    // 删除记录
-    const deletedCount = await LocalBox.destroy({
-      where: { 记录号: record_num }
+    // 标记记录为已取消状态（软删除）
+    const [updatedCount] = await LocalBox.update({
+      status: '已取消',
+      last_updated_at: new Date(),
+      remark: sequelize.fn('CONCAT', 
+        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+        `;\n${new Date().toISOString()} 手动删除记录`
+      )
+    }, {
+      where: { 记录号: record_num, status: '待出库' }
     });
     
-    if (deletedCount > 0) {
+    if (updatedCount > 0) {
       console.log('\x1b[32m%s\x1b[0m', '✅ 混合箱SKU删除成功:', {
         record_num,
         sku: originalRecord.sku,
@@ -5321,23 +5339,30 @@ router.delete('/mixed-box-items/batch', async (req, res) => {
       });
     }
     
-    // 批量删除
-    const deletedCount = await LocalBox.destroy({
-      where: { 记录号: { [Op.in]: record_nums } }
+    // 批量标记为已取消状态（软删除）
+    const [updatedCount] = await LocalBox.update({
+      status: '已取消',
+      last_updated_at: new Date(),
+      remark: sequelize.fn('CONCAT', 
+        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+        `;\n${new Date().toISOString()} 批量删除记录`
+      )
+    }, {
+      where: { 记录号: { [Op.in]: record_nums }, status: '待出库' }
     });
     
     console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除混合箱SKU成功:', {
       requested: record_nums.length,
-      deleted: deletedCount
+      updated: updatedCount
     });
     
     res.json({
       code: 0,
-      message: `批量删除成功，删除了 ${deletedCount} 条记录`,
+      message: `批量删除成功，标记了 ${updatedCount} 条记录为已取消`,
       data: {
         requested_count: record_nums.length,
-        deleted_count: deletedCount,
-        deleted_records: recordsToDelete
+        updated_count: updatedCount,
+        updated_records: recordsToDelete
       }
     });
   } catch (error) {

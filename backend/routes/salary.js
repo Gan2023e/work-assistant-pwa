@@ -156,7 +156,12 @@ router.post('/delete_box_record', async (req, res) => {
       return res.status(400).json({ code: 400, message: '参数不完整' });
     }
     await sequelize.query(
-      'DELETE FROM local_boxes WHERE 记录号 = ?',
+      `UPDATE local_boxes SET 
+         status = '已取消',
+         last_updated_at = NOW(),
+         remark = CONCAT(IFNULL(remark, ''), ';
+', NOW(), ' 工资管理模块删除')
+       WHERE 记录号 = ? AND status = '待出库'`,
       { replacements: [记录号] }
     );
     res.json({ code: 0, message: '删除成功' });

@@ -21,6 +21,8 @@ import SkuMapping from './pages/Inventory/SkuMapping';
 import Summary from './pages/Inventory/Summary';
 import Supplier from './pages/Inventory/Supplier';
 import FbaInventory from './pages/Inventory/FbaInventory';
+import InventoryManagement from './pages/Inventory/InventoryManagement';
+import InventoryCreate from './pages/Inventory/InventoryCreate';
 import SalaryPage from './pages/Salary/SalaryPage';
 import ProfitPage from './pages/Profit/ProfitPage';
 import UserManagePage from './pages/User/UserManagePage';
@@ -68,6 +70,8 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       key: 'inventory',
       label: '库存管理',
       children: [
+        { key: '/inventory/management', label: <Link to="/inventory/management">库存管理</Link> },
+        { key: '/inventory/create', label: <Link to="/inventory/create">库存入库</Link> },
         { key: '/inventory/sku-mapping', label: <Link to="/inventory/sku-mapping">SKU映射管理</Link> },
         { key: '/inventory/summary', label: <Link to="/inventory/summary">旺季备货汇总</Link> },
         { key: '/inventory/supplier', label: <Link to="/inventory/supplier">厂家发货与付款</Link> },
@@ -322,6 +326,20 @@ const AppContent: React.FC = () => {
           <Route path="/logistics" element={
             <ProtectedRoute>
               <LogisticsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/inventory/management" element={
+            <ProtectedRoute>
+              <LayoutWithSidebar>
+                <InventoryManagement />
+              </LayoutWithSidebar>
+            </ProtectedRoute>
+          } />
+          <Route path="/inventory/create" element={
+            <ProtectedRoute>
+              <LayoutWithSidebar>
+                <InventoryCreate />
+              </LayoutWithSidebar>
             </ProtectedRoute>
           } />
           <Route path="/inventory/sku-mapping" element={

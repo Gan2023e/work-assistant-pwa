@@ -1,18 +1,26 @@
-import React from 'react';
-import { Card, Row, Col, Typography, Space, Divider } from 'antd';
+import React, { useState } from 'react';
+import { Card, Row, Col, Typography, Space, Divider, Button } from 'antd';
 import { 
   ShoppingCartOutlined, 
   TruckOutlined, 
   DollarOutlined, 
   BarChartOutlined,
   InboxOutlined,
-  SettingOutlined 
+  SettingOutlined,
+  PlusOutlined,
+  UnorderedListOutlined,
+  PrinterOutlined
 } from '@ant-design/icons';
 import { VERSION_INFO } from '../../config/version';
+import { useNavigate } from 'react-router-dom';
+import PrintManagerComponent, { PrintStatusIndicator } from '../../components/PrintManager';
 
 const { Title, Paragraph } = Typography;
 
 const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+  const [printManagerVisible, setPrintManagerVisible] = useState(false);
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px' }}>
       {/* 欢迎区域 */}
@@ -26,6 +34,18 @@ const HomePage: React.FC = () => {
         <Paragraph style={{ color: '#1890ff' }}>
           📱 已安装为PWA应用，支持离线使用，体验更流畅！
         </Paragraph>
+        
+        {/* 打印服务状态 */}
+        <Space style={{ marginTop: 16 }}>
+          <PrintStatusIndicator onClick={() => setPrintManagerVisible(true)} />
+          <Button 
+            type="link" 
+            icon={<SettingOutlined />}
+            onClick={() => setPrintManagerVisible(true)}
+          >
+            打印设置
+          </Button>
+        </Space>
       </Card>
 
       <Divider orientation="left">功能模块</Divider>
@@ -64,12 +84,30 @@ const HomePage: React.FC = () => {
           <Card hoverable>
             <div style={{ textAlign: 'center' }}>
               <InboxOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
-              <Title level={4}>备货管理</Title>
+              <Title level={4}>库存管理</Title>
               <Paragraph>
+                • 库存入库管理<br/>
+                • 库存状态追踪<br/>
                 • SKU映射管理<br/>
-                • 旺季备货汇总<br/>
-                • 厂家发货付款
+                • FBA库存查询
               </Paragraph>
+              <Space style={{ marginTop: 16 }}>
+                <Button 
+                  type="primary" 
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate('/inventory/create')}
+                >
+                  快速入库
+                </Button>
+                <Button 
+                  size="small"
+                  icon={<UnorderedListOutlined />}
+                  onClick={() => navigate('/inventory/management')}
+                >
+                  库存管理
+                </Button>
+              </Space>
             </div>
           </Card>
         </Col>
@@ -151,6 +189,11 @@ const HomePage: React.FC = () => {
           版本 v{VERSION_INFO.version} | 构建日期: {VERSION_INFO.buildDate}
         </Paragraph>
       </div>
+      {/* 打印管理模态框 */}
+      <PrintManagerComponent 
+        visible={printManagerVisible} 
+        onClose={() => setPrintManagerVisible(false)} 
+      />
     </div>
   );
 };
