@@ -1371,7 +1371,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     <Text type="secondary">{conflictSkus[currentConflictIndex].existingQuantity}</Text>
                   </Descriptions.Item>
                   <Descriptions.Item label="新增数量">
-                    <Text type="primary">{conflictSkus[currentConflictIndex].newQuantity}</Text>
+                    <Text style={{ color: '#1890ff', fontWeight: 'bold' }}>{conflictSkus[currentConflictIndex].newQuantity}</Text>
                   </Descriptions.Item>
                 </Descriptions>
 
