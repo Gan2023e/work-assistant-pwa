@@ -194,6 +194,174 @@ router.get('/inventory-stats', async (req, res) => {
   }
 });
 
+// 获取待发货库存汇总（专门用于库存管理页面）
+router.get('/pending-inventory-summary', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到待发货库存汇总查询请求');
+  
+  try {
+    const { page = 1, limit = 50, country, sku_filter, sort_by = 'total_quantity', sort_order = 'desc' } = req.query;
+    
+    // 查询所有库存数据，包含更多字段用于分析
+    const allData = await LocalBox.findAll({
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'time', '操作员', '打包员', 'marketPlace'],
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的原始库存数据:', allData.length);
+
+    // 按SKU和国家分组汇总
+    const summaryMap = new Map();
+    
+    allData.forEach(item => {
+      const key = `${item.sku}_${item.country}`;
+      
+      if (!summaryMap.has(key)) {
+        summaryMap.set(key, {
+          sku: item.sku || '',
+          country: item.country || '',
+          marketplace: item.marketPlace || '',
+          whole_box_quantity: 0,
+          whole_box_count: 0,
+          mixed_box_quantity: 0,
+          mixed_box_count: 0,
+          total_quantity: 0,
+          last_updated: null,
+          operators: new Set(),
+          packers: new Set(),
+          mixed_box_numbers: new Set()
+        });
+      }
+      
+      const summary = summaryMap.get(key);
+      const quantity = parseInt(item.total_quantity) || 0;
+      const boxes = parseInt(item.total_boxes) || 0;
+      
+      // 更新汇总数据
+      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
+        // 整箱数据
+        summary.whole_box_quantity += quantity;
+        summary.whole_box_count += boxes;
+      } else {
+        // 混合箱数据
+        summary.mixed_box_quantity += quantity;
+        summary.mixed_box_numbers.add(item.mix_box_num);
+      }
+      
+      summary.total_quantity += quantity;
+      
+      // 记录操作员和打包员
+      if (item['操作员']) {
+        summary.operators.add(item['操作员']);
+      }
+      if (item['打包员']) {
+        summary.packers.add(item['打包员']);
+      }
+      
+      // 更新最后操作时间
+      if (item.time && (!summary.last_updated || new Date(item.time) > new Date(summary.last_updated))) {
+        summary.last_updated = item.time;
+      }
+    });
+
+    // 转换为数组并计算混合箱数量
+    let summaryArray = Array.from(summaryMap.values()).map(item => ({
+      sku: item.sku,
+      country: item.country,
+      marketplace: item.marketplace,
+      whole_box_quantity: item.whole_box_quantity,
+      whole_box_count: item.whole_box_count,
+      mixed_box_quantity: item.mixed_box_quantity,
+      mixed_box_count: item.mixed_box_numbers.size, // 混合箱数 = 不同混合箱号的数量
+      total_quantity: item.total_quantity,
+      last_updated: item.last_updated || new Date().toISOString(),
+      operators: Array.from(item.operators).join(', '),
+      packers: Array.from(item.packers).join(', '),
+      status: item.total_quantity > 0 ? '有库存' : '已出库'
+    }));
+
+    // 过滤掉总数量为0的记录（已出库的商品）
+    summaryArray = summaryArray.filter(item => item.total_quantity > 0);
+
+    console.log('\x1b[33m%s\x1b[0m', '🔍 过滤后的汇总数据:', summaryArray.length);
+
+    // 应用筛选条件
+    if (country) {
+      summaryArray = summaryArray.filter(item => 
+        item.country && item.country.toLowerCase().includes(country.toLowerCase())
+      );
+    }
+
+    if (sku_filter) {
+      summaryArray = summaryArray.filter(item => 
+        item.sku && item.sku.toLowerCase().includes(sku_filter.toLowerCase())
+      );
+    }
+
+    // 排序
+    summaryArray.sort((a, b) => {
+      let aValue = a[sort_by] || 0;
+      let bValue = b[sort_by] || 0;
+      
+      if (sort_by === 'last_updated') {
+        aValue = new Date(aValue).getTime();
+        bValue = new Date(bValue).getTime();
+      } else if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (sort_order === 'desc') {
+        return bValue > aValue ? 1 : bValue < aValue ? -1 : 0;
+      } else {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      }
+    });
+
+    // 分页
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedData = summaryArray.slice(startIndex, endIndex);
+
+    // 计算统计信息
+    const stats = {
+      total_skus: summaryArray.length,
+      total_quantity: summaryArray.reduce((sum, item) => sum + item.total_quantity, 0),
+      total_whole_boxes: summaryArray.reduce((sum, item) => sum + item.whole_box_count, 0),
+      total_mixed_boxes: summaryArray.reduce((sum, item) => sum + item.mixed_box_count, 0),
+      countries: [...new Set(summaryArray.map(item => item.country))].filter(Boolean),
+      marketplaces: [...new Set(summaryArray.map(item => item.marketplace))].filter(Boolean)
+    };
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 待发货库存汇总完成:', {
+      总SKU数: stats.total_skus,
+      总数量: stats.total_quantity,
+      国家数: stats.countries.length,
+      当前页数据: paginatedData.length
+    });
+
+    res.json({
+      code: 0,
+      message: '获取待发货库存汇总成功',
+      data: {
+        list: paginatedData,
+        pagination: {
+          current: parseInt(page),
+          pageSize: parseInt(limit),
+          total: summaryArray.length
+        },
+        stats: stats
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取待发货库存汇总失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取待发货库存汇总失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取按国家汇总的库存数据（排除已发货状态的记录）
 router.get('/inventory-by-country', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到按国家汇总库存查询请求');

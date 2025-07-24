@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Table, 
   Button, 
-  Modal, 
-  Form, 
   Input, 
   Select, 
-  InputNumber, 
   message, 
   Space, 
   Tag,
@@ -15,17 +12,18 @@ import {
   Col,
   Statistic,
   Typography,
-  Popconfirm,
-  Tooltip
+  Tooltip,
+  DatePicker,
+  Empty
 } from 'antd';
 import { 
-  EditOutlined,
-  DeleteOutlined,
   ReloadOutlined,
   ExportOutlined,
-  WarningOutlined,
   InboxOutlined,
-  BoxPlotOutlined
+  BoxPlotOutlined,
+  SearchOutlined,
+  FilterOutlined,
+  AppstoreOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -34,50 +32,54 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const { Option } = Select;
 const { Title, Text } = Typography;
+const { Search } = Input;
 
-// 待发货库存数据接口
-interface PendingInventoryItem {
-  record_num: number;
-  need_num: string;
-  amz_sku: string;
-  local_sku: string;
-  quantity: number;
-  original_quantity: number;
-  shipped_quantity: number;
-  shipping_method?: string;
+// 库存汇总数据接口
+interface InventorySummaryItem {
+  sku: string;
+  country: string;
   marketplace: string;
-  country: string;
-  status: '待发货' | '已发货' | '已取消' | '有库存无需求' | '库存未映射';
-  created_at: string;
-  whole_box_quantity: number;
-  whole_box_count: number;
-  mixed_box_quantity: number;
-  total_available: number;
-  shortage: number;
-}
-
-// 国家库存汇总接口
-interface CountryInventory {
-  country: string;
   whole_box_quantity: number;
   whole_box_count: number;
   mixed_box_quantity: number;
   mixed_box_count: number;
   total_quantity: number;
+  last_updated: string;
+  operators: string;
+  packers: string;
+  status: string;
+}
+
+// 统计数据接口
+interface StatsData {
+  total_skus: number;
+  total_quantity: number;
+  total_whole_boxes: number;
+  total_mixed_boxes: number;
+  countries: string[];
+  marketplaces: string[];
 }
 
 const PendingInventoryPage: React.FC = () => {
   const { user } = useAuth();
-  const [data, setData] = useState<PendingInventoryItem[]>([]);
+  const [data, setData] = useState<InventorySummaryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [selectedRows, setSelectedRows] = useState<PendingInventoryItem[]>([]);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<PendingInventoryItem | null>(null);
-  const [editForm] = Form.useForm();
-  const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('待发货');
+  const [stats, setStats] = useState<StatsData>({
+    total_skus: 0,
+    total_quantity: 0,
+    total_whole_boxes: 0,
+    total_mixed_boxes: 0,
+    countries: [],
+    marketplaces: []
+  });
+
+  // 筛选和排序状态
+  const [filters, setFilters] = useState({
+    country: '',
+    sku_filter: '',
+    sort_by: 'total_quantity',
+    sort_order: 'desc'
+  });
 
   // 分页状态
   const [pagination, setPagination] = useState({
@@ -86,21 +88,26 @@ const PendingInventoryPage: React.FC = () => {
     total: 0
   });
 
-  // 获取待发货库存数据
-  const fetchPendingInventory = async (page = 1, pageSize = 50) => {
+  // 获取库存汇总数据
+  const fetchInventorySummary = async (page = 1, pageSize = 50) => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: pageSize.toString(),
-        status: filterStatus,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order
       });
       
-      if (selectedCountry) {
-        queryParams.append('country', selectedCountry);
+      if (filters.country) {
+        queryParams.append('country', filters.country);
+      }
+      
+      if (filters.sku_filter) {
+        queryParams.append('sku_filter', filters.sku_filter);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/pending-inventory-summary?${queryParams}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -115,29 +122,27 @@ const PendingInventoryPage: React.FC = () => {
       const result = await response.json();
       
       if (result.code === 0) {
-        // 过滤待发货和有库存的记录
-        const filteredData = (result.data.list || []).filter((item: PendingInventoryItem) => {
-          if (filterStatus === '待发货') {
-            return item.status === '待发货' && item.quantity > 0;
-          } else if (filterStatus === '有库存无需求') {
-            return item.status === '有库存无需求' && item.total_available > 0;
-          }
-          return item.status === filterStatus;
+        setData(result.data.list || []);
+        setStats(result.data.stats || {
+          total_skus: 0,
+          total_quantity: 0,
+          total_whole_boxes: 0,
+          total_mixed_boxes: 0,
+          countries: [],
+          marketplaces: []
+        });
+        setPagination({
+          current: page,
+          pageSize: pageSize,
+          total: result.data.pagination?.total || 0
         });
         
-        setData(filteredData);
-        setPagination(prev => ({
-          ...prev,
-          current: page,
-          total: filteredData.length
-        }));
-        
-        message.success(`加载了 ${filteredData.length} 条待发货库存记录`);
+        message.success(`加载了 ${result.data.list?.length || 0} 条库存汇总记录`);
       } else {
         message.error(result.message || '获取数据失败');
       }
     } catch (error) {
-      console.error('获取待发货库存失败:', error);
+      console.error('获取库存汇总失败:', error);
       message.error(`获取数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
       setData([]);
     } finally {
@@ -145,174 +150,39 @@ const PendingInventoryPage: React.FC = () => {
     }
   };
 
-  // 获取国家库存数据
-  const fetchCountryInventory = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/shipping/inventory-by-country`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        setCountryInventory(result.data || []);
-      } else {
-        console.error('获取国家库存数据失败:', result.message);
-      }
-    } catch (error) {
-      console.error('获取国家库存数据失败:', error);
-    }
-  };
-
   useEffect(() => {
-    fetchPendingInventory();
-    fetchCountryInventory();
-  }, [filterStatus, selectedCountry]);
+    fetchInventorySummary(pagination.current, pagination.pageSize);
+  }, [filters]);
 
-  // 状态颜色映射
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case '待发货': return 'orange';
-      case '已发货': return 'green';
-      case '已取消': return 'red';
-      case '有库存无需求': return 'blue';
-      case '库存未映射': return 'purple';
-      default: return 'default';
-    }
+  // 处理筛选变化
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+    setPagination(prev => ({ ...prev, current: 1 })); // 重置到第一页
   };
 
-  // 编辑库存数量
-  const handleEdit = (record: PendingInventoryItem) => {
-    setEditingRecord(record);
-    editForm.setFieldsValue({
-      quantity: record.quantity,
-      shipping_method: record.shipping_method,
-      marketplace: record.marketplace,
-      status: record.status
-    });
-    setEditModalVisible(true);
-  };
-
-  // 保存编辑
-  const handleSaveEdit = async () => {
-    try {
-      const values = await editForm.validateFields();
-      
-      if (!editingRecord) return;
-
-      // 检查修改后的数量不能小于已发货数量
-      if (values.quantity < editingRecord.shipped_quantity) {
-        message.error(`修改后的数量(${values.quantity})不能小于已发货数量(${editingRecord.shipped_quantity})`);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/order-management/orders/${editingRecord.need_num}/items/${editingRecord.record_num}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-        body: JSON.stringify({
-          quantity: values.quantity,
-          shipping_method: values.shipping_method,
-          marketplace: values.marketplace,
-          status: values.status
-        }),
+  // 处理表格变化（分页、排序等）
+  const handleTableChange = (paginationInfo: any, filtersInfo: any, sorterInfo: any) => {
+    // 处理分页
+    if (paginationInfo.current !== pagination.current || paginationInfo.pageSize !== pagination.pageSize) {
+      setPagination({
+        current: paginationInfo.current,
+        pageSize: paginationInfo.pageSize,
+        total: pagination.total
       });
-
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        message.success('修改成功');
-        setEditModalVisible(false);
-        fetchPendingInventory();
-      } else {
-        message.error(result.message || '修改失败');
-      }
-    } catch (error) {
-      console.error('修改失败:', error);
-      message.error('修改失败');
-    }
-  };
-
-  // 删除单个记录
-  const handleDelete = async (record: PendingInventoryItem) => {
-    try {
-      // 检查是否已有发货记录
-      if (record.shipped_quantity > 0) {
-        message.error(`该记录已有 ${record.shipped_quantity} 件发货，无法删除`);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/shipping/needs/${record.record_num}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-      });
-
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        message.success('删除成功');
-        fetchPendingInventory();
-      } else {
-        message.error(result.message || '删除失败');
-      }
-    } catch (error) {
-      console.error('删除失败:', error);
-      message.error('删除失败');
-    }
-  };
-
-  // 批量删除
-  const handleBatchDelete = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('请先选择要删除的记录');
-      return;
+      fetchInventorySummary(paginationInfo.current, paginationInfo.pageSize);
     }
 
-    // 检查选中记录是否有已发货的
-    const hasShipped = selectedRows.some(row => row.shipped_quantity > 0);
-    if (hasShipped) {
-      message.error('选中记录中有已发货的记录，无法删除');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/shipping/needs/batch-delete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-        body: JSON.stringify({
-          record_nums: selectedRowKeys
-        }),
-      });
-
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
-        setSelectedRowKeys([]);
-        setSelectedRows([]);
-        fetchPendingInventory();
-      } else {
-        message.error(result.message || '批量删除失败');
-      }
-    } catch (error) {
-      console.error('批量删除失败:', error);
-      message.error('批量删除失败');
+    // 处理排序
+    if (sorterInfo.columnKey && sorterInfo.order) {
+      const sortOrder = sorterInfo.order === 'ascend' ? 'asc' : 'desc';
+      setFilters(prev => ({
+        ...prev,
+        sort_by: sorterInfo.columnKey,
+        sort_order: sortOrder
+      }));
     }
   };
 
@@ -324,95 +194,84 @@ const PendingInventoryPage: React.FC = () => {
     }
 
     const exportData = data.map(item => ({
-      '需求单号': item.need_num,
-      'Amazon SKU': item.amz_sku,
-      '本地SKU': item.local_sku,
-      '需求数量': item.quantity,
-      '原始数量': item.original_quantity,
-      '已发货数量': item.shipped_quantity,
-      '可用库存': item.total_available,
+      'SKU': item.sku,
+      '国家': item.country,
+      '平台': item.marketplace,
       '整箱数量': item.whole_box_quantity,
       '整箱数': item.whole_box_count,
       '混合箱数量': item.mixed_box_quantity,
-      '缺货数量': item.shortage,
-      '运输方式': item.shipping_method || '',
-      '平台': item.marketplace,
-      '国家': item.country,
-      '状态': item.status,
-      '创建时间': new Date(item.created_at).toLocaleString('zh-CN')
+      '混合箱数': item.mixed_box_count,
+      '总数量': item.total_quantity,
+      '最后更新': new Date(item.last_updated).toLocaleString('zh-CN'),
+      '操作员': item.operators,
+      '打包员': item.packers,
+      '状态': item.status
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '待发货库存');
-    XLSX.writeFile(wb, `待发货库存_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, '库存汇总');
+    XLSX.writeFile(wb, `库存汇总_${new Date().toISOString().split('T')[0]}.xlsx`);
     message.success('导出成功');
   };
 
+  // 获取国家颜色
+  const getCountryColor = (country: string) => {
+    const colorMap: { [key: string]: string } = {
+      '美国': 'blue',
+      '英国': 'green',
+      '澳大利亚': 'orange',
+      '加拿大': 'purple',
+      '阿联酋': 'cyan',
+      '德国': 'red',
+      '法国': 'magenta',
+      '意大利': 'gold',
+      '西班牙': 'lime',
+      '日本': 'volcano'
+    };
+    return colorMap[country] || 'default';
+  };
+
   // 表格列定义
-  const columns: ColumnsType<PendingInventoryItem> = [
+  const columns: ColumnsType<InventorySummaryItem> = [
     {
-      title: '需求单号',
-      dataIndex: 'need_num',
-      key: 'need_num',
-      width: 120,
+      title: 'SKU',
+      dataIndex: 'sku',
+      key: 'sku',
+      width: 150,
       fixed: 'left',
+      sorter: true,
       render: (text: string) => <Text strong>{text}</Text>
     },
     {
-      title: 'Amazon SKU',
-      dataIndex: 'amz_sku',
-      key: 'amz_sku',
-      width: 150,
-      render: (text: string) => <Text>{text}</Text>
-    },
-    {
-      title: '本地SKU',
-      dataIndex: 'local_sku',
-      key: 'local_sku',
-      width: 120,
-      render: (text: string) => text || <Text type="secondary">未映射</Text>
-    },
-    {
-      title: '需求数量',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      width: 90,
-      align: 'center',
-      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.quantity - b.quantity,
-      render: (value: number) => <Text strong>{value}</Text>
-    },
-    {
-      title: '已发货',
-      dataIndex: 'shipped_quantity',
-      key: 'shipped_quantity',
+      title: '国家',
+      dataIndex: 'country',
+      key: 'country',
       width: 80,
       align: 'center',
-      render: (value: number) => (
-        <Text type={value > 0 ? 'success' : 'secondary'}>{value}</Text>
-      )
+      sorter: true,
+      render: (text: string) => <Tag color={getCountryColor(text)}>{text}</Tag>
     },
     {
-      title: '可用库存',
-      dataIndex: 'total_available',
-      key: 'total_available',
-      width: 90,
+      title: '平台',
+      dataIndex: 'marketplace',
+      key: 'marketplace',
+      width: 100,
       align: 'center',
-      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.total_available - b.total_available,
-      render: (value: number) => (
-        <Text type={value > 0 ? 'success' : 'danger'}>
-          {value}
-        </Text>
-      ),
+      render: (text: string) => text ? <Tag color="blue">{text}</Tag> : '-'
     },
     {
       title: '整箱数量',
       dataIndex: 'whole_box_quantity',
       key: 'whole_box_quantity',
-      width: 90,
+      width: 100,
       align: 'center',
-      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.whole_box_quantity - b.whole_box_quantity,
-      render: (value: number) => value || '-',
+      sorter: true,
+      render: (value: number) => (
+        <Text type={value > 0 ? 'success' : 'secondary'}>
+          {value || '-'}
+        </Text>
+      )
     },
     {
       title: '整箱数',
@@ -420,239 +279,103 @@ const PendingInventoryPage: React.FC = () => {
       key: 'whole_box_count',
       width: 80,
       align: 'center',
-      render: (value: number) => value || '-',
+      sorter: true,
+      render: (value: number) => value || '-'
     },
     {
       title: '混合箱数量',
       dataIndex: 'mixed_box_quantity',
       key: 'mixed_box_quantity',
-      width: 90,
+      width: 110,
       align: 'center',
-      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.mixed_box_quantity - b.mixed_box_quantity,
-      render: (value: number) => value || '-',
-    },
-    {
-      title: '缺货',
-      dataIndex: 'shortage',
-      key: 'shortage',
-      width: 70,
-      align: 'center',
+      sorter: true,
       render: (value: number) => (
-        value > 0 ? <Text type="danger">{value}</Text> : '-'
+        <Text type={value > 0 ? 'warning' : 'secondary'}>
+          {value || '-'}
+        </Text>
       )
     },
     {
-      title: '平台',
-      dataIndex: 'marketplace',
-      key: 'marketplace',
-      width: 80,
-      render: (text: string) => <Tag color="blue">{text}</Tag>
-    },
-    {
-      title: '国家',
-      dataIndex: 'country',
-      key: 'country',
-      width: 70,
+      title: '混合箱数',
+      dataIndex: 'mixed_box_count',
+      key: 'mixed_box_count',
+      width: 90,
       align: 'center',
-      render: (text: string) => <Tag color="green">{text}</Tag>
+      sorter: true,
+      render: (value: number) => value || '-'
     },
     {
-      title: '运输方式',
-      dataIndex: 'shipping_method',
-      key: 'shipping_method',
+      title: '总数量',
+      dataIndex: 'total_quantity',
+      key: 'total_quantity',
       width: 100,
-      render: (value: string) => value || '-',
+      align: 'center',
+      sorter: true,
+      render: (value: number) => (
+        <Text strong type={value > 0 ? 'success' : 'danger'}>
+          {value}
+        </Text>
+      )
+    },
+    {
+      title: '最后更新',
+      dataIndex: 'last_updated',
+      key: 'last_updated',
+      width: 150,
+      sorter: true,
+      render: (date: string) => new Date(date).toLocaleString('zh-CN')
+    },
+    {
+      title: '操作员',
+      dataIndex: 'operators',
+      key: 'operators',
+      width: 120,
+      render: (text: string) => (
+        <Tooltip title={text}>
+          <Text ellipsis>{text || '-'}</Text>
+        </Tooltip>
+      )
+    },
+    {
+      title: '打包员',
+      dataIndex: 'packers',
+      key: 'packers',
+      width: 120,
+      render: (text: string) => (
+        <Tooltip title={text}>
+          <Text ellipsis>{text || '-'}</Text>
+        </Tooltip>
+      )
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 80,
       align: 'center',
       render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{status}</Tag>
-      ),
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 150,
-      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => {
-        const aTime = new Date(a.created_at).getTime();
-        const bTime = new Date(b.created_at).getTime();
-        return aTime - bTime;
-      },
-      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      align: 'center',
-      fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="编辑">
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              size="small"
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="删除">
-            <Popconfirm
-              title="确认删除"
-              description={
-                record.shipped_quantity > 0 
-                  ? `该记录已有 ${record.shipped_quantity} 件发货，无法删除` 
-                  : "删除后无法恢复，确认删除吗？"
-              }
-              onConfirm={() => handleDelete(record)}
-              disabled={record.shipped_quantity > 0}
-              okText="确认"
-              cancelText="取消"
-            >
-              <Button
-                type="link"
-                icon={<DeleteOutlined />}
-                size="small"
-                danger
-                disabled={record.shipped_quantity > 0}
-              />
-            </Popconfirm>
-          </Tooltip>
-        </Space>
-      ),
-    },
+        <Tag color={status === '有库存' ? 'green' : 'red'}>{status}</Tag>
+      )
+    }
   ];
-
-  // 计算统计数据
-  const stats = data.reduce((acc, item) => {
-    acc.totalQuantity += item.quantity;
-    acc.totalAvailable += item.total_available;
-    acc.totalShortage += item.shortage;
-    acc.wholeBoxQuantity += item.whole_box_quantity;
-    acc.mixedBoxQuantity += item.mixed_box_quantity;
-    return acc;
-  }, {
-    totalQuantity: 0,
-    totalAvailable: 0,
-    totalShortage: 0,
-    wholeBoxQuantity: 0,
-    mixedBoxQuantity: 0
-  });
 
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>
-        <InboxOutlined /> 待发货库存管理
+        <AppstoreOutlined /> 库存汇总管理
       </Title>
       
-      {/* 国家库存统计卡片 */}
-      <Card 
-        title="国家库存统计" 
-        size="small" 
-        style={{ marginBottom: 16 }}
-      >
-        <Row gutter={16}>
-          {countryInventory.map(item => (
-            <Col key={item.country} span={4}>
-              <div 
-                style={{ 
-                  cursor: 'pointer',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  backgroundColor: selectedCountry === item.country ? '#e6f7ff' : undefined
-                }} 
-                onClick={() => {
-                  const newCountry = selectedCountry === item.country ? '' : item.country;
-                  setSelectedCountry(newCountry);
-                }}
-              >
-                <Statistic
-                  title={item.country}
-                  value={item.total_quantity}
-                  valueStyle={{ 
-                    color: selectedCountry === item.country ? '#1677ff' : '#3f8600',
-                    fontSize: '16px'
-                  }}
-                  suffix={
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      整箱: {item.whole_box_quantity} | 混合: {item.mixed_box_quantity}
-                    </div>
-                  }
-                />
-              </div>
-            </Col>
-          ))}
-        </Row>
-      </Card>
-
-      {/* 操作栏 */}
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Space>
-              <Text>状态筛选:</Text>
-              <Select
-                value={filterStatus}
-                onChange={setFilterStatus}
-                style={{ width: 150 }}
-              >
-                <Option value="待发货">待发货</Option>
-                <Option value="有库存无需求">有库存无需求</Option>
-                <Option value="已取消">已取消</Option>
-                <Option value="库存未映射">库存未映射</Option>
-              </Select>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={() => fetchPendingInventory()}
-                loading={loading}
-              >
-                刷新
-              </Button>
-              <Button
-                icon={<ExportOutlined />}
-                onClick={handleExport}
-              >
-                导出Excel
-              </Button>
-              <Popconfirm
-                title="确认批量删除"
-                description={`确认删除选中的 ${selectedRowKeys.length} 条记录吗？`}
-                onConfirm={handleBatchDelete}
-                disabled={selectedRowKeys.length === 0}
-                okText="确认"
-                cancelText="取消"
-              >
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  disabled={selectedRowKeys.length === 0}
-                >
-                  批量删除 ({selectedRowKeys.length})
-                </Button>
-              </Popconfirm>
-            </Space>
-          </Col>
-          <Col>
-            <Text type="secondary">
-              当前显示: {data.length} 条记录
-              {selectedRowKeys.length > 0 && ` | 已选择: ${selectedRowKeys.length} 条`}
-            </Text>
-          </Col>
-        </Row>
-      </Card>
+      <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
+        显示 local_boxes 表中按 SKU 和国家汇总的库存数据
+      </Text>
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={4}>
           <Card size="small">
             <Statistic
-              title="总需求"
-              value={stats.totalQuantity}
+              title="SKU 种类"
+              value={stats.total_skus}
               prefix={<BoxPlotOutlined />}
               valueStyle={{ color: '#1677ff' }}
             />
@@ -662,7 +385,7 @@ const PendingInventoryPage: React.FC = () => {
           <Card size="small">
             <Statistic
               title="总库存"
-              value={stats.totalAvailable}
+              value={stats.total_quantity}
               valueStyle={{ color: '#3f8600' }}
             />
           </Card>
@@ -670,163 +393,146 @@ const PendingInventoryPage: React.FC = () => {
         <Col span={4}>
           <Card size="small">
             <Statistic
-              title="总缺货"
-              value={stats.totalShortage}
-              valueStyle={{ color: '#f5222d' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="整箱库存"
-              value={stats.wholeBoxQuantity}
+              title="整箱数"
+              value={stats.total_whole_boxes}
               valueStyle={{ color: '#fa8c16' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col span={4}>
           <Card size="small">
             <Statistic
-              title="混合箱库存"
-              value={stats.mixedBoxQuantity}
+              title="混合箱数"
+              value={stats.total_mixed_boxes}
               valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card size="small">
+            <Statistic
+              title="国家数"
+              value={stats.countries.length}
+              valueStyle={{ color: '#13c2c2' }}
+            />
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card size="small">
+            <Statistic
+              title="平台数"
+              value={stats.marketplaces.length}
+              valueStyle={{ color: '#eb2f96' }}
             />
           </Card>
         </Col>
       </Row>
 
+      {/* 筛选和操作栏 */}
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Row gutter={16} align="middle">
+          <Col span={6}>
+            <Space>
+              <Text>SKU筛选:</Text>
+              <Search
+                placeholder="输入SKU关键字"
+                allowClear
+                value={filters.sku_filter}
+                onChange={(e) => handleFilterChange('sku_filter', e.target.value)}
+                onSearch={(value) => handleFilterChange('sku_filter', value)}
+                style={{ width: 200 }}
+              />
+            </Space>
+          </Col>
+          <Col span={4}>
+            <Space>
+              <Text>国家:</Text>
+              <Select
+                value={filters.country}
+                onChange={(value) => handleFilterChange('country', value)}
+                style={{ width: 120 }}
+                allowClear
+                placeholder="选择国家"
+              >
+                {stats.countries.map(country => (
+                  <Option key={country} value={country}>{country}</Option>
+                ))}
+              </Select>
+            </Space>
+          </Col>
+          <Col span={6}>
+            <Space>
+              <Text>排序:</Text>
+              <Select
+                value={filters.sort_by}
+                onChange={(value) => handleFilterChange('sort_by', value)}
+                style={{ width: 120 }}
+              >
+                <Option value="total_quantity">总数量</Option>
+                <Option value="whole_box_quantity">整箱数量</Option>
+                <Option value="mixed_box_quantity">混合箱数量</Option>
+                <Option value="last_updated">更新时间</Option>
+                <Option value="sku">SKU</Option>
+                <Option value="country">国家</Option>
+              </Select>
+              <Select
+                value={filters.sort_order}
+                onChange={(value) => handleFilterChange('sort_order', value)}
+                style={{ width: 80 }}
+              >
+                <Option value="desc">降序</Option>
+                <Option value="asc">升序</Option>
+              </Select>
+            </Space>
+          </Col>
+          <Col span={8}>
+            <Space style={{ float: 'right' }}>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => fetchInventorySummary(pagination.current, pagination.pageSize)}
+                loading={loading}
+              >
+                刷新
+              </Button>
+              <Button
+                icon={<ExportOutlined />}
+                onClick={handleExport}
+                disabled={data.length === 0}
+              >
+                导出Excel
+              </Button>
+              <Text type="secondary">
+                共 {pagination.total} 条记录
+              </Text>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
       {/* 数据表格 */}
       <Table
         columns={columns}
         dataSource={data}
-        rowKey="record_num"
+        rowKey={(record) => `${record.sku}_${record.country}`}
         loading={loading}
         pagination={{
           ...pagination,
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+          pageSizeOptions: ['20', '50', '100', '200']
         }}
-        scroll={{ x: 1800, y: 600 }}
-        rowSelection={{
-          type: 'checkbox',
-          selectedRowKeys,
-          onChange: (newSelectedRowKeys, newSelectedRows) => {
-            setSelectedRowKeys(newSelectedRowKeys);
-            setSelectedRows(newSelectedRows);
-          },
-          getCheckboxProps: (record) => ({
-            disabled: record.shipped_quantity > 0, // 已发货的记录无法选择
-          }),
-        }}
-        rowClassName={(record) => {
-          if (record.shipped_quantity > 0) return 'shipped-row';
-          if (record.shortage > 0) return 'shortage-row';
-          return '';
+        scroll={{ x: 1400, y: 600 }}
+        onChange={handleTableChange}
+        locale={{
+          emptyText: (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="暂无库存数据"
+            />
+          )
         }}
       />
-
-      {/* 编辑模态框 */}
-      <Modal
-        title="编辑库存记录"
-        open={editModalVisible}
-        onOk={handleSaveEdit}
-        onCancel={() => setEditModalVisible(false)}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form
-          form={editForm}
-          layout="vertical"
-        >
-          <Form.Item
-            label="需求数量"
-            name="quantity"
-            rules={[
-              { required: true, message: '请输入需求数量' },
-              { type: 'number', min: 0, message: '数量不能小于0' }
-            ]}
-          >
-            <InputNumber 
-              min={editingRecord?.shipped_quantity || 0}
-              style={{ width: '100%' }}
-              placeholder={`最少: ${editingRecord?.shipped_quantity || 0} (已发货数量)`}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            label="运输方式"
-            name="shipping_method"
-          >
-            <Select placeholder="选择运输方式">
-              <Option value="空运">空运</Option>
-              <Option value="海运">海运</Option>
-              <Option value="快递">快递</Option>
-              <Option value="陆运">陆运</Option>
-              <Option value="铁运">铁运</Option>
-            </Select>
-          </Form.Item>
-          
-          <Form.Item
-            label="平台"
-            name="marketplace"
-          >
-            <Select placeholder="选择平台">
-              <Option value="Amazon">Amazon</Option>
-              <Option value="eBay">eBay</Option>
-              <Option value="AliExpress">AliExpress</Option>
-              <Option value="Walmart">Walmart</Option>
-              <Option value="Shopify">Shopify</Option>
-              <Option value="Lazada">Lazada</Option>
-              <Option value="Shopee">Shopee</Option>
-            </Select>
-          </Form.Item>
-          
-          <Form.Item
-            label="状态"
-            name="status"
-          >
-            <Select placeholder="选择状态">
-              <Option value="待发货">待发货</Option>
-              <Option value="已取消">已取消</Option>
-            </Select>
-          </Form.Item>
-        </Form>
-        
-        {editingRecord && (
-          <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 }}>
-            <Text type="secondary" style={{ display: 'block' }}>
-              <WarningOutlined style={{ color: '#faad14', marginRight: 4 }} />
-              当前库存信息:
-            </Text>
-            <Text style={{ display: 'block', marginTop: 4 }}>
-              可用库存: {editingRecord.total_available} | 
-              整箱: {editingRecord.whole_box_quantity} | 
-              混合箱: {editingRecord.mixed_box_quantity}
-            </Text>
-            <Text style={{ display: 'block' }}>
-              已发货: {editingRecord.shipped_quantity} | 
-              缺货: {editingRecord.shortage}
-            </Text>
-          </div>
-        )}
-      </Modal>
-
-      <style>{`
-        .shipped-row {
-          background-color: #f6ffed !important;
-        }
-        .shipped-row:hover {
-          background-color: #d9f7be !important;
-        }
-        .shortage-row {
-          background-color: #fff2f0 !important;
-        }
-        .shortage-row:hover {
-          background-color: #ffece6 !important;
-        }
-      `}</style>
     </div>
   );
 };
