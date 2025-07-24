@@ -194,174 +194,6 @@ router.get('/inventory-stats', async (req, res) => {
   }
 });
 
-// 获取待发货库存汇总（专门用于库存管理页面）
-router.get('/pending-inventory-summary', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到待发货库存汇总查询请求');
-  
-  try {
-    const { page = 1, limit = 50, country, sku_filter, sort_by = 'total_quantity', sort_order = 'desc' } = req.query;
-    
-    // 查询所有库存数据，包含更多字段用于分析
-    const allData = await LocalBox.findAll({
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'time', '操作员', '打包员', 'marketPlace'],
-      raw: true
-    });
-
-    console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的原始库存数据:', allData.length);
-
-    // 按SKU和国家分组汇总
-    const summaryMap = new Map();
-    
-    allData.forEach(item => {
-      const key = `${item.sku}_${item.country}`;
-      
-      if (!summaryMap.has(key)) {
-        summaryMap.set(key, {
-          sku: item.sku || '',
-          country: item.country || '',
-          marketplace: item.marketPlace || '',
-          whole_box_quantity: 0,
-          whole_box_count: 0,
-          mixed_box_quantity: 0,
-          mixed_box_count: 0,
-          total_quantity: 0,
-          last_updated: null,
-          operators: new Set(),
-          packers: new Set(),
-          mixed_box_numbers: new Set()
-        });
-      }
-      
-      const summary = summaryMap.get(key);
-      const quantity = parseInt(item.total_quantity) || 0;
-      const boxes = parseInt(item.total_boxes) || 0;
-      
-      // 更新汇总数据
-      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
-        // 整箱数据
-        summary.whole_box_quantity += quantity;
-        summary.whole_box_count += boxes;
-      } else {
-        // 混合箱数据
-        summary.mixed_box_quantity += quantity;
-        summary.mixed_box_numbers.add(item.mix_box_num);
-      }
-      
-      summary.total_quantity += quantity;
-      
-      // 记录操作员和打包员
-      if (item['操作员']) {
-        summary.operators.add(item['操作员']);
-      }
-      if (item['打包员']) {
-        summary.packers.add(item['打包员']);
-      }
-      
-      // 更新最后操作时间
-      if (item.time && (!summary.last_updated || new Date(item.time) > new Date(summary.last_updated))) {
-        summary.last_updated = item.time;
-      }
-    });
-
-    // 转换为数组并计算混合箱数量
-    let summaryArray = Array.from(summaryMap.values()).map(item => ({
-      sku: item.sku,
-      country: item.country,
-      marketplace: item.marketplace,
-      whole_box_quantity: item.whole_box_quantity,
-      whole_box_count: item.whole_box_count,
-      mixed_box_quantity: item.mixed_box_quantity,
-      mixed_box_count: item.mixed_box_numbers.size, // 混合箱数 = 不同混合箱号的数量
-      total_quantity: item.total_quantity,
-      last_updated: item.last_updated || new Date().toISOString(),
-      operators: Array.from(item.operators).join(', '),
-      packers: Array.from(item.packers).join(', '),
-      status: item.total_quantity > 0 ? '有库存' : '已出库'
-    }));
-
-    // 过滤掉总数量为0的记录（已出库的商品）
-    summaryArray = summaryArray.filter(item => item.total_quantity > 0);
-
-    console.log('\x1b[33m%s\x1b[0m', '🔍 过滤后的汇总数据:', summaryArray.length);
-
-    // 应用筛选条件
-    if (country) {
-      summaryArray = summaryArray.filter(item => 
-        item.country && item.country.toLowerCase().includes(country.toLowerCase())
-      );
-    }
-
-    if (sku_filter) {
-      summaryArray = summaryArray.filter(item => 
-        item.sku && item.sku.toLowerCase().includes(sku_filter.toLowerCase())
-      );
-    }
-
-    // 排序
-    summaryArray.sort((a, b) => {
-      let aValue = a[sort_by] || 0;
-      let bValue = b[sort_by] || 0;
-      
-      if (sort_by === 'last_updated') {
-        aValue = new Date(aValue).getTime();
-        bValue = new Date(bValue).getTime();
-      } else if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-      
-      if (sort_order === 'desc') {
-        return bValue > aValue ? 1 : bValue < aValue ? -1 : 0;
-      } else {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      }
-    });
-
-    // 分页
-    const startIndex = (parseInt(page) - 1) * parseInt(limit);
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedData = summaryArray.slice(startIndex, endIndex);
-
-    // 计算统计信息
-    const stats = {
-      total_skus: summaryArray.length,
-      total_quantity: summaryArray.reduce((sum, item) => sum + item.total_quantity, 0),
-      total_whole_boxes: summaryArray.reduce((sum, item) => sum + item.whole_box_count, 0),
-      total_mixed_boxes: summaryArray.reduce((sum, item) => sum + item.mixed_box_count, 0),
-      countries: [...new Set(summaryArray.map(item => item.country))].filter(Boolean),
-      marketplaces: [...new Set(summaryArray.map(item => item.marketplace))].filter(Boolean)
-    };
-
-    console.log('\x1b[32m%s\x1b[0m', '📊 待发货库存汇总完成:', {
-      总SKU数: stats.total_skus,
-      总数量: stats.total_quantity,
-      国家数: stats.countries.length,
-      当前页数据: paginatedData.length
-    });
-
-    res.json({
-      code: 0,
-      message: '获取待发货库存汇总成功',
-      data: {
-        list: paginatedData,
-        pagination: {
-          current: parseInt(page),
-          pageSize: parseInt(limit),
-          total: summaryArray.length
-        },
-        stats: stats
-      }
-    });
-  } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ 获取待发货库存汇总失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '获取待发货库存汇总失败',
-      error: error.message
-    });
-  }
-});
-
 // 获取按国家汇总的库存数据（排除已发货状态的记录）
 router.get('/inventory-by-country', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到按国家汇总库存查询请求');
@@ -5033,6 +4865,396 @@ router.delete('/logistics-invoice/config', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '删除失败: ' + error.message
+    });
+  }
+});
+
+// 获取混合箱详细信息和列表（用于待发货库存管理）
+router.get('/mixed-box-inventory', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱库存查询请求:', JSON.stringify(req.query, null, 2));
+  
+  try {
+    const { country, mix_box_num, page = 1, limit = 50 } = req.query;
+    
+    let whereCondition = {
+      total_quantity: { [Op.gt]: 0 } // 只显示库存大于0的记录
+    };
+    
+    // 添加国家筛选
+    if (country) {
+      whereCondition.country = country;
+    }
+    
+    // 添加混合箱号筛选
+    if (mix_box_num) {
+      whereCondition.mix_box_num = mix_box_num;
+    }
+    
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    // 查询本地箱子数据
+    const { count, rows } = await LocalBox.findAndCountAll({
+      where: whereCondition,
+      order: [['time', 'DESC'], ['记录号', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset,
+      raw: true
+    });
+    
+    // 分别统计混合箱和整箱数据
+    const mixedBoxes = rows.filter(item => item.mix_box_num && item.mix_box_num.trim() !== '');
+    const wholeBoxes = rows.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '');
+    
+    // 按混合箱号分组统计
+    const mixedBoxSummary = {};
+    mixedBoxes.forEach(item => {
+      const key = `${item.mix_box_num}_${item.country}`;
+      if (!mixedBoxSummary[key]) {
+        mixedBoxSummary[key] = {
+          mix_box_num: item.mix_box_num,
+          country: item.country,
+          total_quantity: 0,
+          sku_count: 0,
+          skus: [],
+          created_at: item.time,
+          operator: item.操作员,
+          marketplace: item.marketPlace
+        };
+      }
+      mixedBoxSummary[key].total_quantity += parseInt(item.total_quantity) || 0;
+      mixedBoxSummary[key].sku_count += 1;
+      mixedBoxSummary[key].skus.push({
+        sku: item.sku,
+        quantity: item.total_quantity,
+        record_num: item.记录号
+      });
+      
+      // 保留最早的创建时间
+      if (item.time && new Date(item.time) < new Date(mixedBoxSummary[key].created_at)) {
+        mixedBoxSummary[key].created_at = item.time;
+      }
+    });
+    
+    // 按SKU+国家分组统计整箱数据
+    const wholeBoxSummary = {};
+    wholeBoxes.forEach(item => {
+      const key = `${item.sku}_${item.country}`;
+      if (!wholeBoxSummary[key]) {
+        wholeBoxSummary[key] = {
+          sku: item.sku,
+          country: item.country,
+          total_quantity: 0,
+          total_boxes: 0,
+          created_at: item.time,
+          operator: item.操作员,
+          marketplace: item.marketPlace,
+          records: []
+        };
+      }
+      wholeBoxSummary[key].total_quantity += parseInt(item.total_quantity) || 0;
+      wholeBoxSummary[key].total_boxes += parseInt(item.total_boxes) || 0;
+      wholeBoxSummary[key].records.push({
+        record_num: item.记录号,
+        quantity: item.total_quantity,
+        boxes: item.total_boxes
+      });
+      
+      // 保留最早的创建时间
+      if (item.time && new Date(item.time) < new Date(wholeBoxSummary[key].created_at)) {
+        wholeBoxSummary[key].created_at = item.time;
+      }
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱库存统计:', {
+      totalRecords: count,
+      mixedBoxCount: Object.keys(mixedBoxSummary).length,
+      wholeBoxCount: Object.keys(wholeBoxSummary).length
+    });
+    
+    res.json({
+      code: 0,
+      message: '获取混合箱库存成功',
+      data: {
+        mixed_boxes: Object.values(mixedBoxSummary),
+        whole_boxes: Object.values(wholeBoxSummary),
+        pagination: {
+          current: parseInt(page),
+          pageSize: parseInt(limit),
+          total: count
+        },
+        stats: {
+          total_records: count,
+          mixed_box_count: Object.keys(mixedBoxSummary).length,
+          whole_box_count: Object.keys(wholeBoxSummary).length
+        }
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取混合箱库存失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取混合箱库存失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取指定混合箱的详细SKU列表
+router.get('/mixed-box-details/:mix_box_num', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱详情查询请求:', req.params);
+  
+  try {
+    const { mix_box_num } = req.params;
+    const { country } = req.query;
+    
+    let whereCondition = {
+      mix_box_num: mix_box_num,
+      total_quantity: { [Op.gt]: 0 }
+    };
+    
+    if (country) {
+      whereCondition.country = country;
+    }
+    
+    const items = await LocalBox.findAll({
+      where: whereCondition,
+      order: [['time', 'DESC']],
+      raw: true
+    });
+    
+    // 查询对应的Amazon SKU映射
+    const itemsWithMapping = await Promise.all(
+      items.map(async (item) => {
+        try {
+          const mapping = await AmzSkuMapping.findOne({
+            where: {
+              local_sku: item.sku,
+              country: item.country
+            },
+            raw: true
+          });
+          
+          return {
+            ...item,
+            amz_sku: mapping?.amz_sku || item.sku,
+            site: mapping?.site || ''
+          };
+        } catch (error) {
+          console.warn('查询SKU映射失败:', error);
+          return {
+            ...item,
+            amz_sku: item.sku,
+            site: ''
+          };
+        }
+      })
+    );
+    
+    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱详情:', {
+      mix_box_num,
+      itemCount: itemsWithMapping.length
+    });
+    
+    res.json({
+      code: 0,
+      message: '获取混合箱详情成功',
+      data: {
+        mix_box_num,
+        country: items[0]?.country || '',
+        items: itemsWithMapping,
+        summary: {
+          total_quantity: items.reduce((sum, item) => sum + (parseInt(item.total_quantity) || 0), 0),
+          sku_count: items.length,
+          created_at: items.length > 0 ? Math.min(...items.map(item => new Date(item.time).getTime())) : null
+        }
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取混合箱详情失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取混合箱详情失败',
+      error: error.message
+    });
+  }
+});
+
+// 修改混合箱中的SKU数量
+router.put('/mixed-box-item/:record_num', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱SKU修改请求:', req.params, req.body);
+  
+  try {
+    const { record_num } = req.params;
+    const { total_quantity, operator } = req.body;
+    
+    if (!total_quantity || total_quantity < 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '数量必须大于0'
+      });
+    }
+    
+    // 查找原记录
+    const originalRecord = await LocalBox.findOne({
+      where: { 记录号: record_num }
+    });
+    
+    if (!originalRecord) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+    
+    // 更新记录
+    const [updatedCount] = await LocalBox.update({
+      total_quantity: parseInt(total_quantity),
+      操作员: operator || '系统修改',
+      time: new Date()
+    }, {
+      where: { 记录号: record_num }
+    });
+    
+    if (updatedCount > 0) {
+      console.log('\x1b[32m%s\x1b[0m', '✅ 混合箱SKU修改成功:', {
+        record_num,
+        old_quantity: originalRecord.total_quantity,
+        new_quantity: total_quantity
+      });
+      
+      res.json({
+        code: 0,
+        message: '修改成功',
+        data: {
+          record_num,
+          old_quantity: originalRecord.total_quantity,
+          new_quantity: parseInt(total_quantity)
+        }
+      });
+    } else {
+      res.status(404).json({
+        code: 1,
+        message: '记录不存在或修改失败'
+      });
+    }
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 修改混合箱SKU失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '修改失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除混合箱中的SKU记录
+router.delete('/mixed-box-item/:record_num', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到混合箱SKU删除请求:', req.params);
+  
+  try {
+    const { record_num } = req.params;
+    
+    // 查找原记录
+    const originalRecord = await LocalBox.findOne({
+      where: { 记录号: record_num }
+    });
+    
+    if (!originalRecord) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+    
+    // 删除记录
+    const deletedCount = await LocalBox.destroy({
+      where: { 记录号: record_num }
+    });
+    
+    if (deletedCount > 0) {
+      console.log('\x1b[32m%s\x1b[0m', '✅ 混合箱SKU删除成功:', {
+        record_num,
+        sku: originalRecord.sku,
+        quantity: originalRecord.total_quantity
+      });
+      
+      res.json({
+        code: 0,
+        message: '删除成功',
+        data: {
+          record_num,
+          deleted_sku: originalRecord.sku,
+          deleted_quantity: originalRecord.total_quantity
+        }
+      });
+    } else {
+      res.status(404).json({
+        code: 1,
+        message: '记录不存在或删除失败'
+      });
+    }
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 删除混合箱SKU失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量删除混合箱记录
+router.delete('/mixed-box-items/batch', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量删除混合箱SKU请求:', req.body);
+  
+  try {
+    const { record_nums } = req.body;
+    
+    if (!record_nums || !Array.isArray(record_nums) || record_nums.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '记录号列表不能为空'
+      });
+    }
+    
+    // 查找所有要删除的记录
+    const recordsToDelete = await LocalBox.findAll({
+      where: { 记录号: { [Op.in]: record_nums } },
+      raw: true
+    });
+    
+    if (recordsToDelete.length === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '没有找到要删除的记录'
+      });
+    }
+    
+    // 批量删除
+    const deletedCount = await LocalBox.destroy({
+      where: { 记录号: { [Op.in]: record_nums } }
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量删除混合箱SKU成功:', {
+      requested: record_nums.length,
+      deleted: deletedCount
+    });
+    
+    res.json({
+      code: 0,
+      message: `批量删除成功，删除了 ${deletedCount} 条记录`,
+      data: {
+        requested_count: record_nums.length,
+        deleted_count: deletedCount,
+        deleted_records: recordsToDelete
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除混合箱SKU失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
     });
   }
 });
