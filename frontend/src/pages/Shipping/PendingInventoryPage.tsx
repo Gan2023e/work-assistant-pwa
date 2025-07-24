@@ -379,7 +379,7 @@ const PendingInventoryPage: React.FC = () => {
       key: 'quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.quantity - b.quantity,
       render: (value: number) => <Text strong>{value}</Text>
     },
     {
@@ -398,7 +398,7 @@ const PendingInventoryPage: React.FC = () => {
       key: 'total_available',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.total_available - b.total_available,
       render: (value: number) => (
         <Text type={value > 0 ? 'success' : 'danger'}>
           {value}
@@ -411,7 +411,7 @@ const PendingInventoryPage: React.FC = () => {
       key: 'whole_box_quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.whole_box_quantity - b.whole_box_quantity,
       render: (value: number) => value || '-',
     },
     {
@@ -428,7 +428,7 @@ const PendingInventoryPage: React.FC = () => {
       key: 'mixed_box_quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => a.mixed_box_quantity - b.mixed_box_quantity,
       render: (value: number) => value || '-',
     },
     {
@@ -478,7 +478,11 @@ const PendingInventoryPage: React.FC = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
-      sorter: true,
+      sorter: (a: PendingInventoryItem, b: PendingInventoryItem) => {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return aTime - bTime;
+      },
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {

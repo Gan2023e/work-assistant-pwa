@@ -1141,7 +1141,11 @@ const ShippingPage: React.FC = () => {
       key: 'need_num',
       width: 130,
       ellipsis: true,
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aValue = a.need_num || '';
+        const bValue = b.need_num || '';
+        return aValue.localeCompare(bValue);
+      },
       render: (needNum: string) => (
         needNum ? (
           <Button 
@@ -1162,7 +1166,10 @@ const ShippingPage: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const statusOrder = { '待发货': 1, '已发货': 2, '已取消': 3, '有库存无需求': 4, '库存未映射': 5 };
+        return statusOrder[a.status] - statusOrder[b.status];
+      },
       render: (status: string) => (
         <Tag color={getStatusColor(status)}>{status}</Tag>
       ),
@@ -1173,7 +1180,11 @@ const ShippingPage: React.FC = () => {
       key: 'amz_sku',
       width: 130,
       ellipsis: true,
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aValue = a.amz_sku || '';
+        const bValue = b.amz_sku || '';
+        return aValue.localeCompare(bValue);
+      },
       render: (amzSku: string, record: MergedShippingData) => (
         <div>
           <div>{amzSku}</div>
@@ -1194,7 +1205,7 @@ const ShippingPage: React.FC = () => {
       key: 'quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => a.quantity - b.quantity,
       render: (value: number) => <Text strong>{value}</Text>,
     },
     {
@@ -1203,7 +1214,7 @@ const ShippingPage: React.FC = () => {
       key: 'shortage',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => a.shortage - b.shortage,
       render: (value: number) => (
         value > 0 ? <Text type="danger">{value}</Text> : <Text type="success">充足</Text>
       ),
@@ -1214,7 +1225,7 @@ const ShippingPage: React.FC = () => {
       key: 'total_available',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => a.total_available - b.total_available,
       render: (value: number) => (
         <Text type={value > 0 ? 'success' : 'danger'}>
           {value}
@@ -1227,7 +1238,7 @@ const ShippingPage: React.FC = () => {
       key: 'whole_box_quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => a.whole_box_quantity - b.whole_box_quantity,
       render: (value: number) => value || '-',
     },
     {
@@ -1236,7 +1247,7 @@ const ShippingPage: React.FC = () => {
       key: 'mixed_box_quantity',
       width: 90,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => a.mixed_box_quantity - b.mixed_box_quantity,
       render: (value: number) => value || '-',
     },
     {
@@ -1245,14 +1256,22 @@ const ShippingPage: React.FC = () => {
       key: 'country',
       width: 70,
       align: 'center',
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aValue = a.country || '';
+        const bValue = b.country || '';
+        return aValue.localeCompare(bValue);
+      },
     },
     {
       title: '运输方式',
       dataIndex: 'shipping_method',
       key: 'shipping_method',
       width: 100,
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aValue = a.shipping_method || '';
+        const bValue = b.shipping_method || '';
+        return aValue.localeCompare(bValue);
+      },
       render: (value: string) => value || '-',
     },
     {
@@ -1260,7 +1279,11 @@ const ShippingPage: React.FC = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
-      sorter: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return aTime - bTime;
+      },
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
   ];

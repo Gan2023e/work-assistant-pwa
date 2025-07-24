@@ -202,7 +202,11 @@ const FbaInventory: React.FC = () => {
       key: 'sku',
       width: 120,
       fixed: 'left',
-      sorter: true,
+      sorter: (a: FbaInventoryRecord, b: FbaInventoryRecord) => {
+        const aValue = a.sku || '';
+        const bValue = b.sku || '';
+        return aValue.localeCompare(bValue);
+      },
       render: (text) => <Text strong>{text}</Text>
     },
     {
