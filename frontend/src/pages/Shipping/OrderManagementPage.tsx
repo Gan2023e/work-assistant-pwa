@@ -303,7 +303,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'need_num',
       width: 150,
       fixed: 'left',
-      sorter: true,
       render: (text: string) => (
         <Text strong style={{ fontSize: '12px' }}>{text}</Text>
       )
@@ -314,7 +313,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'order_status',
       width: 100,
       align: 'center',
-      sorter: true,
       render: (status: string) => (
         <Tag color={getStatusColor(status)} icon={getStatusIcon(status)}>
           {status}
@@ -326,7 +324,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'progress',
       width: 120,
       align: 'center',
-      sorter: (a, b) => a.completion_rate - b.completion_rate,
       render: (_, record) => (
         <Progress 
           percent={record.completion_rate} 
@@ -341,16 +338,14 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'country',
       key: 'country',
       width: 80,
-      align: 'center',
-      sorter: true
+      align: 'center'
     },
     {
       title: '平台',
       dataIndex: 'marketplace',
       key: 'marketplace',
       width: 80,
-      align: 'center',
-      sorter: true
+      align: 'center'
     },
     {
       title: 'SKU数量',
@@ -358,7 +353,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'total_items',
       width: 80,
       align: 'center',
-      sorter: (a, b) => a.total_items - b.total_items,
       render: (value: number) => <Text strong>{value}</Text>
     },
     {
@@ -367,7 +361,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'total_quantity',
       width: 80,
       align: 'center',
-      sorter: (a, b) => a.total_quantity - b.total_quantity,
       render: (value: number) => <Text>{value}</Text>
     },
     {
@@ -376,7 +369,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'total_shipped',
       width: 80,
       align: 'center',
-      sorter: (a, b) => a.total_shipped - b.total_shipped,
       render: (value: number) => <Text type="success">{value}</Text>
     },
     {
@@ -385,7 +377,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'remaining_quantity',
       width: 80,
       align: 'center',
-      sorter: (a, b) => a.remaining_quantity - b.remaining_quantity,
       render: (value: number) => (
         <Text type={value > 0 ? 'warning' : 'success'}>{value}</Text>
       )
@@ -396,7 +387,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'shipment_count',
       width: 90,
       align: 'center',
-      sorter: (a, b) => a.shipment_count - b.shipment_count,
       render: (value: number) => (
         <Tag color={value > 0 ? 'blue' : 'default'} icon={<HistoryOutlined />}>
           {value}
@@ -408,7 +398,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
-      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       render: (date: string) => new Date(date).toLocaleString('zh-CN')
     },
     {
@@ -767,43 +756,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
                     fetchOrders(page, pageSize);
                   }
-                }}
-                onChange={(pagination, filters, sorter) => {
-                  // sorter 可能为数组或对象
-                  let sortField = '';
-                  let sortOrder = '';
-                  if (Array.isArray(sorter)) {
-                    if (sorter.length > 0) {
-                      sortField = sorter[0].field;
-                      sortOrder = sorter[0].order;
-                    }
-                  } else if (sorter && sorter.field) {
-                    sortField = sorter.field;
-                    sortOrder = sorter.order;
-                  }
-                  // 这里只做前端排序，若需后端排序可将sortField/sortOrder传给fetchOrders
-                  let sortedOrders = [...orders];
-                  if (sortField && sortOrder) {
-                    sortedOrders.sort((a, b) => {
-                      let aValue = a[sortField];
-                      let bValue = b[sortField];
-                      if (typeof aValue === 'string' && typeof bValue === 'string') {
-                        if (sortOrder === 'ascend') return aValue.localeCompare(bValue);
-                        else return bValue.localeCompare(aValue);
-                      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-                        if (sortOrder === 'ascend') return aValue - bValue;
-                        else return bValue - aValue;
-                      } else if (aValue instanceof Date && bValue instanceof Date) {
-                        if (sortOrder === 'ascend') return aValue.getTime() - bValue.getTime();
-                        else return bValue.getTime() - aValue.getTime();
-                      } else {
-                        // 兜底
-                        if (sortOrder === 'ascend') return String(aValue).localeCompare(String(bValue));
-                        else return String(bValue).localeCompare(String(aValue));
-                      }
-                    });
-                  }
-                  setOrders(sortedOrders);
                 }}
                 rowClassName={(record) => {
                   if (record.need_num === selectedOrder) return 'ant-table-row-selected';
