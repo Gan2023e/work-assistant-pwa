@@ -10,6 +10,63 @@ const {
   sequelize 
 } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
+const axios = require('axios');
+const crypto = require('crypto');
+
+// 钉钉通知函数 - 海外仓补货需求
+async function sendDingTalkNotification(data) {
+  const webhookUrl = process.env.DINGTALK_WEBHOOK;
+  const secretKey = process.env.SECRET_KEY;
+  const mobileNumMom = process.env.MOBILE_NUM_MOM;
+  
+  if (!webhookUrl) {
+    console.log('⚠️ 钉钉Webhook未配置，跳过通知');
+    return;
+  }
+
+  try {
+    let url = webhookUrl;
+    
+    // 如果有签名密钥，生成签名
+    if (secretKey) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${secretKey}`;
+      const sign = crypto
+        .createHmac('sha256', secretKey)
+        .update(stringToSign)
+        .digest('base64');
+      
+      url += `&timestamp=${timestamp}&sign=${encodeURIComponent(sign)}`;
+    }
+
+    // 构建消息内容
+    const message = `海外仓补货需求
+截止日期：${new Date(data.send_out_date).toLocaleDateString('zh-CN')}
+目的国：${data.country}
+物流方式：${data.shipping_method}
+物销售平台：${data.marketplace}
+SKU及数量：
+${data.skuList.join('\n')}
+@${mobileNumMom || '邹菊先'}`;
+
+    const dingTalkData = {
+      msgtype: 'text',
+      text: {
+        content: message
+      },
+      at: {
+        atMobiles: mobileNumMom ? [mobileNumMom] : [],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(url, dingTalkData);
+    console.log('✅ 海外仓补货需求钉钉通知发送成功');
+  } catch (error) {
+    console.error('❌ 海外仓补货需求钉钉通知发送失败:', error.message);
+    throw error;
+  }
+}
 
 // 获取需求单列表（按需求单号分组）
 router.get('/orders', async (req, res) => {
@@ -158,15 +215,15 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 查询SKU映射 - 通过Amazon SKU查找本地SKU
+        // 查询SKU映射
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            amz_sku: item.sku,
+            local_sku: item.sku,
             country: item.country
           }
         });
 
-        // 查询库存 - 使用本地SKU查询库存
+        // 查询库存
         const inventory = await LocalBox.findAll({
           where: {
             sku: mapping ? mapping.local_sku : item.sku,
@@ -207,8 +264,7 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         return {
           ...item.toJSON(),
-          amz_sku: item.sku, // Amazon SKU显示原始的sku字段
-          local_sku: mapping?.local_sku || item.sku, // 本地SKU显示映射表的local_sku字段
+          amz_sku: mapping?.amz_sku || item.sku,
           whole_box_quantity: wholeBoxQuantity,
           whole_box_count: wholeBoxCount,
           mixed_box_quantity: mixedBoxQuantity,
@@ -263,6 +319,133 @@ router.get('/orders/:needNum/details', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 创建新需求单
+router.post('/orders', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 创建新需求单请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { 
+      country, 
+      shipping_method, 
+      marketplace, 
+      send_out_date, 
+      expect_sold_out_date, 
+      sku_data 
+    } = req.body;
+
+    // 验证必填字段
+    if (!country || !shipping_method || !marketplace || !send_out_date || !expect_sold_out_date || !sku_data) {
+      return res.status(400).json({
+        code: 1,
+        message: '请填写所有必填字段'
+      });
+    }
+
+    // 解析SKU数据
+    const skuLines = sku_data.trim().split('\n').filter(line => line.trim());
+    if (skuLines.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU数据不能为空'
+      });
+    }
+
+    // 生成需求单号（格式：日期+序号）
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const existingCount = await WarehouseProductsNeed.count({
+      where: {
+        need_num: {
+          [Op.like]: `XQ${today}%`
+        }
+      }
+    });
+    const needNum = `XQ${today}${String(existingCount + 1).padStart(3, '0')}`;
+
+    // 解析并创建需求单记录
+    const orderItems = [];
+    for (let i = 0; i < skuLines.length; i++) {
+      const line = skuLines[i].trim();
+      const parts = line.split(/\s+/);
+      
+      if (parts.length < 2) {
+        return res.status(400).json({
+          code: 1,
+          message: `第${i + 1}行SKU数据格式错误，正确格式：SKU 数量`
+        });
+      }
+
+      const sku = parts[0];
+      const quantity = parseInt(parts[1]);
+      
+      if (isNaN(quantity) || quantity <= 0) {
+        return res.status(400).json({
+          code: 1,
+          message: `第${i + 1}行数量必须是大于0的数字`
+        });
+      }
+
+      orderItems.push({
+        need_num: needNum,
+        create_date: new Date(),
+        sku: sku,
+        ori_quantity: quantity,
+        country: country,
+        shipping_method: shipping_method,
+        send_out_date: new Date(send_out_date),
+        marketplace: marketplace,
+        expired_date: new Date(send_out_date), // 发货截止日作为过期日期
+        expect_sold_out_date: new Date(expect_sold_out_date),
+        status: '待发货'
+      });
+    }
+
+    // 批量创建记录
+    await WarehouseProductsNeed.bulkCreate(orderItems);
+
+    console.log('\x1b[32m%s\x1b[0m', '✅ 需求单创建成功:', {
+      needNum,
+      itemCount: orderItems.length,
+      totalQuantity: orderItems.reduce((sum, item) => sum + item.ori_quantity, 0)
+    });
+
+    // 准备钉钉通知数据
+    const notificationData = {
+      needNum,
+      country,
+      shipping_method,
+      marketplace,
+      send_out_date,
+      expect_sold_out_date,
+      skuList: orderItems.map(item => `${item.sku} ${item.ori_quantity}`)
+    };
+
+    // 发送钉钉通知（异步，不影响响应）
+    try {
+      await sendDingTalkNotification(notificationData);
+    } catch (notifyError) {
+      console.error('\x1b[33m%s\x1b[0m', '⚠️ 钉钉通知发送失败:', notifyError.message);
+      // 不影响主流程
+    }
+
+    res.json({
+      code: 0,
+      message: '需求单创建成功',
+      data: {
+        need_num: needNum,
+        total_items: orderItems.length,
+        total_quantity: orderItems.reduce((sum, item) => sum + item.ori_quantity, 0)
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建需求单失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建失败',
       error: error.message
     });
   }

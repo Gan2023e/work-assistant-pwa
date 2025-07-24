@@ -18,7 +18,11 @@ import {
   Descriptions,
   Alert,
   Tooltip,
-  Popconfirm
+  Popconfirm,
+  Input,
+  Select,
+  DatePicker,
+  Checkbox
 } from 'antd';
 import { 
   EyeOutlined,
@@ -32,6 +36,7 @@ import {
   ExclamationCircleOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -64,7 +69,6 @@ interface OrderItem {
   need_num: string;
   sku: string;
   amz_sku: string;
-  local_sku: string;
   ori_quantity: number;
   country: string;
   marketplace: string;
@@ -125,6 +129,10 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   const [shipmentDetailsModalVisible, setShipmentDetailsModalVisible] = useState(false);
   const [shipmentDetailsLoading, setShipmentDetailsLoading] = useState(false);
   const [shipmentDetails, setShipmentDetails] = useState<any>(null);
+  
+  // 添加需求单Modal相关状态
+  const [addOrderModalVisible, setAddOrderModalVisible] = useState(false);
+  const [addOrderForm] = Form.useForm();
 
   // 分页状态
   const [pagination, setPagination] = useState({
@@ -263,6 +271,43 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     } catch (error) {
       console.error('修改需求数量失败:', error);
       message.error('修改需求数量失败');
+    }
+  };
+
+  // 添加需求单处理函数
+  const handleAddOrder = async (values: any) => {
+    try {
+      // 处理日期字段格式
+      const formattedValues = {
+        ...values,
+        send_out_date: values.send_out_date ? dayjs(values.send_out_date).format('YYYY-MM-DD') : null,
+        expect_sold_out_date: values.expect_sold_out_date ? dayjs(values.expect_sold_out_date).format('YYYY-MM-DD') : null
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/order-management/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify(formattedValues)
+      });
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('需求单创建成功');
+        setAddOrderModalVisible(false);
+        addOrderForm.resetFields();
+        
+        // 刷新需求单列表
+        await fetchOrders(pagination.current, pagination.pageSize);
+      } else {
+        message.error(result.message || '创建失败');
+      }
+    } catch (error) {
+      console.error('添加需求单失败:', error);
+      message.error('创建失败，请稍后重试');
     }
   };
 
@@ -428,16 +473,16 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   // SKU明细表格列定义
   const itemColumns: ColumnsType<OrderItem> = [
     {
-      title: 'Amazon SKU',
-      dataIndex: 'amz_sku',
-      key: 'amz_sku',
+      title: '本地SKU',
+      dataIndex: 'sku',
+      key: 'sku',
       width: 120,
       render: (text: string) => <Text>{text}</Text>
     },
     {
-      title: '本地SKU',
-      dataIndex: 'local_sku',
-      key: 'local_sku',
+      title: 'Amazon SKU',
+      dataIndex: 'amz_sku',
+      key: 'amz_sku',
       width: 120,
       render: (text: string) => <Text>{text}</Text>
     },
@@ -733,6 +778,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   <Button 
                     type="primary" 
                     size="small"
+                    onClick={() => setAddOrderModalVisible(true)}
+                  >
+                    添加需求单
+                  </Button>
+                  <Button 
+                    type="default" 
+                    size="small"
                     onClick={() => fetchOrders(pagination.current, pagination.pageSize)}
                   >
                     刷新
@@ -783,8 +835,8 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
             layout="vertical"
           >
             <Descriptions size="small" column={1}>
+              <Descriptions.Item label="SKU">{editingItem.sku}</Descriptions.Item>
               <Descriptions.Item label="Amazon SKU">{editingItem.amz_sku}</Descriptions.Item>
-              <Descriptions.Item label="本地SKU">{editingItem.local_sku}</Descriptions.Item>
               <Descriptions.Item label="已发货数量">{editingItem.shipped_quantity}</Descriptions.Item>
             </Descriptions>
             
@@ -933,6 +985,104 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
             />
           </div>
         )}
+      </Modal>
+
+      {/* 添加需求单对话框 */}
+      <Modal
+        title="海外仓补货需求提交"
+        open={addOrderModalVisible}
+        onCancel={() => {
+          setAddOrderModalVisible(false);
+          addOrderForm.resetFields();
+        }}
+        onOk={() => addOrderForm.submit()}
+        width={600}
+        okText="确定"
+        cancelText="取消"
+      >
+        <Form
+          form={addOrderForm}
+          onFinish={handleAddOrder}
+          layout="vertical"
+          style={{ paddingTop: 16 }}
+        >
+          <Form.Item
+            label="目的国"
+            name="country"
+            rules={[{ required: true, message: '请选择目的国' }]}
+          >
+            <Select placeholder="请选择目的国">
+              <Select.Option value="美国">美国</Select.Option>
+              <Select.Option value="英国">英国</Select.Option>
+              <Select.Option value="加拿大">加拿大</Select.Option>
+              <Select.Option value="阿联酋">阿联酋</Select.Option>
+              <Select.Option value="澳大利亚">澳大利亚</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="物流方式"
+            name="shipping_method"
+            rules={[{ required: true, message: '请选择物流方式' }]}
+          >
+            <Select placeholder="请选择物流方式">
+              <Select.Option value="盐田海运">盐田海运</Select.Option>
+              <Select.Option value="美森海运">美森海运</Select.Option>
+              <Select.Option value="空运">空运</Select.Option>
+              <Select.Option value="快递">快递</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="平台"
+            name="marketplace"
+            rules={[{ required: true, message: '请选择平台' }]}
+          >
+            <Select placeholder="请选择平台">
+              <Select.Option value="亚马逊">亚马逊</Select.Option>
+              <Select.Option value="Shein">Shein</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="发货截止日"
+            name="send_out_date"
+            rules={[{ required: true, message: '请选择发货截止日' }]}
+          >
+            <DatePicker 
+              style={{ width: '100%' }}
+              placeholder="请选择发货截止日"
+              format="YYYY/MM/DD"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="预计售完日"
+            name="expect_sold_out_date"
+            rules={[{ required: true, message: '请选择预计售完日' }]}
+          >
+            <DatePicker 
+              style={{ width: '100%' }}
+              placeholder="请选择预计售完日"
+              format="YYYY/MM/DD"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="SKU及发货数量"
+            name="sku_data"
+            rules={[{ required: true, message: '请输入SKU及发货数量' }]}
+          >
+            <Input.TextArea
+              rows={6}
+              placeholder="请输入多行文本内容，希望输入SKU及数量&#10;例如：&#10;AGXB362D1 44&#10;NAXBA968H 32"
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Checkbox name="remember">记住内容</Checkbox>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );
