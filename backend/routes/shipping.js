@@ -124,9 +124,13 @@ router.get('/inventory-stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存统计查询请求');
   
   try {
-    // 查询所有库存数据
+    // 查询所有库存数据 - 只查询待出库状态的记录
     const allData = await LocalBox.findAll({
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
+      where: {
+        status: '待出库',
+        total_quantity: { [Op.gt]: 0 } // 只查询数量大于0的记录
+      },
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
       raw: true
     });
 
@@ -220,9 +224,13 @@ router.get('/inventory-by-country', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 已发货SKU组合数量:', shippedSkuSet.size);
 
-    // 第二步：查询所有库存数据
+    // 第二步：查询所有库存数据 - 只查询待出库状态的记录
     const allInventory = await LocalBox.findAll({
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
+      where: {
+        status: '待出库',
+        total_quantity: { [Op.gt]: 0 } // 只查询数量大于0的记录
+      },
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
       raw: true
     });
 
@@ -422,12 +430,16 @@ router.post('/mixed-boxes', async (req, res) => {
       country: pair.country
     }));
 
-    // 查询库存数据
+    // 查询库存数据 - 只查询待出库状态的记录
     const inventoryData = await LocalBox.findAll({
       where: {
-        [Op.or]: whereConditions
+        [Op.and]: [
+          { [Op.or]: whereConditions },
+          { status: '待出库' },
+          { total_quantity: { [Op.gt]: 0 } }
+        ]
       },
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes'],
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
       raw: true
     });
 
@@ -460,9 +472,11 @@ router.post('/mixed-boxes', async (req, res) => {
         where: {
           mix_box_num: {
             [Op.in]: Array.from(selectedMixedBoxNums)
-          }
+          },
+          status: '待出库',
+          total_quantity: { [Op.gt]: 0 }
         },
-        attributes: ['sku', 'country', 'mix_box_num', 'total_quantity'],
+        attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'box_type'],
         raw: true
       });
 
@@ -984,7 +998,8 @@ router.get('/merged-data', async (req, res) => {
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
       INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
-      WHERE lb.total_quantity != 0
+      WHERE lb.total_quantity > 0
+        AND lb.status = '待出库'
         AND (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
              OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
              OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
@@ -1724,7 +1739,7 @@ router.post('/outbound-record', async (req, res) => {
       }
       
       // 创建出库记录（保持原有的local_boxes表记录）
-      // 新增：写入shipment_id字段，建立主表-明细表关联
+      // 新增：写入shipment_id字段，建立主表-明细表关联，并正确设置新字段
       const record = {
         记录号: recordId,
         sku: sku,
@@ -1735,7 +1750,13 @@ router.post('/outbound-record', async (req, res) => {
         操作员: operator,
         marketPlace: marketplace,
         mix_box_num: mixBoxNum,
-        shipment_id: shipmentRecord.shipment_id // 关键：写入发货单ID
+        shipment_id: shipmentRecord.shipment_id, // 关键：写入发货单ID
+        // 新增字段
+        status: '已出库',
+        shipped_at: new Date(),
+        box_type: is_mixed_box ? '混合箱' : '整箱',
+        last_updated_at: new Date(),
+        remark: remark ? `发货备注: ${remark}` : `发货单号: ${shipmentNumber}`
       };
       
       outboundRecords.push(record);
@@ -2773,6 +2794,214 @@ router.delete('/shipment-history', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 撤销发货记录（单个）
+router.post('/shipment-cancel/:shipment_id', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到撤销发货记录请求:', req.params.shipment_id);
+  
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { shipment_id } = req.params;
+    const { reason = '用户撤销' } = req.body;
+    
+    // 验证发货记录是否存在
+    const shipmentRecord = await ShipmentRecord.findByPk(shipment_id);
+    if (!shipmentRecord) {
+      await transaction.rollback();
+      return res.status(404).json({
+        code: 1,
+        message: '发货记录不存在'
+      });
+    }
+    
+    // 验证发货记录状态
+    if (shipmentRecord.status === '已取消') {
+      await transaction.rollback();
+      return res.status(400).json({
+        code: 1,
+        message: '该发货记录已经被取消'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '🔄 开始撤销发货记录:', shipment_id);
+    
+    // 1. 恢复local_boxes表中对应的库存状态
+    const restoredLocalBoxes = await LocalBox.update({
+      status: '待出库',
+      shipped_at: null,
+      shipment_id: null,
+      last_updated_at: new Date(),
+      remark: sequelize.fn('CONCAT', 
+        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+        `;\n${new Date().toISOString()} 撤销发货: ${reason}`
+      )
+    }, {
+      where: {
+        shipment_id: shipment_id,
+        status: '已出库'
+      },
+      transaction
+    });
+    
+    // 2. 查询发货明细，恢复需求记录状态
+    const shipmentItems = await ShipmentItem.findAll({
+      where: { shipment_id: shipment_id }
+    });
+    
+    // 恢复需求记录状态（如果完全撤销）
+    const needRecordIds = [...new Set(shipmentItems.map(item => item.order_item_id))];
+    if (needRecordIds.length > 0) {
+      // 检查这些需求记录是否还有其他发货记录
+      for (const recordId of needRecordIds) {
+        const otherShipments = await ShipmentItem.count({
+          where: {
+            order_item_id: recordId,
+            shipment_id: { [Op.ne]: shipment_id }
+          }
+        });
+        
+        // 如果没有其他发货记录，恢复为待发货状态
+        if (otherShipments === 0) {
+          await WarehouseProductsNeed.update(
+            { status: '待发货' },
+            { 
+              where: { record_num: recordId },
+              transaction 
+            }
+          );
+        }
+      }
+    }
+    
+    // 3. 删除发货明细
+    const deletedItems = await ShipmentItem.destroy({
+      where: { shipment_id: shipment_id },
+      transaction
+    });
+    
+    // 4. 删除订单发货关联记录
+    const deletedRelations = await OrderShipmentRelation.destroy({
+      where: { shipment_id: shipment_id },
+      transaction
+    });
+    
+    // 5. 更新发货记录状态为已取消（而非删除）
+    await ShipmentRecord.update({
+      status: '已取消',
+      remark: sequelize.fn('CONCAT', 
+        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+        `;\n${new Date().toISOString()} 撤销原因: ${reason}`
+      ),
+      updated_at: new Date()
+    }, {
+      where: { shipment_id: shipment_id },
+      transaction
+    });
+    
+    await transaction.commit();
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 发货撤销成功:', {
+      shipment_id,
+      restoredLocalBoxes: restoredLocalBoxes[0],
+      deletedItems,
+      deletedRelations,
+      restoredNeedRecords: needRecordIds.length
+    });
+    
+    res.json({
+      code: 0,
+      message: '发货撤销成功',
+      data: {
+        shipment_id: parseInt(shipment_id),
+        restored_local_boxes: restoredLocalBoxes[0],
+        deleted_items: deletedItems,
+        deleted_relations: deletedRelations,
+        restored_need_records: needRecordIds.length
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('\x1b[31m%s\x1b[0m', '❌ 撤销发货失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '撤销发货失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取发货记录详细信息（包含发货明细）
+router.get('/shipment-history/:shipment_id', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取发货详情请求:', req.params.shipment_id);
+  
+  try {
+    const { shipment_id } = req.params;
+    
+    // 查询发货记录基本信息
+    const shipmentRecord = await ShipmentRecord.findByPk(shipment_id, {
+      include: [
+        {
+          model: OrderShipmentRelation,
+          as: 'orderRelations',
+          attributes: ['need_num', 'total_requested', 'total_shipped', 'completion_status']
+        }
+      ]
+    });
+    
+    if (!shipmentRecord) {
+      return res.status(404).json({
+        code: 1,
+        message: '发货记录不存在'
+      });
+    }
+    
+    // 查询发货明细
+    const shipmentItems = await ShipmentItem.findAll({
+      where: { shipment_id: shipment_id },
+      order: [['created_at', 'ASC']]
+    });
+    
+    // 查询相关的出库记录
+    const outboundRecords = await LocalBox.findAll({
+      where: { 
+        shipment_id: shipment_id,
+        status: '已出库'
+      },
+      attributes: ['记录号', 'sku', 'total_quantity', 'total_boxes', 'country', 'time', 'mix_box_num', 'box_type', 'shipped_at', 'remark'],
+      order: [['time', 'ASC']]
+    });
+    
+    // 统计信息
+    const statistics = {
+      total_items: shipmentItems.length,
+      total_quantity: shipmentItems.reduce((sum, item) => sum + item.shipped_quantity, 0),
+      total_boxes: shipmentRecord.total_boxes,
+      whole_boxes: shipmentItems.reduce((sum, item) => sum + item.whole_boxes, 0),
+      mixed_box_quantity: shipmentItems.reduce((sum, item) => sum + item.mixed_box_quantity, 0),
+      countries: [...new Set(shipmentItems.map(item => item.country))],
+      need_nums: [...new Set(shipmentItems.map(item => item.need_num))]
+    };
+    
+    res.json({
+      code: 0,
+      message: '获取发货详情成功',
+      data: {
+        shipment_record: shipmentRecord,
+        shipment_items: shipmentItems,
+        outbound_records: outboundRecords,
+        statistics: statistics
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取发货详情失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取发货详情失败',
       error: error.message
     });
   }

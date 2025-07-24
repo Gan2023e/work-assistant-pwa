@@ -33,7 +33,9 @@ import {
   FileExcelOutlined,
   BarChartOutlined,
   BoxPlotOutlined,
-  EditOutlined
+  EditOutlined,
+  HistoryOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -43,6 +45,7 @@ import { useNavigate } from 'react-router-dom';
 import OrderManagementPage from './OrderManagementPage';
 import WarehouseManagement from '../Logistics/WarehouseManagement';
 import HsCodeManagement from '../Logistics/HsCodeManagement';
+import ShipmentHistoryPage from './ShipmentHistoryPage';
 
 // 自定义样式
 const customStyles = `
@@ -107,6 +110,12 @@ interface MergedShippingData {
   mixed_box_quantity: number;
   total_available: number;
   shortage: number;
+  // 新增库存状态相关字段
+  inventory_status?: '待出库' | '已出库' | '已取消';
+  box_type?: '整箱' | '混合箱';
+  last_updated_at?: string;
+  shipped_at?: string;
+  inventory_remark?: string;
 }
 
 interface AddNeedForm {
@@ -283,6 +292,7 @@ const ShippingPage: React.FC = () => {
   const [confirmedMixedBoxes, setConfirmedMixedBoxes] = useState<MixedBoxItem[]>([]);
   const [confirmedWholeBoxes, setConfirmedWholeBoxes] = useState<WholeBoxConfirmData[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false); // 新增：发货加载状态
+  const [shippingRemark, setShippingRemark] = useState(''); // 新增：发货备注
   
   // 未映射库存相关状态
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
@@ -327,6 +337,13 @@ const ShippingPage: React.FC = () => {
   // 仓库管理和HSCODE管理相关状态
   const [warehouseModalVisible, setWarehouseModalVisible] = useState(false);
   const [hsCodeModalVisible, setHsCodeModalVisible] = useState(false);
+  const [shipmentHistoryModalVisible, setShipmentHistoryModalVisible] = useState(false);
+  
+  // 筛选相关状态
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState<string>('');
+  const [boxTypeFilter, setBoxTypeFilter] = useState<string>('');
 
   // 国家选项配置
   const countryTemplateOptions = [
@@ -1175,6 +1192,53 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
+      title: '库存状态',
+      dataIndex: 'inventory_status',
+      key: 'inventory_status',
+      width: 90,
+      align: 'center',
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const statusOrder = { '待出库': 1, '已出库': 2, '已取消': 3 };
+        const aStatus = a.inventory_status || '待出库';
+        const bStatus = b.inventory_status || '待出库';
+        return statusOrder[aStatus] - statusOrder[bStatus];
+      },
+             render: (status: string) => {
+         const statusConfig: Record<string, { color: string; text: string }> = {
+           '待出库': { color: 'blue', text: '待出库' },
+           '已出库': { color: 'green', text: '已出库' },
+           '已取消': { color: 'red', text: '已取消' }
+         };
+         const config = statusConfig[status] || statusConfig['待出库'];
+         return <Tag color={config.color}>{config.text}</Tag>;
+       },
+    },
+    {
+      title: '箱型',
+      dataIndex: 'box_type',
+      key: 'box_type',
+      width: 80,
+      align: 'center',
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const typeOrder = { '整箱': 1, '混合箱': 2 };
+        const aType = a.box_type || '整箱';
+        const bType = b.box_type || '整箱';
+        return typeOrder[aType] - typeOrder[bType];
+      },
+             render: (type: string) => {
+         const typeConfig: Record<string, { color: string; icon: string }> = {
+           '整箱': { color: 'blue', icon: '📦' },
+           '混合箱': { color: 'orange', icon: '📋' }
+         };
+         const config = typeConfig[type] || typeConfig['整箱'];
+         return (
+           <Tag color={config.color}>
+             {config.icon} {type || '整箱'}
+           </Tag>
+         );
+       },
+    },
+    {
       title: 'Amazon SKU',
       dataIndex: 'amz_sku',
       key: 'amz_sku',
@@ -1285,6 +1349,40 @@ const ShippingPage: React.FC = () => {
         return aTime - bTime;
       },
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+    },
+    {
+      title: '最后更新',
+      dataIndex: 'last_updated_at',
+      key: 'last_updated_at',
+      width: 150,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aTime = a.last_updated_at ? new Date(a.last_updated_at).getTime() : 0;
+        const bTime = b.last_updated_at ? new Date(b.last_updated_at).getTime() : 0;
+        return aTime - bTime;
+      },
+      render: (date: string) => date ? new Date(date).toLocaleString('zh-CN') : '-',
+    },
+    {
+      title: '出库时间',
+      dataIndex: 'shipped_at',
+      key: 'shipped_at',
+      width: 150,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aTime = a.shipped_at ? new Date(a.shipped_at).getTime() : 0;
+        const bTime = b.shipped_at ? new Date(b.shipped_at).getTime() : 0;
+        return aTime - bTime;
+      },
+      render: (date: string, record: MergedShippingData) => {
+        if (!date) return '-';
+        return (
+          <div>
+            <div>{new Date(date).toLocaleString('zh-CN')}</div>
+                         {record.inventory_status === '已出库' && (
+               <Tag color="green">已出库</Tag>
+             )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -1777,6 +1875,15 @@ const ShippingPage: React.FC = () => {
             HSCODE编码管理
           </Button>
         </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<HistoryOutlined />}
+            onClick={() => setShipmentHistoryModalVisible(true)}
+          >
+            发货历史
+          </Button>
+        </Col>
       </Row>
 
       {/* 国家库存卡片栏 */}
@@ -1991,6 +2098,115 @@ const ShippingPage: React.FC = () => {
             </Text>
           </Card>
 
+          {/* 筛选器栏 */}
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Row gutter={16} align="middle">
+              <Col span={6}>
+                <Input
+                  placeholder="搜索 SKU、需求单号、国家等..."
+                  prefix={<SearchOutlined />}
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  allowClear
+                />
+              </Col>
+              <Col span={4}>
+                <Select
+                  placeholder="状态筛选"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  <Option value="待发货">待发货</Option>
+                  <Option value="已发货">已发货</Option>
+                  <Option value="已取消">已取消</Option>
+                  <Option value="有库存无需求">有库存无需求</Option>
+                  <Option value="库存未映射">库存未映射</Option>
+                </Select>
+              </Col>
+              <Col span={4}>
+                <Select
+                  placeholder="库存状态"
+                  value={inventoryStatusFilter}
+                  onChange={setInventoryStatusFilter}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  <Option value="待出库">待出库</Option>
+                  <Option value="已出库">已出库</Option>
+                  <Option value="已取消">已取消</Option>
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Select
+                  placeholder="箱型"
+                  value={boxTypeFilter}
+                  onChange={setBoxTypeFilter}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  <Option value="整箱">📦 整箱</Option>
+                  <Option value="混合箱">📋 混合箱</Option>
+                </Select>
+              </Col>
+              <Col span={4}>
+                <Space>
+                  <Button
+                    onClick={() => {
+                      setSearchKeyword('');
+                      setStatusFilter('');
+                      setInventoryStatusFilter('');
+                      setBoxTypeFilter('');
+                    }}
+                  >
+                    清除筛选
+                  </Button>
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    共 {mergedData.filter((item: MergedShippingData) => {
+                      // 应用相同的筛选逻辑来显示筛选后的数量
+                      if (selectedCountry && selectedCountry !== '') {
+                        if (item.country !== selectedCountry || item.status === '已发货') {
+                          return false;
+                        }
+                      }
+                      if (searchKeyword.trim() !== '') {
+                        const keyword = searchKeyword.toLowerCase();
+                        const searchableFields = [
+                          item.amz_sku?.toLowerCase() || '',
+                          item.amazon_sku?.toLowerCase() || '',
+                          item.local_sku?.toLowerCase() || '',
+                          item.need_num?.toLowerCase() || '',
+                          item.country?.toLowerCase() || '',
+                          item.marketplace?.toLowerCase() || ''
+                        ];
+                        if (!searchableFields.some(field => field.includes(keyword))) {
+                          return false;
+                        }
+                      }
+                      if (statusFilter && item.status !== statusFilter) return false;
+                      if (inventoryStatusFilter && (item.inventory_status || '待出库') !== inventoryStatusFilter) return false;
+                      if (boxTypeFilter && (item.box_type || '整箱') !== boxTypeFilter) return false;
+                      
+                      switch (filterType) {
+                        case 'needs': return item.quantity > 0;
+                        case 'sufficient': return item.quantity > 0 && item.shortage === 0;
+                        case 'shortage': return item.quantity > 0 && item.shortage > 0;
+                        case 'unmapped': return item.quantity > 0 && !item.local_sku;
+                        case 'inventory-only': return item.quantity === 0 && item.total_available > 0;
+                        case 'unmapped-inventory': return item.status === '库存未映射';
+                        default: return true;
+                      }
+                    }).length} 条记录
+                  </Text>
+                </Space>
+              </Col>
+              <Col span={3}>
+                {/* 占位列 */}
+              </Col>
+            </Row>
+          </Card>
+
           <Table
             columns={mergedColumns}
             dataSource={mergedData.filter((item: MergedShippingData) => {
@@ -2005,7 +2221,42 @@ const ShippingPage: React.FC = () => {
                 }
               }
               
-
+              // 关键词搜索筛选
+              if (searchKeyword.trim() !== '') {
+                const keyword = searchKeyword.toLowerCase();
+                const searchableFields = [
+                  item.amz_sku?.toLowerCase() || '',
+                  item.amazon_sku?.toLowerCase() || '',
+                  item.local_sku?.toLowerCase() || '',
+                  item.need_num?.toLowerCase() || '',
+                  item.country?.toLowerCase() || '',
+                  item.marketplace?.toLowerCase() || ''
+                ];
+                if (!searchableFields.some(field => field.includes(keyword))) {
+                  return false;
+                }
+              }
+              
+              // 状态筛选
+              if (statusFilter && statusFilter !== '') {
+                if (item.status !== statusFilter) {
+                  return false;
+                }
+              }
+              
+              // 库存状态筛选
+              if (inventoryStatusFilter && inventoryStatusFilter !== '') {
+                if ((item.inventory_status || '待出库') !== inventoryStatusFilter) {
+                  return false;
+                }
+              }
+              
+              // 箱型筛选
+              if (boxTypeFilter && boxTypeFilter !== '') {
+                if ((item.box_type || '整箱') !== boxTypeFilter) {
+                  return false;
+                }
+              }
               
               // 最后按卡片筛选类型进行过滤
               switch (filterType) {
@@ -2185,9 +2436,11 @@ const ShippingPage: React.FC = () => {
         title="批量发货确认"
         open={shippingModalVisible}
         onCancel={() => {
-          setShippingModalVisible(false);
+                              setShippingModalVisible(false);
+                    setShippingRemark(''); // 清理备注
           setSelectedRowKeys([]);
           setSelectedRows([]);
+          setShippingRemark(''); // 清理备注
         }}
         footer={null}
         width={1000}
@@ -2354,6 +2607,21 @@ const ShippingPage: React.FC = () => {
               rowKey={(record) => `${record.box_num}_${record.amz_sku}`}
             />
 
+            <div style={{ marginTop: 16 }}>
+              <Form layout="vertical">
+                <Form.Item label="发货备注" style={{ marginBottom: 16 }}>
+                  <Input.TextArea
+                    placeholder="请输入发货备注（可选）"
+                    value={shippingRemark}
+                    onChange={(e) => setShippingRemark(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    showCount
+                  />
+                </Form.Item>
+              </Form>
+            </div>
+
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
                 <Button icon={<ExportOutlined />} onClick={exportToExcel}>
@@ -2453,7 +2721,7 @@ const ShippingPage: React.FC = () => {
                       operator: '申报出库',
                       shipping_method: selectedRows[0]?.shipping_method || '',
                       logistics_provider: logisticsProvider || '',
-                      remark: `批量发货 - ${new Date().toLocaleString('zh-CN')}`
+                      remark: shippingRemark.trim() || `批量发货 - ${new Date().toLocaleString('zh-CN')}`
                     };
                     
                     console.log('📋 完整的请求体:', requestBody);
@@ -3327,6 +3595,19 @@ const ShippingPage: React.FC = () => {
         destroyOnClose
       >
         <HsCodeManagement />
+      </Modal>
+
+      {/* 发货历史模态框 */}
+      <Modal
+        title="发货历史"
+        open={shipmentHistoryModalVisible}
+        onCancel={() => setShipmentHistoryModalVisible(false)}
+        width="95%"
+        style={{ maxWidth: '1600px', top: 20 }}
+        footer={null}
+        destroyOnClose
+      >
+        <ShipmentHistoryPage />
       </Modal>
 
     </div>
