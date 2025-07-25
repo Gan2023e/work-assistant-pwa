@@ -50,6 +50,35 @@ interface CountryInventory {
   total_quantity: number;
 }
 
+// 混合箱悬停样式
+const mixedBoxStyles = `
+  .mixed-box-hover {
+    background-color: #e6f7ff !important;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2) !important;
+  }
+  .mixed-box-hover td {
+    background-color: #e6f7ff !important;
+    border-color: #91d5ff !important;
+  }
+  .mixed-box-hover:hover {
+    background-color: #bae7ff !important;
+  }
+  .mixed-box-hover:hover td {
+    background-color: #bae7ff !important;
+  }
+  .inventory-table-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .inventory-table-container .ant-table {
+    min-width: 100%;
+  }
+  .ant-table-tbody > tr.mixed-box-hover {
+    border: 1px solid #40a9ff;
+  }
+`;
+
 const InventoryManagement: React.FC = () => {
   const [summaryData, setSummaryData] = useState<InventorySummary[]>([]);
   const [recordsData, setRecordsData] = useState<InventoryRecord[]>([]);
@@ -86,6 +115,9 @@ const InventoryManagement: React.FC = () => {
   const [mixedBoxEditVisible, setMixedBoxEditVisible] = useState(false);
   const [editingMixedBoxRecords, setEditingMixedBoxRecords] = useState<InventoryRecord[]>([]);
   const [mixedBoxEditForm] = Form.useForm();
+
+  // 混合箱悬停高亮
+  const [hoveredMixedBox, setHoveredMixedBox] = useState<string | null>(null);
 
   // 打印状态
   const [printServiceAvailable, setPrintServiceAvailable] = useState(false);
@@ -771,6 +803,7 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
+      <style>{mixedBoxStyles}</style>
       {/* 国家库存统计卡片 */}
       <Card 
         title={
@@ -783,7 +816,15 @@ const InventoryManagement: React.FC = () => {
           </span>
         } 
         size="small" 
-        style={{ marginBottom: 16 }}
+        style={{ 
+          marginBottom: 16,
+          width: '100%',
+          maxWidth: 'none'
+        }}
+        bodyStyle={{
+          padding: '16px 24px',
+          width: '100%'
+        }}
       >
         <Row gutter={[16, 16]}>
           {countryInventory.map(item => (
@@ -827,7 +868,18 @@ const InventoryManagement: React.FC = () => {
         </Row>
       </Card>
 
-      <Card title="本地库存管理" style={{ marginBottom: '16px' }}>
+      <Card 
+        title="本地库存管理" 
+        style={{ 
+          marginBottom: '16px',
+          width: '100%',
+          maxWidth: 'none'
+        }}
+        bodyStyle={{
+          padding: '24px',
+          width: '100%'
+        }}
+      >
         {/* 筛选区域 */}
         <div style={{ marginBottom: '16px' }}>
           <Space wrap>
@@ -939,38 +991,56 @@ const InventoryManagement: React.FC = () => {
         </div>
 
         {/* 表格 */}
-        {currentView === 'summary' ? (
-          <Table
-            columns={summaryColumns}
-            dataSource={summaryData}
-            loading={summaryLoading}
-            rowKey={(record) => `${record.sku}_${record.country}`}
-            pagination={{
-              ...pagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
-            }}
-            scroll={{ x: 1000 }}
-          />
-        ) : (
-          <Table
-            columns={recordsColumns}
-            dataSource={recordsData}
-            loading={loading}
-            rowKey="记录号"
-            pagination={{
-              ...pagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-              onChange: (page, pageSize) => {
-                setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
-              }
-            }}
-            scroll={{ x: 1200 }}
-          />
-        )}
+        <div className="inventory-table-container">
+          {currentView === 'summary' ? (
+            <Table
+              columns={summaryColumns}
+              dataSource={summaryData}
+              loading={summaryLoading}
+              rowKey={(record) => `${record.sku}_${record.country}`}
+              pagination={{
+                ...pagination,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+              }}
+              scroll={{ x: 1000 }}
+            />
+          ) : (
+            <Table
+              columns={recordsColumns}
+              dataSource={recordsData}
+              loading={loading}
+              rowKey="记录号"
+              rowClassName={(record) => {
+                if (record.mix_box_num && hoveredMixedBox === record.mix_box_num) {
+                  return 'mixed-box-hover';
+                }
+                return '';
+              }}
+              onRow={(record) => ({
+                onMouseEnter: () => {
+                  if (record.mix_box_num) {
+                    setHoveredMixedBox(record.mix_box_num);
+                  }
+                },
+                onMouseLeave: () => {
+                  setHoveredMixedBox(null);
+                }
+              })}
+              pagination={{
+                ...pagination,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                onChange: (page, pageSize) => {
+                  setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
+                }
+              }}
+              scroll={{ x: 1200 }}
+            />
+          )}
+        </div>
       </Card>
 
       {/* 编辑模态框 */}
