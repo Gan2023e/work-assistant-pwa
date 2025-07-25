@@ -1149,6 +1149,26 @@ const InventoryManagement: React.FC = () => {
               >
                 返回汇总
               </Button>
+              <Button 
+                size="small" 
+                type="primary"
+                onClick={async () => {
+                  // 临时测试：直接查询混合箱1732688430的记录
+                  try {
+                    const response = await fetch('/api/inventory/records?mix_box_num=1732688430&limit=1000');
+                    const data = await response.json();
+                    console.log('🧪 直接查询混合箱1732688430的结果:', data);
+                    if (data.code === 0) {
+                      setRecordsData(data.data.records);
+                      message.success(`找到${data.data.records.length}条记录`);
+                    }
+                  } catch (error) {
+                    console.error('🧪 直接查询失败:', error);
+                  }
+                }}
+              >
+                测试直接查询
+              </Button>
             </Space>
           </Card>
         )}
