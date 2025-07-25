@@ -422,10 +422,11 @@ export class PrintManager {
             .thermal-page {
                 width: 60mm;
                 height: 40mm;
-                padding: 1mm;
+                padding: 2mm;
                 box-sizing: border-box;
                 overflow: hidden;
                 position: relative;
+                border: none; /* 移除边框避免出界 */
             }
             
             .page-break {
@@ -445,14 +446,14 @@ export class PrintManager {
         .thermal-page {
             width: 60mm;
             height: 40mm;
-            border: 2px solid #333;
             margin: 5mm auto;
-            padding: 1mm;
+            padding: 2mm;
             box-sizing: border-box;
             background: white;
             position: relative;
             overflow: hidden;
             display: block;
+            box-shadow: 0 0 0 2px #333, 0 2px 4px rgba(0,0,0,0.2); /* 使用阴影替代边框 */
         }
         
         .country {
@@ -480,25 +481,25 @@ export class PrintManager {
         /* 打印时的精确控制 */
         @media print {
             .country {
-                font-size: 10px !important;
+                font-size: 9px !important;
                 font-weight: bold !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
-                padding-bottom: 0.5mm !important;
-                margin-bottom: 1.5mm !important;
-                line-height: 1.1 !important;
+                padding-bottom: 1mm !important;
+                margin-bottom: 2mm !important;
+                line-height: 1.0 !important;
             }
             
             .sku-section {
                 font-size: 8px !important;
                 text-align: center !important;
                 font-weight: bold !important;
-                margin-top: 1.5mm !important;
+                margin-top: 2mm !important;
             }
             
             .sku-item {
-                margin: 0.5mm 0 !important;
-                line-height: 1.2 !important;
+                margin: 1mm 0 !important;
+                line-height: 1.1 !important;
             }
         }
     </style>
