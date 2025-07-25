@@ -2,6 +2,11 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
 const SellerInventorySku = sequelize.define('SellerInventorySku', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   parent_sku: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -29,7 +34,17 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
   }
 }, {
   tableName: 'sellerinventory_sku',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    {
+      name: 'idx_child_sku',
+      fields: ['child_sku']
+    },
+    {
+      name: 'idx_parent_sku',
+      fields: ['parent_sku']
+    }
+  ]
 });
 
 module.exports = SellerInventorySku; 
