@@ -56,21 +56,10 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
       ],
     },
     {
-      key: 'shipping',
-      label: '发货管理',
-      children: [
-        { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
-        { key: '/shipping/pending-inventory', label: <Link to="/shipping/pending-inventory">待发货库存管理</Link> },
-        { key: '/shipping/packed-inventory', label: <Link to="/shipping/packed-inventory">已封箱库存</Link> },
-        { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
-      ],
-    },
-    { key: '/logistics', label: <Link to="/logistics">头程物流管理</Link> },
-    {
       key: 'inventory',
       label: '库存管理',
       children: [
-        { key: '/inventory/management', label: <Link to="/inventory/management">库存管理</Link> },
+        { key: '/inventory/management', label: <Link to="/inventory/management">本地库存管理</Link> },
         { key: '/inventory/create', label: <Link to="/inventory/create">库存入库</Link> },
         { key: '/inventory/sku-mapping', label: <Link to="/inventory/sku-mapping">SKU映射管理</Link> },
         { key: '/inventory/summary', label: <Link to="/inventory/summary">旺季备货汇总</Link> },
@@ -78,6 +67,16 @@ const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }
         { key: '/inventory/fba-inventory', label: <Link to="/inventory/fba-inventory">FBA库存</Link> },
       ],
     },
+    {
+      key: 'shipping',
+      label: '发货管理',
+      children: [
+        { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
+                  { key: '/shipping/pending-inventory', label: <Link to="/shipping/pending-inventory">待发货库存管理</Link> },
+        { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
+      ],
+    },
+    { key: '/logistics', label: <Link to="/logistics">头程物流管理</Link> },
     { key: '/salary', label: <Link to="/salary">临工工资结算</Link> },
     { key: '/profit', label: <Link to="/profit">直发小包利润分析</Link> },
     { key: '/user-manage', label: <Link to="/user-manage">用户管理</Link> },
@@ -180,7 +179,7 @@ const AppContent: React.FC = () => {
   const getSelectedKeys = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings", "/shipping/orders", "/products/purchase-invoice"].includes(path)) return [path];
-    if (["/shipping/management", "/shipping/pending-inventory", "/shipping/packed-inventory", "/shipping/history"].includes(path)) return [path];
+    if (["/shipping/management", "/shipping/pending-inventory", "/shipping/history"].includes(path)) return [path];
     if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
@@ -204,8 +203,7 @@ const AppContent: React.FC = () => {
       key: 'shipping',
       children: [
         { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
-        { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
-        { label: <Link to="/shipping/packed-inventory">已封箱库存</Link>, key: '/shipping/packed-inventory' },
+                    { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
         { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
       ],
     },
@@ -214,6 +212,8 @@ const AppContent: React.FC = () => {
       label: getMenuLabel('库存管理', openKeys.includes('inventory')),
       key: 'inventory',
       children: [
+        { label: <Link to="/inventory/management">本地库存管理</Link>, key: '/inventory/management' },
+        { label: <Link to="/inventory/create">库存入库</Link>, key: '/inventory/create' },
         { label: <Link to="/inventory/sku-mapping">SKU映射管理</Link>, key: '/inventory/sku-mapping' },
         { label: <Link to="/inventory/summary">旺季备货汇总</Link>, key: '/inventory/summary' },
         { label: <Link to="/inventory/supplier">厂家发货与付款</Link>, key: '/inventory/supplier' },

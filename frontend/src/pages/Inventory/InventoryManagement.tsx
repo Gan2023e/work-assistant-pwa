@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography } from 'antd';
+import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { API_BASE_URL } from '../../config/api';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
+const { Text } = Typography;
 
 interface InventoryRecord {
   记录号: string;
@@ -38,12 +40,26 @@ interface InventorySummary {
   latest_update: string;
 }
 
+// 国家库存汇总接口
+interface CountryInventory {
+  country: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
+  mixed_box_count: number;
+  total_quantity: number;
+}
+
 const InventoryManagement: React.FC = () => {
   const [summaryData, setSummaryData] = useState<InventorySummary[]>([]);
   const [recordsData, setRecordsData] = useState<InventoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [currentView, setCurrentView] = useState<'summary' | 'records'>('summary');
+  
+  // 国家库存汇总相关状态
+  const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
   
   // 筛选条件
   const [filters, setFilters] = useState({
@@ -80,6 +96,7 @@ const InventoryManagement: React.FC = () => {
     } else {
       loadRecordsData();
     }
+    fetchCountryInventory();
   }, [currentView, filters, pagination.current, pagination.pageSize]);
 
   // 检查打印服务
@@ -118,6 +135,33 @@ const InventoryManagement: React.FC = () => {
       console.error(error);
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  // 获取国家库存汇总数据
+  const fetchCountryInventory = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/inventory-by-country`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setCountryInventory(result.data || []);
+      } else {
+        console.error('获取国家库存数据失败:', result.message);
+      }
+    } catch (error) {
+      console.error('获取国家库存数据失败:', error);
     }
   };
 
@@ -460,7 +504,63 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card title="库存管理" style={{ marginBottom: '16px' }}>
+      {/* 国家库存统计卡片 */}
+      <Card 
+        title={
+          <span>
+            <GlobalOutlined style={{ marginRight: 8 }} />
+            按国家库存汇总
+            <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+              (不含已发货记录，点击卡片筛选对应国家数据)
+            </Text>
+          </span>
+        } 
+        size="small" 
+        style={{ marginBottom: 16 }}
+      >
+        <Row gutter={[16, 16]}>
+          {countryInventory.map(item => (
+            <Col key={item.country}>
+              <div 
+                style={{ 
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  border: `2px solid ${selectedCountry === item.country ? '#1677ff' : '#d9d9d9'}`,
+                  borderRadius: '6px',
+                  backgroundColor: selectedCountry === item.country ? '#f0f6ff' : '#fff',
+                  transition: 'all 0.3s',
+                  minWidth: '120px'
+                }} 
+                onClick={() => {
+                  const newCountry = selectedCountry === item.country ? '' : item.country;
+                  setSelectedCountry(newCountry);
+                  setFilters(prev => ({ ...prev, country: newCountry }));
+                }}
+              >
+                <Statistic
+                  title={
+                    <div>
+                      <Text strong>{item.country}</Text>
+                      <br />
+                      <Text type="secondary" style={{ fontSize: '10px' }}>
+                        整箱: {item.whole_box_count}箱 | 混合箱: {item.mixed_box_count}箱
+                      </Text>
+                    </div>
+                  }
+                  value={item.total_quantity}
+                  valueStyle={{ 
+                    color: selectedCountry === item.country ? '#1677ff' : '#666',
+                    fontSize: '18px'
+                  }}
+                  suffix="件"
+                />
+              </div>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+
+      <Card title="本地库存管理" style={{ marginBottom: '16px' }}>
         {/* 筛选区域 */}
         <div style={{ marginBottom: '16px' }}>
           <Space wrap>
@@ -519,6 +619,7 @@ const InventoryManagement: React.FC = () => {
                 } else {
                   loadRecordsData();
                 }
+                fetchCountryInventory();
               }}
             >
               搜索
