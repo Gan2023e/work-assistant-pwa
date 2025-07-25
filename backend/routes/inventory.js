@@ -61,21 +61,16 @@ router.get('/records', async (req, res) => {
     try {
         const { sku, country, mix_box_num, box_type, status, page = 1, limit = 20 } = req.query;
         
-        console.log('\x1b[36m%s\x1b[0m', '📡 查询参数:', { sku, country, mix_box_num, box_type, status, page, limit });
-        
         const whereCondition = {};
         if (sku) whereCondition.sku = { [Op.like]: `%${sku}%` };
         if (country) whereCondition.country = country;
         
-        // 处理mix_box_num - 直接字符串匹配（数据库中存储为varchar）
+        // 处理mix_box_num - 直接字符串匹配
         if (mix_box_num) {
-            console.log('\x1b[35m%s\x1b[0m', '🔍 原始mix_box_num:', mix_box_num, '类型:', typeof mix_box_num);
-            // 确保作为字符串进行精确匹配
             whereCondition.mix_box_num = mix_box_num.toString().trim();
-            console.log('\x1b[35m%s\x1b[0m', '🔍 构建的mix_box_num条件:', whereCondition.mix_box_num);
         }
         
-        if (box_type && !mix_box_num) { // 只有在没有指定mix_box_num时才处理box_type
+        if (box_type && !mix_box_num) {
             if (box_type === '整箱') {
                 whereCondition.mix_box_num = { [Op.is]: null };
             } else if (box_type === '混合箱') {
@@ -84,11 +79,7 @@ router.get('/records', async (req, res) => {
         }
         if (status) whereCondition.status = status;
         
-        console.log('\x1b[36m%s\x1b[0m', '🔍 构建的查询条件:', JSON.stringify(whereCondition, null, 2));
-        
         const offset = (page - 1) * limit;
-        
-        console.log('\x1b[35m%s\x1b[0m', '🔍 执行数据库查询，最终条件:', JSON.stringify(whereCondition, null, 2));
         
         const { count, rows } = await LocalBox.findAndCountAll({
             where: whereCondition,
@@ -98,17 +89,6 @@ router.get('/records', async (req, res) => {
         });
         
         console.log('\x1b[33m%s\x1b[0m', `📋 查询到 ${count} 条库存记录`);
-        
-        // 如果是查询特定混合箱号，添加额外调试信息
-        if (mix_box_num) {
-            console.log('\x1b[35m%s\x1b[0m', '🔍 混合箱查询结果样本:', rows.slice(0, 3).map(r => ({
-                id: r.记录号,
-                sku: r.sku,
-                mix_box_num: r.mix_box_num,
-                mix_box_num_type: typeof r.mix_box_num,
-                country: r.country
-            })));
-        }
         
         res.json({
             code: 0,
