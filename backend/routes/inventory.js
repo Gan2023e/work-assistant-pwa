@@ -494,12 +494,55 @@ router.get('/statistics', async (req, res) => {
     }
 });
 
+// 测试数据库连接和模型
+router.get('/test-db', async (req, res) => {
+    try {
+        console.log('测试数据库连接...');
+        
+        // 测试LocalBox模型
+        const localBoxCount = await LocalBox.count();
+        console.log('LocalBox表记录数:', localBoxCount);
+        
+        // 测试SellerInventorySku模型
+        const sellerSkuCount = await SellerInventorySku.count();
+        console.log('SellerInventorySku表记录数:', sellerSkuCount);
+        
+        // 获取SellerInventorySku表的前几条记录
+        const sampleSkus = await SellerInventorySku.findAll({
+            limit: 3,
+            attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
+        });
+        
+        res.json({
+            code: 0,
+            message: '数据库连接正常',
+            data: {
+                localBoxCount,
+                sellerSkuCount,
+                sampleSkus: sampleSkus.map(sku => sku.toJSON())
+            }
+        });
+    } catch (error) {
+        console.error('数据库测试失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '数据库测试失败: ' + error.message,
+            error: {
+                type: error.name,
+                details: error.message,
+                stack: error.stack
+            }
+        });
+    }
+});
+
 // 验证SKU并获取单箱数量
 router.post('/validate-sku', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '🔍 验证SKU并获取单箱数量');
     
     try {
         const { sku } = req.body;
+        console.log('接收到SKU验证请求:', sku);
         
         if (!sku) {
             return res.status(400).json({
@@ -509,11 +552,13 @@ router.post('/validate-sku', async (req, res) => {
         }
         
         // 查询SKU信息
+        console.log('开始查询SKU:', sku);
         const skuInfo = await SellerInventorySku.findOne({
             where: {
                 child_sku: sku
             }
         });
+        console.log('查询结果:', skuInfo ? '找到SKU' : '未找到SKU');
         
         if (!skuInfo) {
             return res.json({
@@ -562,10 +607,19 @@ router.post('/validate-sku', async (req, res) => {
         
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', '❌ 验证SKU失败:', error);
+        console.error('错误详情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            sql: error.sql || '无SQL信息'
+        });
         res.status(500).json({
             code: 1,
-            message: '验证失败',
-            error: error.message
+            message: '验证失败: ' + error.message,
+            error: {
+                type: error.name,
+                details: error.message
+            }
         });
     }
 });

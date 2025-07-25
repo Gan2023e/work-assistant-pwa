@@ -476,15 +476,15 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
 
                     // 调用API创建混合箱记录
        const response = await fetch(`${API_BASE_URL}/api/inventory/create`, {
-         method: 'POST',
+        method: 'POST',
          headers: { 
            'Content-Type': 'application/json',
            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
          },
-         body: JSON.stringify({
+        body: JSON.stringify({
            records: allRecords
-         })
-       });
+        })
+      });
 
       const data = await response.json();
       if (data.code === 0) {
