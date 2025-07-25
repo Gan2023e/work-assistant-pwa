@@ -1173,31 +1173,55 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 税率解析 - 针对税率/征收率列格式优化
-    const taxRatePatterns = [
-      // 匹配税率/征收率列中的百分数
-      /税率[\/征收率]*[^%]*(\d{1,2}%)/,
-      /征收率[^%]*(\d{1,2}%)/,
-      // 匹配表格中的税率
-      /税\s*率[\/征收率]*[^%]*(\d{1,2}%)/,
-      // 匹配其他税率格式
-      /税率[：:\s]*(\d{1,2}%)/,
-      /税率[：:\s]*(\d{1,2}\.\d{1,2}%)/,
-      /税率[：:\s]*0\.(\d{2})/,
-      /(\d{1,2}%)/,
-      /(\d{1,2}\.\d{1,2}%)/
+    // 税率解析 - 针对税率/征收率列格式优化，优先识别"免税"
+    
+    // 首先检查是否包含"免税"字样
+    const freeTagPatterns = [
+      /免税/,
+      /免\s*税/,
+      /税率[\/征收率]*[^%]*免税/,
+      /征收率[^%]*免税/,
+      /税\s*率[\/征收率]*[^%]*免税/
     ];
     
-    for (const pattern of taxRatePatterns) {
-      const match = cleanText.match(pattern);
-      if (match) {
-        let taxRate = match[1];
-        // 如果匹配到的是小数形式，转换为百分比
-        if (taxRate.match(/^0\.\d{2}$/)) {
-          taxRate = (parseFloat(taxRate) * 100).toFixed(0) + '%';
-        }
-        result.tax_rate = taxRate;
+    let foundFreeTax = false;
+    for (const pattern of freeTagPatterns) {
+      if (cleanText.match(pattern)) {
+        result.tax_rate = '0%';
+        foundFreeTax = true;
+        console.log('✅ 识别到"免税"，税率设置为0%');
         break;
+      }
+    }
+    
+    // 如果没有找到"免税"，则使用原有的税率解析逻辑
+    if (!foundFreeTax) {
+      const taxRatePatterns = [
+        // 匹配税率/征收率列中的百分数
+        /税率[\/征收率]*[^%]*(\d{1,2}%)/,
+        /征收率[^%]*(\d{1,2}%)/,
+        // 匹配表格中的税率
+        /税\s*率[\/征收率]*[^%]*(\d{1,2}%)/,
+        // 匹配其他税率格式
+        /税率[：:\s]*(\d{1,2}%)/,
+        /税率[：:\s]*(\d{1,2}\.\d{1,2}%)/,
+        /税率[：:\s]*0\.(\d{2})/,
+        /(\d{1,2}%)/,
+        /(\d{1,2}\.\d{1,2}%)/
+      ];
+      
+      for (const pattern of taxRatePatterns) {
+        const match = cleanText.match(pattern);
+        if (match) {
+          let taxRate = match[1];
+          // 如果匹配到的是小数形式，转换为百分比
+          if (taxRate.match(/^0\.\d{2}$/)) {
+            taxRate = (parseFloat(taxRate) * 100).toFixed(0) + '%';
+          }
+          result.tax_rate = taxRate;
+          console.log(`✅ 识别到税率: ${taxRate}`);
+          break;
+        }
       }
     }
 
