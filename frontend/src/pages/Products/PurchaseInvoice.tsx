@@ -771,8 +771,26 @@ const PurchaseInvoice: React.FC = () => {
       dataIndex: 'invoice',
       key: 'invoice',
       width: 300,
-      render: (invoice: Invoice) => {
-        if (!invoice) return '-';
+      render: (invoice: Invoice, record: PurchaseOrder) => {
+        if (!invoice) {
+          return (
+            <div>
+              <Text type="secondary">未开票</Text>
+              <div style={{ marginTop: '4px' }}>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<UploadOutlined />}
+                  onClick={() => handleSingleInvoice(record)}
+                  disabled={record.invoice_status === '已开票'}
+                  style={{ fontSize: '12px' }}
+                >
+                  上传发票
+                </Button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div>
             <div style={{ fontWeight: 'bold' }}>
@@ -1123,6 +1141,28 @@ const PurchaseInvoice: React.FC = () => {
       }
     };
     fileInput.click();
+  };
+
+  // 处理单个记录开票
+  const handleSingleInvoice = (record: PurchaseOrder) => {
+    // 清空之前选中的记录，设置为当前记录
+    setSelectedRowKeys([record.id]);
+    
+    // 重置发票相关状态
+    setExtractedInfo(null);
+    setParseQuality(null);
+    setFileList([]);
+    setAmountDifference(0);
+    setUploadedScreenshots([]);
+    
+    // 重置表单
+    invoiceForm.resetFields();
+    
+    // 打开发票录入模态框
+    setInvoiceModalVisible(true);
+    
+    // 显示提示信息
+    message.info(`已选择订单：${record.order_number}，开始为其开票`);
   };
 
   // 删除发票方法
