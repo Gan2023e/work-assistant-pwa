@@ -1,10 +1,7 @@
 /**
- * 前端打印管理器
- * 支持本地打印服务和浏览器原生打印
- * 云端部署优化版本 - 智能选择打印方式
+ * 前端浏览器打印管理器
+ * 只支持浏览器原生打印功能
  */
-
-import { printConfig, isCloudDeployment, getRecommendedPrintMethod } from '../config/print';
 
 export interface LabelData {
     recordId: string;
@@ -22,180 +19,43 @@ export interface LabelData {
 }
 
 export interface PrintOptions {
-    printType?: 'html' | 'zpl';
-    printerName?: string;
     autoClose?: boolean;
-    forceLocal?: boolean; // 强制使用本地服务
 }
 
 export class PrintManager {
-    private printServiceUrl: string;
-    private fallbackToBrowser: boolean;
-    private isServiceAvailable: boolean | null = null;
-    private isCloudDeployment: boolean;
-
-    constructor(printServiceUrl?: string, fallbackToBrowser = true) {
-        this.printServiceUrl = printServiceUrl || printConfig.serviceUrl;
-        this.fallbackToBrowser = fallbackToBrowser;
-        this.isCloudDeployment = printConfig.isCloud;
+    constructor() {
+        // 简化构造函数，只支持浏览器打印
     }
 
     /**
-     * 检查打印服务是否可用
+     * 检查浏览器打印可用性（始终返回true）
      */
     async checkPrintService(): Promise<boolean> {
-        // 云端部署且没有配置打印服务URL时，直接返回false
-        if (this.isCloudDeployment && !this.printServiceUrl) {
-            this.isServiceAvailable = false;
-            return false;
-        }
-
-        // 云端部署时使用短超时
-        if (this.isCloudDeployment) {
-            try {
-                const response = await fetch(`${this.printServiceUrl}/health`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: AbortSignal.timeout(printConfig.healthCheckTimeout)
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    this.isServiceAvailable = data.status === 'OK';
-                    return this.isServiceAvailable;
-                }
-            } catch (error) {
-                // 云端部署时，连接失败是预期的
-                console.log('本地打印服务不可用，这在云端部署中是正常的');
-            }
-            
-            this.isServiceAvailable = false;
-            return false;
-        } else {
-            // 本地部署，正常检查
-            try {
-                const response = await fetch(`${this.printServiceUrl}/health`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    this.isServiceAvailable = data.status === 'OK';
-                    return this.isServiceAvailable;
-                }
-                
-                this.isServiceAvailable = false;
-                return false;
-            } catch (error) {
-                console.warn('打印服务不可用:', error);
-                this.isServiceAvailable = false;
-                return false;
-            }
-        }
+        return true;
     }
 
     /**
-     * 获取可用的打印机列表
-     */
-    async getPrinters(): Promise<any[]> {
-        try {
-            const response = await fetch(`${this.printServiceUrl}/printers`);
-            if (response.ok) {
-                const data = await response.json();
-                return data.data?.printers || [];
-            }
-            throw new Error('获取打印机列表失败');
-        } catch (error) {
-            console.error('获取打印机失败:', error);
-            return [];
-        }
-    }
-
-    /**
-     * 打印标签（主要方法）- 云端优化版本
+     * 打印标签（只支持浏览器打印）
      */
     async printLabel(labelData: LabelData, options: PrintOptions = {}): Promise<boolean> {
         try {
-            // 云端部署或强制不使用本地服务时，直接使用浏览器打印
-            if (this.isCloudDeployment && !options.forceLocal) {
-                console.log('云端部署，使用浏览器打印');
-                return this.printViaBrowser(labelData, options);
-            }
-
-            // 检查本地服务状态
-            if (this.isServiceAvailable === null) {
-                await this.checkPrintService();
-            }
-
-            // 尝试本地打印服务
-            if (this.isServiceAvailable && !this.isCloudDeployment) {
-                try {
-                    return await this.printViaService(labelData, options);
-                } catch (error) {
-                    console.warn('本地打印服务失败，切换到浏览器打印');
-                    if (this.fallbackToBrowser) {
-                        return this.printViaBrowser(labelData, options);
-                    }
-                    throw error;
-                }
-            } else {
-                // 本地服务不可用，使用浏览器打印
-                if (this.fallbackToBrowser) {
-                    return this.printViaBrowser(labelData, options);
-                } else {
-                    throw new Error('打印服务不可用且未启用浏览器打印备用方案');
-                }
-            }
+            console.log('🖨️ 使用浏览器打印模式');
+            return this.printViaBrowser(labelData, options);
         } catch (error) {
             console.error('打印失败:', error);
-            
-            // 最后的备用方案：浏览器打印
-            if (this.fallbackToBrowser) {
-                console.warn('所有打印方式失败，尝试浏览器打印');
-                return this.printViaBrowser(labelData, options);
-            }
-            
             throw error;
         }
     }
 
     /**
-     * 通过本地服务打印
+     * 通过浏览器打印
      */
-    private async printViaService(labelData: LabelData, options: PrintOptions): Promise<boolean> {
-        try {
-            const response = await fetch(`${this.printServiceUrl}/print-label`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    labelData: labelData,
-                    printerName: options.printerName,
-                    printType: options.printType || 'html'
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || '打印服务调用失败');
-            }
-
-            const result = await response.json();
-            console.log('✅ 本地打印服务成功:', result.data);
-            return true;
-        } catch (error) {
-            console.error('本地打印服务失败:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * 通过浏览器打印（云端部署的主要方式）
-     */
-    private printViaBrowser(labelData: LabelData, options: PrintOptions = {}): boolean {
+    private async printViaBrowser(labelData: LabelData, options: PrintOptions = {}): Promise<boolean> {
         try {
             const htmlContent = this.generateLabelHTML(labelData);
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // 打开新窗口进行打印
+            const printWindow = window.open('', '_blank', 'width=600,height=400,scrollbars=no,resizable=no');
             
             if (!printWindow) {
                 throw new Error('无法打开打印窗口，请检查浏览器弹窗拦截设置');
@@ -241,7 +101,7 @@ export class PrintManager {
                 success++;
                 
                 // 添加延迟避免打印冲突
-                await new Promise(resolve => setTimeout(resolve, printConfig.batchPrintDelay));
+                await new Promise(resolve => setTimeout(resolve, 1000));
             } catch (error) {
                 console.error(`打印失败 - ${labelData.recordId}:`, error);
                 failed++;
@@ -254,50 +114,14 @@ export class PrintManager {
     /**
      * 测试打印
      */
-    async testPrint(printerName?: string): Promise<boolean> {
+    async testPrint(): Promise<boolean> {
         try {
-            // 云端部署时，优先使用浏览器测试
-            if (this.isCloudDeployment) {
-                const testLabel: LabelData = {
-                    recordId: 'TEST' + Date.now(),
-                    sku: 'TEST-SKU',
-                    quantity: 1,
-                    boxes: 1,
-                    country: 'TEST',
-                    operator: '测试',
-                    boxType: '整箱',
-                    createTime: new Date(),
-                    barcode: 'TEST' + Date.now()
-                };
-
-                return this.printViaBrowser(testLabel, { autoClose: false });
-            }
-
-            // 本地部署时，尝试本地服务
-            if (this.isServiceAvailable === null) {
-                await this.checkPrintService();
-            }
-
-            if (this.isServiceAvailable) {
-                const response = await fetch(`${this.printServiceUrl}/test-print`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ printerName })
-                });
-
-                if (response.ok) {
-                    console.log('✅ 本地打印测试成功');
-                    return true;
-                }
-            }
-
-            // 备用测试打印
             const testLabel: LabelData = {
                 recordId: 'TEST' + Date.now(),
                 sku: 'TEST-SKU',
                 quantity: 1,
                 boxes: 1,
-                country: 'TEST',
+                country: 'US',
                 operator: '测试',
                 boxType: '整箱',
                 createTime: new Date(),
@@ -395,36 +219,32 @@ export class PrintManager {
         /* SKU信息区域 */
         .sku-section { 
             line-height: 1.2;
-            font-size: 7px;
+            font-size: 12px;
+            text-align: center;
         }
         
         .sku-item {
             margin-bottom: 0.5mm;
             word-break: break-all;
-            text-align: left;
-        }
-        
-        /* 混合箱标识 */
-        .mixed-box-info {
             text-align: center;
-            font-size: 6px;
-            margin-top: 1mm;
-            padding: 0.5mm;
-            background: #f0f0f0;
-            border: 1px solid #ccc;
+            font-weight: bold;
+            color: black;
         }
         
-        /* 控制按钮 */
+        /* 控制按钮 - 屏幕居中 */
         .controls {
             position: fixed;
-            top: 10px;
-            right: 10px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             background: #f0f0f0;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            padding: 15px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
             z-index: 1000;
-            font-size: 12px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            text-align: center;
         }
         @media print {
             .controls { display: none; }
@@ -453,15 +273,13 @@ export class PrintManager {
 </head>
 <body>
     <div class="cloud-notice no-print">
-        ${this.isCloudDeployment ? 
-            '🌐 云端打印模式：请使用浏览器打印功能（Ctrl+P）<br/>建议设置为实际尺寸打印' : 
-            '🖥️ 本地打印模式 - 60x40mm热敏纸'}
+        🖨️ 浏览器打印模式：请使用浏览器打印功能（Ctrl+P）<br/>建议设置为实际尺寸打印
     </div>
     
     <div class="controls no-print">
-        <button onclick="window.print()" style="margin-right: 8px;">🖨️ 打印</button>
-        <button onclick="window.close()">❌ 关闭</button>
-        <br><small>60x40mm热敏纸</small>
+        <button onclick="window.print()" style="margin-right: 8px; padding: 8px 16px; font-size: 14px;">🖨️ 打印</button>
+        <button onclick="window.close()" style="padding: 8px 16px; font-size: 14px;">❌ 关闭</button>
+        <br><small style="color: #666; margin-top: 8px; display: block;">60x40mm热敏纸</small>
     </div>
     
     <!-- 目的国 - 最上方加粗显示 -->
@@ -472,15 +290,9 @@ export class PrintManager {
         ${skuContent}
     </div>
     
-    <!-- 混合箱信息（如果适用） -->
-    ${isMultipleSku ? `<div class="mixed-box-info">混合箱: ${labelData.mixBoxNum}</div>` : ''}
-    
     <script>
-        // 云端部署时的自动提示
-        if (${this.isCloudDeployment}) {
-            console.log('🌐 云端打印模式：建议使用 Ctrl+P 快捷键打印');
-            console.log('📏 打印尺寸：60x40mm热敏纸');
-        }
+        console.log('🖨️ 浏览器打印模式：建议使用 Ctrl+P 快捷键打印');
+        console.log('📏 打印尺寸：60x40mm热敏纸');
         
         // 页面加载后自动调整
         window.onload = function() {
@@ -495,26 +307,16 @@ export class PrintManager {
     /**
      * 获取打印服务状态
      */
-    async getServiceStatus(): Promise<{available: boolean, url: string, version?: string, isCloudDeployment: boolean}> {
-        const available = await this.checkPrintService();
+    async getServiceStatus(): Promise<{available: boolean, method: string}> {
         return {
-            available,
-            url: this.printServiceUrl,
-            version: available ? '1.0.0' : undefined,
-            isCloudDeployment: this.isCloudDeployment
+            available: true,
+            method: 'browser'
         };
-    }
-
-    /**
-     * 获取推荐的打印方式
-     */
-    getRecommendedPrintMethod(): 'browser' | 'local' {
-        return this.isCloudDeployment ? 'browser' : 'local';
     }
 }
 
-// 创建默认实例 - 智能配置
-export const printManager = new PrintManager(printConfig.serviceUrl, true);
+// 创建默认实例
+export const printManager = new PrintManager();
 
 // 导出工具函数
 export const printUtils = {
@@ -546,12 +348,5 @@ export const printUtils = {
         if (!labelData.operator) errors.push('操作员不能为空');
         
         return errors;
-    },
-
-    // 检测是否为云端部署
-    isCloudDeployment: (): boolean => {
-        return !window.location.hostname.includes('localhost') 
-            && !window.location.hostname.includes('127.0.0.1')
-            && !window.location.hostname.includes('192.168.');
     }
 }; 
