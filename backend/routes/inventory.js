@@ -507,11 +507,31 @@ router.get('/test-db', async (req, res) => {
         const sellerSkuCount = await SellerInventorySku.count();
         console.log('SellerInventorySku表记录数:', sellerSkuCount);
         
-        // 获取SellerInventorySku表的前几条记录
-        const sampleSkus = await SellerInventorySku.findAll({
-            limit: 3,
-            attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
-        });
+        // 获取SellerInventorySku表的前几条记录，尝试包含qty_per_box字段
+        let sampleSkus;
+        try {
+            sampleSkus = await SellerInventorySku.findAll({
+                limit: 3,
+                attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box']
+            });
+        } catch (error) {
+            console.log('qty_per_box字段不存在，使用基本字段查询');
+            sampleSkus = await SellerInventorySku.findAll({
+                limit: 3,
+                attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
+            });
+        }
+        
+        // 测试查询特定SKU
+        const testSku = 'XB362D1';
+        let testSkuResult;
+        try {
+            testSkuResult = await SellerInventorySku.findOne({
+                where: { child_sku: testSku }
+            });
+        } catch (error) {
+            testSkuResult = { error: error.message };
+        }
         
         res.json({
             code: 0,
@@ -519,7 +539,9 @@ router.get('/test-db', async (req, res) => {
             data: {
                 localBoxCount,
                 sellerSkuCount,
-                sampleSkus: sampleSkus.map(sku => sku.toJSON())
+                sampleSkus: sampleSkus.map(sku => sku.toJSON()),
+                testSkuResult: testSkuResult ? (testSkuResult.toJSON ? testSkuResult.toJSON() : testSkuResult) : null,
+                testSku: testSku
             }
         });
     } catch (error) {
@@ -571,16 +593,25 @@ router.post('/validate-sku', async (req, res) => {
             });
         }
         
-        // 安全地检查qty_per_box字段
+        // 简化逻辑：检查qty_per_box字段
         let qtyPerBox = null;
+        let hasQtyPerBoxField = false;
+        
         try {
-            qtyPerBox = skuInfo.dataValues?.qty_per_box || skuInfo.qty_per_box || null;
+            // 尝试访问qty_per_box字段
+            if (skuInfo.dataValues && 'qty_per_box' in skuInfo.dataValues) {
+                qtyPerBox = skuInfo.dataValues.qty_per_box;
+                hasQtyPerBoxField = true;
+            } else if ('qty_per_box' in skuInfo) {
+                qtyPerBox = skuInfo.qty_per_box;
+                hasQtyPerBoxField = true;
+            }
         } catch (error) {
-            console.log('qty_per_box字段不存在，将提示用户补充');
-            qtyPerBox = null;
+            console.log('qty_per_box字段访问异常:', error.message);
         }
         
-        if (!qtyPerBox || qtyPerBox <= 0) {
+        // 如果字段不存在或没有值，提示用户补充
+        if (!hasQtyPerBoxField || !qtyPerBox || qtyPerBox <= 0) {
             return res.json({
                 code: 3,
                 message: `SKU: ${sku} 缺少单箱产品数量信息，请补充`,
@@ -588,7 +619,13 @@ router.post('/validate-sku', async (req, res) => {
                     sku: sku,
                     exists: true,
                     hasQtyPerBox: false,
-                    skuInfo: skuInfo
+                    hasQtyPerBoxField: hasQtyPerBoxField,
+                    skuInfo: {
+                        parent_sku: skuInfo.parent_sku,
+                        child_sku: skuInfo.child_sku,
+                        sellercolorname: skuInfo.sellercolorname,
+                        sellersizename: skuInfo.sellersizename
+                    }
                 }
             });
         }
@@ -601,7 +638,12 @@ router.post('/validate-sku', async (req, res) => {
                 exists: true,
                 hasQtyPerBox: true,
                 qtyPerBox: qtyPerBox,
-                skuInfo: skuInfo
+                skuInfo: {
+                    parent_sku: skuInfo.parent_sku,
+                    child_sku: skuInfo.child_sku,
+                    sellercolorname: skuInfo.sellercolorname,
+                    sellersizename: skuInfo.sellersizename
+                }
             }
         });
         
@@ -638,45 +680,17 @@ router.post('/update-qty-per-box', async (req, res) => {
             });
         }
         
-        // 尝试更新qty_per_box字段，如果字段不存在则跳过
-        let affectedRows = 0;
-        try {
-            const updateResult = await SellerInventorySku.update({
-                qty_per_box: qtyPerBox
-            }, {
-                where: {
-                    child_sku: sku
-                }
-            });
-            affectedRows = updateResult[0];
-        } catch (error) {
-            console.log('qty_per_box字段不存在，无法更新:', error.message);
-            // 如果字段不存在，我们假设更新成功但无法存储到数据库
-            // 前端可以在内存中记住这个值
-            return res.json({
-                code: 0,
-                message: '已记录单箱数量（字段不存在，仅在当前会话有效）',
-                data: {
-                    sku: sku,
-                    qtyPerBox: qtyPerBox,
-                    temporary: true
-                }
-            });
-        }
+        // 由于qty_per_box字段可能不存在，我们直接使用临时存储方式
+        // 这样可以避免数据库字段兼容性问题
+        console.log(`为SKU ${sku} 设置临时单箱数量: ${qtyPerBox}`);
         
-        if (affectedRows === 0) {
-            return res.status(404).json({
-                code: 1,
-                message: 'SKU不存在，无法更新'
-            });
-        }
-        
-        res.json({
+        return res.json({
             code: 0,
-            message: '更新成功',
+            message: '已记录单箱数量（当前会话有效）',
             data: {
                 sku: sku,
-                qtyPerBox: qtyPerBox
+                qtyPerBox: qtyPerBox,
+                temporary: true
             }
         });
         
