@@ -68,14 +68,38 @@ const mixedBoxStyles = `
     background-color: #bae7ff !important;
   }
   .inventory-table-container {
-    width: 100%;
+    width: 100% !important;
     overflow-x: auto;
   }
   .inventory-table-container .ant-table {
-    min-width: 100%;
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+  .inventory-table-container .ant-table-wrapper {
+    width: 100% !important;
+  }
+  .inventory-table-container .ant-table-container {
+    width: 100% !important;
+  }
+  .inventory-table-container .ant-table-content {
+    width: 100% !important;
+  }
+  .inventory-table-container .ant-table-body {
+    width: 100% !important;
+  }
+  .inventory-table-container .ant-table-thead > tr,
+  .inventory-table-container .ant-table-tbody > tr {
+    width: 100% !important;
   }
   .ant-table-tbody > tr.mixed-box-hover {
     border: 1px solid #40a9ff;
+  }
+  /* 强制表格列平均分配宽度 */
+  .inventory-table-container .ant-table-thead > tr > th,
+  .inventory-table-container .ant-table-tbody > tr > td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -615,7 +639,7 @@ const InventoryManagement: React.FC = () => {
       dataIndex: 'box_type',
       key: 'box_type',
       fixed: 'left',
-      width: 120,
+      width: '15%',
       align: 'center',
       render: (type, record) => (
         <div>
@@ -641,20 +665,20 @@ const InventoryManagement: React.FC = () => {
       title: '记录号',
       dataIndex: '记录号',
       key: '记录号',
-      width: 140,
+      width: '12%',
       align: 'center'
     },
     {
       title: 'SKU',
       dataIndex: 'sku',
       key: 'sku',
-      width: 120,
+      width: '10%',
       align: 'center'
     },
     {
       title: '数量',
       key: 'quantity',
-      width: 100,
+      width: '8%',
       align: 'center',
       render: (_, record) => {
         if (record.box_type === '混合箱') {
@@ -667,14 +691,14 @@ const InventoryManagement: React.FC = () => {
       title: '国家',
       dataIndex: 'country',
       key: 'country',
-      width: 80,
+      width: '6%',
       align: 'center'
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
+      width: '8%',
       align: 'center',
       render: (status) => getStatusTag(status)
     },
@@ -682,21 +706,21 @@ const InventoryManagement: React.FC = () => {
       title: '操作员',
       dataIndex: '操作员',
       key: '操作员',
-      width: 100,
+      width: '8%',
       align: 'center'
     },
     {
       title: '打包员',
       dataIndex: '打包员',
       key: '打包员',
-      width: 100,
+      width: '8%',
       align: 'center'
     },
     {
       title: '入库时间',
       dataIndex: 'time',
       key: 'time',
-      width: 140,
+      width: '12%',
       align: 'center',
       render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
     },
@@ -704,7 +728,7 @@ const InventoryManagement: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 150,
+      width: '13%',
       align: 'center',
       render: (_, record, index) => {
         const rowSpanMap = getRowSpanMap(recordsData);
@@ -1012,6 +1036,8 @@ const InventoryManagement: React.FC = () => {
               dataSource={recordsData}
               loading={loading}
               rowKey="记录号"
+              tableLayout="fixed"
+              size="middle"
               rowClassName={(record) => {
                 if (record.mix_box_num && hoveredMixedBox === record.mix_box_num) {
                   return 'mixed-box-hover';
@@ -1037,7 +1063,8 @@ const InventoryManagement: React.FC = () => {
                   setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
                 }
               }}
-              scroll={{ x: 1200 }}
+              scroll={{ x: 'max-content' }}
+              style={{ width: '100%' }}
             />
           )}
         </div>
