@@ -39,84 +39,7 @@ const getMenuLabel = (label: string, open: boolean) => (
   </span>
 );
 
-// LayoutWithSidebar组件，左侧功能栏与顶部主菜单一致
-const LayoutWithSidebar: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const location = useLocation();
-  // 与顶部主菜单一致的侧边栏菜单结构
-  const sideMenuItems = [
-    { key: '/', label: <Link to="/">主页</Link> },
-    {
-      key: 'products',
-      label: '产品与采购管理',
-      children: [
-        { key: '/products/purchase', label: <Link to="/products/purchase">采购链接管理</Link> },
-        { key: '/products/listings', label: <Link to="/products/listings">在线Listings管理</Link> },
-        { key: '/shipping/orders', label: <Link to="/shipping/orders">需求单管理</Link> },
-        { key: '/products/purchase-invoice', label: <Link to="/products/purchase-invoice">采购发票管理</Link> },
-      ],
-    },
-    {
-      key: 'inventory',
-      label: '库存管理',
-      children: [
-        { key: '/inventory/management', label: <Link to="/inventory/management">本地库存管理</Link> },
-        { key: '/inventory/create', label: <Link to="/inventory/create">库存入库</Link> },
-        { key: '/inventory/sku-mapping', label: <Link to="/inventory/sku-mapping">SKU映射管理</Link> },
-        { key: '/inventory/summary', label: <Link to="/inventory/summary">旺季备货汇总</Link> },
-        { key: '/inventory/supplier', label: <Link to="/inventory/supplier">厂家发货与付款</Link> },
-        { key: '/inventory/fba-inventory', label: <Link to="/inventory/fba-inventory">FBA库存</Link> },
-      ],
-    },
-    {
-      key: 'shipping',
-      label: '发货管理',
-      children: [
-        { key: '/shipping/management', label: <Link to="/shipping/management">发货操作</Link> },
-                  { key: '/shipping/pending-inventory', label: <Link to="/shipping/pending-inventory">待发货库存管理</Link> },
-        { key: '/shipping/history', label: <Link to="/shipping/history">发货历史</Link> },
-      ],
-    },
-    { key: '/logistics', label: <Link to="/logistics">头程物流管理</Link> },
-    { key: '/salary', label: <Link to="/salary">临工工资结算</Link> },
-    { key: '/profit', label: <Link to="/profit">直发小包利润分析</Link> },
-    { key: '/user-manage', label: <Link to="/user-manage">用户管理</Link> },
-  ];
-  // 侧边栏高亮
-  const findSelectedKey = () => {
-    const path = location.pathname;
-    // 精确匹配子菜单
-    for (const item of sideMenuItems) {
-      if (item.children) {
-        for (const child of item.children) {
-          if (child.key === path) return [item.key, child.key];
-        }
-      } else if (item.key === path) {
-        return [item.key];
-      }
-    }
-    return [];
-  };
-  const selectedKeys = findSelectedKey();
-  const openKeys = selectedKeys.length > 1 ? [selectedKeys[0]] : [];
-  return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={220} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
-        <Menu
-          mode="inline"
-          selectedKeys={selectedKeys}
-          defaultOpenKeys={openKeys}
-          style={{ height: '100%', borderRight: 0 }}
-          items={sideMenuItems}
-        />
-      </Sider>
-      <Layout>
-        <Content style={{ padding: 24, minHeight: 280 }}>
-          {children}
-        </Content>
-      </Layout>
-    </Layout>
-  );
-};
+
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -236,7 +159,17 @@ const AppContent: React.FC = () => {
 
   return (
     <Layout>
-      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Header style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        width: '100%'
+      }}>
         <Menu
           theme="dark"
           mode="horizontal"
@@ -262,7 +195,7 @@ const AppContent: React.FC = () => {
         </Dropdown>
       </Header>
       
-      <Content style={{ padding: 24 }}>
+      <Content style={{ padding: 24, paddingTop: 88 }}>
         <Routes>
           <Route path="/" element={
             <ProtectedRoute>
@@ -271,51 +204,37 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/products/purchase" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <Purchase />
-              </LayoutWithSidebar>
+              <Purchase />
             </ProtectedRoute>
           } />
           <Route path="/products/listings" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <Listings />
-              </LayoutWithSidebar>
+              <Listings />
             </ProtectedRoute>
           } />
           <Route path="/products/purchase-invoice" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <PurchaseInvoice />
-              </LayoutWithSidebar>
+              <PurchaseInvoice />
             </ProtectedRoute>
           } />
           <Route path="/shipping/orders" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <OrderManagementPage />
-              </LayoutWithSidebar>
+              <OrderManagementPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping/management" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <ShippingPage />
-              </LayoutWithSidebar>
+              <ShippingPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping/pending-inventory" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <PendingInventoryPage />
-              </LayoutWithSidebar>
+              <PendingInventoryPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping/history" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <ShipmentHistoryPage />
-              </LayoutWithSidebar>
+              <ShipmentHistoryPage />
             </ProtectedRoute>
           } />
           <Route path="/shipping" element={
@@ -330,16 +249,12 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/inventory/management" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <InventoryManagement />
-              </LayoutWithSidebar>
+              <InventoryManagement />
             </ProtectedRoute>
           } />
           <Route path="/inventory/create" element={
             <ProtectedRoute>
-              <LayoutWithSidebar>
-                <InventoryCreate />
-              </LayoutWithSidebar>
+              <InventoryCreate />
             </ProtectedRoute>
           } />
           <Route path="/inventory/sku-mapping" element={
