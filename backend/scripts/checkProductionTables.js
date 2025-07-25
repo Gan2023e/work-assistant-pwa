@@ -23,9 +23,8 @@ async function checkAndCreateTables() {
             // 创建表
             await sequelize.query(`
                 CREATE TABLE IF NOT EXISTS sellerinventory_sku (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
                     parent_sku VARCHAR(255) NOT NULL COMMENT '父SKU',
-                    child_sku VARCHAR(255) NOT NULL COMMENT '子SKU',
+                    child_sku VARCHAR(255) NOT NULL PRIMARY KEY COMMENT '子SKU',
                     sellercolorname VARCHAR(255) NULL COMMENT '卖家颜色名称',
                     sellersizename VARCHAR(255) NULL COMMENT '卖家尺寸名称',
                     qty_per_box INT NULL COMMENT '单箱产品数量'
@@ -56,24 +55,24 @@ async function checkAndCreateTables() {
                 console.log('✅ qty_per_box字段已存在');
             }
             
-            // 检查id字段是否存在
-            const [idColumns] = await sequelize.query(`
+            // 检查child_sku是否是主键
+            const [primaryKey] = await sequelize.query(`
                 SELECT COLUMN_NAME 
                 FROM information_schema.columns 
                 WHERE table_schema = DATABASE() 
                 AND table_name = 'sellerinventory_sku' 
-                AND column_name = 'id'
+                AND column_key = 'PRI'
             `);
             
-            if (idColumns.length === 0) {
-                console.log('📋 添加id主键字段...');
+            if (primaryKey.length === 0 || primaryKey[0].COLUMN_NAME !== 'child_sku') {
+                console.log('📋 设置child_sku为主键...');
                 await sequelize.query(`
                     ALTER TABLE sellerinventory_sku 
-                    ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST
+                    ADD PRIMARY KEY (child_sku)
                 `);
-                console.log('✅ id主键字段添加成功');
+                console.log('✅ child_sku主键设置成功');
             } else {
-                console.log('✅ id主键字段已存在');
+                console.log('✅ child_sku主键已存在');
             }
         }
         
