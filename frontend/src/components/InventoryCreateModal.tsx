@@ -109,22 +109,60 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
 
   // 验证SKU并获取单箱数量
   const validateSku = async (sku: string) => {
-    const response = await fetch('/api/inventory/validate-sku', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sku })
-    });
-    return await response.json();
+    try {
+      const response = await fetch('/api/inventory/validate-sku', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku })
+      });
+      
+      if (!response.ok) {
+        console.error('SKU验证API请求失败:', response.status, response.statusText);
+        return {
+          code: 1,
+          message: `网络请求失败: ${response.status} ${response.statusText}`
+        };
+      }
+      
+      const result = await response.json();
+      console.log('SKU验证结果:', sku, result);
+      return result;
+    } catch (error) {
+      console.error('SKU验证请求异常:', error);
+      return {
+        code: 1,
+        message: `验证请求失败: ${error instanceof Error ? error.message : '未知错误'}`
+      };
+    }
   };
 
   // 更新SKU的单箱数量
   const updateQtyPerBox = async (sku: string, qtyPerBox: number) => {
-    const response = await fetch('/api/inventory/update-qty-per-box', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sku, qtyPerBox })
-    });
-    return await response.json();
+    try {
+      const response = await fetch('/api/inventory/update-qty-per-box', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku, qtyPerBox })
+      });
+      
+      if (!response.ok) {
+        console.error('更新单箱数量API请求失败:', response.status, response.statusText);
+        return {
+          code: 1,
+          message: `网络请求失败: ${response.status} ${response.statusText}`
+        };
+      }
+      
+      const result = await response.json();
+      console.log('更新单箱数量结果:', sku, qtyPerBox, result);
+      return result;
+    } catch (error) {
+      console.error('更新单箱数量请求异常:', error);
+      return {
+        code: 1,
+        message: `更新请求失败: ${error instanceof Error ? error.message : '未知错误'}`
+      };
+    }
   };
 
   // 解析SKU及箱数输入框内容
@@ -204,7 +242,11 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       for (const item of skuItems) {
         const validation = await validateSku(item.sku);
         
-        if (validation.code === 2) {
+        if (validation.code === 1) {
+          // 网络错误或其他技术错误
+          message.error(`SKU ${item.sku} 验证失败: ${validation.message}`);
+          return;
+        } else if (validation.code === 2) {
           // SKU不存在
           message.error(validation.message);
           return;
@@ -228,7 +270,8 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
             totalQuantity: item.boxCount * validation.data.qtyPerBox
           });
         } else {
-          message.error('验证失败：' + validation.message);
+          // 未知错误代码
+          message.error(`SKU ${item.sku} 验证失败: 未知错误代码 ${validation.code}, ${validation.message || '无详细信息'}`);
           return;
         }
       }
