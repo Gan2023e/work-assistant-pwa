@@ -312,80 +312,109 @@ export class PrintManager {
     }
 
     /**
-     * 生成打印用的HTML内容（优化版）
+     * 生成打印用的HTML内容（60x40mm热敏纸优化版）
      */
     private generateLabelHTML(labelData: LabelData): string {
+        // 处理混合箱显示逻辑
+        const isMultipleSku = labelData.boxType === '混合箱';
+        
+        // 生成SKU和数量信息
+        let skuContent = '';
+        if (isMultipleSku && labelData.qrData) {
+            try {
+                const qrObj = JSON.parse(labelData.qrData);
+                if (qrObj.skus && Array.isArray(qrObj.skus)) {
+                    // 混合箱：显示所有SKU
+                    skuContent = qrObj.skus.map((item: any) => 
+                        `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+                    ).join('');
+                } else {
+                    // 备用显示
+                    skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
+                }
+            } catch (error) {
+                // 解析失败时的备用显示
+                skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
+            }
+        } else {
+            // 整箱：显示单个SKU
+            const boxInfo = labelData.boxes > 1 ? `/${labelData.boxes}箱` : '';
+            skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件${boxInfo}</div>`;
+        }
+
         return `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>外箱单 - ${labelData.recordId}</title>
+    <title>物流标签 - ${labelData.recordId}</title>
     <style>
         @page { 
-            size: 10cm 7cm; 
-            margin: 2mm; 
+            size: 60mm 40mm; 
+            margin: 0; 
         }
         @media print {
             body { 
-                font-family: 'Microsoft YaHei', Arial, sans-serif; 
-                font-size: 11px; 
+                font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+                font-size: 8px; 
                 margin: 0;
-                padding: 2mm;
+                padding: 1mm;
                 color: black;
                 background: white;
-                line-height: 1.2;
+                line-height: 1.1;
+                width: 58mm;
+                height: 38mm;
+                overflow: hidden;
             }
             .no-print { display: none; }
-            .page-break { page-break-after: always; }
         }
         body { 
-            font-family: 'Microsoft YaHei', Arial, sans-serif; 
-            font-size: 11px; 
+            font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+            font-size: 8px; 
             margin: 0;
-            padding: 2mm;
-            line-height: 1.2;
+            padding: 1mm;
+            line-height: 1.1;
+            width: 58mm;
+            height: 38mm;
+            overflow: hidden;
         }
-        .header { 
+        
+        /* 目的国显示 - 顶部加粗 */
+        .country { 
             text-align: center; 
             font-weight: bold; 
-            font-size: 14px;
+            font-size: 16px;
+            color: black;
             margin-bottom: 2mm; 
             border-bottom: 1px solid #000;
             padding-bottom: 1mm;
-        }
-        .content { 
-            line-height: 1.4; 
-        }
-        .content div {
-            margin-bottom: 0.5mm;
-            display: flex;
-            justify-content: space-between;
-        }
-        .content .label {
-            font-weight: bold;
-            width: 25%;
-        }
-        .content .value {
-            width: 70%;
-            text-align: right;
-        }
-        .barcode { 
-            font-family: 'Courier New', monospace; 
-            font-size: 16px; 
-            text-align: center; 
-            margin-top: 2mm;
-            padding: 1mm;
-            border: 1px solid #000;
+            text-transform: uppercase;
             letter-spacing: 1px;
-            font-weight: bold;
         }
-        .footer {
+        
+        /* SKU信息区域 */
+        .sku-section { 
+            line-height: 1.2;
+            font-size: 7px;
+        }
+        
+        .sku-item {
+            margin-bottom: 0.5mm;
+            word-break: break-all;
+            text-align: left;
+        }
+        
+        /* 混合箱标识 */
+        .mixed-box-info {
             text-align: center;
-            font-size: 9px;
-            margin-top: 2mm;
-            color: #666;
+            font-size: 6px;
+            margin-top: 1mm;
+            padding: 0.5mm;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
         }
+        
+        /* 控制按钮 */
         .controls {
             position: fixed;
             top: 10px;
@@ -395,10 +424,12 @@ export class PrintManager {
             border: 1px solid #ccc;
             border-radius: 5px;
             z-index: 1000;
+            font-size: 12px;
         }
         @media print {
             .controls { display: none; }
         }
+        
         .cloud-notice {
             position: fixed;
             top: 10px;
@@ -413,41 +444,48 @@ export class PrintManager {
         @media print {
             .cloud-notice { display: none; }
         }
+        
+        /* 确保内容不超出页面 */
+        * {
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
     <div class="cloud-notice no-print">
         ${this.isCloudDeployment ? 
-            '🌐 云端打印模式：请使用浏览器打印功能（Ctrl+P）' : 
-            '🖥️ 本地打印模式'}
+            '🌐 云端打印模式：请使用浏览器打印功能（Ctrl+P）<br/>建议设置为实际尺寸打印' : 
+            '🖥️ 本地打印模式 - 60x40mm热敏纸'}
     </div>
     
     <div class="controls no-print">
         <button onclick="window.print()" style="margin-right: 8px;">🖨️ 打印</button>
         <button onclick="window.close()">❌ 关闭</button>
+        <br><small>60x40mm热敏纸</small>
     </div>
     
-    <div class="header">外箱单</div>
-    <div class="content">
-        <div><span class="label">记录号:</span><span class="value">${labelData.recordId}</span></div>
-        <div><span class="label">SKU:</span><span class="value">${labelData.sku}</span></div>
-        <div><span class="label">数量:</span><span class="value">${labelData.quantity}件/${labelData.boxes}箱</span></div>
-        <div><span class="label">目的地:</span><span class="value">${labelData.country}</span></div>
-        <div><span class="label">操作员:</span><span class="value">${labelData.operator}</span></div>
-        ${labelData.packer ? `<div><span class="label">打包员:</span><span class="value">${labelData.packer}</span></div>` : ''}
-        <div><span class="label">时间:</span><span class="value">${new Date(labelData.createTime).toLocaleString()}</span></div>
-        ${labelData.boxType === '混合箱' ? `<div><span class="label">混合箱:</span><span class="value">${labelData.mixBoxNum}</span></div>` : ''}
+    <!-- 目的国 - 最上方加粗显示 -->
+    <div class="country">${labelData.country}</div>
+    
+    <!-- SKU及数量信息 -->
+    <div class="sku-section">
+        ${skuContent}
     </div>
-    <div class="barcode">${labelData.barcode}</div>
-    <div class="footer">
-        ${this.isCloudDeployment ? '云端生成' : '本地生成'} | ${labelData.recordId}
-    </div>
+    
+    <!-- 混合箱信息（如果适用） -->
+    ${isMultipleSku ? `<div class="mixed-box-info">混合箱: ${labelData.mixBoxNum}</div>` : ''}
     
     <script>
         // 云端部署时的自动提示
         if (${this.isCloudDeployment}) {
             console.log('🌐 云端打印模式：建议使用 Ctrl+P 快捷键打印');
+            console.log('📏 打印尺寸：60x40mm热敏纸');
         }
+        
+        // 页面加载后自动调整
+        window.onload = function() {
+            console.log('📄 标签页面已加载 - 60x40mm格式');
+        };
     </script>
 </body>
 </html>
