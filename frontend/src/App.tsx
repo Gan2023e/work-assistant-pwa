@@ -158,7 +158,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <Layout style={{ minHeight: '100vh' }}>
       <Header style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -168,7 +168,9 @@ const AppContent: React.FC = () => {
         left: 0,
         right: 0,
         zIndex: 1000,
-        width: '100%'
+        width: '100%',
+        height: '64px',
+        lineHeight: '64px'
       }}>
         <Menu
           theme="dark"
