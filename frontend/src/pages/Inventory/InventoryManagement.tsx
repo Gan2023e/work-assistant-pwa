@@ -308,14 +308,25 @@ const InventoryManagement: React.FC = () => {
       // 合并整箱记录和混合箱记录
       const allRecords = [...wholeBoxRecords, ...mixedBoxRecords];
       console.log('🔗 合并后记录数量:', allRecords.length);
+      console.log('🔗 合并后记录详情:', allRecords.map(r => ({ 
+        recordId: r.记录号, 
+        sku: r.sku, 
+        mix_box_num: r.mix_box_num,
+        country: r.country 
+      })));
       
-      // 去重（防止重复记录）
+      // 去重（防止重复记录）- 使用记录号作为唯一标识
       const uniqueRecords = allRecords.filter((record, index, arr) => 
-        arr.findIndex(r => r.id === record.id) === index
+        arr.findIndex(r => r.记录号 === record.记录号) === index
       );
       
-      console.log('✅ 最终显示记录数量:', uniqueRecords.length);
-      console.log('📋 最终记录列表:', uniqueRecords.map(r => ({ id: r.id, sku: r.sku, mix_box_num: r.mix_box_num })));
+      console.log('✅ 去重后最终显示记录数量:', uniqueRecords.length);
+      console.log('📋 最终记录列表:', uniqueRecords.map(r => ({ 
+        recordId: r.记录号, 
+        sku: r.sku, 
+        mix_box_num: r.mix_box_num,
+        country: r.country 
+      })));
       
       setRecordsData(uniqueRecords);
       setPagination(prev => ({
