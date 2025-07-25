@@ -341,11 +341,11 @@ export class PrintManager {
     }
 
     /**
-     * 生成包含多个标签的HTML页面（60x40mm热敏纸规格）
+     * 生成热敏纸直接打印页面（每张60x40mm热敏纸打印一个标签）
      */
     private generateMultiLabelHTML(labelDataList: LabelData[]): string {
-        // 生成所有标签的内容
-        const labelContents = labelDataList.map(labelData => {
+        // 为每个标签生成单独的页面
+        const labelPages = labelDataList.map((labelData, index) => {
             // 处理混合箱显示逻辑
             const isMultipleSku = labelData.boxType === '混合箱';
             
@@ -373,7 +373,7 @@ export class PrintManager {
             }
 
             return `
-                <div class="thermal-label">
+                <div class="thermal-page${index > 0 ? ' page-break' : ''}">
                     <!-- 目的国 - 最上方加粗显示 -->
                     <div class="country">${labelData.country}</div>
                     
@@ -390,51 +390,73 @@ export class PrintManager {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>热敏标签批量打印 - ${labelDataList.length}张 60x40mm</title>
+    <title>热敏纸直接打印 - ${labelDataList.length}张标签</title>
     <style>
+        /* 设置页面为60x40mm热敏纸规格 */
         @page { 
-            size: auto;
+            size: 60mm 40mm; 
             margin: 0; 
         }
+        
         @media print {
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
             body { 
                 font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
-                margin: 0;
-                padding: 5mm;
+                font-size: 8px;
+                line-height: 1.1;
                 color: black;
                 background: white;
-                font-size: 8px;
+                margin: 0;
+                padding: 0;
             }
-            .no-print { display: none; }
-            .thermal-label {
-                page-break-inside: avoid;
+            
+            .no-print { 
+                display: none; 
+            }
+            
+            .thermal-page {
+                width: 60mm;
+                height: 40mm;
+                padding: 1mm;
+                box-sizing: border-box;
+                overflow: hidden;
+                position: relative;
+            }
+            
+            .page-break {
+                page-break-before: always;
             }
         }
         
+        /* 屏幕预览样式 */
         body { 
             font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
             margin: 0;
-            padding: 5mm;
+            padding: 10px;
             line-height: 1.1;
-            background: #f5f5f5;
+            background: #f0f0f0;
         }
         
-        .thermal-label {
+        .thermal-page {
             width: 60mm;
             height: 40mm;
-            border: 1px solid #333;
-            margin: 2mm;
+            border: 2px solid #333;
+            margin: 5mm auto;
             padding: 1mm;
             box-sizing: border-box;
-            display: inline-block;
-            vertical-align: top;
             background: white;
             position: relative;
             overflow: hidden;
+            display: block;
         }
         
         .country {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             text-align: center;
             border-bottom: 1px solid #000;
@@ -444,10 +466,10 @@ export class PrintManager {
         }
         
         .sku-section {
-            font-size: 9px;
+            font-size: 10px;
             text-align: center;
             font-weight: bold;
-            margin-top: 1mm;
+            margin-top: 2mm;
         }
         
         .sku-item {
@@ -455,58 +477,52 @@ export class PrintManager {
             line-height: 1.3;
         }
         
-        /* 每行显示3个标签（适合A4纸张） */
-        .thermal-label:nth-child(3n) {
-            margin-right: 2mm;
-        }
-        
-        /* 每3个标签后强制换行 */
-        .thermal-label:nth-child(3n):after {
-            content: "";
-            display: block;
-            width: 100%;
-            clear: both;
-        }
-        
-        /* 打印时的精确尺寸控制 */
+        /* 打印时的精确控制 */
         @media print {
-            .thermal-label {
-                width: 60mm !important;
-                height: 40mm !important;
-                margin: 1mm !important;
-                padding: 1mm !important;
-                border: 1px solid #000 !important;
-                font-size: 8px !important;
-            }
             .country {
                 font-size: 10px !important;
-                margin-bottom: 1mm !important;
+                font-weight: bold !important;
+                text-align: center !important;
+                border-bottom: 1px solid #000 !important;
                 padding-bottom: 0.5mm !important;
+                margin-bottom: 1.5mm !important;
+                line-height: 1.1 !important;
             }
+            
             .sku-section {
                 font-size: 8px !important;
+                text-align: center !important;
+                font-weight: bold !important;
+                margin-top: 1.5mm !important;
+            }
+            
+            .sku-item {
+                margin: 0.5mm 0 !important;
+                line-height: 1.2 !important;
             }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="text-align: center; margin-bottom: 10mm; padding: 5mm; background: #e0e0e0; border-radius: 3mm;">
-        <h3 style="margin: 0 0 5mm 0; color: #333;">热敏标签批量打印</h3>
-        <p style="margin: 0 0 5mm 0; color: #666;">共 ${labelDataList.length} 张 60x40mm 热敏标签</p>
-        <button onclick="window.print()" style="padding: 8px 20px; margin-right: 10px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">🖨️ 打印</button>
-        <button onclick="window.close()" style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">❌ 关闭</button>
+    <div class="no-print" style="text-align: center; margin-bottom: 10px; padding: 10px; background: #e0e0e0; border-radius: 5px;">
+        <h3 style="margin: 0 0 10px 0; color: #333;">🏷️ 60×40mm热敏纸直接打印</h3>
+        <p style="margin: 0 0 10px 0; color: #666;">共 ${labelDataList.length} 张标签，每张热敏纸打印一个外箱单</p>
+        <button onclick="window.print()" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">🖨️ 开始打印</button>
+        <button onclick="window.close()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">❌ 关闭</button>
+        <div style="margin-top: 10px; font-size: 12px; color: #888;">
+            ⚠️ 请确保打印机设置为60×40mm热敏纸规格
+        </div>
     </div>
     
-    <div style="text-align: left;">
-        ${labelContents}
-    </div>
+    ${labelPages}
     
     <script>
-        console.log('🖨️ 热敏标签批量打印：共 ${labelDataList.length} 张 60x40mm 标签');
+        console.log('🖨️ 热敏纸直接打印：共 ${labelDataList.length} 张 60×40mm 标签');
+        console.log('📄 每张热敏纸打印一个外箱单标签');
         
         // 页面加载后自动调整
         window.onload = function() {
-            console.log('📄 热敏标签页面已加载 - 60x40mm 规格');
+            console.log('📄 热敏标签页面已加载 - 60×40mm 直接打印模式');
         };
     </script>
 </body>
