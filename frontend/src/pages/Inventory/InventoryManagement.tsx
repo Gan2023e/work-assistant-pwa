@@ -82,6 +82,11 @@ const InventoryManagement: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<InventoryRecord | null>(null);
   const [editForm] = Form.useForm();
 
+  // 混合箱批量编辑
+  const [mixedBoxEditVisible, setMixedBoxEditVisible] = useState(false);
+  const [editingMixedBoxRecords, setEditingMixedBoxRecords] = useState<InventoryRecord[]>([]);
+  const [mixedBoxEditForm] = Form.useForm();
+
   // 打印状态
   const [printServiceAvailable, setPrintServiceAvailable] = useState(false);
 
@@ -304,6 +309,158 @@ const InventoryManagement: React.FC = () => {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
+  // 处理混合箱数据分组，用于行合并
+  const getRowSpanMap = (data: InventoryRecord[]) => {
+    const mixedBoxGroups: { [key: string]: number } = {};
+    const rowSpanMap: { [key: number]: number } = {};
+    
+    // 统计每个混合箱的记录数量
+    data.forEach(record => {
+      if (record.mix_box_num) {
+        mixedBoxGroups[record.mix_box_num] = (mixedBoxGroups[record.mix_box_num] || 0) + 1;
+      }
+    });
+
+    // 计算每行的rowSpan
+    let currentMixedBox = '';
+    let mixedBoxFirstRowIndex = -1;
+    
+    data.forEach((record, index) => {
+      if (record.mix_box_num) {
+        if (record.mix_box_num !== currentMixedBox) {
+          // 新的混合箱开始
+          currentMixedBox = record.mix_box_num;
+          mixedBoxFirstRowIndex = index;
+          rowSpanMap[index] = mixedBoxGroups[record.mix_box_num];
+        } else {
+          // 同一混合箱的后续记录，不显示操作按钮
+          rowSpanMap[index] = 0;
+        }
+      } else {
+        // 整箱记录，单独一行
+        rowSpanMap[index] = 1;
+      }
+    });
+
+    return rowSpanMap;
+  };
+
+  // 处理混合箱批量编辑
+  const handleMixedBoxEdit = (mixBoxNum: string) => {
+    const mixedBoxRecords = recordsData.filter(record => record.mix_box_num === mixBoxNum);
+    setEditingMixedBoxRecords(mixedBoxRecords);
+    
+    // 设置表单初始值
+    const formData = mixedBoxRecords.map(record => ({
+      recordId: record.记录号,
+      sku: record.sku,
+      total_quantity: record.total_quantity,
+      country: record.country,
+      打包员: record.打包员,
+      marketPlace: record.marketPlace
+    }));
+    
+    mixedBoxEditForm.setFieldsValue({
+      mixBoxNum: mixBoxNum,
+      records: formData
+    });
+    
+    setMixedBoxEditVisible(true);
+  };
+
+  // 保存混合箱批量编辑
+  const handleSaveMixedBoxEdit = async () => {
+    try {
+      const values = await mixedBoxEditForm.validateFields();
+      const { records } = values;
+      
+      // 批量更新记录
+      for (const record of records) {
+        await fetch(`/api/inventory/edit/${record.recordId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            updateData: {
+              sku: record.sku,
+              total_quantity: record.total_quantity,
+              country: record.country,
+              打包员: record.打包员,
+              marketPlace: record.marketPlace
+            },
+            changeNote: '混合箱批量编辑'
+          })
+        });
+      }
+
+      message.success('批量编辑成功');
+      setMixedBoxEditVisible(false);
+      loadRecordsData();
+    } catch (error) {
+      message.error('批量编辑失败');
+      console.error(error);
+    }
+  };
+
+  // 处理混合箱批量删除
+  const handleMixedBoxDelete = async (mixBoxNum: string) => {
+    try {
+      const mixedBoxRecords = recordsData.filter(record => record.mix_box_num === mixBoxNum);
+      
+      for (const record of mixedBoxRecords) {
+        await fetch(`/api/inventory/delete/${record.记录号}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: `删除混合箱 ${mixBoxNum}` })
+        });
+      }
+
+      message.success(`混合箱 ${mixBoxNum} 删除成功`);
+      loadRecordsData();
+    } catch (error) {
+      message.error('删除失败');
+      console.error(error);
+    }
+  };
+
+  // 处理混合箱批量打印
+  const handleMixedBoxPrint = async (mixBoxNum: string) => {
+    try {
+      const mixedBoxRecords = recordsData.filter(record => record.mix_box_num === mixBoxNum);
+      
+      // 为混合箱创建LabelData，使用第一个记录的基本信息
+      const firstRecord = mixedBoxRecords[0];
+      const totalQuantity = mixedBoxRecords.reduce((sum, record) => sum + record.total_quantity, 0);
+      
+      const labelData: LabelData = {
+        recordId: mixBoxNum,
+        sku: `混合箱-${mixBoxNum}`,
+        quantity: totalQuantity,
+        boxes: 1,
+        country: firstRecord?.country || '',
+        operator: firstRecord?.操作员 || '',
+        packer: firstRecord?.打包员 || '',
+        boxType: '混合箱' as const,
+        mixBoxNum: mixBoxNum,
+        createTime: firstRecord?.time || '',
+        barcode: mixBoxNum,
+        qrData: JSON.stringify({
+          mixBoxNum: mixBoxNum,
+          skus: mixedBoxRecords.map(record => ({
+            sku: record.sku,
+            quantity: record.total_quantity
+          })),
+          country: firstRecord?.country
+        })
+      };
+
+      await printManager.printLabel(labelData);
+      message.success('打印任务已发送');
+    } catch (error) {
+      message.error('打印失败');
+      console.error(error);
+    }
+  };
+
   // 库存汇总表格列
   const summaryColumns: ColumnsType<InventorySummary> = [
     {
@@ -311,67 +468,97 @@ const InventoryManagement: React.FC = () => {
       dataIndex: 'sku',
       key: 'sku',
       fixed: 'left',
-      width: 150
+      width: 150,
+      align: 'center'
     },
     {
       title: '国家',
       dataIndex: 'country',
       key: 'country',
-      width: 80
+      width: 80,
+      align: 'center'
     },
     {
       title: '整箱库存',
       key: 'whole_box',
       width: 120,
-      render: (_, record) => (
-        <div>
-          <div>{record.whole_box_quantity} 件</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.whole_box_count} 箱
+      align: 'center',
+      render: (_, record) => {
+        const quantity = Number(record.whole_box_quantity) || 0;
+        const count = Number(record.whole_box_count) || 0;
+        
+        if (quantity === 0 && count === 0) {
+          return null;
+        }
+        
+        return (
+          <div>
+            <div>{quantity} 件</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              {count} 箱
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       title: '混合箱库存',
       key: 'mixed_box',
       width: 120,
-      render: (_, record) => (
-        <div>
-          <div>{record.mixed_box_quantity} 件</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.mixed_box_count} 个混合箱
+      align: 'center',
+      render: (_, record) => {
+        const quantity = Number(record.mixed_box_quantity) || 0;
+        const count = Number(record.mixed_box_count) || 0;
+        
+        if (quantity === 0 && count === 0) {
+          return null;
+        }
+        
+        return (
+          <div>
+            <div>{quantity} 件</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              {count} 个混合箱
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       title: '总库存',
       key: 'total',
       width: 100,
-      render: (_, record) => (
-        <strong>{record.whole_box_quantity + record.mixed_box_quantity} 件</strong>
-      )
+      align: 'center',
+      render: (_, record) => {
+        const wholeBoxQty = Number(record.whole_box_quantity) || 0;
+        const mixedBoxQty = Number(record.mixed_box_quantity) || 0;
+        const total = wholeBoxQty + mixedBoxQty;
+        
+        return <strong>{total} 件</strong>;
+      }
     },
     {
-      title: '最早入库',
+      title: '创建时间',
       dataIndex: 'earliest_inbound',
       key: 'earliest_inbound',
       width: 120,
-      render: (date) => dayjs(date).format('MM-DD HH:mm')
+      align: 'center',
+      render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
     },
     {
       title: '最后更新',
       dataIndex: 'latest_update',
       key: 'latest_update',
       width: 120,
-      render: (date) => dayjs(date).format('MM-DD HH:mm')
+      align: 'center',
+      render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
     },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
       width: 120,
+      align: 'center',
       render: (_, record) => (
         <Space>
           <Tooltip title="查看详情">
@@ -392,40 +579,26 @@ const InventoryManagement: React.FC = () => {
   // 库存记录表格列
   const recordsColumns: ColumnsType<InventoryRecord> = [
     {
-      title: '记录号',
-      dataIndex: '记录号',
-      key: '记录号',
-      fixed: 'left',
-      width: 140
-    },
-    {
-      title: 'SKU',
-      dataIndex: 'sku',
-      key: 'sku',
-      width: 120
-    },
-    {
-      title: '数量',
-      key: 'quantity',
-      width: 100,
-      render: (_, record) => `${record.total_quantity}件/${record.total_boxes}箱`
-    },
-    {
-      title: '国家',
-      dataIndex: 'country',
-      key: 'country',
-      width: 80
-    },
-    {
       title: '箱型',
       dataIndex: 'box_type',
       key: 'box_type',
-      width: 80,
+      fixed: 'left',
+      width: 120,
+      align: 'center',
       render: (type, record) => (
         <div>
           <Tag color={type === '整箱' ? 'blue' : 'orange'}>{type}</Tag>
           {record.mix_box_num && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
+            <div style={{ 
+              fontSize: '12px', 
+              color: '#1890ff',
+              fontWeight: 500,
+              marginTop: '4px',
+              padding: '2px 6px',
+              background: '#f0f6ff',
+              borderRadius: '4px',
+              border: '1px solid #d6e4ff'
+            }}>
               {record.mix_box_num}
             </div>
           )}
@@ -433,72 +606,166 @@ const InventoryManagement: React.FC = () => {
       )
     },
     {
+      title: '记录号',
+      dataIndex: '记录号',
+      key: '记录号',
+      width: 140,
+      align: 'center'
+    },
+    {
+      title: 'SKU',
+      dataIndex: 'sku',
+      key: 'sku',
+      width: 120,
+      align: 'center'
+    },
+    {
+      title: '数量',
+      key: 'quantity',
+      width: 100,
+      align: 'center',
+      render: (_, record) => {
+        if (record.box_type === '混合箱') {
+          return `${record.total_quantity}件`;
+        }
+        return `${record.total_quantity}件/${record.total_boxes}箱`;
+      }
+    },
+    {
+      title: '国家',
+      dataIndex: 'country',
+      key: 'country',
+      width: 80,
+      align: 'center'
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 80,
+      align: 'center',
       render: (status) => getStatusTag(status)
     },
     {
       title: '操作员',
       dataIndex: '操作员',
       key: '操作员',
-      width: 100
+      width: 100,
+      align: 'center'
     },
     {
       title: '打包员',
       dataIndex: '打包员',
       key: '打包员',
-      width: 100
+      width: 100,
+      align: 'center'
     },
     {
       title: '入库时间',
       dataIndex: 'time',
       key: 'time',
-      width: 120,
-      render: (date) => dayjs(date).format('MM-DD HH:mm')
+      width: 140,
+      align: 'center',
+      render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
     },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
       width: 150,
-      render: (_, record) => (
-        <Space>
-          {record.status === '待出库' && (
-            <>
-              <Tooltip title="编辑">
-                <Button
-                  type="link"
-                  icon={<EditOutlined />}
-                  onClick={() => handleEdit(record)}
-                />
-              </Tooltip>
-              <Popconfirm
-                title="确定要删除这条记录吗？"
-                onConfirm={() => handleDelete(record.记录号)}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Tooltip title="删除">
+      align: 'center',
+      render: (_, record, index) => {
+        const rowSpanMap = getRowSpanMap(recordsData);
+        const rowSpan = rowSpanMap[index];
+        
+        // 如果rowSpan为0，表示这是同一混合箱的后续记录，不显示操作按钮
+        if (rowSpan === 0) {
+          return null;
+        }
+
+        // 混合箱的操作
+        if (record.mix_box_num && rowSpan > 1) {
+          return {
+            children: (
+              <Space>
+                {record.status === '待出库' && (
+                  <>
+                    <Tooltip title="编辑混合箱">
+                      <Button
+                        type="link"
+                        icon={<EditOutlined />}
+                        onClick={() => handleMixedBoxEdit(record.mix_box_num!)}
+                      />
+                    </Tooltip>
+                    <Popconfirm
+                      title={`确定要删除混合箱 ${record.mix_box_num} 的所有记录吗？`}
+                      onConfirm={() => handleMixedBoxDelete(record.mix_box_num!)}
+                      okText="确定"
+                      cancelText="取消"
+                    >
+                      <Tooltip title="删除混合箱">
+                        <Button
+                          type="link"
+                          danger
+                          icon={<DeleteOutlined />}
+                        />
+                      </Tooltip>
+                    </Popconfirm>
+                  </>
+                )}
+                <Tooltip title="打印混合箱标签">
                   <Button
                     type="link"
-                    danger
-                    icon={<DeleteOutlined />}
+                    icon={<PrinterOutlined />}
+                    onClick={() => handleMixedBoxPrint(record.mix_box_num!)}
                   />
                 </Tooltip>
-              </Popconfirm>
-            </>
-          )}
-          <Tooltip title="打印标签">
-            <Button
-              type="link"
-              icon={<PrinterOutlined />}
-              onClick={() => handlePrint(record)}
-            />
-          </Tooltip>
-        </Space>
-      )
+              </Space>
+            ),
+            props: {
+              rowSpan: rowSpan
+            }
+          };
+        }
+
+        // 整箱的操作
+        return (
+          <Space>
+            {record.status === '待出库' && (
+              <>
+                <Tooltip title="编辑">
+                  <Button
+                    type="link"
+                    icon={<EditOutlined />}
+                    onClick={() => handleEdit(record)}
+                  />
+                </Tooltip>
+                <Popconfirm
+                  title="确定要删除这条记录吗？"
+                  onConfirm={() => handleDelete(record.记录号)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Tooltip title="删除">
+                    <Button
+                      type="link"
+                      danger
+                      icon={<DeleteOutlined />}
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              </>
+            )}
+            <Tooltip title="打印标签">
+              <Button
+                type="link"
+                icon={<PrinterOutlined />}
+                onClick={() => handlePrint(record)}
+              />
+            </Tooltip>
+          </Space>
+        );
+      }
     }
   ];
 
@@ -764,6 +1031,90 @@ const InventoryManagement: React.FC = () => {
           >
             <Input />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 混合箱批量编辑模态框 */}
+      <Modal
+        title={`编辑混合箱 ${editingMixedBoxRecords[0]?.mix_box_num || ''}`}
+        visible={mixedBoxEditVisible}
+        onOk={handleSaveMixedBoxEdit}
+        onCancel={() => setMixedBoxEditVisible(false)}
+        width={800}
+        bodyStyle={{ maxHeight: '60vh', overflowY: 'auto' }}
+      >
+        <Form form={mixedBoxEditForm} layout="vertical">
+          <Form.Item label="混合箱编号" name="mixBoxNum">
+            <Input disabled />
+          </Form.Item>
+          
+          <Form.List name="records">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 16 }}>
+                    <Row gutter={16}>
+                      <Col span={6}>
+                        <Form.Item
+                          {...restField}
+                          label="SKU"
+                          name={[name, 'sku']}
+                          rules={[{ required: true, message: '请输入SKU' }]}
+                        >
+                          <Input />
+                        </Form.Item>
+                      </Col>
+                      <Col span={6}>
+                        <Form.Item
+                          {...restField}
+                          label="数量"
+                          name={[name, 'total_quantity']}
+                          rules={[{ required: true, message: '请输入数量' }]}
+                        >
+                          <Input type="number" min={1} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={6}>
+                        <Form.Item
+                          {...restField}
+                          label="国家"
+                          name={[name, 'country']}
+                          rules={[{ required: true, message: '请选择国家' }]}
+                        >
+                          <Select>
+                            <Option value="US">美国</Option>
+                            <Option value="CA">加拿大</Option>
+                            <Option value="UK">英国</Option>
+                            <Option value="DE">德国</Option>
+                            <Option value="FR">法国</Option>
+                            <Option value="IT">意大利</Option>
+                            <Option value="ES">西班牙</Option>
+                            <Option value="JP">日本</Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={6}>
+                        <Form.Item
+                          {...restField}
+                          label="打包员"
+                          name={[name, '打包员']}
+                        >
+                          <Input />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Form.Item
+                      {...restField}
+                      name={[name, 'recordId']}
+                      hidden
+                    >
+                      <Input />
+                    </Form.Item>
+                  </Card>
+                ))}
+              </>
+            )}
+          </Form.List>
         </Form>
       </Modal>
     </div>
