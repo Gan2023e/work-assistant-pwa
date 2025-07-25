@@ -52,6 +52,9 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   const [currentMixedBoxSkus, setCurrentMixedBoxSkus] = useState<MixedBoxSkuItem[]>([]);
   const [allMixedBoxes, setAllMixedBoxes] = useState<{[key: number]: MixedBoxSkuItem[]}>({});
   const [mixedBoxInputModalVisible, setMixedBoxInputModalVisible] = useState(false);
+  
+  // 临时存储单箱数量（当数据库字段不存在时）
+  const [tempQtyPerBox, setTempQtyPerBox] = useState<{[sku: string]: number}>({});
 
   // 打包员选项
   const packerOptions = [
@@ -81,6 +84,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
     setCurrentMixedBoxSkus([]);
     setAllMixedBoxes({});
     setMixedBoxInputModalVisible(false);
+    // 注意：不清除tempQtyPerBox，保持会话期间的数据
   };
 
   // 处理对话框关闭
@@ -215,7 +219,13 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
           if (qtyPerBox > 0) {
             const result = await updateQtyPerBox(sku, qtyPerBox);
             if (result.code === 0) {
-              message.success('单箱数量更新成功');
+              // 如果是临时存储，则保存到本地状态
+              if (result.data.temporary) {
+                setTempQtyPerBox(prev => ({ ...prev, [sku]: qtyPerBox }));
+                message.success('单箱数量已记录（当前会话有效）');
+              } else {
+                message.success('单箱数量更新成功');
+              }
               resolve(qtyPerBox);
             } else {
               message.error('更新失败：' + result.message);
@@ -247,6 +257,17 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       const validatedItems: WholeBoxItem[] = [];
       
       for (const item of skuItems) {
+        // 首先检查临时存储中是否有单箱数量
+        const tempQty = tempQtyPerBox[item.sku];
+        if (tempQty && tempQty > 0) {
+          validatedItems.push({
+            ...item,
+            qtyPerBox: tempQty,
+            totalQuantity: item.boxCount * tempQty
+          });
+          continue;
+        }
+
         const validation = await validateSku(item.sku);
         
         if (validation.code === 1) {
