@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined } from '@ant-design/icons';
+import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -620,9 +620,17 @@ const InventoryManagement: React.FC = () => {
           <Tooltip title="查看详情">
             <Button
               type="link"
-              icon={<HistoryOutlined />}
+              icon={<EyeOutlined />}
               onClick={() => {
-                setFilters(prev => ({ ...prev, sku: record.sku, country: record.country }));
+                // 如果有混合箱记录，只筛选SKU和国家来显示所有相关记录（包括所有混合箱）
+                // 如果没有混合箱记录，也是筛选SKU和国家
+                setFilters(prev => ({ 
+                  ...prev, 
+                  sku: record.sku, 
+                  country: record.country,
+                  box_type: '', // 清空箱型筛选，显示该SKU的所有记录
+                  status: '' // 清空状态筛选
+                }));
                 setCurrentView('records');
               }}
             />
