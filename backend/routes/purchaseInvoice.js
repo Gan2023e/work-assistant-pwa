@@ -1134,8 +1134,29 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 税额解析 - 针对税额列格式优化
-    const taxAmountPatterns = [
+    // 优先检查是否为免税 - 在解析税额和税率之前
+    const freeTagPatterns = [
+      /免税/,
+      /免\s*税/,
+      /税率[\/征收率]*[^%]*免税/,
+      /征收率[^%]*免税/,
+      /税\s*率[\/征收率]*[^%]*免税/
+    ];
+    
+    let isFreeTax = false;
+    for (const pattern of freeTagPatterns) {
+      if (cleanText.match(pattern)) {
+        result.tax_rate = '0%';
+        result.tax_amount = '0';
+        isFreeTax = true;
+        console.log('✅ 识别到"免税"，税率和税额均设置为0');
+        break;
+      }
+    }
+
+    // 税额解析 - 针对税额列格式优化（仅在非免税情况下解析）
+    if (!isFreeTax) {
+      const taxAmountPatterns = [
       // 匹配合计行的税额 "合计 ¥30.69 ¥0.31"
       /合计[^¥]*¥[^¥]*¥\s*([\d,]{1,10}\.?\d{0,2})/,
       // 匹配税额列最后的小数金额（在税率后面）
@@ -1157,45 +1178,25 @@ const parseInvoicePDF = (text) => {
       /税额[：:\s]*([\d,]{1,10}\.?\d{0,2})/
     ];
     
-    for (const pattern of taxAmountPatterns) {
-      const match = cleanText.match(pattern);
-      if (match) {
-        const taxAmount = match[1].replace(/,/g, '');
-        // 验证税额的合理性
-        if (parseFloat(taxAmount) >= 0 && 
-            parseFloat(taxAmount) < 9999999.99 && // 最大税额限制
-            taxAmount.length <= 10 && // 数字长度限制
-            taxAmount !== result.invoice_number && // 不能是发票号码
-            !taxAmount.match(/^\d{15,}$/)) { // 不能是15位以上的纯数字（避免发票号码）
-          result.tax_amount = taxAmount;
-          break;
+      for (const pattern of taxAmountPatterns) {
+        const match = cleanText.match(pattern);
+        if (match) {
+          const taxAmount = match[1].replace(/,/g, '');
+          // 验证税额的合理性
+          if (parseFloat(taxAmount) >= 0 && 
+              parseFloat(taxAmount) < 9999999.99 && // 最大税额限制
+              taxAmount.length <= 10 && // 数字长度限制
+              taxAmount !== result.invoice_number && // 不能是发票号码
+              !taxAmount.match(/^\d{15,}$/)) { // 不能是15位以上的纯数字（避免发票号码）
+            result.tax_amount = taxAmount;
+            break;
+          }
         }
       }
     }
 
-    // 税率解析 - 针对税率/征收率列格式优化，优先识别"免税"
-    
-    // 首先检查是否包含"免税"字样
-    const freeTagPatterns = [
-      /免税/,
-      /免\s*税/,
-      /税率[\/征收率]*[^%]*免税/,
-      /征收率[^%]*免税/,
-      /税\s*率[\/征收率]*[^%]*免税/
-    ];
-    
-    let foundFreeTax = false;
-    for (const pattern of freeTagPatterns) {
-      if (cleanText.match(pattern)) {
-        result.tax_rate = '0%';
-        foundFreeTax = true;
-        console.log('✅ 识别到"免税"，税率设置为0%');
-        break;
-      }
-    }
-    
-    // 如果没有找到"免税"，则使用原有的税率解析逻辑
-    if (!foundFreeTax) {
+    // 税率解析 - 针对税率/征收率列格式优化（仅在非免税情况下解析）
+    if (!isFreeTax) {
       const taxRatePatterns = [
         // 匹配税率/征收率列中的百分数
         /税率[\/征收率]*[^%]*(\d{1,2}%)/,
