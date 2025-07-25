@@ -242,8 +242,8 @@ router.get('/inventory-by-country', async (req, res) => {
     const wholeBoxStats = {};
     
     allInventory.forEach(item => {
-      // 只处理整箱数据（mix_box_num为空）
-      if (item.mix_box_num && item.mix_box_num.trim() !== '') {
+      // 只处理整箱数据（根据box_type字段判断）
+      if (item.box_type !== '整箱') {
         return;
       }
       
@@ -275,8 +275,8 @@ router.get('/inventory-by-country', async (req, res) => {
     const mixedBoxStats = {};
     
     allInventory.forEach(item => {
-      // 只处理混合箱数据（mix_box_num不为空）
-      if (!item.mix_box_num || item.mix_box_num.trim() === '') {
+      // 只处理混合箱数据（根据box_type字段判断）
+      if (item.box_type !== '混合箱') {
         return;
       }
       
