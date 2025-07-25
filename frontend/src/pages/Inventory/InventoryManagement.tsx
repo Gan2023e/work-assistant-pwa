@@ -651,7 +651,7 @@ const InventoryManagement: React.FC = () => {
               fontWeight: 500,
               marginTop: '4px',
               padding: '2px 6px',
-              background: '#f0f6ff',
+              background: '#ffffff',
               borderRadius: '4px',
               border: '1px solid #d6e4ff'
             }}>

@@ -54,8 +54,8 @@ export class PrintManager {
         try {
             const htmlContent = this.generateLabelHTML(labelData);
             
-            // 打开新窗口进行打印
-            const printWindow = window.open('', '_blank', 'width=600,height=400,scrollbars=no,resizable=no');
+            // 打开全屏新窗口进行打印
+            const printWindow = window.open('', '_blank', 'fullscreen=yes,scrollbars=no,resizable=yes,toolbar=no,menubar=no,location=no,status=no');
             
             if (!printWindow) {
                 throw new Error('无法打开打印窗口，请检查浏览器弹窗拦截设置');

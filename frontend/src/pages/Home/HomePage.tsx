@@ -6,20 +6,19 @@ import {
   DollarOutlined, 
   BarChartOutlined,
   InboxOutlined,
-  SettingOutlined,
   PlusOutlined,
   UnorderedListOutlined,
   PrinterOutlined
 } from '@ant-design/icons';
 import { VERSION_INFO } from '../../config/version';
 import { useNavigate } from 'react-router-dom';
-import PrintManagerComponent, { PrintStatusIndicator } from '../../components/PrintManager';
+
 
 const { Title, Paragraph } = Typography;
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const [printManagerVisible, setPrintManagerVisible] = useState(false);
+
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px' }}>
@@ -35,17 +34,7 @@ const HomePage: React.FC = () => {
           📱 已安装为PWA应用，支持离线使用，体验更流畅！
         </Paragraph>
         
-        {/* 打印服务状态 */}
-        <Space style={{ marginTop: 16 }}>
-          <PrintStatusIndicator onClick={() => setPrintManagerVisible(true)} />
-          <Button 
-            type="link" 
-            icon={<SettingOutlined />}
-            onClick={() => setPrintManagerVisible(true)}
-          >
-            打印设置
-          </Button>
-        </Space>
+
       </Card>
 
       <Divider orientation="left">功能模块</Divider>
@@ -143,7 +132,7 @@ const HomePage: React.FC = () => {
         <Col xs={24} sm={12} lg={8}>
           <Card hoverable>
             <div style={{ textAlign: 'center' }}>
-              <SettingOutlined style={{ fontSize: 48, color: '#13c2c2', marginBottom: 16 }} />
+              <UnorderedListOutlined style={{ fontSize: 48, color: '#13c2c2', marginBottom: 16 }} />
               <Title level={4}>系统设置</Title>
               <Paragraph>
                 • 用户权限管理<br/>
@@ -189,11 +178,7 @@ const HomePage: React.FC = () => {
           版本 v{VERSION_INFO.version} | 构建日期: {VERSION_INFO.buildDate}
         </Paragraph>
       </div>
-      {/* 打印管理模态框 */}
-      <PrintManagerComponent 
-        visible={printManagerVisible} 
-        onClose={() => setPrintManagerVisible(false)} 
-      />
+
     </div>
   );
 };
