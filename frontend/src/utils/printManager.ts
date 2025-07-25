@@ -341,7 +341,7 @@ export class PrintManager {
     }
 
     /**
-     * 生成包含多个标签的HTML页面
+     * 生成包含多个标签的HTML页面（60x40mm热敏纸规格）
      */
     private generateMultiLabelHTML(labelDataList: LabelData[]): string {
         // 生成所有标签的内容
@@ -368,13 +368,12 @@ export class PrintManager {
                     skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
                 }
             } else {
-                // 整箱：显示单个SKU
-                const boxInfo = labelData.boxes > 1 ? `/${labelData.boxes}箱` : '';
-                skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件${boxInfo}</div>`;
+                // 整箱：显示单个SKU，不显示箱数信息（因为每个标签代表一箱）
+                skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
             }
 
             return `
-                <div class="label-container">
+                <div class="thermal-label">
                     <!-- 目的国 - 最上方加粗显示 -->
                     <div class="country">${labelData.country}</div>
                     
@@ -391,91 +390,123 @@ export class PrintManager {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>物流标签批量打印 - ${labelDataList.length}张</title>
+    <title>热敏标签批量打印 - ${labelDataList.length}张 60x40mm</title>
     <style>
         @page { 
             size: auto;
-            margin: 5mm; 
+            margin: 0; 
         }
         @media print {
             body { 
                 font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
                 margin: 0;
-                padding: 0;
+                padding: 5mm;
                 color: black;
                 background: white;
+                font-size: 8px;
             }
             .no-print { display: none; }
-        }
-        body { 
-            font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
-            margin: 10px;
-            padding: 0;
-            line-height: 1.2;
+            .thermal-label {
+                page-break-inside: avoid;
+            }
         }
         
-        .label-container {
+        body { 
+            font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+            margin: 0;
+            padding: 5mm;
+            line-height: 1.1;
+            background: #f5f5f5;
+        }
+        
+        .thermal-label {
             width: 60mm;
             height: 40mm;
-            border: 1px solid #ccc;
-            margin-bottom: 5mm;
-            padding: 2mm;
+            border: 1px solid #333;
+            margin: 2mm;
+            padding: 1mm;
             box-sizing: border-box;
-            page-break-inside: avoid;
             display: inline-block;
             vertical-align: top;
-            margin-right: 5mm;
+            background: white;
+            position: relative;
+            overflow: hidden;
         }
         
         .country {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
             text-align: center;
             border-bottom: 1px solid #000;
-            padding-bottom: 2px;
-            margin-bottom: 4px;
+            padding-bottom: 1mm;
+            margin-bottom: 2mm;
+            line-height: 1.2;
         }
         
         .sku-section {
-            font-size: 10px;
+            font-size: 9px;
             text-align: center;
+            font-weight: bold;
+            margin-top: 1mm;
         }
         
         .sku-item {
-            margin: 2px 0;
-            font-weight: bold;
+            margin: 1mm 0;
+            line-height: 1.3;
         }
         
-        /* 每行显示3个标签 */
-        .label-container:nth-child(3n) {
-            margin-right: 0;
+        /* 每行显示3个标签（适合A4纸张） */
+        .thermal-label:nth-child(3n) {
+            margin-right: 2mm;
         }
         
-        /* 每3个标签后换行 */
-        .label-container:nth-child(3n):after {
+        /* 每3个标签后强制换行 */
+        .thermal-label:nth-child(3n):after {
             content: "";
             display: block;
             width: 100%;
-            height: 0;
+            clear: both;
+        }
+        
+        /* 打印时的精确尺寸控制 */
+        @media print {
+            .thermal-label {
+                width: 60mm !important;
+                height: 40mm !important;
+                margin: 1mm !important;
+                padding: 1mm !important;
+                border: 1px solid #000 !important;
+                font-size: 8px !important;
+            }
+            .country {
+                font-size: 10px !important;
+                margin-bottom: 1mm !important;
+                padding-bottom: 0.5mm !important;
+            }
+            .sku-section {
+                font-size: 8px !important;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="text-align: center; margin-bottom: 10px; padding: 10px; background: #f0f0f0;">
-        <h3>物流标签批量打印</h3>
-        <p>共 ${labelDataList.length} 张标签，建议使用热敏纸打印机</p>
-        <button onclick="window.print()" style="padding: 5px 15px; margin-right: 10px;">打印</button>
-        <button onclick="window.close()" style="padding: 5px 15px;">关闭</button>
+    <div class="no-print" style="text-align: center; margin-bottom: 10mm; padding: 5mm; background: #e0e0e0; border-radius: 3mm;">
+        <h3 style="margin: 0 0 5mm 0; color: #333;">热敏标签批量打印</h3>
+        <p style="margin: 0 0 5mm 0; color: #666;">共 ${labelDataList.length} 张 60x40mm 热敏标签</p>
+        <button onclick="window.print()" style="padding: 8px 20px; margin-right: 10px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">🖨️ 打印</button>
+        <button onclick="window.close()" style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">❌ 关闭</button>
     </div>
     
-    ${labelContents}
+    <div style="text-align: left;">
+        ${labelContents}
+    </div>
     
     <script>
-        console.log('🖨️ 批量打印模式：共 ${labelDataList.length} 张标签');
+        console.log('🖨️ 热敏标签批量打印：共 ${labelDataList.length} 张 60x40mm 标签');
         
         // 页面加载后自动调整
         window.onload = function() {
-            console.log('📄 批量标签页面已加载');
+            console.log('📄 热敏标签页面已加载 - 60x40mm 规格');
         };
     </script>
 </body>
