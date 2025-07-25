@@ -331,70 +331,36 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       if (data.code === 0) {
         message.success(`整箱入库成功，已创建 ${records.length} 条记录`);
         
-        // 执行打印功能 - 整箱入库需要为每个箱子单独打印
+        // 执行打印功能 - 整箱入库需要为每个SKU的每个箱子单独打印
         if (data.data.records && data.data.records.length > 0) {
           try {
-            // 计算最大箱数，用于确定需要打印多少张外箱单
-            const maxBoxCount = Math.max(...(data.data.records as any[]).map((record: any) => record.total_boxes));
+            let totalLabels = 0;
             
-            // 为每个箱子编号创建一张外箱单
-            for (let boxIndex = 1; boxIndex <= maxBoxCount; boxIndex++) {
-              // 收集这个箱子编号中所有SKU的信息
-              const boxSkus: {sku: string, quantity: number}[] = [];
-              let baseRecord: any = null;
+            // 为每个SKU的每个箱子单独打印外箱单
+            for (const record of (data.data.records as any[])) {
+              const totalBoxes = record.total_boxes;
+              const singleBoxQuantity = Math.floor(record.total_quantity / totalBoxes);
               
-              for (const record of (data.data.records as any[])) {
-                if (boxIndex <= record.total_boxes) {
-                  const singleBoxQuantity = Math.floor(record.total_quantity / record.total_boxes);
-                  boxSkus.push({
-                    sku: record.sku,
-                    quantity: singleBoxQuantity
-                  });
-                  if (!baseRecord) {
-                    baseRecord = record; // 用于获取公共信息（国家、操作员等）
-                  }
-                }
-              }
-              
-              if (boxSkus.length > 0 && baseRecord) {
-                // 如果只有一个SKU，使用普通格式
-                if (boxSkus.length === 1) {
-                  const labelData: LabelData = {
-                    recordId: `${baseRecord.记录号}_${boxIndex}`,
-                    sku: boxSkus[0].sku,
-                    quantity: boxSkus[0].quantity,
-                    boxes: 1,
-                    country: baseRecord.country,
-                    operator: baseRecord.操作员,
-                    packer: baseRecord.打包员,
-                    boxType: baseRecord.box_type,
-                    createTime: baseRecord.time,
-                    barcode: `${baseRecord.记录号}_${boxIndex}`
-                  };
-                  await printManager.printLabel(labelData);
-                } else {
-                  // 多个SKU，使用混合箱格式
-                  const labelData: LabelData = {
-                    recordId: `${baseRecord.记录号}_${boxIndex}`,
-                    sku: `混合箱${boxIndex}`,
-                    quantity: 1,
-                    boxes: 1,
-                    country: baseRecord.country,
-                    operator: baseRecord.操作员,
-                    packer: baseRecord.打包员,
-                    boxType: '混合箱',
-                    createTime: baseRecord.time,
-                    barcode: `${baseRecord.记录号}_${boxIndex}`,
-                    qrData: JSON.stringify({
-                      skus: boxSkus
-                    })
-                  };
-                  await printManager.printLabel(labelData);
-                }
+              // 为当前SKU的每个箱子创建一张外箱单
+              for (let boxIndex = 1; boxIndex <= totalBoxes; boxIndex++) {
+                const labelData: LabelData = {
+                  recordId: `${record.记录号}_${boxIndex}`,
+                  sku: record.sku,
+                  quantity: singleBoxQuantity, // 单箱数量
+                  boxes: 1, // 每张标签代表1箱
+                  country: record.country,
+                  operator: record.操作员,
+                  packer: record.打包员,
+                  boxType: record.box_type,
+                  createTime: record.time,
+                  barcode: `${record.记录号}_${boxIndex}`
+                };
+                await printManager.printLabel(labelData);
+                totalLabels++;
               }
             }
             
-            message.success(`打印任务已发送，共 ${maxBoxCount} 张外箱单`);
+            message.success(`打印任务已发送，共 ${totalLabels} 张外箱单`);
           } catch (error) {
             message.warning('打印失败，但入库成功');
             console.error('打印错误:', error);
