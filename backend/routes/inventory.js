@@ -61,6 +61,8 @@ router.get('/records', async (req, res) => {
     try {
         const { sku, country, mix_box_num, box_type, status, page = 1, limit = 20 } = req.query;
         
+        console.log('\x1b[36m%s\x1b[0m', '📡 查询参数:', { sku, country, mix_box_num, box_type, status, page, limit });
+        
         const whereCondition = {};
         if (sku) whereCondition.sku = { [Op.like]: `%${sku}%` };
         if (country) whereCondition.country = country;
@@ -73,6 +75,8 @@ router.get('/records', async (req, res) => {
             }
         }
         if (status) whereCondition.status = status;
+        
+        console.log('\x1b[36m%s\x1b[0m', '🔍 构建的查询条件:', JSON.stringify(whereCondition, null, 2));
         
         const offset = (page - 1) * limit;
         

@@ -233,14 +233,19 @@ const InventoryManagement: React.FC = () => {
   const loadSkuRelatedRecords = async (sku: string, country: string) => {
     setLoading(true);
     try {
+      console.log('🔍 开始查询SKU相关记录:', { sku, country });
+      
       // 第一步：查询该SKU的所有记录，获取相关的混合箱号
       const skuParams = new URLSearchParams();
       skuParams.append('sku', sku);
       skuParams.append('country', country);
       skuParams.append('limit', '1000'); // 获取所有记录
       
+      console.log('📡 第一步查询参数:', skuParams.toString());
       const skuResponse = await fetch(`/api/inventory/records?${skuParams.toString()}`);
       const skuData = await skuResponse.json();
+      
+      console.log('📋 第一步查询结果:', skuData);
       
       if (skuData.code !== 0) {
         message.error('查询SKU记录失败');
@@ -252,12 +257,24 @@ const InventoryManagement: React.FC = () => {
       const wholeBoxRecords: any[] = [];
       
       skuData.data.records.forEach((record: any) => {
-        if (record.box_type === '混合箱' && record.mix_box_num) {
+        console.log('🔍 分析记录:', { 
+          id: record.id, 
+          sku: record.sku, 
+          box_type: record.box_type, 
+          mix_box_num: record.mix_box_num 
+        });
+        
+        if (record.mix_box_num) {
           mixedBoxNumbers.add(record.mix_box_num);
-        } else if (record.box_type === '整箱') {
+          console.log('📦 找到混合箱号:', record.mix_box_num);
+        } else {
           wholeBoxRecords.push(record);
+          console.log('📋 找到整箱记录:', record.id);
         }
       });
+      
+      console.log('📦 所有混合箱号:', Array.from(mixedBoxNumbers));
+      console.log('📋 整箱记录数量:', wholeBoxRecords.length);
       
       // 第二步：如果有混合箱，查询这些混合箱的完整记录
       let mixedBoxRecords: any[] = [];
@@ -268,8 +285,11 @@ const InventoryManagement: React.FC = () => {
           boxParams.append('country', country);
           boxParams.append('limit', '1000');
           
+          console.log(`🔍 查询混合箱 ${boxNum} 的完整记录:`, boxParams.toString());
           const boxResponse = await fetch(`/api/inventory/records?${boxParams.toString()}`);
           const boxData = await boxResponse.json();
+          
+          console.log(`📦 混合箱 ${boxNum} 的记录:`, boxData);
           
           if (boxData.code === 0) {
             return boxData.data.records;
@@ -279,15 +299,20 @@ const InventoryManagement: React.FC = () => {
         
         const mixedBoxResults = await Promise.all(mixedBoxPromises);
         mixedBoxRecords = mixedBoxResults.flat();
+        console.log('📦 所有混合箱记录数量:', mixedBoxRecords.length);
       }
       
       // 合并整箱记录和混合箱记录
       const allRecords = [...wholeBoxRecords, ...mixedBoxRecords];
+      console.log('🔗 合并后记录数量:', allRecords.length);
       
       // 去重（防止重复记录）
       const uniqueRecords = allRecords.filter((record, index, arr) => 
         arr.findIndex(r => r.id === record.id) === index
       );
+      
+      console.log('✅ 最终显示记录数量:', uniqueRecords.length);
+      console.log('📋 最终记录列表:', uniqueRecords.map(r => ({ id: r.id, sku: r.sku, mix_box_num: r.mix_box_num })));
       
       setRecordsData(uniqueRecords);
       setPagination(prev => ({
@@ -298,7 +323,7 @@ const InventoryManagement: React.FC = () => {
       
     } catch (error) {
       message.error('加载相关记录失败');
-      console.error(error);
+      console.error('❌ 查询失败:', error);
     } finally {
       setLoading(false);
     }
