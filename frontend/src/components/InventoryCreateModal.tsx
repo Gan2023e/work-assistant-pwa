@@ -133,7 +133,6 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       }
       
       const result = await response.json();
-      console.log('SKU验证结果:', sku, result);
       return result;
     } catch (error) {
       console.error('SKU验证请求异常:', error);
@@ -165,7 +164,6 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       }
       
       const result = await response.json();
-      console.log('更新单箱数量结果:', sku, qtyPerBox, result);
       return result;
     } catch (error) {
       console.error('更新单箱数量请求异常:', error);

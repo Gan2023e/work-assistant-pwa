@@ -494,60 +494,6 @@ router.get('/statistics', async (req, res) => {
     }
 });
 
-// 测试数据库连接和模型
-router.get('/test-db', async (req, res) => {
-    try {
-        console.log('测试数据库连接...');
-        
-        // 测试LocalBox模型
-        const localBoxCount = await LocalBox.count();
-        console.log('LocalBox表记录数:', localBoxCount);
-        
-        // 测试SellerInventorySku模型
-        const sellerSkuCount = await SellerInventorySku.count();
-        console.log('SellerInventorySku表记录数:', sellerSkuCount);
-        
-        // 获取SellerInventorySku表的前几条记录
-        const sampleSkus = await SellerInventorySku.findAll({
-            limit: 3,
-            attributes: ['skuid', 'parent_sku', 'child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box']
-        });
-        
-        // 测试查询特定SKU
-        const testSku = 'XB362D1';
-        let testSkuResult;
-        try {
-            testSkuResult = await SellerInventorySku.findOne({
-                where: { child_sku: testSku }
-            });
-        } catch (error) {
-            testSkuResult = { error: error.message };
-        }
-        
-        res.json({
-            code: 0,
-            message: '数据库连接正常',
-            data: {
-                localBoxCount,
-                sellerSkuCount,
-                sampleSkus: sampleSkus.map(sku => sku.toJSON()),
-                testSkuResult: testSkuResult ? (testSkuResult.toJSON ? testSkuResult.toJSON() : testSkuResult) : null,
-                testSku: testSku
-            }
-        });
-    } catch (error) {
-        console.error('数据库测试失败:', error);
-        res.status(500).json({
-            code: 1,
-            message: '数据库测试失败: ' + error.message,
-            error: {
-                type: error.name,
-                details: error.message,
-                stack: error.stack
-            }
-        });
-    }
-});
 
 // 验证SKU并获取单箱数量
 router.post('/validate-sku', async (req, res) => {
@@ -555,7 +501,6 @@ router.post('/validate-sku', async (req, res) => {
     
     try {
         const { sku } = req.body;
-        console.log('接收到SKU验证请求:', sku);
         
         if (!sku) {
             return res.status(400).json({
@@ -565,13 +510,11 @@ router.post('/validate-sku', async (req, res) => {
         }
         
         // 查询SKU信息
-        console.log('开始查询SKU:', sku);
         const skuInfo = await SellerInventorySku.findOne({
             where: {
                 child_sku: sku
             }
         });
-        console.log('查询结果:', skuInfo ? '找到SKU' : '未找到SKU');
         
         if (!skuInfo) {
             return res.json({
@@ -586,7 +529,6 @@ router.post('/validate-sku', async (req, res) => {
         
         // 检查qty_per_box字段值
         const qtyPerBox = skuInfo.qty_per_box;
-        console.log(`SKU ${sku} 的qty_per_box值:`, qtyPerBox);
         
         // 如果qty_per_box为空值、null或0，提示用户补充
         if (!qtyPerBox || qtyPerBox <= 0) {
@@ -629,19 +571,10 @@ router.post('/validate-sku', async (req, res) => {
         
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', '❌ 验证SKU失败:', error);
-        console.error('错误详情:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            sql: error.sql || '无SQL信息'
-        });
         res.status(500).json({
             code: 1,
-            message: '验证失败: ' + error.message,
-            error: {
-                type: error.name,
-                details: error.message
-            }
+            message: '验证失败',
+            error: error.message
         });
     }
 });
@@ -661,8 +594,6 @@ router.post('/update-qty-per-box', async (req, res) => {
         }
         
         // 更新数据库中的qty_per_box字段
-        console.log(`为SKU ${sku} 更新qty_per_box为: ${qtyPerBox}`);
-        
         const [affectedRows] = await SellerInventorySku.update({
             qty_per_box: qtyPerBox
         }, {
@@ -677,8 +608,6 @@ router.post('/update-qty-per-box', async (req, res) => {
                 message: 'SKU不存在，无法更新'
             });
         }
-        
-        console.log(`成功更新SKU ${sku} 的qty_per_box为 ${qtyPerBox}`);
         
         res.json({
             code: 0,
