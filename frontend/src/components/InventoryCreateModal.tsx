@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, Divider, AutoComplete } from 'antd';
 import { SaveOutlined, UndoOutlined, FileTextOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../utils/printManager';
+import { useAuth } from '../contexts/AuthContext';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -34,6 +35,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   const [form] = Form.useForm();
   const [mixedBoxForm] = Form.useForm();
   const [currentMixedBoxForm] = Form.useForm();
+  const { user } = useAuth(); // 获取当前登录用户
   
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'select' | 'whole-box' | 'mixed-box'>('select');
@@ -55,13 +57,13 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
     { value: '老张' }
   ];
 
-  // 国家选项
+  // 国家选项 - 显示中文，存储中文
   const countryOptions = [
-    { value: 'US', label: '美国' },
-    { value: 'UK', label: '英国' },
-    { value: 'AE', label: '阿联酋' },
-    { value: 'AU', label: '澳大利亚' },
-    { value: 'CA', label: '加拿大' }
+    { value: '美国', label: '美国' },
+    { value: '英国', label: '英国' },
+    { value: '阿联酋', label: '阿联酋' },
+    { value: '澳大利亚', label: '澳大利亚' },
+    { value: '加拿大', label: '加拿大' }
   ];
 
   // 重置所有状态
@@ -142,7 +144,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         total_quantity: item.quantity,
         total_boxes: item.quantity, // 整箱入库时，数量即箱数
         country: values.country,
-        operator: '系统',
+        operator: user?.username || '系统', // 使用当前登录用户名
         packer: values.packer,
         pre_type: values.pre_type,
         box_type: '整箱',
@@ -154,17 +156,40 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          records: records,
-          print: true // 默认打印
+          records: records
         })
       });
 
       const data = await response.json();
       if (data.code === 0) {
         message.success(`整箱入库成功，已创建 ${records.length} 条记录`);
-        if (data.data.printData) {
-          message.info(`已发送 ${data.data.printData.length} 个打印任务`);
+        
+        // 执行打印功能
+        if (data.data.records && data.data.records.length > 0) {
+          try {
+            for (const record of data.data.records) {
+              const labelData: LabelData = {
+                recordId: record.记录号,
+                sku: record.sku,
+                quantity: record.total_quantity,
+                boxes: record.total_boxes,
+                country: record.country,
+                operator: record.操作员,
+                packer: record.打包员,
+                boxType: record.box_type,
+                mixBoxNum: record.mix_box_num,
+                createTime: record.time,
+                barcode: record.记录号
+              };
+              await printManager.printLabel(labelData);
+            }
+            message.success('打印任务已发送');
+          } catch (error) {
+            message.warning('打印失败，但入库成功');
+            console.error('打印错误:', error);
+          }
         }
+        
         resetAllStates();
         onSuccess();
       } else {
@@ -269,7 +294,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
           total_quantity: item.quantity,
           total_boxes: 1, // 混合箱每个SKU都是1箱
           country: mixedBoxData!.country,
-          operator: '系统',
+          operator: user?.username || '系统', // 使用当前登录用户名
           packer: mixedBoxData!.packer,
           pre_type: mixedBoxData!.pre_type,
           box_type: '混合箱',
@@ -280,22 +305,68 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         allRecords.push(...boxRecords);
       }
 
-      // 调用API创建混合箱记录
-      const response = await fetch('/api/inventory/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          records: allRecords,
-          print: true // 默认打印
-        })
-      });
+             // 调用API创建混合箱记录
+       const response = await fetch('/api/inventory/create', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           records: allRecords
+         })
+       });
 
       const data = await response.json();
       if (data.code === 0) {
         message.success(`混合箱入库成功，已创建 ${mixedBoxData!.mixedBoxCount} 个混合箱，共 ${allRecords.length} 条记录`);
-        if (data.data.printData) {
-          message.info('已发送打印任务');
+        
+        // 执行打印功能 - 按混合箱分组打印
+        if (data.data.records && data.data.records.length > 0) {
+          try {
+            // 按混合箱编号分组
+            const mixedBoxGroups = data.data.records.reduce((groups: any, record: any) => {
+              const mixBoxNum = record.mix_box_num;
+              if (!groups[mixBoxNum]) {
+                groups[mixBoxNum] = [];
+              }
+              groups[mixBoxNum].push(record);
+              return groups;
+            }, {});
+            
+            // 为每个混合箱打印一个标签
+            for (const [mixBoxNum, records] of Object.entries(mixedBoxGroups)) {
+              const recordList = records as any[];
+              const firstRecord = recordList[0];
+              const totalQuantity = recordList.reduce((sum: number, record: any) => sum + record.total_quantity, 0);
+              
+              const labelData: LabelData = {
+                recordId: mixBoxNum,
+                sku: `混合箱-${mixBoxNum}`,
+                quantity: totalQuantity,
+                boxes: 1,
+                country: firstRecord.country,
+                operator: firstRecord.操作员,
+                packer: firstRecord.打包员,
+                boxType: '混合箱' as const,
+                mixBoxNum: mixBoxNum,
+                createTime: firstRecord.time,
+                barcode: mixBoxNum,
+                qrData: JSON.stringify({
+                  mixBoxNum: mixBoxNum,
+                  skus: recordList.map(record => ({
+                    sku: record.sku,
+                    quantity: record.total_quantity
+                  })),
+                  country: firstRecord.country
+                })
+              };
+              await printManager.printLabel(labelData);
+            }
+            message.success('打印任务已发送');
+          } catch (error) {
+            message.warning('打印失败，但入库成功');
+            console.error('打印错误:', error);
+          }
         }
+        
         setMixedBoxInputModalVisible(false);
         resetAllStates();
         onSuccess();
@@ -374,8 +445,8 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                     rules={[{ required: true, message: '请选择备货类型' }]}
                   >
                     <Select placeholder="请选择备货类型">
-                      <Option value="旺季备货">旺季备货</Option>
                       <Option value="平时备货">平时备货</Option>
+                      <Option value="旺季备货">旺季备货</Option>
                     </Select>
                   </Form.Item>
                 </Col>

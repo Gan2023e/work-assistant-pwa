@@ -2,17 +2,19 @@ const LocalBox = require('../models/LocalBox');
 const { Op } = require('sequelize');
 
 /**
- * 生成新的记录号 - 基于时间串
+ * 生成新的记录号 - 基于北京时间
  * 格式：YYYYMMDDHHMM + 序号
  * 例如：202501031425001, 202501031425002
  */
 async function generateRecordId() {
+    // 获取北京时间 (UTC+8)
     const now = new Date();
-    const timeString = now.getFullYear().toString() +
-                      (now.getMonth() + 1).toString().padStart(2, '0') +
-                      now.getDate().toString().padStart(2, '0') +
-                      now.getHours().toString().padStart(2, '0') +
-                      now.getMinutes().toString().padStart(2, '0');
+    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const timeString = beijingTime.getUTCFullYear().toString() +
+                      (beijingTime.getUTCMonth() + 1).toString().padStart(2, '0') +
+                      beijingTime.getUTCDate().toString().padStart(2, '0') +
+                      beijingTime.getUTCHours().toString().padStart(2, '0') +
+                      beijingTime.getUTCMinutes().toString().padStart(2, '0');
     
     // 查询同分钟内的最大序号
     const existingRecords = await LocalBox.findAll({
