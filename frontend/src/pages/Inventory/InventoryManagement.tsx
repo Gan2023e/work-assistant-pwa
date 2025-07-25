@@ -143,6 +143,9 @@ const InventoryManagement: React.FC = () => {
   // 混合箱悬停高亮
   const [hoveredMixedBox, setHoveredMixedBox] = useState<string | null>(null);
 
+  // 查看SKU详情的状态
+  const [viewingSkuDetails, setViewingSkuDetails] = useState<{sku: string, country: string} | null>(null);
+
   // 打印状态
   const [printServiceAvailable, setPrintServiceAvailable] = useState(false);
 
@@ -158,7 +161,7 @@ const InventoryManagement: React.FC = () => {
       loadRecordsData();
     }
     fetchCountryInventory();
-  }, [currentView, filters, pagination.current, pagination.pageSize]);
+  }, [currentView, filters, pagination.current, pagination.pageSize, viewingSkuDetails]);
 
   // 检查打印服务
   const checkPrintService = async () => {
@@ -231,10 +234,20 @@ const InventoryManagement: React.FC = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.sku) params.append('sku', filters.sku);
-      if (filters.country) params.append('country', filters.country);
-      if (filters.box_type) params.append('box_type', filters.box_type);
-      if (filters.status) params.append('status', filters.status);
+      
+      // 如果在查看SKU详情模式，使用viewingSkuDetails的条件
+      if (viewingSkuDetails) {
+        params.append('sku', viewingSkuDetails.sku);
+        params.append('country', viewingSkuDetails.country);
+        // 不设置box_type和status，显示该SKU的所有记录
+      } else {
+        // 否则使用正常的筛选条件
+        if (filters.sku) params.append('sku', filters.sku);
+        if (filters.country) params.append('country', filters.country);
+        if (filters.box_type) params.append('box_type', filters.box_type);
+        if (filters.status) params.append('status', filters.status);
+      }
+      
       params.append('page', pagination.current.toString());
       params.append('limit', pagination.pageSize.toString());
       
@@ -622,15 +635,11 @@ const InventoryManagement: React.FC = () => {
               type="link"
               icon={<EyeOutlined />}
               onClick={() => {
-                // 如果有混合箱记录，只筛选SKU和国家来显示所有相关记录（包括所有混合箱）
-                // 如果没有混合箱记录，也是筛选SKU和国家
-                setFilters(prev => ({ 
-                  ...prev, 
-                  sku: record.sku, 
-                  country: record.country,
-                  box_type: '', // 清空箱型筛选，显示该SKU的所有记录
-                  status: '' // 清空状态筛选
-                }));
+                // 设置查看SKU详情状态，这样不会影响搜索框显示
+                setViewingSkuDetails({
+                  sku: record.sku,
+                  country: record.country
+                });
                 setCurrentView('records');
               }}
             />
@@ -915,13 +924,19 @@ const InventoryManagement: React.FC = () => {
               placeholder="搜索SKU"
               prefix={<SearchOutlined />}
               value={filters.sku}
-              onChange={(e) => setFilters(prev => ({ ...prev, sku: e.target.value }))}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, sku: e.target.value }));
+                setViewingSkuDetails(null); // 清除查看详情状态
+              }}
               style={{ width: 200 }}
             />
             <Select
               placeholder="选择国家"
               value={filters.country}
-              onChange={(value) => setFilters(prev => ({ ...prev, country: value }))}
+              onChange={(value) => {
+                setFilters(prev => ({ ...prev, country: value }));
+                setViewingSkuDetails(null); // 清除查看详情状态
+              }}
               style={{ width: 120 }}
               allowClear
             >
@@ -937,7 +952,10 @@ const InventoryManagement: React.FC = () => {
             <Select
               placeholder="箱型"
               value={filters.box_type}
-              onChange={(value) => setFilters(prev => ({ ...prev, box_type: value }))}
+              onChange={(value) => {
+                setFilters(prev => ({ ...prev, box_type: value }));
+                setViewingSkuDetails(null); // 清除查看详情状态
+              }}
               style={{ width: 120 }}
               allowClear
             >
@@ -948,7 +966,10 @@ const InventoryManagement: React.FC = () => {
               <Select
                 placeholder="状态"
                 value={filters.status}
-                onChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+                onChange={(value) => {
+                  setFilters(prev => ({ ...prev, status: value }));
+                  setViewingSkuDetails(null); // 清除查看详情状态
+                }}
                 style={{ width: 120 }}
                 allowClear
               >
@@ -976,6 +997,7 @@ const InventoryManagement: React.FC = () => {
               onClick={() => {
                 setFilters({ sku: '', country: '', box_type: '', status: '', dateRange: null });
                 setPagination(prev => ({ ...prev, current: 1 }));
+                setViewingSkuDetails(null); // 清除查看详情状态
               }}
             >
               重置
@@ -1013,6 +1035,25 @@ const InventoryManagement: React.FC = () => {
           </Space>
           <div></div>
         </div>
+
+        {/* SKU详情查看提示 */}
+        {currentView === 'records' && viewingSkuDetails && (
+          <Card size="small" style={{ marginBottom: '16px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f' }}>
+            <Space>
+              <EyeOutlined style={{ color: '#52c41a' }} />
+              <span>正在查看 <strong>{viewingSkuDetails.sku}</strong> 在 <strong>{viewingSkuDetails.country}</strong> 的所有库存记录</span>
+              <Button 
+                size="small" 
+                onClick={() => {
+                  setViewingSkuDetails(null);
+                  setCurrentView('summary');
+                }}
+              >
+                返回汇总
+              </Button>
+            </Space>
+          </Card>
+        )}
 
         {/* 表格 */}
         <div className="inventory-table-container">
