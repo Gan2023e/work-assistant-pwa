@@ -199,16 +199,6 @@ const AppContent: React.FC = () => {
       ],
     },
     {
-      label: getMenuLabel('发货管理', openKeys.includes('shipping')),
-      key: 'shipping',
-      children: [
-        { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
-                    { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
-        { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
-      ],
-    },
-    { label: <Link to="/logistics">头程物流管理</Link>, key: '/logistics' },
-    {
       label: getMenuLabel('库存管理', openKeys.includes('inventory')),
       key: 'inventory',
       children: [
@@ -220,6 +210,16 @@ const AppContent: React.FC = () => {
         { label: <Link to="/inventory/fba-inventory">FBA库存</Link>, key: '/inventory/fba-inventory' },
       ],
     },
+    {
+      label: getMenuLabel('发货管理', openKeys.includes('shipping')),
+      key: 'shipping',
+      children: [
+        { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
+                    { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
+        { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
+      ],
+    },
+    { label: <Link to="/logistics">头程物流管理</Link>, key: '/logistics' },
     { label: <Link to="/salary">临工工资结算</Link>, key: '/salary' },
     { label: <Link to="/profit">直发小包利润分析</Link>, key: '/profit' },
     {
