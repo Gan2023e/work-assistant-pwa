@@ -1156,25 +1156,64 @@ const InventoryManagement: React.FC = () => {
                 size="small" 
                 type="primary"
                 onClick={async () => {
-                  // 临时测试：直接查询混合箱1752666330的记录（更新为正确的混合箱号）
+                  // 测试：直接查询混合箱1752666330的记录
                   try {
+                    console.log('🧪 开始测试直接查询混合箱1752666330...');
                     const response = await fetch('/api/inventory/records?mix_box_num=1752666330&limit=1000');
                     const data = await response.json();
-                    console.log('🧪 直接查询混合箱1752666330的结果:', data);
+                    console.log('🧪 API返回的原始数据:', data);
+                    
                     if (data.code === 0) {
-                      // 过滤美国的记录
+                      console.log('🧪 找到的所有记录:', data.data.records.map((r: any) => ({
+                        id: r.记录号,
+                        sku: r.sku,
+                        country: r.country,
+                        mix_box_num: r.mix_box_num
+                      })));
+                      
+                      // 过滤指定国家的记录
                       const countryRecords = data.data.records.filter((record: any) => record.country === viewingSkuDetails?.country);
+                      console.log('🧪 过滤后的国家记录:', countryRecords.length);
+                      
                       setRecordsData(countryRecords);
-                      message.success(`找到${countryRecords.length}条记录`);
+                      message.success(`总共找到${data.data.records.length}条记录，${viewingSkuDetails?.country}有${countryRecords.length}条`);
+                    } else {
+                      message.error('查询失败: ' + data.message);
                     }
                   } catch (error) {
                     console.error('🧪 直接查询失败:', error);
+                    message.error('查询异常');
                   }
                 }}
               >
-                测试直接查询
+                                测试混合箱查询
               </Button>
-          </Space>
+              <Button 
+                size="small" 
+                onClick={async () => {
+                  // 查看所有混合箱记录统计
+                  try {
+                    const response = await fetch('/api/inventory/records?box_type=混合箱&limit=1000');
+                    const data = await response.json();
+                    if (data.code === 0) {
+                      const mixBoxStats = data.data.records.reduce((acc: any, record: any) => {
+                        const boxNum = record.mix_box_num;
+                        if (!acc[boxNum]) acc[boxNum] = [];
+                        acc[boxNum].push({sku: record.sku, country: record.country});
+                        return acc;
+                      }, {});
+                      console.log('📊 所有混合箱统计:', mixBoxStats);
+                      console.log('📊 混合箱1752666330详情:', mixBoxStats['1752666330']);
+                      message.info(`共${Object.keys(mixBoxStats).length}个混合箱，详情见控制台`);
+                    }
+                  } catch (error) {
+                    console.error('查询混合箱统计失败:', error);
+                  }
+                }}
+              >
+                查看混合箱统计
+              </Button>
+            </Space>
           </Card>
         )}
 

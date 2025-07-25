@@ -67,17 +67,11 @@ router.get('/records', async (req, res) => {
         if (sku) whereCondition.sku = { [Op.like]: `%${sku}%` };
         if (country) whereCondition.country = country;
         
-        // 处理mix_box_num - 尝试字符串和数字两种类型
+        // 处理mix_box_num - 直接字符串匹配（数据库中存储为varchar）
         if (mix_box_num) {
             console.log('\x1b[35m%s\x1b[0m', '🔍 原始mix_box_num:', mix_box_num, '类型:', typeof mix_box_num);
-            // 尝试多种匹配方式
-            whereCondition.mix_box_num = {
-                [Op.or]: [
-                    mix_box_num,           // 字符串形式
-                    parseInt(mix_box_num), // 数字形式
-                    mix_box_num.toString() // 确保是字符串
-                ]
-            };
+            // 确保作为字符串进行精确匹配
+            whereCondition.mix_box_num = mix_box_num.toString().trim();
             console.log('\x1b[35m%s\x1b[0m', '🔍 构建的mix_box_num条件:', whereCondition.mix_box_num);
         }
         
