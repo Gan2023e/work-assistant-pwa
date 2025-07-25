@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, Divider, AutoComplete } from 'antd';
+import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, Divider, AutoComplete, InputNumber } from 'antd';
 import { SaveOutlined, UndoOutlined, FileTextOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../utils/printManager';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,7 +15,9 @@ interface InventoryCreateModalProps {
 
 interface WholeBoxItem {
   sku: string;
-  quantity: number;
+  boxCount: number; // 箱数
+  qtyPerBox?: number; // 单箱产品数
+  totalQuantity?: number; // 总件数
 }
 
 interface MixedBoxData {
@@ -105,6 +107,26 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
     setMixedBoxData(null);
   };
 
+  // 验证SKU并获取单箱数量
+  const validateSku = async (sku: string) => {
+    const response = await fetch('/api/inventory/validate-sku', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku })
+    });
+    return await response.json();
+  };
+
+  // 更新SKU的单箱数量
+  const updateQtyPerBox = async (sku: string, qtyPerBox: number) => {
+    const response = await fetch('/api/inventory/update-qty-per-box', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, qtyPerBox })
+    });
+    return await response.json();
+  };
+
   // 解析SKU及箱数输入框内容
   const parseSkuInput = (text: string): WholeBoxItem[] => {
     if (!text.trim()) return [];
@@ -116,14 +138,52 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 2) {
         const sku = parts[0];
-        const quantity = parseInt(parts[1]);
-        if (sku && !isNaN(quantity) && quantity > 0) {
-          items.push({ sku, quantity });
+        const boxCount = parseInt(parts[1]);
+        if (sku && !isNaN(boxCount) && boxCount > 0) {
+          items.push({ sku, boxCount });
         }
       }
     }
     
     return items;
+  };
+
+  // 处理单箱数量缺失的对话框
+  const handleMissingQtyPerBox = (sku: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      Modal.confirm({
+        title: '单箱产品数量缺失',
+        content: (
+          <div>
+            <p>SKU: {sku} 缺少单箱产品数量信息，请输入：</p>
+            <InputNumber
+              min={1}
+              placeholder="请输入单箱产品数量"
+              style={{ width: '100%' }}
+              id="qty-per-box-input"
+            />
+          </div>
+        ),
+        onOk: async () => {
+          const input = document.getElementById('qty-per-box-input') as HTMLInputElement;
+          const qtyPerBox = parseInt(input?.value || '0');
+          if (qtyPerBox > 0) {
+            const result = await updateQtyPerBox(sku, qtyPerBox);
+            if (result.code === 0) {
+              message.success('单箱数量更新成功');
+              resolve(qtyPerBox);
+            } else {
+              message.error('更新失败：' + result.message);
+              resolve(null);
+            }
+          } else {
+            message.error('请输入有效的数量');
+            resolve(null);
+          }
+        },
+        onCancel: () => resolve(null)
+      });
+    });
   };
 
   // 整箱入库确认
@@ -138,11 +198,46 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         return;
       }
 
+      // 验证所有SKU并获取单箱数量
+      const validatedItems: WholeBoxItem[] = [];
+      
+      for (const item of skuItems) {
+        const validation = await validateSku(item.sku);
+        
+        if (validation.code === 2) {
+          // SKU不存在
+          message.error(validation.message);
+          return;
+        } else if (validation.code === 3) {
+          // 缺少单箱数量
+          const qtyPerBox = await handleMissingQtyPerBox(item.sku);
+          if (!qtyPerBox) {
+            message.error('操作已取消');
+            return;
+          }
+          validatedItems.push({
+            ...item,
+            qtyPerBox,
+            totalQuantity: item.boxCount * qtyPerBox
+          });
+        } else if (validation.code === 0) {
+          // 验证成功
+          validatedItems.push({
+            ...item,
+            qtyPerBox: validation.data.qtyPerBox,
+            totalQuantity: item.boxCount * validation.data.qtyPerBox
+          });
+        } else {
+          message.error('验证失败：' + validation.message);
+          return;
+        }
+      }
+
       // 准备库存记录数据
-      const records = skuItems.map(item => ({
+      const records = validatedItems.map(item => ({
         sku: item.sku,
-        total_quantity: item.quantity,
-        total_boxes: item.quantity, // 整箱入库时，数量即箱数
+        total_quantity: item.totalQuantity!,
+        total_boxes: item.boxCount,
         country: values.country,
         operator: user?.username || '系统', // 使用当前登录用户名
         packer: values.packer,
@@ -307,12 +402,12 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
 
              // 调用API创建混合箱记录
        const response = await fetch('/api/inventory/create', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
            records: allRecords
-         })
-       });
+        })
+      });
 
       const data = await response.json();
       if (data.code === 0) {
@@ -392,19 +487,19 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
 
   return (
     <>
-      <Modal
-        title="库存入库"
-        open={visible}
-        onCancel={handleCancel}
+    <Modal
+      title="库存入库"
+      open={visible}
+      onCancel={handleCancel}
         width={800}
-        footer={null}
-        destroyOnClose
-      >
+      footer={null}
+      destroyOnClose
+    >
         {step === 'select' && (
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
             <h3>请选择入库类型</h3>
             <Space size="large" style={{ marginTop: '30px' }}>
-              <Button 
+            <Button
                 type="primary" 
                 size="large"
                 onClick={handleSelectWholeBox}
@@ -414,8 +509,8 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   <FileTextOutlined style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }} />
                   整箱入库
                 </div>
-              </Button>
-              <Button 
+            </Button>
+            <Button
                 type="primary" 
                 size="large"
                 onClick={handleSelectMixedBox}
@@ -423,9 +518,9 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
               >
                 <div>
                   <FileTextOutlined style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }} />
-                  混合箱入库
+              混合箱入库
                 </div>
-              </Button>
+            </Button>
             </Space>
           </div>
         )}
@@ -439,7 +534,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
             >
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="备货类型"
                     name="pre_type"
                     rules={[{ required: true, message: '请选择备货类型' }]}
@@ -448,10 +543,10 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                       <Option value="平时备货">平时备货</Option>
                       <Option value="旺季备货">旺季备货</Option>
                     </Select>
-                  </Form.Item>
+                </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="打包员"
                     name="packer"
                     rules={[{ required: true, message: '请选择打包员' }]}
@@ -462,33 +557,33 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                       filterOption={(inputValue, option) =>
                         option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
                       }
-                    />
-                  </Form.Item>
+                  />
+                </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="目的国"
-                    name="country"
+                  name="country"
                     rules={[{ required: true, message: '请选择目的国' }]}
                   >
                     <Select placeholder="请选择目的国">
                       {countryOptions.map(option => (
                         <Option key={option.value} value={option.value}>{option.label}</Option>
                       ))}
-                    </Select>
-                  </Form.Item>
+                  </Select>
+                </Form.Item>
                 </Col>
               </Row>
 
-              <Form.Item
+                              <Form.Item
                 label="SKU及箱数"
                 name="skuInput"
                 rules={[{ required: true, message: '请输入SKU及箱数' }]}
-                help="每行填写一个SKU及数量，格式：SKU 数量（中间用空格隔开）"
+                help="每行填写一个SKU及箱数，格式：SKU 箱数（中间用空格隔开）。系统会自动根据单箱产品数计算总件数。"
               >
                 <TextArea
                   rows={8}
-                  placeholder="示例：&#10;XB362D1 12&#10;MK048A4 8&#10;..."
+                  placeholder="示例：&#10;XB362D1 12（表示XB362D1产品12箱）&#10;MK048A4 8（表示MK048A4产品8箱）&#10;..."
                   style={{ fontFamily: 'monospace' }}
                 />
               </Form.Item>
@@ -531,7 +626,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
             >
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="打包员"
                     name="packer"
                     rules={[{ required: true, message: '请选择打包员' }]}
@@ -543,35 +638,35 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                         option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
                       }
                     />
-                  </Form.Item>
+                </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="目的国"
-                    name="country"
+                  name="country"
                     rules={[{ required: true, message: '请选择目的国' }]}
                   >
                     <Select placeholder="请选择目的国">
                       {countryOptions.map(option => (
                         <Option key={option.value} value={option.value}>{option.label}</Option>
                       ))}
-                    </Select>
-                  </Form.Item>
+                  </Select>
+                </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item
+                <Form.Item
                     label="需要录入的混合箱箱数"
                     name="mixedBoxCount"
                     rules={[{ required: true, message: '请输入混合箱箱数' }]}
-                  >
+                >
                     <Input type="number" min={1} placeholder="1" />
-                  </Form.Item>
+                </Form.Item>
                 </Col>
               </Row>
 
               <Form.Item name="pre_type" initialValue="平时备货" hidden>
                 <Input />
-              </Form.Item>
+                </Form.Item>
 
               <Form.Item
                 label="备注"
@@ -581,21 +676,21 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
               </Form.Item>
 
               <Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
+              <Space>
+                <Button
+                  type="primary"
                     htmlType="submit"
-                    icon={<SaveOutlined />}
-                  >
+                  icon={<SaveOutlined />}
+                >
                     开始录入混合箱
-                  </Button>
-                  <Button
-                    icon={<UndoOutlined />}
+                </Button>
+                <Button
+                  icon={<UndoOutlined />}
                     onClick={handleBackToSelect}
-                  >
+                >
                     返回
-                  </Button>
-                </Space>
+                </Button>
+              </Space>
               </Form.Item>
             </Form>
           </Card>
@@ -621,7 +716,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
             layout="vertical"
             onFinish={handleConfirmCurrentMixedBox}
           >
-            <Form.Item
+                <Form.Item
               name="skuInput"
               rules={[{ required: true, message: '请输入SKU及数量' }]}
               help="每行填写一个SKU及数量，格式：SKU 数量（中间用空格隔开）"
@@ -631,7 +726,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                 placeholder="示例：&#10;MK048A4 56&#10;XB362D1 23&#10;..."
                 style={{ fontFamily: 'monospace' }}
               />
-            </Form.Item>
+                </Form.Item>
 
             <Form.Item>
               <Space>
@@ -642,18 +737,18 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   loading={loading}
                 >
                   {currentMixedBoxIndex + 1 < (mixedBoxData?.mixedBoxCount || 0) ? '确认' : '完成录入'}
-                </Button>
-                <Button
-                  icon={<UndoOutlined />}
+              </Button>
+              <Button
+                icon={<UndoOutlined />}
                   onClick={handleCancelMixedBoxInput}
                 >
                   取消
-                </Button>
-              </Space>
+              </Button>
+            </Space>
             </Form.Item>
           </Form>
-        </Card>
-      </Modal>
+          </Card>
+    </Modal>
     </>
   );
 };

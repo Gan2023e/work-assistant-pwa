@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const LocalBox = require('../models/LocalBox');
+const SellerInventorySku = require('../models/SellerInventorySku');
 const { Op } = require('sequelize');
 const {
     createInventoryRecord,
@@ -333,11 +334,12 @@ router.delete('/delete/:recordId', async (req, res) => {
             });
         }
         
-        // 软删除：更新为已取消状态
-        await updateInventoryRecord(recordId, 
-            { status: '已取消' }, 
-            `删除原因: ${reason || '用户删除'}`
-        );
+        // 硬删除：从数据库中删除记录
+        await LocalBox.destroy({
+            where: {
+                记录号: recordId
+            }
+        });
         
         console.log('\x1b[32m%s\x1b[0m', `✅ 成功删除记录 ${recordId}`);
         
@@ -487,6 +489,121 @@ router.get('/statistics', async (req, res) => {
         res.status(500).json({
             code: 1,
             message: '统计失败',
+            error: error.message
+        });
+    }
+});
+
+// 验证SKU并获取单箱数量
+router.post('/validate-sku', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '🔍 验证SKU并获取单箱数量');
+    
+    try {
+        const { sku } = req.body;
+        
+        if (!sku) {
+            return res.status(400).json({
+                code: 1,
+                message: 'SKU不能为空'
+            });
+        }
+        
+        // 查询SKU信息
+        const skuInfo = await SellerInventorySku.findOne({
+            where: {
+                child_sku: sku
+            }
+        });
+        
+        if (!skuInfo) {
+            return res.json({
+                code: 2,
+                message: `系统中没有SKU: ${sku}，请联系管理员添加`,
+                data: {
+                    sku: sku,
+                    exists: false
+                }
+            });
+        }
+        
+        if (!skuInfo.qty_per_box || skuInfo.qty_per_box <= 0) {
+            return res.json({
+                code: 3,
+                message: `SKU: ${sku} 缺少单箱产品数量信息，请补充`,
+                data: {
+                    sku: sku,
+                    exists: true,
+                    hasQtyPerBox: false,
+                    skuInfo: skuInfo
+                }
+            });
+        }
+        
+        res.json({
+            code: 0,
+            message: '验证成功',
+            data: {
+                sku: sku,
+                exists: true,
+                hasQtyPerBox: true,
+                qtyPerBox: skuInfo.qty_per_box,
+                skuInfo: skuInfo
+            }
+        });
+        
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 验证SKU失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '验证失败',
+            error: error.message
+        });
+    }
+});
+
+// 更新SKU的单箱数量
+router.post('/update-qty-per-box', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '📝 更新SKU单箱数量');
+    
+    try {
+        const { sku, qtyPerBox } = req.body;
+        
+        if (!sku || !qtyPerBox || qtyPerBox <= 0) {
+            return res.status(400).json({
+                code: 1,
+                message: 'SKU和单箱数量不能为空，且数量必须大于0'
+            });
+        }
+        
+        const [affectedRows] = await SellerInventorySku.update({
+            qty_per_box: qtyPerBox
+        }, {
+            where: {
+                child_sku: sku
+            }
+        });
+        
+        if (affectedRows === 0) {
+            return res.status(404).json({
+                code: 1,
+                message: 'SKU不存在，无法更新'
+            });
+        }
+        
+        res.json({
+            code: 0,
+            message: '更新成功',
+            data: {
+                sku: sku,
+                qtyPerBox: qtyPerBox
+            }
+        });
+        
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 更新单箱数量失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '更新失败',
             error: error.message
         });
     }
