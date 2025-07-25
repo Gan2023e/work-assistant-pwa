@@ -27,6 +27,11 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
     type: DataTypes.STRING,
     allowNull: true,
     comment: '卖家尺寸名称'
+  },
+  qty_per_box: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: '单箱产品数量'
   }
 }, {
   tableName: 'sellerinventory_sku',

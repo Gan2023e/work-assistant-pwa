@@ -219,12 +219,12 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
           if (qtyPerBox > 0) {
             const result = await updateQtyPerBox(sku, qtyPerBox);
             if (result.code === 0) {
-              // 如果是临时存储，则保存到本地状态
+              // 如果是临时存储，则保存到本地状态；否则数据库已更新
               if (result.data.temporary) {
                 setTempQtyPerBox(prev => ({ ...prev, [sku]: qtyPerBox }));
                 message.success('单箱数量已记录（当前会话有效）');
               } else {
-                message.success('单箱数量更新成功');
+                message.success('单箱数量已保存到数据库');
               }
               resolve(qtyPerBox);
             } else {
