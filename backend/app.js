@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { sequelize } = require('./models');
+const { checkAndCreateTables } = require('./scripts/checkProductionTables');
 const productWeblinkRouter = require('./routes/productWeblink');
 const logisticsRouter = require('./routes/logistics');
 const salaryRouter = require('./routes/salary');
@@ -113,10 +114,18 @@ sequelize.authenticate().then(() => {
   
   // 检查生产环境，避免自动同步数据库结构
   if (process.env.NODE_ENV === 'production') {
-    console.log('🔒 生产环境：跳过数据库结构同步，使用现有表结构');
+    console.log('🔒 生产环境：检查和修复数据库表结构...');
     
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+    // 在生产环境中检查和创建必要的表
+    checkAndCreateTables().then(() => {
+      console.log('✅ 生产环境表结构检查完成');
+      
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+      });
+    }).catch(err => {
+      console.error('❌ 生产环境表结构检查失败:', err);
+      process.exit(1);
     });
   } else {
     // 开发环境才进行数据库同步
