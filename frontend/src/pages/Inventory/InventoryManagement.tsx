@@ -229,24 +229,97 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
+  // 加载SKU相关混合箱的完整记录
+  const loadSkuRelatedRecords = async (sku: string, country: string) => {
+    setLoading(true);
+    try {
+      // 第一步：查询该SKU的所有记录，获取相关的混合箱号
+      const skuParams = new URLSearchParams();
+      skuParams.append('sku', sku);
+      skuParams.append('country', country);
+      skuParams.append('limit', '1000'); // 获取所有记录
+      
+      const skuResponse = await fetch(`/api/inventory/records?${skuParams.toString()}`);
+      const skuData = await skuResponse.json();
+      
+      if (skuData.code !== 0) {
+        message.error('查询SKU记录失败');
+        return;
+      }
+      
+      // 提取该SKU所在的混合箱号
+      const mixedBoxNumbers = new Set<string>();
+      const wholeBoxRecords: any[] = [];
+      
+      skuData.data.records.forEach((record: any) => {
+        if (record.box_type === '混合箱' && record.mix_box_num) {
+          mixedBoxNumbers.add(record.mix_box_num);
+        } else if (record.box_type === '整箱') {
+          wholeBoxRecords.push(record);
+        }
+      });
+      
+      // 第二步：如果有混合箱，查询这些混合箱的完整记录
+      let mixedBoxRecords: any[] = [];
+      if (mixedBoxNumbers.size > 0) {
+        const mixedBoxPromises = Array.from(mixedBoxNumbers).map(async (boxNum) => {
+          const boxParams = new URLSearchParams();
+          boxParams.append('mix_box_num', boxNum);
+          boxParams.append('country', country);
+          boxParams.append('limit', '1000');
+          
+          const boxResponse = await fetch(`/api/inventory/records?${boxParams.toString()}`);
+          const boxData = await boxResponse.json();
+          
+          if (boxData.code === 0) {
+            return boxData.data.records;
+          }
+          return [];
+        });
+        
+        const mixedBoxResults = await Promise.all(mixedBoxPromises);
+        mixedBoxRecords = mixedBoxResults.flat();
+      }
+      
+      // 合并整箱记录和混合箱记录
+      const allRecords = [...wholeBoxRecords, ...mixedBoxRecords];
+      
+      // 去重（防止重复记录）
+      const uniqueRecords = allRecords.filter((record, index, arr) => 
+        arr.findIndex(r => r.id === record.id) === index
+      );
+      
+      setRecordsData(uniqueRecords);
+      setPagination(prev => ({
+        ...prev,
+        total: uniqueRecords.length,
+        current: 1
+      }));
+      
+    } catch (error) {
+      message.error('加载相关记录失败');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 加载库存记录数据
   const loadRecordsData = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      
-      // 如果在查看SKU详情模式，使用viewingSkuDetails的条件
+      // 如果在查看SKU详情模式，加载相关混合箱的完整记录
       if (viewingSkuDetails) {
-        params.append('sku', viewingSkuDetails.sku);
-        params.append('country', viewingSkuDetails.country);
-        // 不设置box_type和status，显示该SKU的所有记录
-      } else {
-        // 否则使用正常的筛选条件
-        if (filters.sku) params.append('sku', filters.sku);
-        if (filters.country) params.append('country', filters.country);
-        if (filters.box_type) params.append('box_type', filters.box_type);
-        if (filters.status) params.append('status', filters.status);
+        await loadSkuRelatedRecords(viewingSkuDetails.sku, viewingSkuDetails.country);
+        return;
       }
+      
+      // 否则使用正常的筛选条件
+      const params = new URLSearchParams();
+      if (filters.sku) params.append('sku', filters.sku);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.box_type) params.append('box_type', filters.box_type);
+      if (filters.status) params.append('status', filters.status);
       
       params.append('page', pagination.current.toString());
       params.append('limit', pagination.pageSize.toString());
@@ -1041,7 +1114,7 @@ const InventoryManagement: React.FC = () => {
           <Card size="small" style={{ marginBottom: '16px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f' }}>
             <Space>
               <EyeOutlined style={{ color: '#52c41a' }} />
-              <span>正在查看 <strong>{viewingSkuDetails.sku}</strong> 在 <strong>{viewingSkuDetails.country}</strong> 的所有库存记录</span>
+              <span>正在查看 <strong>{viewingSkuDetails.sku}</strong> 在 <strong>{viewingSkuDetails.country}</strong> 相关混合箱的完整记录（包括整箱记录和混合箱中的所有SKU）</span>
               <Button 
                 size="small" 
                 onClick={() => {
@@ -1095,7 +1168,7 @@ const InventoryManagement: React.FC = () => {
                   setHoveredMixedBox(null);
                 }
               })}
-              pagination={{
+              pagination={viewingSkuDetails ? false : {
                 ...pagination,
                 showSizeChanger: true,
                 showQuickJumper: true,

@@ -59,12 +59,19 @@ router.get('/records', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '🔍 获取库存记录详情');
     
     try {
-        const { sku, country, mix_box_num, status, page = 1, limit = 20 } = req.query;
+        const { sku, country, mix_box_num, box_type, status, page = 1, limit = 20 } = req.query;
         
         const whereCondition = {};
         if (sku) whereCondition.sku = { [Op.like]: `%${sku}%` };
         if (country) whereCondition.country = country;
         if (mix_box_num) whereCondition.mix_box_num = mix_box_num;
+        if (box_type) {
+            if (box_type === '整箱') {
+                whereCondition.mix_box_num = { [Op.is]: null };
+            } else if (box_type === '混合箱') {
+                whereCondition.mix_box_num = { [Op.not]: null };
+            }
+        }
         if (status) whereCondition.status = status;
         
         const offset = (page - 1) * limit;
