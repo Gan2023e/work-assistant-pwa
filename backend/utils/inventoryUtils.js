@@ -54,7 +54,8 @@ async function createInventoryRecord(data) {
         打包员: data.packer,
         mix_box_num: data.mix_box_num || null,
         marketPlace: data.marketplace,
-        box_type: data.mix_box_num ? '混合箱' : '整箱',
+        box_type: data.box_type || (data.mix_box_num ? '混合箱' : '整箱'),
+        pre_type: data.pre_type || '平时备货',
         status: '待出库',
         time: new Date(),
         last_updated_at: new Date(),
@@ -66,7 +67,7 @@ async function createInventoryRecord(data) {
  * 批量创建混合箱记录
  */
 async function createMixedBoxRecords(mixedBoxData) {
-    const { skus, mixBoxNum, operator, packer, remark } = mixedBoxData;
+    const { skus, mixBoxNum, operator, packer, remark, pre_type } = mixedBoxData;
     const records = [];
     
     for (const skuData of skus) {
@@ -79,6 +80,8 @@ async function createMixedBoxRecords(mixedBoxData) {
             packer: packer,
             mix_box_num: mixBoxNum,
             marketplace: skuData.marketplace,
+            box_type: '混合箱',
+            pre_type: pre_type || '平时备货',
             remark: remark
         });
         records.push(record);

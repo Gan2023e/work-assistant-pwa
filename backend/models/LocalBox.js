@@ -46,6 +46,11 @@ const LocalBox = sequelize.define('LocalBox', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: '操作备注'
+  },
+  pre_type: {
+    type: DataTypes.ENUM('旺季备货', '平时备货'),
+    defaultValue: '平时备货',
+    comment: '备货类型'
   }
 }, {
   tableName: 'local_boxes',
