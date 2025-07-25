@@ -507,32 +507,20 @@ router.get('/test-db', async (req, res) => {
         const sellerSkuCount = await SellerInventorySku.count();
         console.log('SellerInventorySku表记录数:', sellerSkuCount);
         
-        // 获取SellerInventorySku表的前几条记录，尝试包含qty_per_box字段
-        let sampleSkus;
-        try {
-            sampleSkus = await SellerInventorySku.findAll({
-                limit: 3,
-                attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box']
-            });
-        } catch (error) {
-            console.log('qty_per_box字段不存在，使用基本字段查询');
-            sampleSkus = await SellerInventorySku.findAll({
-                limit: 3,
-                attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
-            });
-        }
+        // 获取SellerInventorySku表的前几条记录
+        const sampleSkus = await SellerInventorySku.findAll({
+            limit: 3,
+            attributes: ['skuid', 'parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
+        });
         
-        // 测试查询特定SKU - 明确指定字段避免主键问题
+        // 测试查询特定SKU
         const testSku = 'XB362D1';
         let testSkuResult;
         try {
             testSkuResult = await SellerInventorySku.findOne({
-                where: { child_sku: testSku },
-                attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box'],
-                raw: true // 返回原始数据，避免Sequelize实例问题
+                where: { child_sku: testSku }
             });
         } catch (error) {
-            console.error('查询XB362D1失败:', error);
             testSkuResult = { error: error.message };
         }
         
@@ -576,16 +564,14 @@ router.post('/validate-sku', async (req, res) => {
             });
         }
         
-        // 查询SKU信息 - 明确指定字段避免主键问题
+        // 查询SKU信息
         console.log('开始查询SKU:', sku);
         const skuInfo = await SellerInventorySku.findOne({
             where: {
                 child_sku: sku
-            },
-            attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box'],
-            raw: true // 返回原始数据
+            }
         });
-        console.log('查询结果:', skuInfo ? '找到SKU' : '未找到SKU', skuInfo);
+        console.log('查询结果:', skuInfo ? '找到SKU' : '未找到SKU');
         
         if (!skuInfo) {
             return res.json({
@@ -598,47 +584,21 @@ router.post('/validate-sku', async (req, res) => {
             });
         }
         
-        // 简化逻辑：检查qty_per_box字段 (skuInfo现在是原始对象)
-        let qtyPerBox = null;
-        let hasQtyPerBoxField = false;
-        
-        try {
-            // 直接从原始对象访问qty_per_box字段
-            if ('qty_per_box' in skuInfo && skuInfo.qty_per_box !== undefined) {
-                qtyPerBox = skuInfo.qty_per_box;
-                hasQtyPerBoxField = true;
-                console.log('找到qty_per_box字段，值为:', qtyPerBox);
-            } else {
-                console.log('qty_per_box字段不存在或为undefined');
-            }
-        } catch (error) {
-            console.log('qty_per_box字段访问异常:', error.message);
-        }
-        
-        // 如果字段不存在或没有值，提示用户补充
-        if (!hasQtyPerBoxField || !qtyPerBox || qtyPerBox <= 0) {
-            return res.json({
-                code: 3,
-                message: `SKU: ${sku} 缺少单箱产品数量信息，请补充`,
-                data: {
-                    sku: sku,
-                    exists: true,
-                    hasQtyPerBox: false,
-                    hasQtyPerBoxField: hasQtyPerBoxField,
-                    skuInfo: skuInfo // 现在是原始对象，可以直接返回
-                }
-            });
-        }
-        
-        res.json({
-            code: 0,
-            message: '验证成功',
+        // 由于qty_per_box字段不存在，直接提示用户补充单箱数量
+        return res.json({
+            code: 3,
+            message: `SKU: ${sku} 缺少单箱产品数量信息，请补充`,
             data: {
                 sku: sku,
                 exists: true,
-                hasQtyPerBox: true,
-                qtyPerBox: qtyPerBox,
-                skuInfo: skuInfo // 现在是原始对象，可以直接返回
+                hasQtyPerBox: false,
+                skuInfo: {
+                    skuid: skuInfo.skuid,
+                    parent_sku: skuInfo.parent_sku,
+                    child_sku: skuInfo.child_sku,
+                    sellercolorname: skuInfo.sellercolorname,
+                    sellersizename: skuInfo.sellersizename
+                }
             }
         });
         

@@ -2,10 +2,11 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
 const SellerInventorySku = sequelize.define('SellerInventorySku', {
-  id: {
+  skuid: {
     type: DataTypes.INTEGER,
     primaryKey: true,
-    autoIncrement: true
+    autoIncrement: true,
+    comment: '主键ID'
   },
   parent_sku: {
     type: DataTypes.STRING,
@@ -26,25 +27,10 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
     type: DataTypes.STRING,
     allowNull: true,
     comment: '卖家尺寸名称'
-  },
-  qty_per_box: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    comment: '单箱产品数量'
   }
 }, {
   tableName: 'sellerinventory_sku',
-  timestamps: false,
-  indexes: [
-    {
-      name: 'idx_child_sku',
-      fields: ['child_sku']
-    },
-    {
-      name: 'idx_parent_sku',
-      fields: ['parent_sku']
-    }
-  ]
+  timestamps: false
 });
 
 module.exports = SellerInventorySku; 
