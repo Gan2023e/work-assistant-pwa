@@ -10,7 +10,6 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
   child_sku: {
     type: DataTypes.STRING,
     allowNull: false,
-    primaryKey: true,
     comment: '子SKU'
   },
   sellercolorname: {

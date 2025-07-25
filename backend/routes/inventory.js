@@ -526,7 +526,9 @@ router.post('/validate-sku', async (req, res) => {
             });
         }
         
-        if (!skuInfo.qty_per_box || skuInfo.qty_per_box <= 0) {
+        // 检查qty_per_box字段是否存在且有值
+        const qtyPerBox = skuInfo.dataValues?.qty_per_box || skuInfo.qty_per_box;
+        if (!qtyPerBox || qtyPerBox <= 0) {
             return res.json({
                 code: 3,
                 message: `SKU: ${sku} 缺少单箱产品数量信息，请补充`,
@@ -546,7 +548,7 @@ router.post('/validate-sku', async (req, res) => {
                 sku: sku,
                 exists: true,
                 hasQtyPerBox: true,
-                qtyPerBox: skuInfo.qty_per_box,
+                qtyPerBox: qtyPerBox,
                 skuInfo: skuInfo
             }
         });
