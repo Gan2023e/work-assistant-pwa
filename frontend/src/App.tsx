@@ -126,7 +126,6 @@ const AppContent: React.FC = () => {
       key: 'inventory',
       children: [
         { label: <Link to="/inventory/management">本地库存管理</Link>, key: '/inventory/management' },
-        { label: <Link to="/inventory/create">库存入库</Link>, key: '/inventory/create' },
         { label: <Link to="/inventory/sku-mapping">SKU映射管理</Link>, key: '/inventory/sku-mapping' },
         { label: <Link to="/inventory/summary">旺季备货汇总</Link>, key: '/inventory/summary' },
         { label: <Link to="/inventory/supplier">厂家发货与付款</Link>, key: '/inventory/supplier' },

@@ -347,25 +347,7 @@ const InventoryCreate: React.FC = () => {
   return (
     <div style={{ padding: '24px' }}>
       <Card title="库存入库" style={{ marginBottom: '16px' }}>
-        {/* 打印服务状态 */}
-        <Alert
-          message={
-            <Space>
-              <span>打印服务状态:</span>
-              <Tag color={printServiceAvailable ? 'green' : 'red'}>
-                {printServiceAvailable ? '可用' : '不可用'}
-              </Tag>
-              {!printServiceAvailable && (
-                <span style={{ color: '#666' }}>
-                  如需打印功能，请启动本地打印服务
-                </span>
-              )}
-            </Space>
-          }
-          type={printServiceAvailable ? 'success' : 'warning'}
-          style={{ marginBottom: '16px' }}
-          showIcon
-        />
+
 
         {/* 入库类型选择 */}
         <div style={{ marginBottom: '24px' }}>

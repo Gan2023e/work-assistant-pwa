@@ -646,14 +646,10 @@ const InventoryManagement: React.FC = () => {
           <Tag color={type === '整箱' ? 'blue' : 'orange'}>{type}</Tag>
           {record.mix_box_num && (
             <div style={{ 
-              fontSize: '12px', 
+              fontSize: '14px', 
               color: '#1890ff',
-              fontWeight: 500,
-              marginTop: '4px',
-              padding: '2px 6px',
-              background: '#ffffff',
-              borderRadius: '4px',
-              border: '1px solid #d6e4ff'
+              fontWeight: 700,
+              marginTop: '4px'
             }}>
               {record.mix_box_num}
             </div>
@@ -976,6 +972,16 @@ const InventoryManagement: React.FC = () => {
             >
               重置
             </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                // 跳转到入库页面
+                window.location.href = '/inventory/create';
+              }}
+            >
+              新增库存
+            </Button>
           </Space>
         </div>
 
@@ -997,21 +1003,7 @@ const InventoryManagement: React.FC = () => {
               </Button>
             </Button.Group>
           </Space>
-          <Space>
-            <Tag color={printServiceAvailable ? 'green' : 'red'}>
-              打印服务: {printServiceAvailable ? '可用' : '不可用'}
-            </Tag>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                // 跳转到入库页面
-                window.location.href = '/inventory/create';
-              }}
-            >
-              新增库存
-            </Button>
-          </Space>
+          <div></div>
         </div>
 
         {/* 表格 */}
