@@ -282,7 +282,7 @@ const InventoryManagement: React.FC = () => {
         const mixedBoxPromises = Array.from(mixedBoxNumbers).map(async (boxNum) => {
           const boxParams = new URLSearchParams();
           boxParams.append('mix_box_num', boxNum);
-          boxParams.append('country', country);
+          // 移除country限制，因为混合箱号应该是全局唯一的
           boxParams.append('limit', '1000');
           
           console.log(`🔍 查询混合箱 ${boxNum} 的完整记录:`, boxParams.toString());
@@ -292,7 +292,10 @@ const InventoryManagement: React.FC = () => {
           console.log(`📦 混合箱 ${boxNum} 的记录:`, boxData);
           
           if (boxData.code === 0) {
-            return boxData.data.records;
+            // 过滤出指定国家的记录
+            const countryRecords = boxData.data.records.filter((record: any) => record.country === country);
+            console.log(`📦 混合箱 ${boxNum} 在${country}的记录数量:`, countryRecords.length);
+            return countryRecords;
           }
           return [];
         });
@@ -659,12 +662,12 @@ const InventoryManagement: React.FC = () => {
         }
         
         return (
-          <div>
+        <div>
             <div>{quantity} 件</div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
+          <div style={{ fontSize: '12px', color: '#666' }}>
               {count} 箱
-            </div>
           </div>
+        </div>
         );
       }
     },
@@ -682,12 +685,12 @@ const InventoryManagement: React.FC = () => {
         }
         
         return (
-          <div>
+        <div>
             <div>{quantity} 件</div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
+          <div style={{ fontSize: '12px', color: '#666' }}>
               {count} 个混合箱
-            </div>
           </div>
+        </div>
         );
       }
     },
@@ -897,40 +900,40 @@ const InventoryManagement: React.FC = () => {
 
         // 整箱的操作
         return (
-          <Space>
-            {record.status === '待出库' && (
-              <>
-                <Tooltip title="编辑">
+        <Space>
+          {record.status === '待出库' && (
+            <>
+              <Tooltip title="编辑">
+                <Button
+                  type="link"
+                  icon={<EditOutlined />}
+                  onClick={() => handleEdit(record)}
+                />
+              </Tooltip>
+              <Popconfirm
+                title="确定要删除这条记录吗？"
+                onConfirm={() => handleDelete(record.记录号)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Tooltip title="删除">
                   <Button
                     type="link"
-                    icon={<EditOutlined />}
-                    onClick={() => handleEdit(record)}
+                    danger
+                    icon={<DeleteOutlined />}
                   />
                 </Tooltip>
-                <Popconfirm
-                  title="确定要删除这条记录吗？"
-                  onConfirm={() => handleDelete(record.记录号)}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Tooltip title="删除">
-                    <Button
-                      type="link"
-                      danger
-                      icon={<DeleteOutlined />}
-                    />
-                  </Tooltip>
-                </Popconfirm>
-              </>
-            )}
-            <Tooltip title="打印标签">
-              <Button
-                type="link"
-                icon={<PrinterOutlined />}
-                onClick={() => handlePrint(record)}
-              />
-            </Tooltip>
-          </Space>
+              </Popconfirm>
+            </>
+          )}
+          <Tooltip title="打印标签">
+            <Button
+              type="link"
+              icon={<PrinterOutlined />}
+              onClick={() => handlePrint(record)}
+            />
+          </Tooltip>
+        </Space>
         );
       }
     }
@@ -1137,30 +1140,32 @@ const InventoryManagement: React.FC = () => {
         {/* SKU详情查看提示 */}
         {currentView === 'records' && viewingSkuDetails && (
           <Card size="small" style={{ marginBottom: '16px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f' }}>
-            <Space>
+          <Space>
               <EyeOutlined style={{ color: '#52c41a' }} />
               <span>正在查看 <strong>{viewingSkuDetails.sku}</strong> 在 <strong>{viewingSkuDetails.country}</strong> 相关混合箱的完整记录（包括整箱记录和混合箱中的所有SKU）</span>
-              <Button 
+            <Button
                 size="small" 
-                onClick={() => {
+              onClick={() => {
                   setViewingSkuDetails(null);
                   setCurrentView('summary');
                 }}
               >
                 返回汇总
               </Button>
-              <Button 
+                            <Button 
                 size="small" 
                 type="primary"
                 onClick={async () => {
-                  // 临时测试：直接查询混合箱1732688430的记录
+                  // 临时测试：直接查询混合箱1752666330的记录（更新为正确的混合箱号）
                   try {
-                    const response = await fetch('/api/inventory/records?mix_box_num=1732688430&limit=1000');
+                    const response = await fetch('/api/inventory/records?mix_box_num=1752666330&limit=1000');
                     const data = await response.json();
-                    console.log('🧪 直接查询混合箱1732688430的结果:', data);
+                    console.log('🧪 直接查询混合箱1752666330的结果:', data);
                     if (data.code === 0) {
-                      setRecordsData(data.data.records);
-                      message.success(`找到${data.data.records.length}条记录`);
+                      // 过滤美国的记录
+                      const countryRecords = data.data.records.filter((record: any) => record.country === viewingSkuDetails?.country);
+                      setRecordsData(countryRecords);
+                      message.success(`找到${countryRecords.length}条记录`);
                     }
                   } catch (error) {
                     console.error('🧪 直接查询失败:', error);
@@ -1169,32 +1174,32 @@ const InventoryManagement: React.FC = () => {
               >
                 测试直接查询
               </Button>
-            </Space>
+          </Space>
           </Card>
         )}
 
         {/* 表格 */}
         <div className="inventory-table-container">
-          {currentView === 'summary' ? (
-            <Table
-              columns={summaryColumns}
-              dataSource={summaryData}
-              loading={summaryLoading}
-              rowKey={(record) => `${record.sku}_${record.country}`}
-              pagination={{
-                ...pagination,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
-              }}
-              scroll={{ x: 1000 }}
-            />
-          ) : (
-            <Table
-              columns={recordsColumns}
-              dataSource={recordsData}
-              loading={loading}
-              rowKey="记录号"
+        {currentView === 'summary' ? (
+          <Table
+            columns={summaryColumns}
+            dataSource={summaryData}
+            loading={summaryLoading}
+            rowKey={(record) => `${record.sku}_${record.country}`}
+            pagination={{
+              ...pagination,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+            }}
+            scroll={{ x: 1000 }}
+          />
+        ) : (
+          <Table
+            columns={recordsColumns}
+            dataSource={recordsData}
+            loading={loading}
+            rowKey="记录号"
               tableLayout="fixed"
               size="middle"
               rowClassName={(record) => {
@@ -1214,18 +1219,18 @@ const InventoryManagement: React.FC = () => {
                 }
               })}
               pagination={viewingSkuDetails ? false : {
-                ...pagination,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-                onChange: (page, pageSize) => {
-                  setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
-                }
-              }}
+              ...pagination,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+              onChange: (page, pageSize) => {
+                setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
+              }
+            }}
               scroll={{ x: 'max-content' }}
               style={{ width: '100%' }}
-            />
-          )}
+          />
+        )}
         </div>
       </Card>
 

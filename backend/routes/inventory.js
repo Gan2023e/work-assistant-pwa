@@ -66,8 +66,22 @@ router.get('/records', async (req, res) => {
         const whereCondition = {};
         if (sku) whereCondition.sku = { [Op.like]: `%${sku}%` };
         if (country) whereCondition.country = country;
-        if (mix_box_num) whereCondition.mix_box_num = mix_box_num;
-        if (box_type) {
+        
+        // 处理mix_box_num - 尝试字符串和数字两种类型
+        if (mix_box_num) {
+            console.log('\x1b[35m%s\x1b[0m', '🔍 原始mix_box_num:', mix_box_num, '类型:', typeof mix_box_num);
+            // 尝试多种匹配方式
+            whereCondition.mix_box_num = {
+                [Op.or]: [
+                    mix_box_num,           // 字符串形式
+                    parseInt(mix_box_num), // 数字形式
+                    mix_box_num.toString() // 确保是字符串
+                ]
+            };
+            console.log('\x1b[35m%s\x1b[0m', '🔍 构建的mix_box_num条件:', whereCondition.mix_box_num);
+        }
+        
+        if (box_type && !mix_box_num) { // 只有在没有指定mix_box_num时才处理box_type
             if (box_type === '整箱') {
                 whereCondition.mix_box_num = { [Op.is]: null };
             } else if (box_type === '混合箱') {
@@ -80,6 +94,8 @@ router.get('/records', async (req, res) => {
         
         const offset = (page - 1) * limit;
         
+        console.log('\x1b[35m%s\x1b[0m', '🔍 执行数据库查询，最终条件:', JSON.stringify(whereCondition, null, 2));
+        
         const { count, rows } = await LocalBox.findAndCountAll({
             where: whereCondition,
             order: [['last_updated_at', 'DESC']],
@@ -88,6 +104,17 @@ router.get('/records', async (req, res) => {
         });
         
         console.log('\x1b[33m%s\x1b[0m', `📋 查询到 ${count} 条库存记录`);
+        
+        // 如果是查询特定混合箱号，添加额外调试信息
+        if (mix_box_num) {
+            console.log('\x1b[35m%s\x1b[0m', '🔍 混合箱查询结果样本:', rows.slice(0, 3).map(r => ({
+                id: r.记录号,
+                sku: r.sku,
+                mix_box_num: r.mix_box_num,
+                mix_box_num_type: typeof r.mix_box_num,
+                country: r.country
+            })));
+        }
         
         res.json({
             code: 0,
