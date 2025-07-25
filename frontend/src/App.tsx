@@ -22,7 +22,7 @@ import Summary from './pages/Inventory/Summary';
 import Supplier from './pages/Inventory/Supplier';
 import FbaInventory from './pages/Inventory/FbaInventory';
 import InventoryManagement from './pages/Inventory/InventoryManagement';
-import InventoryCreate from './pages/Inventory/InventoryCreate';
+
 import SalaryPage from './pages/Salary/SalaryPage';
 import ProfitPage from './pages/Profit/ProfitPage';
 import UserManagePage from './pages/User/UserManagePage';
@@ -253,11 +253,7 @@ const AppContent: React.FC = () => {
               <InventoryManagement />
             </ProtectedRoute>
           } />
-          <Route path="/inventory/create" element={
-            <ProtectedRoute>
-              <InventoryCreate />
-            </ProtectedRoute>
-          } />
+
           <Route path="/inventory/sku-mapping" element={
             <ProtectedRoute>
               <SkuMapping />

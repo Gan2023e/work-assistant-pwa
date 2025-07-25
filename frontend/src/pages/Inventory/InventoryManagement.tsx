@@ -5,6 +5,7 @@ import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
+import InventoryCreateModal from '../../components/InventoryCreateModal';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -145,6 +146,9 @@ const InventoryManagement: React.FC = () => {
 
   // 查看SKU详情的状态
   const [viewingSkuDetails, setViewingSkuDetails] = useState<{sku: string, country: string} | null>(null);
+
+  // 库存入库Modal状态
+  const [createModalVisible, setCreateModalVisible] = useState(false);
 
   // 打印状态
   const [printServiceAvailable, setPrintServiceAvailable] = useState(false);
@@ -1080,8 +1084,7 @@ const InventoryManagement: React.FC = () => {
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => {
-                // 跳转到入库页面
-                window.location.href = '/inventory/create';
+                setCreateModalVisible(true);
               }}
             >
               新增库存
@@ -1329,6 +1332,22 @@ const InventoryManagement: React.FC = () => {
           </Form.List>
         </Form>
       </Modal>
+
+      {/* 库存入库Modal */}
+      <InventoryCreateModal
+        visible={createModalVisible}
+        onCancel={() => setCreateModalVisible(false)}
+        onSuccess={() => {
+          setCreateModalVisible(false);
+          // 刷新数据
+          if (currentView === 'summary') {
+            loadSummaryData();
+          } else {
+            loadRecordsData();
+          }
+          message.success('入库成功，数据已刷新');
+        }}
+      />
     </div>
   );
 };
