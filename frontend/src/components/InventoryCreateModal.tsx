@@ -3,6 +3,7 @@ import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, Div
 import { SaveOutlined, UndoOutlined, FileTextOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../utils/printManager';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config/api';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -110,9 +111,12 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   // 验证SKU并获取单箱数量
   const validateSku = async (sku: string) => {
     try {
-      const response = await fetch('/api/inventory/validate-sku', {
+      const response = await fetch(`${API_BASE_URL}/api/inventory/validate-sku`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        },
         body: JSON.stringify({ sku })
       });
       
@@ -139,9 +143,12 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   // 更新SKU的单箱数量
   const updateQtyPerBox = async (sku: string, qtyPerBox: number) => {
     try {
-      const response = await fetch('/api/inventory/update-qty-per-box', {
+      const response = await fetch(`${API_BASE_URL}/api/inventory/update-qty-per-box`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        },
         body: JSON.stringify({ sku, qtyPerBox })
       });
       
@@ -290,9 +297,12 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
       }));
 
       // 调用API创建库存记录
-      const response = await fetch('/api/inventory/create', {
+      const response = await fetch(`${API_BASE_URL}/api/inventory/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        },
         body: JSON.stringify({
           records: records
         })
@@ -443,14 +453,17 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         allRecords.push(...boxRecords);
       }
 
-             // 调用API创建混合箱记录
-       const response = await fetch('/api/inventory/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+                    // 调用API创建混合箱记录
+       const response = await fetch(`${API_BASE_URL}/api/inventory/create`, {
+         method: 'POST',
+         headers: { 
+           'Content-Type': 'application/json',
+           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+         },
+         body: JSON.stringify({
            records: allRecords
-        })
-      });
+         })
+       });
 
       const data = await response.json();
       if (data.code === 0) {
@@ -618,7 +631,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                 </Col>
               </Row>
 
-                              <Form.Item
+                <Form.Item
                 label="SKU及箱数"
                 name="skuInput"
                 rules={[{ required: true, message: '请输入SKU及箱数' }]}
@@ -629,7 +642,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   placeholder="示例：&#10;XB362D1 12（表示XB362D1产品12箱）&#10;MK048A4 8（表示MK048A4产品8箱）&#10;..."
                   style={{ fontFamily: 'monospace' }}
                 />
-              </Form.Item>
+                </Form.Item>
 
               <Form.Item
                 label="备注"
