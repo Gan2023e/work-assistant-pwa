@@ -112,6 +112,42 @@ export class PrintManager {
     }
 
     /**
+     * 在一个页面中打印多个标签
+     */
+    async printMultipleLabels(labelDataList: LabelData[], options: PrintOptions = {}): Promise<boolean> {
+        try {
+            const multiLabelHTML = this.generateMultiLabelHTML(labelDataList);
+            
+            const printWindow = window.open('', '_blank', 'width=600,height=800');
+            if (!printWindow) {
+                console.error('无法打开打印窗口');
+                return false;
+            }
+
+            printWindow.document.write(multiLabelHTML);
+            printWindow.document.close();
+
+            // 等待内容加载完成后打印
+            printWindow.onload = () => {
+                setTimeout(() => {
+                    printWindow.print();
+                    if (options.autoClose !== false) {
+                        setTimeout(() => {
+                            printWindow.close();
+                        }, 500);
+                    }
+                }, 500);
+            };
+
+            console.log(`✅ 已打开包含 ${labelDataList.length} 个标签的打印窗口`);
+            return true;
+        } catch (error) {
+            console.error('批量打印失败:', error);
+            return false;
+        }
+    }
+
+    /**
      * 测试打印
      */
     async testPrint(): Promise<boolean> {
@@ -297,6 +333,149 @@ export class PrintManager {
         // 页面加载后自动调整
         window.onload = function() {
             console.log('📄 标签页面已加载 - 60x40mm格式');
+        };
+    </script>
+</body>
+</html>
+        `.trim();
+    }
+
+    /**
+     * 生成包含多个标签的HTML页面
+     */
+    private generateMultiLabelHTML(labelDataList: LabelData[]): string {
+        // 生成所有标签的内容
+        const labelContents = labelDataList.map(labelData => {
+            // 处理混合箱显示逻辑
+            const isMultipleSku = labelData.boxType === '混合箱';
+            
+            // 生成SKU和数量信息
+            let skuContent = '';
+            if (isMultipleSku && labelData.qrData) {
+                try {
+                    const qrObj = JSON.parse(labelData.qrData);
+                    if (qrObj.skus && Array.isArray(qrObj.skus)) {
+                        // 混合箱：显示所有SKU
+                        skuContent = qrObj.skus.map((item: any) => 
+                            `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+                        ).join('');
+                    } else {
+                        // 备用显示
+                        skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
+                    }
+                } catch (error) {
+                    // 解析失败时的备用显示
+                    skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
+                }
+            } else {
+                // 整箱：显示单个SKU
+                const boxInfo = labelData.boxes > 1 ? `/${labelData.boxes}箱` : '';
+                skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件${boxInfo}</div>`;
+            }
+
+            return `
+                <div class="label-container">
+                    <!-- 目的国 - 最上方加粗显示 -->
+                    <div class="country">${labelData.country}</div>
+                    
+                    <!-- SKU及数量信息 -->
+                    <div class="sku-section">
+                        ${skuContent}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>物流标签批量打印 - ${labelDataList.length}张</title>
+    <style>
+        @page { 
+            size: auto;
+            margin: 5mm; 
+        }
+        @media print {
+            body { 
+                font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+                margin: 0;
+                padding: 0;
+                color: black;
+                background: white;
+            }
+            .no-print { display: none; }
+        }
+        body { 
+            font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+            margin: 10px;
+            padding: 0;
+            line-height: 1.2;
+        }
+        
+        .label-container {
+            width: 60mm;
+            height: 40mm;
+            border: 1px solid #ccc;
+            margin-bottom: 5mm;
+            padding: 2mm;
+            box-sizing: border-box;
+            page-break-inside: avoid;
+            display: inline-block;
+            vertical-align: top;
+            margin-right: 5mm;
+        }
+        
+        .country {
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 1px solid #000;
+            padding-bottom: 2px;
+            margin-bottom: 4px;
+        }
+        
+        .sku-section {
+            font-size: 10px;
+            text-align: center;
+        }
+        
+        .sku-item {
+            margin: 2px 0;
+            font-weight: bold;
+        }
+        
+        /* 每行显示3个标签 */
+        .label-container:nth-child(3n) {
+            margin-right: 0;
+        }
+        
+        /* 每3个标签后换行 */
+        .label-container:nth-child(3n):after {
+            content: "";
+            display: block;
+            width: 100%;
+            height: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center; margin-bottom: 10px; padding: 10px; background: #f0f0f0;">
+        <h3>物流标签批量打印</h3>
+        <p>共 ${labelDataList.length} 张标签，建议使用热敏纸打印机</p>
+        <button onclick="window.print()" style="padding: 5px 15px; margin-right: 10px;">打印</button>
+        <button onclick="window.close()" style="padding: 5px 15px;">关闭</button>
+    </div>
+    
+    ${labelContents}
+    
+    <script>
+        console.log('🖨️ 批量打印模式：共 ${labelDataList.length} 张标签');
+        
+        // 页面加载后自动调整
+        window.onload = function() {
+            console.log('📄 批量标签页面已加载');
         };
     </script>
 </body>

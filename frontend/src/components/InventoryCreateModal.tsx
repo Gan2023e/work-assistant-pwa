@@ -334,9 +334,9 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         // 执行打印功能 - 整箱入库需要为每个SKU的每个箱子单独打印
         if (data.data.records && data.data.records.length > 0) {
           try {
-            let totalLabels = 0;
+            const allLabels: LabelData[] = [];
             
-            // 为每个SKU的每个箱子单独打印外箱单
+            // 为每个SKU的每个箱子创建标签数据
             for (const record of (data.data.records as any[])) {
               const totalBoxes = record.total_boxes;
               const singleBoxQuantity = Math.floor(record.total_quantity / totalBoxes);
@@ -355,12 +355,17 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   createTime: record.time,
                   barcode: `${record.记录号}_${boxIndex}`
                 };
-                await printManager.printLabel(labelData);
-                totalLabels++;
+                allLabels.push(labelData);
               }
             }
             
-            message.success(`打印任务已发送，共 ${totalLabels} 张外箱单`);
+            // 一次性打印所有标签
+            const success = await printManager.printMultipleLabels(allLabels);
+            if (success) {
+              message.success(`打印任务已发送，共 ${allLabels.length} 张外箱单`);
+            } else {
+              message.warning('打印失败，但入库成功');
+            }
           } catch (error) {
             message.warning('打印失败，但入库成功');
             console.error('打印错误:', error);
@@ -511,7 +516,9 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
               return groups;
             }, {});
             
-            // 为每个混合箱打印一个标签
+            const allLabels: LabelData[] = [];
+            
+            // 为每个混合箱创建标签数据
             for (const [mixBoxNum, records] of Object.entries(mixedBoxGroups)) {
               const recordList = records as any[];
               const firstRecord = recordList[0];
@@ -538,9 +545,16 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   country: firstRecord.country
                 })
               };
-              await printManager.printLabel(labelData);
+              allLabels.push(labelData);
             }
-            message.success('打印任务已发送');
+            
+            // 一次性打印所有混合箱标签
+            const success = await printManager.printMultipleLabels(allLabels);
+            if (success) {
+              message.success(`打印任务已发送，共 ${allLabels.length} 张混合箱外箱单`);
+            } else {
+              message.warning('打印失败，但入库成功');
+            }
           } catch (error) {
             message.warning('打印失败，但入库成功');
             console.error('打印错误:', error);
