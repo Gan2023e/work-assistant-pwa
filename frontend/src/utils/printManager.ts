@@ -473,7 +473,7 @@ export class PrintManager {
         }
         
         .country {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
             text-align: center;
             border-bottom: 1px solid #000;
@@ -497,7 +497,7 @@ export class PrintManager {
         /* 打印时的精确控制 */
         @media print {
             .country {
-                font-size: 14px !important;
+                font-size: 18px !important;
                 font-weight: bold !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
@@ -507,7 +507,7 @@ export class PrintManager {
             }
             
             .sku-section {
-                font-size: 12px !important;
+                font-size: 14px !important;
                 text-align: center !important;
                 font-weight: bold !important;
                 margin: 1mm 1mm 0 1mm !important;
