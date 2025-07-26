@@ -35,7 +35,8 @@ import {
   BoxPlotOutlined,
   EditOutlined,
   HistoryOutlined,
-  SearchOutlined
+  SearchOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -72,6 +73,26 @@ const customStyles = `
   }
   .sufficient-row:hover {
     background-color: #f0f9ff !important;
+  }
+  .mixed-box-row {
+    background-color: #fff7e6 !important;
+  }
+  .mixed-box-row:hover {
+    background-color: #ffe7ba !important;
+  }
+  .shipped-row {
+    background-color: #f6ffed !important;
+    opacity: 0.7;
+  }
+  .shipped-row:hover {
+    background-color: #e6f7ff !important;
+  }
+  .cancelled-row {
+    background-color: #fff1f0 !important;
+    opacity: 0.7;
+  }
+  .cancelled-row:hover {
+    background-color: #ffe4e6 !important;
   }
 `;
 
@@ -264,6 +285,42 @@ interface OutboundItem {
   original_mix_box_num?: string;
   order_item_id?: number;
   need_num?: string;
+}
+
+// 新增：本地库存汇总接口（参考库存管理页面）
+interface LocalInventorySummary {
+  sku: string;
+  country: string;
+  whole_box_quantity: number;
+  whole_box_count: number;
+  mixed_box_quantity: number;
+  mixed_box_count: number;
+  total_quantity: number;
+  earliest_inbound: string;
+  latest_update: string;
+  pending_outbound_quantity: number; // 待出库数量
+  pending_outbound_boxes: number; // 待出库箱数
+}
+
+// 新增：待出库记录接口
+interface PendingOutboundRecord {
+  记录号: string;
+  sku: string;
+  total_quantity: number;
+  total_boxes: number;
+  country: string;
+  操作员: string;
+  打包员: string;
+  mix_box_num?: string;
+  marketPlace: string;
+  status: '待出库' | '已出库' | '已取消';
+  box_type: '整箱' | '混合箱';
+  time: string;
+  last_updated_at: string;
+  shipped_at?: string;
+  shipment_id?: number;
+  remark?: string;
+  pre_type?: '旺季备货' | '平时备货';
 }
 
 const ShippingPage: React.FC = () => {
@@ -1020,21 +1077,17 @@ const ShippingPage: React.FC = () => {
 
 
 
-  // 获取合并数据（全部显示，不分页）
-  const fetchMergedData = async (status = '待发货') => {
+  // 获取本地库存汇总数据（待出库记录）
+  const fetchLocalInventorySummary = async () => {
     setMergedLoading(true);
     try {
-      // 如果选择了特定的状态，获取所有数据然后在前端筛选
-      // 如果选择的是空或者待发货，使用后端筛选优化性能
-      const useBackendFilter = !status || status === '待发货';
-      const queryParams = new URLSearchParams({
-        ...(useBackendFilter && status && { status }),
-        limit: '1000' // 设置较大的限制来获取所有数据
-      });
+      const params = new URLSearchParams();
+      if (selectedCountry) params.append('country', selectedCountry);
+      if (searchKeyword.trim()) params.append('sku', searchKeyword.trim());
+      if (boxTypeFilter) params.append('box_type', boxTypeFilter);
+      if (inventoryStatusFilter) params.append('status', inventoryStatusFilter);
       
-
-      
-      const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
+      const response = await fetch(`${API_BASE_URL}/api/inventory/pending?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1048,23 +1101,56 @@ const ShippingPage: React.FC = () => {
       
       const result = await response.json();
       
-      
       if (result.code === 0) {
-        setMergedData(result.data.list || []);
-        
-        // 检查是否有未映射的库存
-        const unmappedItems = result.data.unmapped_inventory || [];
-        setUnmappedInventory(unmappedItems);
-        
-        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
+        setLocalInventorySummary(result.data.inventory || []);
+        message.success(`加载了 ${result.data.inventory?.length || 0} 个SKU的库存汇总`);
       } else {
-        message.error(result.message || '获取合并数据失败');
+        message.error(result.message || '获取库存汇总失败');
       }
     } catch (error) {
-      console.error('获取合并数据失败:', error);
-      message.error(`获取合并数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      // 设置空数据以防止界面异常
-      setMergedData([]);
+      console.error('获取库存汇总失败:', error);
+      message.error(`获取库存汇总失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setLocalInventorySummary([]);
+    } finally {
+      setMergedLoading(false);
+    }
+  };
+
+  // 获取待出库记录详情
+  const fetchPendingOutboundRecords = async () => {
+    setMergedLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('status', '待出库'); // 只获取待出库状态的记录
+      if (selectedCountry) params.append('country', selectedCountry);
+      if (searchKeyword.trim()) params.append('sku', searchKeyword.trim());
+      if (boxTypeFilter) params.append('box_type', boxTypeFilter);
+      params.append('limit', '1000'); // 获取更多记录
+      
+      const response = await fetch(`${API_BASE_URL}/api/inventory/records?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setPendingOutboundRecords(result.data.records || []);
+        message.success(`加载了 ${result.data.records?.length || 0} 条待出库记录`);
+      } else {
+        message.error(result.message || '获取待出库记录失败');
+      }
+    } catch (error) {
+      console.error('获取待出库记录失败:', error);
+      message.error(`获取待出库记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setPendingOutboundRecords([]);
     } finally {
       setMergedLoading(false);
     }
@@ -1098,12 +1184,16 @@ const ShippingPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchMergedData(); // 默认获取待发货数据
+    if (currentView === 'summary') {
+      fetchLocalInventorySummary(); // 获取库存汇总数据
+    } else {
+      fetchPendingOutboundRecords(); // 获取待出库记录详情
+    }
     fetchCountryInventory(); // 同时获取国家库存数据
     fetchAmazonTemplateConfig(); // 获取亚马逊模板配置
     fetchPackingListConfig(); // 获取装箱表配置
     fetchLogisticsInvoiceConfig(); // 获取物流商发票模板配置
-  }, []);
+  }, [currentView, selectedCountry, searchKeyword, boxTypeFilter, inventoryStatusFilter]);
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
@@ -1150,7 +1240,245 @@ const ShippingPage: React.FC = () => {
     console.log('排序变更:', sorter);
   };
 
-  // 合并数据表格列定义（重新排序）
+  // 库存汇总表格列定义（参考库存管理页面）
+  const localInventorySummaryColumns: ColumnsType<LocalInventorySummary> = [
+    {
+      title: 'SKU',
+      dataIndex: 'sku',
+      key: 'sku',
+      fixed: 'left',
+      width: 150,
+      align: 'center'
+    },
+    {
+      title: '国家',
+      dataIndex: 'country',
+      key: 'country',
+      width: 80,
+      align: 'center'
+    },
+    {
+      title: '整箱库存',
+      key: 'whole_box',
+      width: 120,
+      align: 'center',
+      render: (_, record) => {
+        const quantity = Number(record.whole_box_quantity) || 0;
+        const count = Number(record.whole_box_count) || 0;
+        
+        if (quantity === 0 && count === 0) {
+          return <Text type="secondary">-</Text>;
+        }
+        
+        return (
+          <div>
+            <div><Text strong>{quantity} 件</Text></div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              📦 {count} 箱
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      title: '混合箱库存',
+      key: 'mixed_box',
+      width: 120,
+      align: 'center',
+      render: (_, record) => {
+        const quantity = Number(record.mixed_box_quantity) || 0;
+        const count = Number(record.mixed_box_count) || 0;
+        
+        if (quantity === 0 && count === 0) {
+          return <Text type="secondary">-</Text>;
+        }
+        
+        return (
+          <div>
+            <div><Text strong>{quantity} 件</Text></div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              📋 {count} 个混合箱
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      title: '总库存',
+      key: 'total',
+      width: 100,
+      align: 'center',
+      render: (_, record) => {
+        const wholeBoxQty = Number(record.whole_box_quantity) || 0;
+        const mixedBoxQty = Number(record.mixed_box_quantity) || 0;
+        const total = wholeBoxQty + mixedBoxQty;
+        
+        return <Text strong style={{ color: '#52c41a' }}>{total} 件</Text>;
+      }
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'earliest_inbound',
+      key: 'earliest_inbound',
+      width: 120,
+      align: 'center',
+      render: (date) => date ? new Date(date).toLocaleString('zh-CN') : '-'
+    },
+    {
+      title: '最后更新',
+      dataIndex: 'latest_update',
+      key: 'latest_update',
+      width: 120,
+      align: 'center',
+      render: (date) => date ? new Date(date).toLocaleString('zh-CN') : '-'
+    }
+  ];
+
+  // 待出库记录表格列定义
+  const pendingOutboundColumns: ColumnsType<PendingOutboundRecord> = [
+    {
+      title: '箱型',
+      dataIndex: 'box_type',
+      key: 'box_type',
+      fixed: 'left',
+      width: 120,
+      align: 'center',
+      render: (type, record) => (
+        <div>
+          <Tag color={type === '整箱' ? 'blue' : 'orange'}>
+            {type === '整箱' ? '📦' : '📋'} {type}
+          </Tag>
+          {record.mix_box_num && (
+            <div style={{ 
+              fontSize: '12px', 
+              color: '#1890ff',
+              fontWeight: 600,
+              marginTop: '4px'
+            }}>
+              {record.mix_box_num}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      title: '记录号',
+      dataIndex: '记录号',
+      key: '记录号',
+      width: 120,
+      align: 'center',
+      ellipsis: true
+    },
+    {
+      title: 'SKU',
+      dataIndex: 'sku',
+      key: 'sku',
+      width: 150,
+      align: 'center',
+      ellipsis: true
+    },
+    {
+      title: '数量/箱数',
+      key: 'quantity',
+      width: 100,
+      align: 'center',
+      render: (_, record) => {
+        if (record.box_type === '混合箱') {
+          return <Text strong>{record.total_quantity} 件</Text>;
+        }
+        return (
+          <div>
+            <Text strong>{record.total_quantity} 件</Text>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              {record.total_boxes} 箱
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      title: '国家',
+      dataIndex: 'country',
+      key: 'country',
+      width: 80,
+      align: 'center'
+    },
+    {
+      title: '平台',
+      dataIndex: 'marketPlace',
+      key: 'marketPlace',
+      width: 90,
+      align: 'center'
+    },
+    {
+      title: '库存状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 90,
+      align: 'center',
+      render: (status: string) => {
+        const statusConfig: Record<string, { color: string; text: string }> = {
+          '待出库': { color: 'blue', text: '待出库' },
+          '已出库': { color: 'green', text: '已出库' },
+          '已取消': { color: 'red', text: '已取消' }
+        };
+        const config = statusConfig[status] || statusConfig['待出库'];
+        return <Tag color={config.color}>{config.text}</Tag>;
+      }
+    },
+    {
+      title: '备货类型',
+      dataIndex: 'pre_type',
+      key: 'pre_type',
+      width: 90,
+      align: 'center',
+      render: (type: string) => (
+        <Tag color={type === '旺季备货' ? 'red' : 'blue'}>
+          {type || '平时备货'}
+        </Tag>
+      )
+    },
+    {
+      title: '操作员',
+      dataIndex: '操作员',
+      key: '操作员',
+      width: 80,
+      align: 'center'
+    },
+    {
+      title: '打包员',
+      dataIndex: '打包员',
+      key: '打包员',
+      width: 80,
+      align: 'center'
+    },
+    {
+      title: '入库时间',
+      dataIndex: 'time',
+      key: 'time',
+      width: 150,
+      align: 'center',
+      render: (date: string) => date ? new Date(date).toLocaleString('zh-CN') : '-'
+    },
+    {
+      title: '最后更新',
+      dataIndex: 'last_updated_at',
+      key: 'last_updated_at',
+      width: 150,
+      align: 'center',
+      render: (date: string) => date ? new Date(date).toLocaleString('zh-CN') : '-'
+    },
+    {
+      title: '出库时间',
+      dataIndex: 'shipped_at',
+      key: 'shipped_at',
+      width: 150,
+      align: 'center',
+      render: (date: string) => date ? new Date(date).toLocaleString('zh-CN') : '-'
+    }
+  ];
+
+  // 原有的合并数据表格列定义（保留用于兼容）
   const mergedColumns: ColumnsType<MergedShippingData> = [
     {
       title: '需求单号',
@@ -1758,7 +2086,11 @@ const ShippingPage: React.FC = () => {
         setMappingModalVisible(false);
         mappingForm.resetFields();
         // 重新加载数据
-        fetchMergedData();
+        if (currentView === 'summary') {
+          fetchLocalInventorySummary();
+        } else {
+          fetchPendingOutboundRecords();
+        }
       } else {
         message.error(result.message || '创建映射失败');
       }
@@ -1789,7 +2121,11 @@ const ShippingPage: React.FC = () => {
         message.success('添加成功');
         setAddModalVisible(false);
         addForm.resetFields();
-        fetchMergedData();
+        if (currentView === 'summary') {
+          fetchLocalInventorySummary();
+        } else {
+          fetchPendingOutboundRecords();
+        }
       } else {
         message.error(result.message || '添加失败');
       }
@@ -1803,11 +2139,34 @@ const ShippingPage: React.FC = () => {
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [orderModalNeedNum, setOrderModalNeedNum] = useState<string | null>(null);
 
+  // 新增：本地库存汇总相关状态
+  const [localInventorySummary, setLocalInventorySummary] = useState<LocalInventorySummary[]>([]);
+  const [pendingOutboundRecords, setPendingOutboundRecords] = useState<PendingOutboundRecord[]>([]);
+  const [currentView, setCurrentView] = useState<'summary' | 'records'>('summary');
+
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>发货操作</Title>
       
       <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col>
+          <Button.Group>
+            <Button
+              type={currentView === 'summary' ? 'primary' : 'default'}
+              icon={<BarChartOutlined />}
+              onClick={() => setCurrentView('summary')}
+            >
+              库存汇总
+            </Button>
+            <Button
+              type={currentView === 'records' ? 'primary' : 'default'}
+              icon={<BoxPlotOutlined />}
+              onClick={() => setCurrentView('records')}
+            >
+              记录详情
+            </Button>
+          </Button.Group>
+        </Col>
         <Col>
           <Button
             type="primary"
@@ -1822,10 +2181,11 @@ const ShippingPage: React.FC = () => {
             type="primary"
             icon={<SendOutlined />}
             onClick={handleStartShipping}
-            disabled={selectedRowKeys.length === 0}
+            disabled={selectedRowKeys.length === 0 || currentView !== 'records'}
             loading={shippingLoading}
           >
             批量发货 ({selectedRowKeys.length})
+            {currentView === 'summary' && <Text style={{ marginLeft: 4, fontSize: '12px' }}>(请切换到记录详情)</Text>}
           </Button>
         </Col>
         <Col>
@@ -1950,7 +2310,7 @@ const ShippingPage: React.FC = () => {
             title={
               <span>
                 <BarChartOutlined style={{ marginRight: 8 }} />
-                发货需求统计 
+                待出库库存统计 
                 {selectedCountry && (
                   <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
                     (当前国家: {selectedCountry})
@@ -1966,135 +2326,199 @@ const ShippingPage: React.FC = () => {
             style={{ marginBottom: 16 }}
           >
             {(() => {
-              // 根据选中的国家筛选数据
-              const filteredData = selectedCountry 
-                ? mergedData.filter((item: MergedShippingData) => item.country === selectedCountry)
-                : mergedData;
-              
-              return (
-                <Row gutter={16}>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'needs' ? '' : 'needs';
-                        setFilterType(newFilterType);
-                      }}
-                    >
+              // 根据当前视图和选中的国家筛选数据
+              let filteredData;
+              if (currentView === 'summary') {
+                filteredData = selectedCountry 
+                  ? localInventorySummary.filter((item: LocalInventorySummary) => item.country === selectedCountry)
+                  : localInventorySummary;
+                
+                return (
+                  <Row gutter={16}>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          const newFilterType = filterType === 'sku-summary' ? '' : 'sku-summary';
+                          setFilterType(newFilterType);
+                        }}
+                      >
+                        <Statistic
+                          title="待出库SKU数"
+                          value={filteredData.length}
+                          prefix={<PlusOutlined />}
+                          valueStyle={{ color: filterType === 'sku-summary' ? '#1677ff' : '#3f8600' }}
+                        />
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          const newFilterType = filterType === 'whole-box' ? '' : 'whole-box';
+                          setFilterType(newFilterType);
+                        }}
+                      >
+                        <Statistic
+                          title="整箱库存"
+                          value={filteredData.reduce((sum: number, item: LocalInventorySummary) => sum + item.whole_box_quantity, 0)}
+                          suffix="件"
+                          valueStyle={{ color: filterType === 'whole-box' ? '#1677ff' : '#1677ff' }}
+                          prefix="📦"
+                        />
+                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                          共{filteredData.reduce((sum: number, item: LocalInventorySummary) => sum + item.whole_box_count, 0)}箱
+                        </div>
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          const newFilterType = filterType === 'mixed-box' ? '' : 'mixed-box';
+                          setFilterType(newFilterType);
+                        }}
+                      >
+                        <Statistic
+                          title="混合箱库存"
+                          value={filteredData.reduce((sum: number, item: LocalInventorySummary) => sum + item.mixed_box_quantity, 0)}
+                          suffix="件"
+                          valueStyle={{ color: filterType === 'mixed-box' ? '#1677ff' : '#fa8c16' }}
+                          prefix="📋"
+                        />
+                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                          共{filteredData.reduce((sum: number, item: LocalInventorySummary) => sum + item.mixed_box_count, 0)}个混合箱
+                        </div>
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          const newFilterType = filterType === 'total-inventory' ? '' : 'total-inventory';
+                          setFilterType(newFilterType);
+                        }}
+                      >
+                        <Statistic
+                          title="总库存"
+                          value={filteredData.reduce((sum: number, item: LocalInventorySummary) => sum + item.total_quantity, 0)}
+                          suffix="件"
+                          valueStyle={{ color: filterType === 'total-inventory' ? '#1677ff' : '#52c41a' }}
+                          prefix={<CheckOutlined />}
+                        />
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          setCurrentView('records');
+                        }}
+                      >
+                        <Statistic
+                          title="查看详情"
+                          value="点击查看"
+                          valueStyle={{ color: '#722ed1', fontSize: '14px' }}
+                          prefix={<EyeOutlined />}
+                        />
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          setFilterType('');
+                        }}
+                      >
+                        <Statistic
+                          title="清除筛选"
+                          value="全部显示"
+                          valueStyle={{ color: filterType === '' ? '#1677ff' : '#666', fontSize: '14px' }}
+                        />
+                      </div>
+                    </Col>
+                  </Row>
+                );
+              } else {
+                // 记录详情视图的统计
+                const filteredRecords = selectedCountry 
+                  ? pendingOutboundRecords.filter((item: PendingOutboundRecord) => item.country === selectedCountry)
+                  : pendingOutboundRecords;
+                
+                return (
+                  <Row gutter={16}>
+                    <Col span={4}>
                       <Statistic
-                        title="发货需求数"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0).length}
+                        title="待出库记录"
+                        value={filteredRecords.length}
                         prefix={<PlusOutlined />}
-                        valueStyle={{ color: filterType === 'needs' ? '#1677ff' : undefined }}
+                        valueStyle={{ color: '#3f8600' }}
                       />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'sufficient' ? '' : 'sufficient';
-                        setFilterType(newFilterType);
-                      }}
-                    >
+                    </Col>
+                    <Col span={4}>
                       <Statistic
-                        title="库存充足需求"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage === 0).length}
-                        valueStyle={{ color: filterType === 'sufficient' ? '#1677ff' : '#3f8600' }}
+                        title="整箱记录"
+                        value={filteredRecords.filter((item: PendingOutboundRecord) => item.box_type === '整箱').length}
+                        prefix="📦"
+                        valueStyle={{ color: '#1677ff' }}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Statistic
+                        title="混合箱记录"
+                        value={filteredRecords.filter((item: PendingOutboundRecord) => item.box_type === '混合箱').length}
+                        prefix="📋"
+                        valueStyle={{ color: '#fa8c16' }}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Statistic
+                        title="总数量"
+                        value={filteredRecords.reduce((sum: number, item: PendingOutboundRecord) => sum + item.total_quantity, 0)}
+                        suffix="件"
+                        valueStyle={{ color: '#52c41a' }}
                         prefix={<CheckOutlined />}
                       />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
-                        setFilterType(newFilterType);
-                      }}
-                    >
-                      <Statistic
-                        title="库存不足需求"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage > 0).length}
-                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#cf1322' }}
-                        prefix={<CloseOutlined />}
-                      />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'shortage' ? '' : 'shortage';
-                        setFilterType(newFilterType);
-                      }}
-                    >
-                      <Statistic
-                        title="缺货SKU"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity > 0 && item.shortage > 0).length}
-                        valueStyle={{ color: filterType === 'shortage' ? '#1677ff' : '#fa8c16' }}
-                      />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'inventory-only' ? '' : 'inventory-only';
-                        setFilterType(newFilterType);
-                      }}
-                    >
-                      <Statistic
-                        title="有库存无需求"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity === 0 && item.total_available > 0).length}
-                        valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
-                      />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
-                        setFilterType(newFilterType);
-                      }}
-                    >
-                      <Statistic
-                        title="库存未映射"
-                        value={filteredData.filter((item: MergedShippingData) => item.status === '库存未映射').length}
-                        valueStyle={{ color: filterType === 'unmapped-inventory' ? '#1677ff' : '#722ed1' }}
-                      />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    <div 
-                      style={{ cursor: 'pointer' }} 
-                      onClick={() => {
-                        setFilterType('');
-                      }}
-                    >
-                      <Statistic
-                        title="总记录数"
-                        value={filteredData.length}
-                        valueStyle={{ color: filterType === '' ? '#1677ff' : '#666' }}
-                      />
-                    </div>
-                  </Col>
-                  <Col span={3}>
-                    {/* 空列用于保持布局对称 */}
-                  </Col>
-                </Row>
-              );
+                    </Col>
+                    <Col span={4}>
+                      <div 
+                        style={{ cursor: 'pointer' }} 
+                        onClick={() => {
+                          setCurrentView('summary');
+                        }}
+                      >
+                        <Statistic
+                          title="返回汇总"
+                          value="点击返回"
+                          valueStyle={{ color: '#722ed1', fontSize: '14px' }}
+                          prefix={<BarChartOutlined />}
+                        />
+                      </div>
+                    </Col>
+                    <Col span={4}>
+                      {/* 空列用于保持布局对称 */}
+                    </Col>
+                  </Row>
+                );
+              }
             })()}
           </Card>
 
           <Card size="small" style={{ marginBottom: 8 }}>
             <Text type="secondary" style={{ fontSize: '12px' }}>
-              行颜色说明：
-              <Tag color="blue" style={{ marginLeft: 8 }}>蓝色 - 有库存无需求</Tag>
-              <Tag color="red" style={{ marginLeft: 4 }}>红色 - 需求缺货</Tag>
-              <Tag color="orange" style={{ marginLeft: 4 }}>橙色 - 需求未映射</Tag>
-              <Tag color="green" style={{ marginLeft: 4 }}>绿色 - 需求库存充足</Tag>
+              {currentView === 'summary' ? (
+                <>
+                  库存汇总视图：显示每个SKU的整箱和混合箱数量统计，数据来源于local_boxes表中状态为"待出库"的记录
+                </>
+              ) : (
+                <>
+                  行颜色说明：
+                  <Tag color="orange" style={{ marginLeft: 8 }}>橙色 - 混合箱记录</Tag>
+                  <Tag color="green" style={{ marginLeft: 4 }}>绿色 - 已出库记录</Tag>
+                  <Tag color="red" style={{ marginLeft: 4 }}>红色 - 已取消记录</Tag>
+                  <Tag style={{ marginLeft: 4 }}>默认 - 待出库记录</Tag>
+                </>
+              )}
             </Text>
           </Card>
 
@@ -2163,41 +2587,30 @@ const ShippingPage: React.FC = () => {
                     清除筛选
                   </Button>
                   <Text type="secondary" style={{ fontSize: '12px' }}>
-                    共 {mergedData.filter((item: MergedShippingData) => {
-                      // 应用相同的筛选逻辑来显示筛选后的数量
-                      if (selectedCountry && selectedCountry !== '') {
-                        if (item.country !== selectedCountry || item.status === '已发货') {
-                          return false;
+                    {currentView === 'summary' ? (
+                      <>共 {localInventorySummary.filter((item: LocalInventorySummary) => {
+                        if (selectedCountry && selectedCountry !== '') {
+                          if (item.country !== selectedCountry) return false;
                         }
-                      }
-                      if (searchKeyword.trim() !== '') {
-                        const keyword = searchKeyword.toLowerCase();
-                        const searchableFields = [
-                          item.amz_sku?.toLowerCase() || '',
-                          item.amazon_sku?.toLowerCase() || '',
-                          item.local_sku?.toLowerCase() || '',
-                          item.need_num?.toLowerCase() || '',
-                          item.country?.toLowerCase() || '',
-                          item.marketplace?.toLowerCase() || ''
-                        ];
-                        if (!searchableFields.some(field => field.includes(keyword))) {
-                          return false;
+                        if (searchKeyword.trim() !== '') {
+                          const keyword = searchKeyword.toLowerCase();
+                          if (!item.sku.toLowerCase().includes(keyword)) return false;
                         }
-                      }
-                      if (statusFilter && item.status !== statusFilter) return false;
-                      if (inventoryStatusFilter && (item.inventory_status || '待出库') !== inventoryStatusFilter) return false;
-                      if (boxTypeFilter && (item.box_type || '整箱') !== boxTypeFilter) return false;
-                      
-                      switch (filterType) {
-                        case 'needs': return item.quantity > 0;
-                        case 'sufficient': return item.quantity > 0 && item.shortage === 0;
-                        case 'shortage': return item.quantity > 0 && item.shortage > 0;
-                        case 'unmapped': return item.quantity > 0 && !item.local_sku;
-                        case 'inventory-only': return item.quantity === 0 && item.total_available > 0;
-                        case 'unmapped-inventory': return item.status === '库存未映射';
-                        default: return true;
-                      }
-                    }).length} 条记录
+                        return true;
+                      }).length} 个SKU</>
+                    ) : (
+                      <>共 {pendingOutboundRecords.filter((item: PendingOutboundRecord) => {
+                        if (selectedCountry && selectedCountry !== '') {
+                          if (item.country !== selectedCountry) return false;
+                        }
+                        if (searchKeyword.trim() !== '') {
+                          const keyword = searchKeyword.toLowerCase();
+                          if (!item.sku.toLowerCase().includes(keyword)) return false;
+                        }
+                        if (boxTypeFilter && item.box_type !== boxTypeFilter) return false;
+                        return true;
+                      }).length} 条记录</>
+                    )}
                   </Text>
                 </Space>
               </Col>
@@ -2207,112 +2620,145 @@ const ShippingPage: React.FC = () => {
             </Row>
           </Card>
 
-          <Table
-            columns={mergedColumns}
-            dataSource={mergedData.filter((item: MergedShippingData) => {
-              // 首先按国家筛选（新增）
-              if (selectedCountry && selectedCountry !== '') {
-                if (item.country !== selectedCountry) {
-                  return false;
+          {currentView === 'summary' ? (
+            <Table
+              title={() => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    <BarChartOutlined style={{ marginRight: 8 }} />
+                    库存汇总 - 按SKU统计待出库记录
+                  </span>
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    共 {localInventorySummary.filter((item: LocalInventorySummary) => {
+                      if (selectedCountry && selectedCountry !== '') {
+                        if (item.country !== selectedCountry) return false;
+                      }
+                      if (searchKeyword.trim() !== '') {
+                        const keyword = searchKeyword.toLowerCase();
+                        if (!item.sku.toLowerCase().includes(keyword)) return false;
+                      }
+                      return true;
+                    }).length} 个SKU
+                  </Text>
+                </div>
+              )}
+              columns={localInventorySummaryColumns}
+              dataSource={localInventorySummary.filter((item: LocalInventorySummary) => {
+                // 按国家筛选
+                if (selectedCountry && selectedCountry !== '') {
+                  if (item.country !== selectedCountry) return false;
                 }
-                // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
-                if (item.status === '已发货') {
-                  return false;
+                
+                // 关键词搜索筛选
+                if (searchKeyword.trim() !== '') {
+                  const keyword = searchKeyword.toLowerCase();
+                  if (!item.sku.toLowerCase().includes(keyword)) return false;
                 }
-              }
-              
-              // 关键词搜索筛选
-              if (searchKeyword.trim() !== '') {
-                const keyword = searchKeyword.toLowerCase();
-                const searchableFields = [
-                  item.amz_sku?.toLowerCase() || '',
-                  item.amazon_sku?.toLowerCase() || '',
-                  item.local_sku?.toLowerCase() || '',
-                  item.need_num?.toLowerCase() || '',
-                  item.country?.toLowerCase() || '',
-                  item.marketplace?.toLowerCase() || ''
-                ];
-                if (!searchableFields.some(field => field.includes(keyword))) {
-                  return false;
+                
+                // 按筛选类型过滤
+                switch (filterType) {
+                  case 'whole-box':
+                    return item.whole_box_quantity > 0;
+                  case 'mixed-box':
+                    return item.mixed_box_quantity > 0;
+                  case 'total-inventory':
+                    return item.total_quantity > 0;
+                  default:
+                    return true;
                 }
-              }
-              
-              // 状态筛选
-              if (statusFilter && statusFilter !== '') {
-                if (item.status !== statusFilter) {
-                  return false;
+              })}
+              rowKey={(record) => `${record.sku}_${record.country}`}
+              loading={mergedLoading}
+              pagination={{ 
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+              }}
+              scroll={{ x: 1000 }}
+              size="middle"
+            />
+          ) : (
+            <Table
+              title={() => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    <BoxPlotOutlined style={{ marginRight: 8 }} />
+                    待出库记录详情
+                  </span>
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    共 {pendingOutboundRecords.filter((item: PendingOutboundRecord) => {
+                      if (selectedCountry && selectedCountry !== '') {
+                        if (item.country !== selectedCountry) return false;
+                      }
+                      if (searchKeyword.trim() !== '') {
+                        const keyword = searchKeyword.toLowerCase();
+                        if (!item.sku.toLowerCase().includes(keyword)) return false;
+                      }
+                      if (boxTypeFilter && boxTypeFilter !== '') {
+                        if (item.box_type !== boxTypeFilter) return false;
+                      }
+                      return true;
+                    }).length} 条记录
+                  </Text>
+                </div>
+              )}
+              columns={pendingOutboundColumns}
+              dataSource={pendingOutboundRecords.filter((item: PendingOutboundRecord) => {
+                // 按国家筛选
+                if (selectedCountry && selectedCountry !== '') {
+                  if (item.country !== selectedCountry) return false;
                 }
-              }
-              
-              // 库存状态筛选
-              if (inventoryStatusFilter && inventoryStatusFilter !== '') {
-                if ((item.inventory_status || '待出库') !== inventoryStatusFilter) {
-                  return false;
+                
+                // 关键词搜索筛选
+                if (searchKeyword.trim() !== '') {
+                  const keyword = searchKeyword.toLowerCase();
+                  if (!item.sku.toLowerCase().includes(keyword)) return false;
                 }
-              }
-              
-              // 箱型筛选
-              if (boxTypeFilter && boxTypeFilter !== '') {
-                if ((item.box_type || '整箱') !== boxTypeFilter) {
-                  return false;
+                
+                // 箱型筛选
+                if (boxTypeFilter && boxTypeFilter !== '') {
+                  if (item.box_type !== boxTypeFilter) return false;
                 }
-              }
-              
-              // 最后按卡片筛选类型进行过滤
-              switch (filterType) {
-                case 'needs':
-                  return item.quantity > 0;
-                case 'sufficient':
-                  return item.quantity > 0 && item.shortage === 0;
-                case 'shortage':
-                  return item.quantity > 0 && item.shortage > 0;
-                case 'unmapped':
-                  return item.quantity > 0 && !item.local_sku;
-                case 'inventory-only':
-                  return item.quantity === 0 && item.total_available > 0;
-                case 'unmapped-inventory':
-                  return item.status === '库存未映射';
-                default:
-                  return true; // 显示所有数据
-              }
-            })}
-            rowKey="record_num"
-            loading={mergedLoading}
-            pagination={false}
-            scroll={{ x: 1500 }}
-            onChange={handleTableChange}
-            rowSelection={{
-              type: 'checkbox',
-              selectedRowKeys,
-              onChange: (newSelectedRowKeys, newSelectedRows) => {
-                // 检查选中的记录是否都是同一个国家
-                if (newSelectedRows.length > 1) {
-                  const countries = Array.from(new Set(newSelectedRows.map(row => row.country)));
-                  if (countries.length > 1) {
-                    message.error(`只能选择同一国家的记录进行批量发货！当前选择了：${countries.join('、')}`);
-                    return; // 不更新选择状态
+                
+                return true;
+              })}
+              rowKey="记录号"
+              loading={mergedLoading}
+              pagination={{ 
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+              }}
+              scroll={{ x: 1800 }}
+              size="middle"
+              rowSelection={currentView === 'records' ? {
+                type: 'checkbox',
+                selectedRowKeys,
+                onChange: (newSelectedRowKeys, newSelectedRows) => {
+                  // 检查选中的记录是否都是同一个国家
+                  if (newSelectedRows.length > 1) {
+                    const countries = Array.from(new Set(newSelectedRows.map(row => row.country)));
+                    if (countries.length > 1) {
+                      message.error(`只能选择同一国家的记录进行批量发货！当前选择了：${countries.join('、')}`);
+                      return;
+                    }
                   }
-                }
-                setSelectedRowKeys(newSelectedRowKeys);
-                setSelectedRows(newSelectedRows);
-              },
-              getCheckboxProps: (record) => ({
-                disabled: false, // 所有记录都可以选择
-                name: record.amz_sku,
-              }),
-            }}
-            rowClassName={(record) => {
-              // 有库存无需求的记录
-              if (record.quantity === 0 && record.total_available > 0) return 'inventory-only-row';
-              // 有需求但缺货的记录
-              if (record.quantity > 0 && record.shortage > 0) return 'shortage-row';
-              // 有需求但未映射SKU的记录
-              if (record.quantity > 0 && !record.local_sku) return 'unmapped-row';
-              // 有需求且库存充足的记录
-              if (record.quantity > 0 && record.shortage === 0 && record.local_sku) return 'sufficient-row';
-              return '';
-            }}
-          />
+                  setSelectedRowKeys(newSelectedRowKeys);
+                  setSelectedRows(newSelectedRows as any[]);
+                },
+                getCheckboxProps: (record) => ({
+                  disabled: record.status !== '待出库',
+                  name: record.记录号,
+                }),
+              } : undefined}
+              rowClassName={(record) => {
+                if (record.box_type === '混合箱') return 'mixed-box-row';
+                if (record.status === '已出库') return 'shipped-row';
+                if (record.status === '已取消') return 'cancelled-row';
+                return '';
+              }}
+            />
+          )}
 
 
       {/* 添加需求模态框 */}
@@ -2770,7 +3216,7 @@ const ShippingPage: React.FC = () => {
                       const refreshMessage = message.loading('正在刷新数据...', 0);
                       try {
                         await Promise.all([
-                          fetchMergedData(),
+                          currentView === 'summary' ? fetchLocalInventorySummary() : fetchPendingOutboundRecords(),
                           fetchCountryInventory()
                         ]);
                         message.destroy();
