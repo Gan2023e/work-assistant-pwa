@@ -373,17 +373,7 @@ export class PrintManager {
                 skuContent = `<div class="sku-item">${labelData.sku}: ${labelData.quantity}件</div>`;
             }
 
-            return `
-                <div class="thermal-page${index > 0 ? ' page-break' : ''}">
-                    <!-- 目的国 - 最上方加粗显示 -->
-                    <div class="country">${labelData.country}</div>
-                    
-                    <!-- SKU及数量信息 -->
-                    <div class="sku-section">
-                        ${skuContent}
-                    </div>
-                </div>
-            `;
+            return `<div class="thermal-page${index > 0 ? ' page-break' : ''}"><div class="country">${labelData.country}</div><div class="sku-section">${skuContent}</div></div>`;
         }).join('');
 
         return `
@@ -401,37 +391,62 @@ export class PrintManager {
         
         @media print {
             * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+            }
+            
+            html {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 60mm !important;
+                height: 40mm !important;
             }
             
             body { 
-                font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
-                font-size: 8px;
-                line-height: 1.1;
-                color: black;
-                background: white;
-                margin: 0;
-                padding: 0;
+                font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif !important; 
+                font-size: 8px !important;
+                line-height: 1.1 !important;
+                color: black !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 60mm !important;
+                height: auto !important;
+                overflow: visible !important;
             }
             
             .no-print { 
-                display: none; 
+                display: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                width: 0 !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
             
             .thermal-page {
-                width: 60mm;
-                height: 40mm;
-                padding: 0;
-                box-sizing: border-box;
-                overflow: hidden;
-                position: relative;
-                border: none; /* 移除边框避免出界 */
+                width: 60mm !important;
+                height: 40mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+                position: relative !important;
+                border: none !important;
+                page-break-inside: avoid !important;
+            }
+            
+            .thermal-page:first-child {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
             }
             
             .page-break {
-                page-break-before: always;
+                page-break-before: always !important;
+                margin-top: 0 !important;
+                padding-top: 0 !important;
             }
         }
         
@@ -439,7 +454,7 @@ export class PrintManager {
         body { 
             font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
             margin: 0;
-            padding: 10px;
+            padding: 20px 10px;
             line-height: 1.1;
             background: #f0f0f0;
         }
@@ -447,7 +462,7 @@ export class PrintManager {
         .thermal-page {
             width: 60mm;
             height: 40mm;
-            margin: 5mm auto;
+            margin: 10mm auto;
             padding: 0;
             box-sizing: border-box;
             background: white;
@@ -486,8 +501,8 @@ export class PrintManager {
                 font-weight: bold !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
-                padding-bottom: 1mm !important;
-                margin: 1mm 1mm 2mm 1mm !important;
+                padding: 1mm 1mm 1mm 1mm !important;
+                margin: 0 !important;
                 line-height: 1.0 !important;
             }
             
@@ -495,18 +510,20 @@ export class PrintManager {
                 font-size: 8px !important;
                 text-align: center !important;
                 font-weight: bold !important;
-                margin: 2mm 1mm 0 1mm !important;
+                margin: 1mm 1mm 0 1mm !important;
+                padding: 0 !important;
             }
             
             .sku-item {
-                margin: 1mm 0 !important;
+                margin: 0.5mm 0 !important;
+                padding: 0 !important;
                 line-height: 1.1 !important;
             }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="text-align: center; margin-bottom: 10px; padding: 10px; background: #e0e0e0; border-radius: 5px;">
+    <div class="no-print" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; text-align: center; padding: 20px; background: rgba(224, 224, 224, 0.95); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
         <h3 style="margin: 0 0 10px 0; color: #333;">🏷️ 60×40mm热敏纸直接打印</h3>
         <p style="margin: 0 0 10px 0; color: #666;">共 ${labelDataList.length} 张标签，每张热敏纸打印一个外箱单</p>
         <button onclick="window.print()" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">🖨️ 开始打印</button>
@@ -514,22 +531,7 @@ export class PrintManager {
         <div style="margin-top: 10px; font-size: 12px; color: #888;">
             ⚠️ 请确保打印机设置为60×40mm热敏纸规格
         </div>
-    </div>
-    
-    ${labelPages}
-    
-    <script>
-        console.log('🖨️ 热敏纸直接打印：共 ${labelDataList.length} 张 60×40mm 标签');
-        console.log('📄 每张热敏纸打印一个外箱单标签');
-        
-        // 页面加载后自动调整
-        window.onload = function() {
-            console.log('📄 热敏标签页面已加载 - 60×40mm 直接打印模式');
-        };
-    </script>
-</body>
-</html>
-        `.trim();
+    </div>${labelPages}<script class="no-print">console.log('🖨️ 热敏纸直接打印：共 ${labelDataList.length} 张 60×40mm 标签');console.log('📄 每张热敏纸打印一个外箱单标签');window.onload=function(){console.log('📄 热敏标签页面已加载 - 60×40mm 直接打印模式');}</script></body></html>`.trim();
     }
 
     /**
