@@ -118,14 +118,7 @@ interface MergedShippingData {
   inventory_remark?: string;
 }
 
-interface AddNeedForm {
-  sku: string;
-  quantity: number;
-  shipping_method?: string;
-  marketplace: string;
-  country: string;
-  remark?: string;
-}
+
 
 interface MixedBoxItem {
   box_num: string;
@@ -260,8 +253,7 @@ const ShippingPage: React.FC = () => {
   const navigate = useNavigate();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
   const [mergedLoading, setMergedLoading] = useState(false);
-  const [addModalVisible, setAddModalVisible] = useState(false);
-  const [addForm] = Form.useForm();
+
 
   const [filterType, setFilterType] = useState<string>(''); // 新增：卡片筛选类型
   
@@ -1141,7 +1133,12 @@ const ShippingPage: React.FC = () => {
   // 合并数据表格列定义（重新排序）
   const mergedColumns: ColumnsType<MergedShippingData> = [
     {
-      title: '需求单号',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>需求</div>
+          <div>单号</div>
+        </div>
+      ),
       dataIndex: 'need_num',
       key: 'need_num',
       width: 130,
@@ -1167,7 +1164,11 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '状态',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          状态
+        </div>
+      ),
       dataIndex: 'status',
       key: 'status',
       width: 120,
@@ -1331,7 +1332,11 @@ const ShippingPage: React.FC = () => {
       render: (value: number) => value || '-',
     },
     {
-      title: '国家',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          国家
+        </div>
+      ),
       dataIndex: 'country',
       key: 'country',
       width: 70,
@@ -1682,36 +1687,7 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 添加需求
-  const handleAdd = async (values: AddNeedForm[]) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/shipping/needs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-        body: JSON.stringify({
-          needs: values,
-          created_by: user?.username
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (result.code === 0) {
-        message.success('添加成功');
-        setAddModalVisible(false);
-        addForm.resetFields();
-        fetchMergedData();
-      } else {
-        message.error(result.message || '添加失败');
-      }
-    } catch (error) {
-      console.error('添加失败:', error);
-      message.error(`添加失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    }
-  };
+
 
   // 需求单管理弹窗相关state
   const [orderModalVisible, setOrderModalVisible] = useState(false);
@@ -1722,15 +1698,7 @@ const ShippingPage: React.FC = () => {
       <Title level={2}>发货操作</Title>
       
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setAddModalVisible(true)}
-          >
-            添加需求
-          </Button>
-        </Col>
+
         <Col>
           <Button
             type="primary"
@@ -1764,20 +1732,20 @@ const ShippingPage: React.FC = () => {
         <Col>
           <Button
             type="default"
-            icon={<SettingOutlined />}
-            onClick={() => setTemplateModalVisible(true)}
+            icon={<FileExcelOutlined />}
+            onClick={() => setPackingListModalVisible(true)}
           >
-            管理亚马逊发货上传模板
-            {amazonTemplateConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+            上传装箱表
           </Button>
         </Col>
         <Col>
           <Button
             type="default"
-            icon={<FileExcelOutlined />}
-            onClick={() => setPackingListModalVisible(true)}
+            icon={<SettingOutlined />}
+            onClick={() => setTemplateModalVisible(true)}
           >
-            上传装箱表
+            管理亚马逊发货上传模板
+            {amazonTemplateConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
           </Button>
         </Col>
         <Col>
@@ -2229,121 +2197,7 @@ const ShippingPage: React.FC = () => {
           />
 
 
-      {/* 添加需求模态框 */}
-      <Modal
-        title="添加发货需求"
-        open={addModalVisible}
-        onCancel={() => {
-          setAddModalVisible(false);
-          addForm.resetFields();
-        }}
-        footer={null}
-        width={800}
-      >
-        <Form
-          form={addForm}
-          layout="vertical"
-          onFinish={(values) => {
-            // 支持批量添加，表单数据转换为数组
-            const needsArray = [{
-              sku: values.sku,
-              quantity: values.quantity,
-              shipping_method: values.shipping_method,
-              marketplace: values.marketplace,
-              country: values.country,
-              remark: values.remark
-            }];
-            handleAdd(needsArray);
-          }}
-        >
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="SKU"
-                name="sku"
-                rules={[{ required: true, message: '请输入SKU' }]}
-              >
-                <Input placeholder="请输入SKU" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="数量"
-                name="quantity"
-                rules={[{ required: true, message: '请输入数量' }]}
-              >
-                <InputNumber
-                  min={1}
-                  placeholder="请输入数量"
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="平台"
-                name="marketplace"
-                rules={[{ required: true, message: '请选择平台' }]}
-              >
-                <Select placeholder="请选择平台">
-                  {marketplaceOptions.map(option => (
-                    <Option key={option} value={option}>{option}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="国家"
-                name="country"
-                rules={[{ required: true, message: '请选择国家' }]}
-              >
-                <Select placeholder="请选择国家">
-                  {countryOptions.map(option => (
-                    <Option key={option} value={option}>{option}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="运输方式"
-                name="shipping_method"
-              >
-                <Select placeholder="请选择运输方式">
-                  {shippingMethodOptions.map(option => (
-                    <Option key={option} value={option}>{option}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Form.Item label="备注" name="remark">
-            <Input.TextArea rows={3} placeholder="请输入备注" />
-          </Form.Item>
-          
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit">
-                提交
-              </Button>
-              <Button onClick={() => {
-                setAddModalVisible(false);
-                addForm.resetFields();
-              }}>
-                取消
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+
 
       {/* 发货确认模态框 */}
       <Modal
@@ -2369,8 +2223,8 @@ const ShippingPage: React.FC = () => {
         {currentStep === 0 && uniqueMixedBoxNums.length > 0 && (
           <div>
             <Alert
-              message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}: ${uniqueMixedBoxNums[currentMixedBoxIndex]}`}
-              description="以下是该混合箱内的所有产品，请确认是否发出"
+              message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}`}
+              description={`正在处理混合箱号: ${uniqueMixedBoxNums[currentMixedBoxIndex]} 中的所有产品，请确认是否发出`}
               type="info"
               style={{ marginBottom: 16 }}
             />
@@ -2464,18 +2318,10 @@ const ShippingPage: React.FC = () => {
                 >
                   HSCODE编码管理
                 </Button>
-                <Text strong>物流商：</Text>
-                <Select
-                  style={{ width: 140 }}
-                  value={logisticsProvider}
-                  onChange={setLogisticsProvider}
-                  options={logisticsProviderOptions}
-                  placeholder="选择物流商"
-                />
               </Space>
             </div>
 
-            {/* 物流商选择和功能按钮 */}
+            {/* 功能按钮 */}
             <div style={{ marginBottom: 16 }}>
               <Space>
                 <Button 
@@ -2485,6 +2331,13 @@ const ShippingPage: React.FC = () => {
                   type="default"
                 >
                   生成亚马逊发货文件
+                </Button>
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => setPackingListModalVisible(true)}
+                  type="default"
+                >
+                  上传装箱表
                 </Button>
                 {(() => {
                   // 检查是否有当前目的国的亚马逊模板
@@ -2508,6 +2361,15 @@ const ShippingPage: React.FC = () => {
                         </Button>
                       )}
                       
+                      <Text strong>物流商：</Text>
+                      <Select
+                        style={{ width: 140 }}
+                        value={logisticsProvider}
+                        onChange={setLogisticsProvider}
+                        options={logisticsProviderOptions}
+                        placeholder="选择物流商"
+                      />
+                      
                       {hasInvoiceTemplate ? (
                         <Button 
                           icon={<DownloadOutlined />} 
@@ -2526,14 +2388,6 @@ const ShippingPage: React.FC = () => {
                           管理发票模板
                         </Button>
                       )}
-                      
-                      <Button 
-                        icon={<FileExcelOutlined />} 
-                        onClick={() => setPackingListModalVisible(true)}
-                        type="default"
-                      >
-                        上传装箱表
-                      </Button>
                     </>
                   );
                 })()}

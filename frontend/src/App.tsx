@@ -15,7 +15,7 @@ import PurchaseInvoice from './pages/Products/PurchaseInvoice';
 import ShippingPage from './pages/Shipping/ShippingPage';
 import OrderManagementPage from './pages/Shipping/OrderManagementPage';
 import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
-import PendingInventoryPage from './pages/Shipping/PendingInventoryPage';
+
 import LogisticsPage from './pages/Logistics/LogisticsPage';
 import SkuMapping from './pages/Inventory/SkuMapping';
 import Summary from './pages/Inventory/Summary';
@@ -102,7 +102,7 @@ const AppContent: React.FC = () => {
   const getSelectedKeys = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings", "/shipping/orders", "/products/purchase-invoice"].includes(path)) return [path];
-    if (["/shipping/management", "/shipping/pending-inventory", "/shipping/history"].includes(path)) return [path];
+    if (["/shipping/management", "/shipping/history"].includes(path)) return [path];
     if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
@@ -137,7 +137,6 @@ const AppContent: React.FC = () => {
       key: 'shipping',
       children: [
         { label: <Link to="/shipping/management">发货操作</Link>, key: '/shipping/management' },
-                    { label: <Link to="/shipping/pending-inventory">待发货库存管理</Link>, key: '/shipping/pending-inventory' },
         { label: <Link to="/shipping/history">发货历史</Link>, key: '/shipping/history' },
       ],
     },
@@ -228,11 +227,7 @@ const AppContent: React.FC = () => {
               <ShippingPage />
             </ProtectedRoute>
           } />
-          <Route path="/shipping/pending-inventory" element={
-            <ProtectedRoute>
-              <PendingInventoryPage />
-            </ProtectedRoute>
-          } />
+
           <Route path="/shipping/history" element={
             <ProtectedRoute>
               <ShipmentHistoryPage />
