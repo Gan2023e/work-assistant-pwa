@@ -806,9 +806,6 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         destroyOnClose
       >
         <Card size="small">
-          <p style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>
-            混合箱第{currentMixedBoxIndex + 1}箱产品信息录入：
-          </p>
           
           <Form
             form={currentMixedBoxForm}

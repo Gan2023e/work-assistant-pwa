@@ -118,7 +118,7 @@ export class PrintManager {
         try {
             const multiLabelHTML = this.generateMultiLabelHTML(labelDataList);
             
-            const printWindow = window.open('', '_blank', 'width=600,height=800');
+            const printWindow = window.open('', '_blank', 'fullscreen=yes,scrollbars=no,resizable=yes,toolbar=no,menubar=no,location=no,status=no');
             if (!printWindow) {
                 console.error('无法打开打印窗口');
                 return false;

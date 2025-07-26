@@ -51,6 +51,35 @@ interface CountryInventory {
   total_quantity: number;
 }
 
+// 混合箱记录排序函数
+const sortRecordsByMixedBox = (records: InventoryRecord[]): InventoryRecord[] => {
+  return records.sort((a, b) => {
+    // 如果两个记录都有混合箱编号
+    if (a.mix_box_num && b.mix_box_num) {
+      // 先按混合箱编号排序
+      if (a.mix_box_num !== b.mix_box_num) {
+        return a.mix_box_num.localeCompare(b.mix_box_num);
+      }
+      // 同一混合箱内按SKU排序
+      return a.sku.localeCompare(b.sku);
+    }
+    
+    // 如果只有一个有混合箱编号，则混合箱记录按时间和编号混合排序
+    if (a.mix_box_num && !b.mix_box_num) {
+      // 比较混合箱的时间和整箱的时间
+      return new Date(a.time).getTime() - new Date(b.time).getTime();
+    }
+    
+    if (!a.mix_box_num && b.mix_box_num) {
+      // 比较整箱的时间和混合箱的时间
+      return new Date(a.time).getTime() - new Date(b.time).getTime();
+    }
+    
+    // 如果都没有混合箱编号（都是整箱），按时间排序
+    return new Date(a.time).getTime() - new Date(b.time).getTime();
+  });
+};
+
 // 混合箱悬停样式
 const mixedBoxStyles = `
   .mixed-box-hover {
@@ -294,7 +323,9 @@ const InventoryManagement: React.FC = () => {
         arr.findIndex(r => r.记录号 === record.记录号) === index
       );
       
-      setRecordsData(uniqueRecords);
+      // 对记录进行排序，确保同一混合箱的记录连续显示
+      const sortedRecords = sortRecordsByMixedBox(uniqueRecords);
+      setRecordsData(sortedRecords);
       setPagination(prev => ({
         ...prev,
         total: uniqueRecords.length,
@@ -333,7 +364,9 @@ const InventoryManagement: React.FC = () => {
       const data = await response.json();
       
       if (data.code === 0) {
-        setRecordsData(data.data.records);
+        // 对记录进行排序，确保同一混合箱的记录连续显示
+        const sortedRecords = sortRecordsByMixedBox(data.data.records);
+        setRecordsData(sortedRecords);
         setPagination(prev => ({
           ...prev,
           total: data.data.total
