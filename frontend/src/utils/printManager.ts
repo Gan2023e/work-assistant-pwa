@@ -218,12 +218,12 @@ export class PrintManager {
                 font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
                 font-size: 8px; 
                 margin: 0;
-                padding: 1mm;
+                padding: 0;
                 color: black;
                 background: white;
                 line-height: 1.1;
-                width: 58mm;
-                height: 38mm;
+                width: 60mm;
+                height: 40mm;
                 overflow: hidden;
             }
             .no-print { display: none; }
@@ -232,10 +232,10 @@ export class PrintManager {
             font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
             font-size: 8px; 
             margin: 0;
-            padding: 1mm;
+            padding: 0;
             line-height: 1.1;
-            width: 58mm;
-            height: 38mm;
+            width: 60mm;
+            height: 40mm;
             overflow: hidden;
         }
         
@@ -245,7 +245,7 @@ export class PrintManager {
             font-weight: bold; 
             font-size: 16px;
             color: black;
-            margin-bottom: 2mm; 
+            margin: 1mm 1mm 2mm 1mm; 
             border-bottom: 1px solid #000;
             padding-bottom: 1mm;
             text-transform: uppercase;
@@ -257,6 +257,7 @@ export class PrintManager {
             line-height: 1.2;
             font-size: 12px;
             text-align: center;
+            margin: 0 1mm;
         }
         
         .sku-item {
@@ -422,7 +423,7 @@ export class PrintManager {
             .thermal-page {
                 width: 60mm;
                 height: 40mm;
-                padding: 2mm;
+                padding: 0;
                 box-sizing: border-box;
                 overflow: hidden;
                 position: relative;
@@ -447,7 +448,7 @@ export class PrintManager {
             width: 60mm;
             height: 40mm;
             margin: 5mm auto;
-            padding: 2mm;
+            padding: 0;
             box-sizing: border-box;
             background: white;
             position: relative;
@@ -462,7 +463,7 @@ export class PrintManager {
             text-align: center;
             border-bottom: 1px solid #000;
             padding-bottom: 1mm;
-            margin-bottom: 2mm;
+            margin: 1mm 1mm 2mm 1mm;
             line-height: 1.2;
         }
         
@@ -470,7 +471,7 @@ export class PrintManager {
             font-size: 10px;
             text-align: center;
             font-weight: bold;
-            margin-top: 2mm;
+            margin: 2mm 1mm 0 1mm;
         }
         
         .sku-item {
@@ -486,7 +487,7 @@ export class PrintManager {
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
                 padding-bottom: 1mm !important;
-                margin-bottom: 2mm !important;
+                margin: 1mm 1mm 2mm 1mm !important;
                 line-height: 1.0 !important;
             }
             
@@ -494,7 +495,7 @@ export class PrintManager {
                 font-size: 8px !important;
                 text-align: center !important;
                 font-weight: bold !important;
-                margin-top: 2mm !important;
+                margin: 2mm 1mm 0 1mm !important;
             }
             
             .sku-item {
