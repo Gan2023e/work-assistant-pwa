@@ -253,18 +253,7 @@ interface LogisticsInvoiceConfig {
   countries?: string[];
 }
 
-// 新增：出库记录项接口
-interface OutboundItem {
-  sku: string;
-  total_quantity: number;
-  total_boxes?: number;
-  country: string;
-  marketplace: string;
-  is_mixed_box: boolean;
-  original_mix_box_num?: string;
-  order_item_id?: number;
-  need_num?: string;
-}
+
 
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
@@ -343,7 +332,6 @@ const ShippingPage: React.FC = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState<string>('');
-  const [boxTypeFilter, setBoxTypeFilter] = useState<string>('');
 
   // 国家选项配置
   const countryTemplateOptions = [
@@ -1182,7 +1170,7 @@ const ShippingPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       sorter: (a: MergedShippingData, b: MergedShippingData) => {
         const statusOrder = { '待发货': 1, '已发货': 2, '已取消': 3, '有库存无需求': 4, '库存未映射': 5 };
         return statusOrder[a.status] - statusOrder[b.status];
@@ -1192,7 +1180,12 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '库存状态',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>库存</div>
+          <div>状态</div>
+        </div>
+      ),
       dataIndex: 'inventory_status',
       key: 'inventory_status',
       width: 90,
@@ -1203,43 +1196,23 @@ const ShippingPage: React.FC = () => {
         const bStatus = b.inventory_status || '待出库';
         return statusOrder[aStatus] - statusOrder[bStatus];
       },
-             render: (status: string) => {
-         const statusConfig: Record<string, { color: string; text: string }> = {
-           '待出库': { color: 'blue', text: '待出库' },
-           '已出库': { color: 'green', text: '已出库' },
-           '已取消': { color: 'red', text: '已取消' }
-         };
-         const config = statusConfig[status] || statusConfig['待出库'];
-         return <Tag color={config.color}>{config.text}</Tag>;
-       },
-    },
-    {
-      title: '箱型',
-      dataIndex: 'box_type',
-      key: 'box_type',
-      width: 80,
-      align: 'center',
-      sorter: (a: MergedShippingData, b: MergedShippingData) => {
-        const typeOrder = { '整箱': 1, '混合箱': 2 };
-        const aType = a.box_type || '整箱';
-        const bType = b.box_type || '整箱';
-        return typeOrder[aType] - typeOrder[bType];
+      render: (status: string) => {
+        const statusConfig: Record<string, { color: string; text: string }> = {
+          '待出库': { color: 'blue', text: '待出库' },
+          '已出库': { color: 'green', text: '已出库' },
+          '已取消': { color: 'red', text: '已取消' }
+        };
+        const config = statusConfig[status] || statusConfig['待出库'];
+        return <Tag color={config.color}>{config.text}</Tag>;
       },
-             render: (type: string) => {
-         const typeConfig: Record<string, { color: string; icon: string }> = {
-           '整箱': { color: 'blue', icon: '📦' },
-           '混合箱': { color: 'orange', icon: '📋' }
-         };
-         const config = typeConfig[type] || typeConfig['整箱'];
-         return (
-           <Tag color={config.color}>
-             {config.icon} {type || '整箱'}
-           </Tag>
-         );
-       },
     },
     {
-      title: 'Amazon SKU',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>Amazon</div>
+          <div>SKU</div>
+        </div>
+      ),
       dataIndex: 'amz_sku',
       key: 'amz_sku',
       width: 130,
@@ -1264,7 +1237,30 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '需求数量',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>本地</div>
+          <div>SKU</div>
+        </div>
+      ),
+      dataIndex: 'local_sku',
+      key: 'local_sku',
+      width: 130,
+      ellipsis: true,
+      sorter: (a: MergedShippingData, b: MergedShippingData) => {
+        const aValue = a.local_sku || '';
+        const bValue = b.local_sku || '';
+        return aValue.localeCompare(bValue);
+      },
+      render: (localSku: string) => localSku || '-',
+    },
+    {
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>需求</div>
+          <div>数量</div>
+        </div>
+      ),
       dataIndex: 'quantity',
       key: 'quantity',
       width: 90,
@@ -1273,7 +1269,12 @@ const ShippingPage: React.FC = () => {
       render: (value: number) => <Text strong>{value}</Text>,
     },
     {
-      title: '缺货数量',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>缺货</div>
+          <div>数量</div>
+        </div>
+      ),
       dataIndex: 'shortage',
       key: 'shortage',
       width: 90,
@@ -1284,7 +1285,12 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '可用库存',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>可用</div>
+          <div>库存</div>
+        </div>
+      ),
       dataIndex: 'total_available',
       key: 'total_available',
       width: 90,
@@ -1297,7 +1303,12 @@ const ShippingPage: React.FC = () => {
       ),
     },
     {
-      title: '整箱数量',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>整箱</div>
+          <div>数量</div>
+        </div>
+      ),
       dataIndex: 'whole_box_quantity',
       key: 'whole_box_quantity',
       width: 90,
@@ -1306,7 +1317,12 @@ const ShippingPage: React.FC = () => {
       render: (value: number) => value || '-',
     },
     {
-      title: '混合箱数量',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>混合箱</div>
+          <div>数量</div>
+        </div>
+      ),
       dataIndex: 'mixed_box_quantity',
       key: 'mixed_box_quantity',
       width: 90,
@@ -1327,7 +1343,12 @@ const ShippingPage: React.FC = () => {
       },
     },
     {
-      title: '运输方式',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>运输</div>
+          <div>方式</div>
+        </div>
+      ),
       dataIndex: 'shipping_method',
       key: 'shipping_method',
       width: 100,
@@ -1339,7 +1360,12 @@ const ShippingPage: React.FC = () => {
       render: (value: string) => value || '-',
     },
     {
-      title: '创建时间',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>创建</div>
+          <div>时间</div>
+        </div>
+      ),
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
@@ -1351,7 +1377,12 @@ const ShippingPage: React.FC = () => {
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
-      title: '最后更新',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>最后</div>
+          <div>更新</div>
+        </div>
+      ),
       dataIndex: 'last_updated_at',
       key: 'last_updated_at',
       width: 150,
@@ -1363,7 +1394,12 @@ const ShippingPage: React.FC = () => {
       render: (date: string) => date ? new Date(date).toLocaleString('zh-CN') : '-',
     },
     {
-      title: '出库时间',
+      title: (
+        <div style={{ textAlign: 'center' }}>
+          <div>出库</div>
+          <div>时间</div>
+        </div>
+      ),
       dataIndex: 'shipped_at',
       key: 'shipped_at',
       width: 150,
@@ -1377,110 +1413,16 @@ const ShippingPage: React.FC = () => {
         return (
           <div>
             <div>{new Date(date).toLocaleString('zh-CN')}</div>
-                         {record.inventory_status === '已出库' && (
-               <Tag color="green">已出库</Tag>
-             )}
+            {record.inventory_status === '已出库' && (
+              <Tag color="green">已出库</Tag>
+            )}
           </div>
         );
       },
     },
   ];
 
-  // 记录出库信息
-  const recordOutbound = async (items: MixedBoxItem[] | WholeBoxConfirmData[], isMixedBox: boolean = false, logisticsProvider?: string) => {
-    console.log(`🚀 开始记录${isMixedBox ? '混合箱' : '整箱'}出库信息, 项目数量: ${items.length}`);
-    console.log('📋 传入的items数据:', items);
-    console.log('📋 当前selectedRows:', selectedRows);
-    
-    try {
-      const shipments = items.map(item => {
-        if (isMixedBox) {
-          // 混合箱出库
-          const mixedItem = item as MixedBoxItem;
-          // 从选中的记录中找到对应的国家和平台信息
-          const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === mixedItem.amz_sku);
-          
-          console.log(`📦 处理混合箱SKU: ${mixedItem.amz_sku}, 找到的记录:`, selectedRecord);
-          
-          return {
-            sku: selectedRecord?.local_sku || mixedItem.sku,
-            total_quantity: mixedItem.quantity,
-            country: selectedRecord?.country || '美国',
-            marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
-            is_mixed_box: true,
-            original_mix_box_num: mixedItem.box_num, // 传递原始混合箱单号
-            // 新增：需求单相关信息
-            order_item_id: selectedRecord?.record_num,
-            need_num: selectedRecord?.need_num
-          };
-        } else {
-          // 整箱出库
-          const wholeItem = item as WholeBoxConfirmData;
-          // 从选中的记录中找到对应的本地SKU、国家和平台信息
-          const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === wholeItem.amz_sku);
-          
-          console.log(`📦 处理整箱SKU: ${wholeItem.amz_sku}, 找到的记录:`, selectedRecord);
-          
-          return {
-            sku: selectedRecord?.local_sku || wholeItem.amz_sku,
-            total_quantity: wholeItem.confirm_quantity,
-            total_boxes: wholeItem.confirm_boxes,
-            country: selectedRecord?.country || '美国',
-            marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
-            is_mixed_box: false,
-            // 新增：需求单相关信息
-            order_item_id: selectedRecord?.record_num,
-            need_num: selectedRecord?.need_num
-          };
-        }
-      });
 
-      console.log('📋 准备发送到后端的shipments数据:', shipments);
-
-      const requestBody = {
-        shipments,
-        operator: '申报出库',
-        shipping_method: selectedRows[0]?.shipping_method || '', // 传递运输方式
-        logistics_provider: logisticsProvider || '', // 新增物流商字段
-        remark: `批量发货 - ${new Date().toLocaleString('zh-CN')}` // 添加备注
-      };
-      
-      console.log('📋 完整的请求体:', requestBody);
-
-      const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const result = await response.json();
-      console.log('📋 后端返回的结果:', result);
-      
-      if (result.code === 0) {
-        console.log('✅ 出库记录创建成功:', result.data);
-
-        // 修复：确保显示成功消息
-        if (result.data && result.data.shipment_number) {
-          message.success(`出库记录创建成功，发货单号: ${result.data.shipment_number}`);
-        } else {
-          message.success('出库记录创建成功！');
-        }
-      } else {
-        console.error('❌ 出库记录失败:', result.message);
-        message.error(`出库记录失败: ${result.message}`);
-        // 抛出错误，以便上层捕获
-        throw new Error(`出库记录失败: ${result.message}`);
-      }
-    } catch (error) {
-      console.error('❌ 出库记录异常:', error);
-      message.error(`出库记录异常: ${error instanceof Error ? error.message : '未知错误'}`);
-      // 重新抛出错误，以便上层处理
-      throw error;
-    }
-  };
 
   // 开始发货流程
   const handleStartShipping = async () => {
@@ -1623,35 +1565,7 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 导出Excel
-  const exportToExcel = () => {
-    // 准备Excel数据
-    const data = [
-      ['箱号', 'Amazon SKU', '发货数量'],
-      ...shippingData.map((item: any) => [item.box_num, item.amz_sku, item.quantity])
-    ];
-    
-    // 创建工作簿和工作表
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.aoa_to_sheet(data);
-    
-    // 设置列宽
-    const columnWidths = [
-      { wch: 10 }, // 箱号
-      { wch: 20 }, // Amazon SKU
-      { wch: 12 }  // 发货数量
-    ];
-    worksheet['!cols'] = columnWidths;
-    
-    // 将工作表添加到工作簿
-    XLSX.utils.book_append_sheet(workbook, worksheet, '发货清单');
-    
-    // 生成文件名
-    const fileName = `发货清单_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    
-    // 导出文件
-    XLSX.writeFile(workbook, fileName);
-  };
+
 
   // 获取Amazon站点URL
   const getAmazonSite = (country: string) => {
@@ -1840,6 +1754,16 @@ const ShippingPage: React.FC = () => {
         <Col>
           <Button
             type="default"
+            icon={<DownloadOutlined />}
+            onClick={generateAmazonFile}
+            loading={generateLoading}
+          >
+            生成亚马逊发货文件
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
             icon={<SettingOutlined />}
             onClick={() => setTemplateModalVisible(true)}
           >
@@ -1850,11 +1774,10 @@ const ShippingPage: React.FC = () => {
         <Col>
           <Button
             type="default"
-            icon={<SettingOutlined />}
-            onClick={() => setInvoiceTemplateModalVisible(true)}
+            icon={<FileExcelOutlined />}
+            onClick={() => setPackingListModalVisible(true)}
           >
-            管理物流商发票模板
-            {logisticsInvoiceConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
+            上传装箱表
           </Button>
         </Col>
         <Col>
@@ -1873,6 +1796,16 @@ const ShippingPage: React.FC = () => {
             onClick={() => setHsCodeModalVisible(true)}
           >
             HSCODE编码管理
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            type="default"
+            icon={<SettingOutlined />}
+            onClick={() => setInvoiceTemplateModalVisible(true)}
+          >
+            管理物流商发票模板
+            {logisticsInvoiceConfig.hasTemplate && <Text type="success" style={{ marginLeft: 4 }}>✓</Text>}
           </Button>
         </Col>
         <Col>
@@ -2138,26 +2071,13 @@ const ShippingPage: React.FC = () => {
                   <Option value="已取消">已取消</Option>
                 </Select>
               </Col>
-              <Col span={3}>
-                <Select
-                  placeholder="箱型"
-                  value={boxTypeFilter}
-                  onChange={setBoxTypeFilter}
-                  allowClear
-                  style={{ width: '100%' }}
-                >
-                  <Option value="整箱">📦 整箱</Option>
-                  <Option value="混合箱">📋 混合箱</Option>
-                </Select>
-              </Col>
-              <Col span={4}>
+              <Col span={7}>
                 <Space>
                   <Button
                     onClick={() => {
                       setSearchKeyword('');
                       setStatusFilter('');
                       setInventoryStatusFilter('');
-                      setBoxTypeFilter('');
                     }}
                   >
                     清除筛选
@@ -2186,7 +2106,6 @@ const ShippingPage: React.FC = () => {
                       }
                       if (statusFilter && item.status !== statusFilter) return false;
                       if (inventoryStatusFilter && (item.inventory_status || '待出库') !== inventoryStatusFilter) return false;
-                      if (boxTypeFilter && (item.box_type || '整箱') !== boxTypeFilter) return false;
                       
                       switch (filterType) {
                         case 'needs': return item.quantity > 0;
@@ -2251,12 +2170,7 @@ const ShippingPage: React.FC = () => {
                 }
               }
               
-              // 箱型筛选
-              if (boxTypeFilter && boxTypeFilter !== '') {
-                if ((item.box_type || '整箱') !== boxTypeFilter) {
-                  return false;
-                }
-              }
+
               
               // 最后按卡片筛选类型进行过滤
               switch (filterType) {
@@ -2463,7 +2377,14 @@ const ShippingPage: React.FC = () => {
             <Table
               dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
               columns={[
-                { title: '原始混合箱号', dataIndex: 'box_num', key: 'box_num', width: 120, align: 'center' },
+                { 
+                  title: '原始混合箱号', 
+                  dataIndex: 'box_num', 
+                  key: 'box_num', 
+                  width: 150, 
+                  align: 'center',
+                  ellipsis: true
+                },
                 { title: '本地SKU', dataIndex: 'sku', key: 'sku', width: 120 },
                 { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
                 { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' },
@@ -2524,7 +2445,9 @@ const ShippingPage: React.FC = () => {
           <div>
             <Alert message="发货清单已生成" type="success" style={{ marginBottom: 16 }} />
             
-            {/* 亚马逊仓库管理和HSCODE编码管理按钮 */}
+
+            
+            {/* 仓库管理和HSCODE管理按钮 */}
             <div style={{ marginBottom: 16 }}>
               <Space>
                 <Button 
@@ -2541,12 +2464,6 @@ const ShippingPage: React.FC = () => {
                 >
                   HSCODE编码管理
                 </Button>
-              </Space>
-            </div>
-            
-            {/* 物流商选择和功能按钮 */}
-            <div style={{ marginBottom: 16 }}>
-              <Space>
                 <Text strong>物流商：</Text>
                 <Select
                   style={{ width: 140 }}
@@ -2555,6 +2472,12 @@ const ShippingPage: React.FC = () => {
                   options={logisticsProviderOptions}
                   placeholder="选择物流商"
                 />
+              </Space>
+            </div>
+
+            {/* 物流商选择和功能按钮 */}
+            <div style={{ marginBottom: 16 }}>
+              <Space>
                 <Button 
                   icon={<DownloadOutlined />} 
                   onClick={generateAmazonFile}
@@ -2563,35 +2486,57 @@ const ShippingPage: React.FC = () => {
                 >
                   生成亚马逊发货文件
                 </Button>
-                <Button 
-                  icon={<SettingOutlined />} 
-                  onClick={() => setTemplateModalVisible(true)}
-                  type="default"
-                >
-                  管理模板
-                </Button>
-                <Button 
-                  icon={<DownloadOutlined />} 
-                  onClick={generateInvoice}
-                  loading={generateInvoiceLoading}
-                  type="default"
-                >
-                  生成发票
-                </Button>
-                <Button 
-                  icon={<SettingOutlined />} 
-                  onClick={() => setInvoiceTemplateModalVisible(true)}
-                  type="default"
-                >
-                  管理发票模板
-                </Button>
-                <Button 
-                  icon={<FileExcelOutlined />} 
-                  onClick={() => setPackingListModalVisible(true)}
-                  type="default"
-                >
-                  上传装箱表
-                </Button>
+                {(() => {
+                  // 检查是否有当前目的国的亚马逊模板
+                  const currentCountry = selectedRows[0]?.country;
+                  const hasAmazonTemplate = currentCountry && amazonTemplateConfig.hasTemplate && 
+                    amazonTemplateConfig.countries?.includes(currentCountry);
+                  
+                  // 检查是否有当前目的国和物流商的发票模板
+                  const hasInvoiceTemplate = currentCountry && logisticsInvoiceConfig.hasTemplate && 
+                    logisticsInvoiceConfig.templates?.[logisticsProvider]?.[currentCountry];
+                  
+                  return (
+                    <>
+                      {!hasAmazonTemplate && (
+                        <Button 
+                          icon={<SettingOutlined />} 
+                          onClick={() => setTemplateModalVisible(true)}
+                          type="default"
+                        >
+                          管理亚马逊发货上传模板
+                        </Button>
+                      )}
+                      
+                      {hasInvoiceTemplate ? (
+                        <Button 
+                          icon={<DownloadOutlined />} 
+                          onClick={generateInvoice}
+                          loading={generateInvoiceLoading}
+                          type="default"
+                        >
+                          生成发票
+                        </Button>
+                      ) : (
+                        <Button 
+                          icon={<SettingOutlined />} 
+                          onClick={() => setInvoiceTemplateModalVisible(true)}
+                          type="default"
+                        >
+                          管理发票模板
+                        </Button>
+                      )}
+                      
+                      <Button 
+                        icon={<FileExcelOutlined />} 
+                        onClick={() => setPackingListModalVisible(true)}
+                        type="default"
+                      >
+                        上传装箱表
+                      </Button>
+                    </>
+                  );
+                })()}
               </Space>
             </div>
 
@@ -2624,9 +2569,6 @@ const ShippingPage: React.FC = () => {
 
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
-                <Button icon={<ExportOutlined />} onClick={exportToExcel}>
-                  导出Excel
-                </Button>
                 <Button type="primary" onClick={async () => {
                   console.log('🔄 开始执行批量发货完成操作');
                   
@@ -2648,77 +2590,67 @@ const ShippingPage: React.FC = () => {
                       return;
                     }
                     
-                    // 第一步：记录出库信息（合并混合箱和整箱数据）
-                    let stepMessage = message.loading('第1步：正在记录出库信息...', 0);
+                    // 更新local_boxes表中相关记录的状态为"已发货"
+                    let stepMessage = message.loading('正在更新库存状态为已发货...', 0);
                     
-                    // 准备合并的出库数据数组
-                    const allOutboundItems: OutboundItem[] = [];
+                    // 准备更新的数据
+                    const updateItems: any[] = [];
                     
                     // 处理混合箱数据
                     if (confirmedMixedBoxes.length > 0) {
-                      console.log('📦 添加混合箱数据到出库记录:', confirmedMixedBoxes);
+                      console.log('📦 处理混合箱数据:', confirmedMixedBoxes);
                       confirmedMixedBoxes.forEach(mixedItem => {
                         const selectedRecord = selectedRows.find(row => row.amz_sku === mixedItem.amz_sku);
-                        allOutboundItems.push({
+                        updateItems.push({
                           sku: selectedRecord?.local_sku || mixedItem.sku,
-                          total_quantity: mixedItem.quantity,
+                          quantity: mixedItem.quantity,
                           country: selectedRecord?.country || '美国',
-                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
                           is_mixed_box: true,
                           original_mix_box_num: mixedItem.box_num,
-                          order_item_id: selectedRecord?.record_num,
-                          need_num: selectedRecord?.need_num
                         });
                       });
                     }
                     
                     // 处理整箱数据
                     if (confirmedWholeBoxes.length > 0) {
-                      console.log('📦 添加整箱数据到出库记录:', confirmedWholeBoxes);
+                      console.log('📦 处理整箱数据:', confirmedWholeBoxes);
                       confirmedWholeBoxes.forEach(wholeItem => {
                         const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amz_sku);
-                        allOutboundItems.push({
+                        updateItems.push({
                           sku: selectedRecord?.local_sku || wholeItem.amz_sku,
-                          total_quantity: wholeItem.confirm_quantity,
+                          quantity: wholeItem.confirm_quantity,
                           total_boxes: wholeItem.confirm_boxes,
                           country: selectedRecord?.country || '美国',
-                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
                           is_mixed_box: false,
-                          order_item_id: selectedRecord?.record_num,
-                          need_num: selectedRecord?.need_num
                         });
                       });
                     }
                     
                     // 如果没有确认的箱数据，使用发货数据
-                    if (allOutboundItems.length === 0 && shippingData.length > 0) {
-                      console.log('📦 使用发货数据进行出库记录:', shippingData);
+                    if (updateItems.length === 0 && shippingData.length > 0) {
+                      console.log('📦 使用发货数据进行状态更新:', shippingData);
                       shippingData.forEach(item => {
                         const selectedRecord = selectedRows.find(row => row.amz_sku === item.amz_sku);
-                        allOutboundItems.push({
+                        updateItems.push({
                           sku: selectedRecord?.local_sku || item.amz_sku,
-                          total_quantity: item.quantity,
+                          quantity: item.quantity,
                           country: selectedRecord?.country || '美国',
-                          marketplace: selectedRecord?.marketplace === 'Amazon' ? '亚马逊' : selectedRecord?.marketplace || '亚马逊',
                           is_mixed_box: true, // 默认按混合箱处理
                           original_mix_box_num: item.box_num,
-                          order_item_id: selectedRecord?.record_num,
-                          need_num: selectedRecord?.need_num
                         });
                       });
                     }
                     
-                    if (allOutboundItems.length === 0) {
-                      console.log('⚠️ 没有找到需要记录的出库数据');
-                      message.warning('没有找到需要记录的出库数据');
+                    if (updateItems.length === 0) {
+                      console.log('⚠️ 没有找到需要更新的数据');
+                      message.warning('没有找到需要更新的数据');
                       return;
                     }
                     
-                    // 一次性创建所有出库记录
-                    console.log('📋 准备创建出库记录，总计:', allOutboundItems.length);
+                    // 更新库存状态为"已发货"
+                    console.log('📋 准备更新库存状态，总计:', updateItems.length);
                     const requestBody = {
-                      shipments: allOutboundItems,
-                      operator: '申报出库',
+                      updateItems: updateItems,
                       shipping_method: selectedRows[0]?.shipping_method || '',
                       logistics_provider: logisticsProvider || '',
                       remark: shippingRemark.trim() || `批量发货 - ${new Date().toLocaleString('zh-CN')}`
@@ -2726,7 +2658,7 @@ const ShippingPage: React.FC = () => {
                     
                     console.log('📋 完整的请求体:', requestBody);
 
-                    const response = await fetch(`${API_BASE_URL}/api/shipping/outbound-record`, {
+                    const response = await fetch(`${API_BASE_URL}/api/shipping/update-shipped-status`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -2741,15 +2673,11 @@ const ShippingPage: React.FC = () => {
                     message.destroy();
                     
                     if (result.code === 0) {
-                      console.log('✅ 出库记录创建成功:', result.data);
-                      if (result.data && result.data.shipment_number) {
-                        message.success(`✅ 发货完成！发货单号: ${result.data.shipment_number}`, 3);
-                      } else {
-                        message.success('✅ 发货完成！出库记录已成功创建', 3);
-                      }
+                      console.log('✅ 库存状态更新成功:', result.data);
+                      message.success(`✅ 发货完成！已更新 ${result.data.updated_count || updateItems.length} 个库存记录状态为已发货`, 3);
                     } else {
-                      console.error('❌ 出库记录失败:', result.message);
-                      message.error(`出库记录失败: ${result.message}`);
+                      console.error('❌ 状态更新失败:', result.message);
+                      message.error(`状态更新失败: ${result.message}`);
                       return;
                     }
                     
@@ -2784,7 +2712,7 @@ const ShippingPage: React.FC = () => {
                     
                   } catch (error) {
                     message.destroy();
-                    console.error('❌ 出库记录处理失败:', error);
+                    console.error('❌ 状态更新处理失败:', error);
                     message.error('操作失败，请检查后重试：' + (error instanceof Error ? error.message : '未知错误'));
                   } finally {
                     setShippingLoading(false);
