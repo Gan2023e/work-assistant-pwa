@@ -423,22 +423,56 @@ const InventoryManagement: React.FC = () => {
   // 打印标签
   const handlePrint = async (record: InventoryRecord) => {
     try {
-      const labelData: LabelData = {
-        recordId: record.记录号,
-        sku: record.sku,
-        quantity: record.total_quantity,
-        boxes: record.total_boxes,
-        country: record.country,
-        operator: record.操作员,
-        packer: record.打包员,
-        boxType: record.box_type,
-        mixBoxNum: record.mix_box_num,
-        createTime: record.time,
-        barcode: record.记录号
-      };
+      // 如果是混合箱，直接打印一张混合箱标签
+      if (record.box_type === '混合箱') {
+        const labelData: LabelData = {
+          recordId: record.记录号,
+          sku: record.sku,
+          quantity: record.total_quantity,
+          boxes: 1,
+          country: record.country,
+          operator: record.操作员,
+          packer: record.打包员,
+          boxType: record.box_type,
+          mixBoxNum: record.mix_box_num,
+          createTime: record.time,
+          barcode: record.记录号
+        };
 
-      await printManager.printLabel(labelData);
-      message.success('打印任务已发送');
+        await printManager.printLabel(labelData);
+        message.success('打印任务已发送');
+        return;
+      }
+
+      // 整箱：为每个箱子创建单独的外箱单
+      const totalBoxes = record.total_boxes;
+      const singleBoxQuantity = Math.floor(record.total_quantity / totalBoxes);
+      const allLabels: LabelData[] = [];
+
+      // 为每个箱子创建一张外箱单
+      for (let boxIndex = 1; boxIndex <= totalBoxes; boxIndex++) {
+        const labelData: LabelData = {
+          recordId: `${record.记录号}_${boxIndex}`,
+          sku: record.sku,
+          quantity: singleBoxQuantity, // 单箱数量
+          boxes: 1, // 每张标签代表1箱
+          country: record.country,
+          operator: record.操作员,
+          packer: record.打包员,
+          boxType: record.box_type,
+          createTime: record.time,
+          barcode: `${record.记录号}_${boxIndex}`
+        };
+        allLabels.push(labelData);
+      }
+
+      // 一次性打印所有标签
+      const success = await printManager.printMultipleLabels(allLabels);
+      if (success) {
+        message.success(`打印任务已发送，共 ${allLabels.length} 张外箱单`);
+      } else {
+        message.error('打印失败');
+      }
     } catch (error) {
       message.error('打印失败');
       console.error(error);
