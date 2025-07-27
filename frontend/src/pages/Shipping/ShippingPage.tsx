@@ -35,7 +35,8 @@ import {
   BoxPlotOutlined,
   EditOutlined,
   HistoryOutlined,
-  SearchOutlined
+  SearchOutlined,
+  LeftOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
@@ -1142,6 +1143,7 @@ const ShippingPage: React.FC = () => {
       dataIndex: 'need_num',
       key: 'need_num',
       width: 130,
+      align: 'center',
       ellipsis: true,
       sorter: (a: MergedShippingData, b: MergedShippingData) => {
         const aValue = a.need_num || '';
@@ -1497,23 +1499,50 @@ const ShippingPage: React.FC = () => {
     setShippingLoading(true);
     
     try {
-      // 检查当前混合箱是否已经确认过（通过箱号检查）
-      const currentBoxNumber = String(nextBoxNumber);
-      const isAlreadyConfirmed = shippingData.some((item: any) => item.box_num === currentBoxNumber);
+      const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
       
-      if (!isAlreadyConfirmed) {
-        const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
-          box_num: currentBoxNumber,
-          amz_sku: item.amz_sku,
-          quantity: item.quantity
-        }));
+      // 检查当前混合箱是否已经确认过
+      const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
+      
+      if (isAlreadyConfirmed) {
+        // 如果已经确认过，先移除之前的确认数据
+        const updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => item.box_num !== currentBoxNum);
+        setConfirmedMixedBoxes(updatedConfirmedMixedBoxes);
         
-        setShippingData([...shippingData, ...newShippingData]);
-        setNextBoxNumber(nextBoxNumber + 1); // 递增箱号
+        // 移除对应的发货数据
+        const correspondingShippingData = shippingData.filter((item: any) => {
+          // 通过 amz_sku 匹配找到对应的发货数据
+          return boxData.some(boxItem => boxItem.amz_sku === item.amz_sku);
+        });
         
-        // 保存混合箱数据用于最终出库记录
-        setConfirmedMixedBoxes([...confirmedMixedBoxes, ...boxData]);
+        if (correspondingShippingData.length > 0) {
+          const boxNumToRemove = correspondingShippingData[0].box_num;
+          const updatedShippingData = shippingData.filter((item: any) => item.box_num !== boxNumToRemove);
+          setShippingData(updatedShippingData);
+        }
       }
+      
+      // 生成新的箱号
+      const newBoxNumber = isAlreadyConfirmed ? 
+        // 如果是重新确认，使用原来的位置编号
+        String(currentMixedBoxIndex + 1) :
+        String(nextBoxNumber);
+      
+      const newShippingData: ShippingConfirmData[] = boxData.map(item => ({
+        box_num: newBoxNumber,
+        amz_sku: item.amz_sku,
+        quantity: item.quantity
+      }));
+      
+      setShippingData([...shippingData, ...newShippingData]);
+      
+      // 如果不是重新确认，才递增箱号
+      if (!isAlreadyConfirmed) {
+        setNextBoxNumber(nextBoxNumber + 1);
+      }
+      
+      // 保存混合箱数据用于最终出库记录
+      setConfirmedMixedBoxes([...confirmedMixedBoxes, ...boxData]);
       
       if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
         setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
@@ -1523,6 +1552,15 @@ const ShippingPage: React.FC = () => {
       }
     } finally {
       setShippingLoading(false);
+    }
+  };
+
+  // 返回上一箱
+  const goToPreviousMixedBox = () => {
+    if (currentMixedBoxIndex > 0) {
+      // 简单地返回到上一箱显示确认页面
+      // 不自动撤销任何确认，让用户在上一箱的页面中自行决定
+      setCurrentMixedBoxIndex(currentMixedBoxIndex - 1);
     }
   };
 
@@ -2222,12 +2260,29 @@ const ShippingPage: React.FC = () => {
 
         {currentStep === 0 && uniqueMixedBoxNums.length > 0 && (
           <div>
-            <Alert
-              message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}`}
-              description={`正在处理混合箱号: ${uniqueMixedBoxNums[currentMixedBoxIndex]} 中的所有产品，请确认是否发出`}
-              type="info"
-              style={{ marginBottom: 16 }}
-            />
+            {(() => {
+              const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+              const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
+              const actualBoxNum = mixedBoxes.filter(item => item.box_num === currentBoxNum)[0]?.box_num || currentBoxNum;
+              
+              return (
+                <Alert
+                  message={`混合箱 ${currentMixedBoxIndex + 1}/${uniqueMixedBoxNums.length}${isAlreadyConfirmed ? ' (已确认)' : ''}`}
+                  description={
+                    <div>
+                      <div>正在处理混合箱号: {actualBoxNum} 中的所有产品，请确认是否发出</div>
+                      {isAlreadyConfirmed && (
+                        <div style={{ color: '#52c41a', marginTop: 4 }}>
+                          ✅ 此箱已确认发货，重新确认将覆盖之前的选择
+                        </div>
+                      )}
+                    </div>
+                  }
+                  type={isAlreadyConfirmed ? "success" : "info"}
+                  style={{ marginBottom: 16 }}
+                />
+              );
+            })()}
             <Table
               dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
               columns={[
@@ -2249,6 +2304,16 @@ const ShippingPage: React.FC = () => {
             />
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
+                {/* 只有在有2箱及以上且不是第一箱时才显示"上一箱"按钮 */}
+                {uniqueMixedBoxNums.length >= 2 && currentMixedBoxIndex > 0 && (
+                  <Button 
+                    onClick={goToPreviousMixedBox}
+                    disabled={shippingLoading}
+                    icon={<LeftOutlined />}
+                  >
+                    上一箱
+                  </Button>
+                )}
                 <Button 
                   onClick={() => {
                     if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
@@ -2270,7 +2335,11 @@ const ShippingPage: React.FC = () => {
                   loading={shippingLoading}
                   disabled={shippingLoading}
                 >
-                  确认发出
+                  {(() => {
+                    const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+                    const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
+                    return isAlreadyConfirmed ? '重新确认' : '确认发出';
+                  })()}
                 </Button>
               </Space>
             </div>
@@ -3465,11 +3534,14 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
                   value={record.confirm_boxes}
                   onChange={(value) => {
                     const newData = [...confirmData];
-                    newData[index].confirm_boxes = value || 0;
-                    newData[index].confirm_quantity = Math.min(
-                      value || 0 * Math.floor(record.total_quantity / record.total_boxes),
-                      record.total_quantity
-                    );
+                    const newBoxes = value || 0;
+                    newData[index].confirm_boxes = newBoxes;
+                    
+                    // 根据箱数自动计算数量：箱数 * 每箱平均数量
+                    const avgQuantityPerBox = Math.floor(record.total_quantity / record.total_boxes);
+                    const newQuantity = Math.min(newBoxes * avgQuantityPerBox, record.total_quantity);
+                    newData[index].confirm_quantity = newQuantity;
+                    
                     setConfirmData(newData);
                   }}
                 />
@@ -3478,18 +3550,31 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
             {
               title: '确认数量',
               key: 'confirm_quantity',
-              render: (_, record, index) => (
-                <InputNumber
-                  min={0}
-                  max={record.total_quantity}
-                  value={record.confirm_quantity}
-                  onChange={(value) => {
-                    const newData = [...confirmData];
-                    newData[index].confirm_quantity = value || 0;
-                    setConfirmData(newData);
-                  }}
-                />
-              )
+              render: (_, record, index) => {
+                const avgQuantityPerBox = Math.floor(record.total_quantity / record.total_boxes);
+                return (
+                  <InputNumber
+                    min={0}
+                    max={record.total_quantity}
+                    step={avgQuantityPerBox} // 设置步长为每箱平均数量
+                    value={record.confirm_quantity}
+                    keyboard={false} // 禁用键盘输入
+                    onChange={(value) => {
+                      const newData = [...confirmData];
+                      const newQuantity = value || 0;
+                      newData[index].confirm_quantity = newQuantity;
+                      
+                      // 根据数量自动计算箱数：数量 / 每箱平均数量
+                      if (avgQuantityPerBox > 0) {
+                        const newBoxes = Math.round(newQuantity / avgQuantityPerBox);
+                        newData[index].confirm_boxes = Math.min(newBoxes, record.total_boxes);
+                      }
+                      
+                      setConfirmData(newData);
+                    }}
+                  />
+                );
+              }
             },
           ]}
           pagination={false}
