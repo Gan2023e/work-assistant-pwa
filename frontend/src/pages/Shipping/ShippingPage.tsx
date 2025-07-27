@@ -1501,12 +1501,16 @@ const ShippingPage: React.FC = () => {
     try {
       const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
       
-      // 检查当前混合箱是否已经确认过
-      const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
+      // 检查当前混合箱是否已经确认过（使用前缀匹配，因为confirmedMixedBoxes中可能存储完整箱号）
+      const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
+        item.box_num.startsWith(currentBoxNum) || currentBoxNum.startsWith(item.box_num)
+      );
       
       if (isAlreadyConfirmed) {
         // 如果已经确认过，先移除之前的确认数据
-        const updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => item.box_num !== currentBoxNum);
+        const updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => 
+          !item.box_num.startsWith(currentBoxNum) && !currentBoxNum.startsWith(item.box_num)
+        );
         setConfirmedMixedBoxes(updatedConfirmedMixedBoxes);
         
         // 移除对应的发货数据
@@ -2262,8 +2266,16 @@ const ShippingPage: React.FC = () => {
           <div>
             {(() => {
               const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
-              const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
-              const actualBoxNum = mixedBoxes.filter(item => item.box_num === currentBoxNum)[0]?.box_num || currentBoxNum;
+              // 获取当前处理的混合箱数据，这里包含完整的箱号
+              const currentBoxData = mixedBoxes.filter(item => {
+                // 通过前缀匹配来找到对应的箱子，因为 uniqueMixedBoxNums 可能只包含基础箱号
+                return item.box_num.startsWith(currentBoxNum);
+              });
+              const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
+                item.box_num.startsWith(currentBoxNum)
+              );
+              // 使用实际的完整箱号
+              const actualBoxNum = currentBoxData[0]?.box_num || currentBoxNum;
               
               return (
                 <Alert
@@ -2284,7 +2296,9 @@ const ShippingPage: React.FC = () => {
               );
             })()}
             <Table
-              dataSource={mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex])}
+              dataSource={mixedBoxes.filter(item => 
+                item.box_num.startsWith(uniqueMixedBoxNums[currentMixedBoxIndex])
+              )}
               columns={[
                 { 
                   title: '原始混合箱号', 
@@ -2329,7 +2343,9 @@ const ShippingPage: React.FC = () => {
                 <Button 
                   type="primary" 
                   onClick={() => {
-                    const currentBoxData = mixedBoxes.filter(item => item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]);
+                    const currentBoxData = mixedBoxes.filter(item => 
+                      item.box_num.startsWith(uniqueMixedBoxNums[currentMixedBoxIndex])
+                    );
                     confirmMixedBox(currentBoxData);
                   }}
                   loading={shippingLoading}
@@ -2337,7 +2353,9 @@ const ShippingPage: React.FC = () => {
                 >
                   {(() => {
                     const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
-                    const isAlreadyConfirmed = confirmedMixedBoxes.some(item => item.box_num === currentBoxNum);
+                    const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
+                      item.box_num.startsWith(currentBoxNum)
+                    );
                     return isAlreadyConfirmed ? '重新确认' : '确认发出';
                   })()}
                 </Button>
