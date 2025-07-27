@@ -1465,12 +1465,9 @@ const ShippingPage: React.FC = () => {
         const mixedBoxData = result.data.mixed_boxes || [];
         const wholeBoxData = result.data.whole_boxes || [];
         
-        // 获取所有唯一的混合箱号 - 改进版本
-        // 如果box_num包含下划线，提取基础箱号；否则直接使用
-        const baseBoxNums = mixedBoxData.map((item: MixedBoxItem) => {
-          return item.box_num.includes('_') ? item.box_num.split('_')[0] : item.box_num;
-        });
-        const uniqueBoxNums: string[] = Array.from(new Set(baseBoxNums));
+        // 获取所有唯一的混合箱号 - 每个完整箱号作为独立单位
+        // 每个完整的混合箱号（如 MIX1753529866212_1, MIX1753529866212_2）都是独立的混合箱
+        const uniqueBoxNums: string[] = Array.from(new Set(mixedBoxData.map((item: MixedBoxItem) => item.box_num)));
         
         setMixedBoxes(mixedBoxData);
         setUniqueMixedBoxNums(uniqueBoxNums);
@@ -1503,21 +1500,17 @@ const ShippingPage: React.FC = () => {
     setShippingLoading(true);
     
     try {
-      const baseBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+      const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
       
-      // 检查当前混合箱是否已经确认过（使用改进的匹配逻辑）
+      // 检查当前混合箱是否已经确认过
       const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
-        item.box_num === baseBoxNum || 
-        item.box_num.startsWith(baseBoxNum + '_') ||
-        (item.box_num.includes('_') && item.box_num.split('_')[0] === baseBoxNum)
+        item.box_num === currentBoxNum
       );
       
       if (isAlreadyConfirmed) {
         // 如果已经确认过，先移除之前的确认数据
         const updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => 
-          !(item.box_num === baseBoxNum || 
-            item.box_num.startsWith(baseBoxNum + '_') ||
-            (item.box_num.includes('_') && item.box_num.split('_')[0] === baseBoxNum))
+          item.box_num !== currentBoxNum
         );
         setConfirmedMixedBoxes(updatedConfirmedMixedBoxes);
         
@@ -2273,16 +2266,14 @@ const ShippingPage: React.FC = () => {
         {currentStep === 0 && uniqueMixedBoxNums.length > 0 && (
           <div>
             {(() => {
-              const baseBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
-              // 获取当前处理的混合箱数据，这里包含完整的箱号
-              const currentBoxData = mixedBoxes.filter(item => {
-                return item.box_num === baseBoxNum || item.box_num.startsWith(baseBoxNum + '_');
-              });
+              const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+              // 获取当前处理的混合箱数据
+              const currentBoxData = mixedBoxes.filter(item => item.box_num === currentBoxNum);
               const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
-                item.box_num === baseBoxNum || item.box_num.startsWith(baseBoxNum + '_')
+                item.box_num === currentBoxNum
               );
-              // 使用实际的完整箱号，如果有多个子箱，显示第一个
-              const actualBoxNum = currentBoxData[0]?.box_num || baseBoxNum;
+              // 使用当前的完整箱号
+              const actualBoxNum = currentBoxNum;
               
               return (
                 <Alert
@@ -2303,10 +2294,9 @@ const ShippingPage: React.FC = () => {
               );
             })()}
             <Table
-              dataSource={mixedBoxes.filter(item => {
-                const baseBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
-                return item.box_num === baseBoxNum || item.box_num.startsWith(baseBoxNum + '_');
-              })}
+              dataSource={mixedBoxes.filter(item => 
+                item.box_num === uniqueMixedBoxNums[currentMixedBoxIndex]
+              )}
               columns={[
                 { 
                   title: '原始混合箱号', 
@@ -2351,9 +2341,9 @@ const ShippingPage: React.FC = () => {
                 <Button 
                   type="primary" 
                   onClick={() => {
-                    const baseBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+                    const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
                     const currentBoxData = mixedBoxes.filter(item => 
-                      item.box_num === baseBoxNum || item.box_num.startsWith(baseBoxNum + '_')
+                      item.box_num === currentBoxNum
                     );
                     confirmMixedBox(currentBoxData);
                   }}
@@ -2361,9 +2351,9 @@ const ShippingPage: React.FC = () => {
                   disabled={shippingLoading}
                 >
                   {(() => {
-                    const baseBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
+                    const currentBoxNum = uniqueMixedBoxNums[currentMixedBoxIndex];
                     const isAlreadyConfirmed = confirmedMixedBoxes.some(item => 
-                      item.box_num === baseBoxNum || item.box_num.startsWith(baseBoxNum + '_')
+                      item.box_num === currentBoxNum
                     );
                     return isAlreadyConfirmed ? '重新确认' : '确认发出';
                   })()}
