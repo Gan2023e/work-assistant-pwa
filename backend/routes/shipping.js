@@ -563,7 +563,15 @@ router.post('/mixed-boxes', async (req, res) => {
       // 只处理汇总后数量大于0的SKU（过滤掉已完全出库的SKU）
       skuSummaryMap.forEach((totalQuantity, summaryKey) => {
         if (totalQuantity > 0) { // 只处理库存为正的SKU
-          const [sku, country, mixBoxNum] = summaryKey.split('_');
+          // 修复箱号分割逻辑 - 正确解析summaryKey
+          // summaryKey格式: SKU_国家_混合箱号
+          // 例如: MK024A4_美国_MIX1753529314489_1
+          const parts = summaryKey.split('_');
+          const sku = parts[0];
+          const country = parts[1];
+          // 混合箱号是从第3部分开始的所有部分重新拼接
+          const mixBoxNum = parts.slice(2).join('_');
+          
           const mappingKey = `${sku}_${country}`;
           const amazonSku = mappingMap.get(mappingKey) || sku;
 
@@ -574,8 +582,11 @@ router.post('/mixed-boxes', async (req, res) => {
             quantity: totalQuantity
           });
         } else {
-          // 记录已出库的SKU
-          const [sku, country, mixBoxNum] = summaryKey.split('_');
+          // 记录已出库的SKU - 也需要修复分割逻辑
+          const parts = summaryKey.split('_');
+          const sku = parts[0];
+          const country = parts[1];
+          const mixBoxNum = parts.slice(2).join('_');
           console.log('\x1b[31m%s\x1b[0m', `🚫 已完全出库的SKU: ${sku} (混合箱: ${mixBoxNum}, 汇总数量: ${totalQuantity})`);
         }
       });
