@@ -828,20 +828,31 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // 上传装箱表（自动分析）- 直接处理文件上传
-  const handlePackingListFileSelect = async (file: any) => {
+  // 上传装箱表（自动分析）- 文件选择后立即上传
+  const handlePackingListFileChange = async (info: any) => {
+    const { fileList } = info;
+    
+    if (fileList.length === 0) {
+      return; // 用户清除了文件选择
+    }
+
+    const file = fileList[0]?.originFileObj || fileList[0]?.file || fileList[0];
+    
+    if (!file || !file.name) {
+      message.error('文件获取失败，请重新选择文件');
+      return;
+    }
+
     // 检查是否有发货数据
     if (!shippingData || shippingData.length === 0) {
-      message.error('请先确认发货清单后再上传装箱表');
-      return false; // 阻止文件上传
+      message.warning('请先确认发货清单后再上传装箱表');
+      return;
     }
 
     setPackingListLoading(true);
-    message.loading('正在处理装箱表，请稍候...', 0);
-    
-    try {
-      console.log('📁 开始处理装箱表文件:', { name: file.name, size: file.size, type: file.type });
+    message.loading('正在上传装箱表并自动填写...', 0);
 
+    try {
       // 读取Excel文件，获取sheetNames，自动选择第二个sheet
       let sheetNameToUse = undefined;
       let boxCount = 0;
@@ -890,7 +901,6 @@ const ShippingPage: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        console.log('✅ 装箱表上传成功，开始自动填写');
         setPackingListConfig(result.data);
         
         // 自动填写装箱表
@@ -965,8 +975,6 @@ const ShippingPage: React.FC = () => {
     } finally {
       setPackingListLoading(false);
     }
-    
-    return false; // 阻止自动上传，因为我们已经手动处理了
   };
 
 
@@ -3040,7 +3048,7 @@ const ShippingPage: React.FC = () => {
             <div>
               <p><strong>🎨 保持原始格式：</strong>填写时完全保持原Excel文件的样式、公式、格式不变。</p>
               <p><strong>📋 智能解析：</strong>自动从M3获取箱数，从M列开始处理，第6行开始填写数据。</p>
-              <p><strong>🚀 一键完成：</strong>上传后自动填写并下载，无需额外操作。</p>
+              <p><strong>🚀 选择即处理：</strong>选择Excel文件后自动上传、填写并下载，无需点击其他按钮。</p>
             </div>
           }
           type="info"
@@ -3049,38 +3057,44 @@ const ShippingPage: React.FC = () => {
         
         <div style={{ textAlign: 'center' }}>
           <Upload
-            beforeUpload={handlePackingListFileSelect}
+            beforeUpload={() => false}
             accept=".xlsx,.xls"
             maxCount={1}
-            showUploadList={false}
-            disabled={packingListLoading}
+            onChange={handlePackingListFileChange}
+            disabled={packingListLoading || !shippingData || shippingData.length === 0}
+            fileList={[]} // 保持空的fileList，避免显示已选择的文件
           >
             <Button 
               icon={<UploadOutlined />} 
               size="large" 
-              style={{ width: '400px', height: '80px' }}
+              style={{ width: '100%', height: '80px' }}
               loading={packingListLoading}
               disabled={packingListLoading || !shippingData || shippingData.length === 0}
             >
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                  {packingListLoading ? '正在处理中...' : '选择Excel文件'}
+                <div style={{ fontSize: '16px', marginBottom: '4px' }}>
+                  {packingListLoading ? '正在处理...' : '选择Excel文件'}
                 </div>
-                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                  {shippingData && shippingData.length > 0 
-                    ? '选择后将自动上传、填写并下载' 
-                    : '请先确认发货清单'}
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  {!shippingData || shippingData.length === 0 
+                    ? '请先确认发货清单' 
+                    : packingListLoading 
+                      ? '正在上传、填写并准备下载...'
+                      : '选择后自动上传填写并下载'}
                 </div>
               </div>
             </Button>
           </Upload>
-          
-          {packingListLoading && (
-            <div style={{ marginTop: 16, color: '#1677ff' }}>
-              正在智能处理装箱表，请耐心等待...
-            </div>
-          )}
         </div>
+        
+        {(!shippingData || shippingData.length === 0) && (
+          <Alert
+            message="提示"
+            description="请先在发货确认流程中完成混合箱和整箱确认，生成发货清单后再上传装箱表。"
+            type="warning"
+            style={{ marginTop: 16 }}
+          />
+        )}
       </Modal>
 
       {/* 删除确认对话框 */}

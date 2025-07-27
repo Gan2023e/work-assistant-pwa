@@ -3365,15 +3365,10 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         boxCount: numBoxes,
         boxColumns: boxColumns,
         boxNumbers: boxNumbers,
-        // 新流程中明确不设置这些行号，避免修改列名行
         foundBoxWeightRow: null,
         foundBoxWidthRow: null,
         foundBoxLengthRow: null,
-        foundBoxHeightRow: null,
-        boxWeightRow: null, // 明确设置为null，确保不会填写
-        boxWidthRow: null,
-        boxLengthRow: null, 
-        boxHeightRow: null
+        foundBoxHeightRow: null
       };
       
       headerRowIndex = startRow - 2; // 设置一个虚拟的标题行索引，实际不使用
@@ -3627,8 +3622,21 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
         skuEndRowIndex = rowIndex;
       }
       
-      // 新流程：完全不查找箱子信息行，避免修改列名行
-      console.log('🚫 新流程跳过箱子信息行查找，确保不会修改列名行');
+      // 新流程中也查找箱子信息行（Box weight, Box width, Box length, Box height）
+      for (let rowIndex = skuEndRowIndex + 1; rowIndex < data.length; rowIndex++) {
+        const row = data[rowIndex] || [];
+        const firstCell = String(row[0] || '').toLowerCase().trim();
+        
+        if (firstCell.includes('box') && firstCell.includes('weight')) {
+          autoConfig.foundBoxWeightRow = rowIndex;
+        } else if (firstCell.includes('box') && firstCell.includes('width')) {
+          autoConfig.foundBoxWidthRow = rowIndex;
+        } else if (firstCell.includes('box') && firstCell.includes('length')) {
+          autoConfig.foundBoxLengthRow = rowIndex;
+        } else if (firstCell.includes('box') && firstCell.includes('height')) {
+          autoConfig.foundBoxHeightRow = rowIndex;
+        }
+      }
       
       // 创建箱子信息
       for (let i = 0; i < autoConfig.boxNumbers.length; i++) {
@@ -3712,10 +3720,10 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       skuEndRow: useNewFlow ? null : (skuEndRowIndex + 1), // 新流程动态确定结束行
       boxColumns: autoConfig.boxColumns,
       boxNumbers: autoConfig.boxNumbers,
-      boxWeightRow: useNewFlow ? null : (autoConfig.foundBoxWeightRow !== null ? autoConfig.foundBoxWeightRow + 1 : null),
-      boxWidthRow: useNewFlow ? null : (autoConfig.foundBoxWidthRow !== null ? autoConfig.foundBoxWidthRow + 1 : null),
-      boxLengthRow: useNewFlow ? null : (autoConfig.foundBoxLengthRow !== null ? autoConfig.foundBoxLengthRow + 1 : null),
-      boxHeightRow: useNewFlow ? null : (autoConfig.foundBoxHeightRow !== null ? autoConfig.foundBoxHeightRow + 1 : null),
+      boxWeightRow: autoConfig.foundBoxWeightRow !== null ? autoConfig.foundBoxWeightRow + 1 : null,
+      boxWidthRow: autoConfig.foundBoxWidthRow !== null ? autoConfig.foundBoxWidthRow + 1 : null,
+      boxLengthRow: autoConfig.foundBoxLengthRow !== null ? autoConfig.foundBoxLengthRow + 1 : null,
+      boxHeightRow: autoConfig.foundBoxHeightRow !== null ? autoConfig.foundBoxHeightRow + 1 : null,
       sheetNames: workbook.SheetNames,
       items: packingItems,
       boxes: boxes,
@@ -3916,14 +3924,7 @@ router.post('/packing-list/fill', async (req, res) => {
       filledCount++;
     });
 
-    // 填写默认的箱子信息（如果没有的话）- 只在确保不是列名行的情况下填写
-    console.log(`🔍 检查是否需要填写箱子信息，配置中的行号:`, {
-      boxWeightRow: config.boxWeightRow,
-      boxWidthRow: config.boxWidthRow, 
-      boxLengthRow: config.boxLengthRow,
-      boxHeightRow: config.boxHeightRow,
-      skuStartRow: config.skuStartRow
-    });
+    // 填写默认的箱子信息（如果没有的话）- 直接修改原始工作表
     
     // 根据发货数据中的国家信息确定默认箱子参数
     const countriesInShipment = [...new Set(shippingData.map(item => item.country || '默认'))];
@@ -3945,9 +3946,6 @@ router.post('/packing-list/fill', async (req, res) => {
       defaultBoxDimensions = { width: 45, length: 60, height: 35 };
     }
 
-    // 安全检查：只有当行号大于SKU数据区域时才填写箱子信息，确保不修改列名行
-    const safeRowThreshold = config.skuStartRow + availableSkus.length + 3; // SKU开始行 + SKU数量 + 3行缓冲
-    
     for (let i = 0; i < config.boxColumns.length; i++) {
       const colIndex = getColumnIndex(config.boxColumns[i]);
       
@@ -3957,39 +3955,28 @@ router.post('/packing-list/fill', async (req, res) => {
       );
       
       if (hasItems) {
+        // 只为有装货的箱子使用ExcelJS填写默认信息，完美保持格式
         const colNum = colIndex + 1; // 转换为1基索引
         
-        // 安全检查：确保不会修改列名行或标题行
-        if (config.boxWeightRow && config.boxWeightRow > safeRowThreshold) {
+        if (config.boxWeightRow) {
           const weightCell = worksheet.getCell(config.boxWeightRow, colNum);
           weightCell.value = defaultBoxWeight;
-          console.log(`📝 ExcelJS安全填写箱重: 行${config.boxWeightRow} 列${colNum} = ${defaultBoxWeight}`);
-        } else if (config.boxWeightRow) {
-          console.log(`⚠️ 跳过箱重填写，行号${config.boxWeightRow}可能是列名行（安全阈值：${safeRowThreshold}）`);
+          console.log(`📝 ExcelJS填写箱重: 行${config.boxWeightRow} 列${colNum} = ${defaultBoxWeight}`);
         }
-        
-        if (config.boxWidthRow && config.boxWidthRow > safeRowThreshold) {
+        if (config.boxWidthRow) {
           const widthCell = worksheet.getCell(config.boxWidthRow, colNum);
           widthCell.value = defaultBoxDimensions.width;
-          console.log(`📝 ExcelJS安全填写箱宽: 行${config.boxWidthRow} 列${colNum} = ${defaultBoxDimensions.width}`);
-        } else if (config.boxWidthRow) {
-          console.log(`⚠️ 跳过箱宽填写，行号${config.boxWidthRow}可能是列名行（安全阈值：${safeRowThreshold}）`);
+          console.log(`📝 ExcelJS填写箱宽: 行${config.boxWidthRow} 列${colNum} = ${defaultBoxDimensions.width}`);
         }
-        
-        if (config.boxLengthRow && config.boxLengthRow > safeRowThreshold) {
+        if (config.boxLengthRow) {
           const lengthCell = worksheet.getCell(config.boxLengthRow, colNum);
           lengthCell.value = defaultBoxDimensions.length;
-          console.log(`📝 ExcelJS安全填写箱长: 行${config.boxLengthRow} 列${colNum} = ${defaultBoxDimensions.length}`);
-        } else if (config.boxLengthRow) {
-          console.log(`⚠️ 跳过箱长填写，行号${config.boxLengthRow}可能是列名行（安全阈值：${safeRowThreshold}）`);
+          console.log(`📝 ExcelJS填写箱长: 行${config.boxLengthRow} 列${colNum} = ${defaultBoxDimensions.length}`);
         }
-        
-        if (config.boxHeightRow && config.boxHeightRow > safeRowThreshold) {
+        if (config.boxHeightRow) {
           const heightCell = worksheet.getCell(config.boxHeightRow, colNum);
           heightCell.value = defaultBoxDimensions.height;
-          console.log(`📝 ExcelJS安全填写箱高: 行${config.boxHeightRow} 列${colNum} = ${defaultBoxDimensions.height}`);
-        } else if (config.boxHeightRow) {
-          console.log(`⚠️ 跳过箱高填写，行号${config.boxHeightRow}可能是列名行（安全阈值：${safeRowThreshold}）`);
+          console.log(`📝 ExcelJS填写箱高: 行${config.boxHeightRow} 列${colNum} = ${defaultBoxDimensions.height}`);
         }
       }
     }
