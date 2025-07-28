@@ -27,7 +27,10 @@ async function processPartialShipment(shipmentItems, transaction) {
           sku: sku,
           country: country,
           status: { [Op.in]: ['待出库', '部分出库'] },
-          remaining_quantity: { [Op.gt]: 0 }
+          [Op.and]: [
+            // 使用原始字段计算剩余数量 > 0
+            LocalBox.sequelize.literal('(total_quantity - COALESCE(shipped_quantity, 0)) > 0')
+          ]
         },
         order: [['time', 'ASC']], // 按时间先进先出
         transaction
