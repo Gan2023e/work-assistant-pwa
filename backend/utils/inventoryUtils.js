@@ -176,7 +176,7 @@ async function cancelShipment(shipmentId, operator = '系统') {
  */
 async function getPendingInventory(filters = {}) {
     const whereCondition = {
-        status: '待出库'
+        status: { [Op.in]: ['待出库', '部分出库'] }
     };
     
     // 添加筛选条件
@@ -195,18 +195,28 @@ async function getPendingInventory(filters = {}) {
         attributes: [
             'sku',
             'country',
+            // 整箱剩余数量 = 总数量 - 已出库数量
             [LocalBox.sequelize.fn('SUM', 
-                LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' THEN total_quantity ELSE 0 END")
+                LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END")
             ), 'whole_box_quantity'],
             [LocalBox.sequelize.fn('SUM', 
                 LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END")
             ), 'whole_box_count'],
+            // 混合箱剩余数量 = 总数量 - 已出库数量
             [LocalBox.sequelize.fn('SUM', 
-                LocalBox.sequelize.literal("CASE WHEN box_type = '混合箱' THEN total_quantity ELSE 0 END")
+                LocalBox.sequelize.literal("CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END")
             ), 'mixed_box_quantity'],
             [LocalBox.sequelize.fn('COUNT', 
                 LocalBox.sequelize.literal("DISTINCT CASE WHEN box_type = '混合箱' THEN mix_box_num END")
             ), 'mixed_box_count'],
+            // 总剩余数量
+            [LocalBox.sequelize.fn('SUM', 
+                LocalBox.sequelize.literal("(total_quantity - COALESCE(shipped_quantity, 0))")
+            ), 'total_remaining_quantity'],
+            // 总已出库数量
+            [LocalBox.sequelize.fn('SUM', 
+                LocalBox.sequelize.literal("COALESCE(shipped_quantity, 0)")
+            ), 'total_shipped_quantity'],
             [LocalBox.sequelize.fn('MIN', LocalBox.sequelize.col('time')), 'earliest_inbound'],
             [LocalBox.sequelize.fn('MAX', LocalBox.sequelize.col('last_updated_at')), 'latest_update']
         ],
@@ -224,7 +234,7 @@ async function getMixedBoxDetails(mixBoxNum) {
     return await LocalBox.findAll({
         where: {
             mix_box_num: mixBoxNum,
-            status: '待出库'
+            status: { [Op.in]: ['待出库', '部分出库'] }
         },
         order: [['记录号', 'ASC']]
     });

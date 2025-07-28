@@ -21,13 +21,15 @@ interface InventoryRecord {
   打包员: string;
   mix_box_num?: string;
   marketPlace: string;
-  status: '待出库' | '已出库' | '已取消';
+  status: '待出库' | '部分出库' | '已出库' | '已取消';
   box_type: '整箱' | '混合箱';
   time: string;
   last_updated_at: string;
   shipped_at?: string;
   shipment_id?: number;
   remark?: string;
+  shipped_quantity?: number;
+  remaining_quantity?: number;
 }
 
 interface InventorySummary {
@@ -37,6 +39,8 @@ interface InventorySummary {
   whole_box_count: number;
   mixed_box_quantity: number;
   mixed_box_count: number;
+  total_remaining_quantity: number;
+  total_shipped_quantity: number;
   earliest_inbound: string;
   latest_update: string;
 }
@@ -516,6 +520,7 @@ const InventoryManagement: React.FC = () => {
   const getStatusTag = (status: string) => {
     const statusConfig = {
       '待出库': { color: 'blue', text: '待出库' },
+      '部分出库': { color: 'orange', text: '部分出库' },
       '已出库': { color: 'green', text: '已出库' },
       '已取消': { color: 'red', text: '已取消' }
     };
@@ -706,12 +711,14 @@ const InventoryManagement: React.FC = () => {
         }
         
         return (
-        <div>
-            <div>{quantity} 件</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
+          <div>
+            <div style={{ color: '#1890ff', fontWeight: 'bold' }}>
+              {quantity} 件
+            </div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
               {count} 箱
+            </div>
           </div>
-        </div>
         );
       }
     },
@@ -729,26 +736,42 @@ const InventoryManagement: React.FC = () => {
         }
         
         return (
-        <div>
-            <div>{quantity} 件</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
+          <div>
+            <div style={{ color: '#1890ff', fontWeight: 'bold' }}>
+              {quantity} 件
+            </div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
               {count} 个混合箱
+            </div>
           </div>
-        </div>
         );
       }
     },
     {
       title: '总库存',
       key: 'total',
-      width: 100,
+      width: 120,
       align: 'center',
       render: (_, record) => {
-        const wholeBoxQty = Number(record.whole_box_quantity) || 0;
-        const mixedBoxQty = Number(record.mixed_box_quantity) || 0;
-        const total = wholeBoxQty + mixedBoxQty;
+        const remainingQty = Number(record.total_remaining_quantity) || 0;
+        const shippedQty = Number(record.total_shipped_quantity) || 0;
+        const totalQty = remainingQty + shippedQty;
         
-        return <strong>{total} 件</strong>;
+        return (
+          <div>
+            <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
+              剩余: {remainingQty} 件
+            </div>
+            {shippedQty > 0 && (
+              <div style={{ fontSize: '12px', color: '#52c41a', marginTop: '2px' }}>
+                已出: {shippedQty} 件
+              </div>
+            )}
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+              总计: {totalQty} 件
+            </div>
+          </div>
+        );
       }
     },
     {
@@ -834,15 +857,40 @@ const InventoryManagement: React.FC = () => {
       align: 'center'
     },
     {
-      title: '数量',
+      title: '数量信息',
       key: 'quantity',
-      width: '8%',
+      width: '12%',
       align: 'center',
       render: (_, record) => {
-        if (record.box_type === '混合箱') {
-          return `${record.total_quantity}件`;
-        }
-        return `${record.total_quantity}件/${record.total_boxes}箱`;
+        const totalQty = record.total_quantity || 0;
+        const shippedQty = record.shipped_quantity || 0;
+        const remainingQty = record.remaining_quantity || (totalQty - shippedQty);
+        
+        return (
+          <div>
+            {/* 基本数量信息 */}
+            <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
+              {record.box_type === '混合箱' 
+                ? `${totalQty}件` 
+                : `${totalQty}件/${record.total_boxes}箱`
+              }
+            </div>
+            
+            {/* 出库状态信息 */}
+            {record.status === '部分出库' && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                <div style={{ color: '#52c41a' }}>已出: {shippedQty}件</div>
+                <div style={{ color: '#1890ff' }}>剩余: {remainingQty}件</div>
+              </div>
+            )}
+            
+            {record.status === '已出库' && shippedQty > 0 && (
+              <div style={{ fontSize: '12px', color: '#52c41a', marginTop: '2px' }}>
+                已全部出库
+              </div>
+            )}
+          </div>
+        );
       }
     },
     {
@@ -1119,6 +1167,7 @@ const InventoryManagement: React.FC = () => {
                 allowClear
               >
                 <Option value="待出库">待出库</Option>
+                <Option value="部分出库">部分出库</Option>
                 <Option value="已出库">已出库</Option>
                 <Option value="已取消">已取消</Option>
               </Select>

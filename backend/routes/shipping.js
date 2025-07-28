@@ -3,6 +3,7 @@ const router = express.Router();
 const { WarehouseProductsNeed, LocalBox, AmzSkuMapping, sequelize, ShipmentRecord, ShipmentItem, OrderShipmentRelation } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
 const { shipInventoryRecords, cancelShipment } = require('../utils/inventoryUtils');
+const { processPartialShipment, getInventoryStatusSummary, checkPartialShipmentStatus } = require('../utils/partialShipmentUtils');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
@@ -5754,8 +5755,19 @@ router.post('/update-shipped-status', async (req, res) => {
       outboundRecords.push(record);
     }
 
-    // 第三步：批量插入出库记录
-    await LocalBox.bulkCreate(outboundRecords, { transaction });
+    // 第三步：使用新的部分出库处理逻辑
+    const shipmentForProcessing = updateItems.map(item => ({
+      sku: item.sku,
+      quantity: item.quantity,
+      country: item.country
+    }));
+
+    const partialShipmentResult = await processPartialShipment(shipmentForProcessing, transaction);
+
+    // 第四步：创建出库记录（用于历史追踪）
+    if (outboundRecords.length > 0) {
+      await LocalBox.bulkCreate(outboundRecords, { transaction });
+    }
 
     await transaction.commit();
     
@@ -5770,8 +5782,14 @@ router.post('/update-shipped-status', async (req, res) => {
       data: {
         shipment_number: shipmentNumber,
         shipment_id: shipmentRecord.shipment_id,
-        updated_count: outboundRecords.length,
-        outbound_records: outboundRecords.length
+        updated_count: partialShipmentResult.updated,
+        outbound_records: outboundRecords.length,
+        partial_shipment_summary: {
+          updated: partialShipmentResult.updated,
+          partialShipped: partialShipmentResult.partialShipped,
+          fullyShipped: partialShipmentResult.fullyShipped,
+          errors: partialShipmentResult.errors
+        }
       }
     });
   } catch (error) {
@@ -5780,6 +5798,100 @@ router.post('/update-shipped-status', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '批量发货完成失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取库存状态汇总（包括部分出库）
+router.get('/inventory-status-summary', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到库存状态汇总查询请求:', JSON.stringify(req.query, null, 2));
+  
+  try {
+    const { country, sku, status } = req.query;
+    
+    // 构建筛选条件
+    const filters = {};
+    if (country) filters.country = country;
+    if (sku) filters.sku = { [Op.like]: `%${sku}%` };
+    if (status) filters.status = status;
+    
+    // 获取库存状态汇总
+    const summary = await getInventoryStatusSummary(filters);
+    
+    // 按状态分组统计
+    const statusCounts = {
+      '待出库': 0,
+      '部分出库': 0,
+      '已出库': 0,
+      '已取消': 0
+    };
+    
+    let totalQuantity = 0;
+    let totalShipped = 0;
+    let totalRemaining = 0;
+    
+    summary.forEach(item => {
+      statusCounts[item.status] = (statusCounts[item.status] || 0) + 1;
+      totalQuantity += parseInt(item.total_quantity) || 0;
+      totalShipped += parseInt(item.shipped_quantity) || 0;
+      totalRemaining += parseInt(item.remaining_quantity) || 0;
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '📊 库存状态汇总查询成功:', {
+      总记录数: summary.length,
+      状态统计: statusCounts
+    });
+    
+    res.json({
+      code: 0,
+      message: '获取库存状态汇总成功',
+      data: {
+        summary: summary,
+        statistics: {
+          total_records: summary.length,
+          status_counts: statusCounts,
+          total_quantity: totalQuantity,
+          total_shipped: totalShipped,
+          total_remaining: totalRemaining
+        }
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取库存状态汇总失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取库存状态汇总失败',
+      error: error.message
+    });
+  }
+});
+
+// 检查SKU的部分出库状态
+router.get('/check-partial-shipment/:sku/:country', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到SKU部分出库状态检查请求:', req.params);
+  
+  try {
+    const { sku, country } = req.params;
+    
+    const status = await checkPartialShipmentStatus(sku, country);
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ SKU部分出库状态检查完成:', {
+      sku,
+      country,
+      hasPartialShipment: status.hasPartialShipment
+    });
+    
+    res.json({
+      code: 0,
+      message: 'SKU部分出库状态检查完成',
+      data: status
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ SKU部分出库状态检查失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: 'SKU部分出库状态检查失败',
       error: error.message
     });
   }

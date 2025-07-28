@@ -23,9 +23,22 @@ const LocalBox = sequelize.define('LocalBox', {
   },
   // 新增字段
   status: {
-    type: DataTypes.ENUM('待出库', '已出库', '已取消'),
+    type: DataTypes.ENUM('待出库', '部分出库', '已出库', '已取消'),
     defaultValue: '待出库',
     comment: '库存状态'
+  },
+  shipped_quantity: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+    comment: '已出库数量'
+  },
+  remaining_quantity: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return (this.getDataValue('total_quantity') || 0) - (this.getDataValue('shipped_quantity') || 0);
+    },
+    comment: '剩余数量(虚拟字段)'
   },
   last_updated_at: {
     type: DataTypes.DATE,
@@ -71,6 +84,10 @@ const LocalBox = sequelize.define('LocalBox', {
     {
       name: 'idx_mix_box_num',
       fields: ['mix_box_num']
+    },
+    {
+      name: 'idx_status_shipped_quantity',
+      fields: ['status', 'shipped_quantity']
     }
   ]
 });
