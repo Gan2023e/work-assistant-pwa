@@ -5615,4 +5615,174 @@ router.delete('/mixed-box-items/batch', async (req, res) => {
   }
 });
 
+// 更新发货状态（批量发货完成）
+router.post('/update-shipped-status', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到批量发货完成请求:', JSON.stringify(req.body, null, 2));
+  
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { updateItems, shipping_method = '', logistics_provider = '', remark = '' } = req.body;
+    
+    if (!updateItems || !Array.isArray(updateItems) || updateItems.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({
+        code: 1,
+        message: '发货数据不能为空'
+      });
+    }
+
+    console.log('\x1b[33m%s\x1b[0m', '📦 开始处理发货完成，总计:', updateItems.length);
+
+    // 使用现有的出库记录逻辑，调用outbound-record的相同处理方式
+    const shipments = updateItems.map(item => ({
+      sku: item.sku,
+      total_quantity: item.quantity,
+      total_boxes: item.total_boxes || null,
+      country: item.country,
+      marketplace: '亚马逊', // 默认值
+      is_mixed_box: item.is_mixed_box || false,
+      original_mix_box_num: item.original_mix_box_num || null,
+      order_item_id: null, // 批量发货可能没有具体的需求记录ID
+      need_num: null // 批量发货可能没有具体的需求单号
+    }));
+
+    // 第一步：创建发货记录主表
+    const shipmentNumber = `SHIP-${Date.now()}`;
+    const totalBoxes = shipments.reduce((sum, item) => sum + (item.total_boxes || 0), 0);
+    const totalItems = shipments.reduce((sum, item) => sum + item.total_quantity, 0);
+
+    console.log('\x1b[33m%s\x1b[0m', '📦 创建发货记录:', {
+      shipmentNumber,
+      totalBoxes: Math.abs(totalBoxes),
+      totalItems: Math.abs(totalItems)
+    });
+
+    const shipmentRecord = await ShipmentRecord.create({
+      shipment_number: shipmentNumber,
+      operator: '批量发货',
+      total_boxes: Math.abs(totalBoxes),
+      total_items: Math.abs(totalItems),
+      shipping_method: shipping_method,
+      status: '已发货',
+      remark: remark,
+      logistics_provider: logistics_provider
+    }, { transaction });
+
+    // 第二步：处理出库记录
+    const outboundRecords = [];
+    
+    for (const shipment of shipments) {
+      const {
+        sku,
+        total_quantity,
+        total_boxes = null,
+        country,
+        marketplace = '亚马逊',
+        is_mixed_box = false,
+        original_mix_box_num = null
+      } = shipment;
+      
+      // 生成唯一的记录号
+      const recordId = `OUT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      
+      // 统一country字段为中文
+      let normalizedCountry = country;
+      if (country === 'US') {
+        normalizedCountry = '美国';
+      } else if (country === 'UK') {
+        normalizedCountry = '英国';
+      } else if (country === 'AU') {
+        normalizedCountry = '澳大利亚';
+      } else if (country === 'AE') {
+        normalizedCountry = '阿联酋';
+      } else if (country === 'CA') {
+        normalizedCountry = '加拿大';
+      }
+      
+      // 处理混合箱号
+      let mixBoxNum = null;
+      if (is_mixed_box) {
+        if (original_mix_box_num) {
+          mixBoxNum = original_mix_box_num;
+        } else {
+          try {
+            const existingRecord = await LocalBox.findOne({
+              where: {
+                sku: sku,
+                country: normalizedCountry,
+                mix_box_num: { [Op.ne]: null }
+              },
+              attributes: ['mix_box_num'],
+              raw: true
+            });
+            
+            if (existingRecord && existingRecord.mix_box_num) {
+              mixBoxNum = existingRecord.mix_box_num;
+              console.log(`📦 找到原始混合箱号: ${mixBoxNum} for SKU: ${sku}`);
+            } else {
+              console.warn(`⚠️ 无法找到SKU ${sku} 的原始混合箱号，生成新箱号`);
+              mixBoxNum = `OUT-MIX-${Date.now()}`;
+            }
+          } catch (error) {
+            console.error(`❌ 查找原始混合箱号失败: ${error.message}`);
+            mixBoxNum = `OUT-MIX-${Date.now()}`;
+          }
+        }
+      }
+      
+      // 创建出库记录
+      const record = {
+        记录号: recordId,
+        sku: sku,
+        total_quantity: -Math.abs(total_quantity),
+        total_boxes: total_boxes ? -Math.abs(total_boxes) : null,
+        country: normalizedCountry,
+        time: new Date(),
+        操作员: '批量发货',
+        marketPlace: marketplace,
+        mix_box_num: mixBoxNum,
+        shipment_id: shipmentRecord.shipment_id,
+        // 新增字段
+        status: '已出库',
+        shipped_at: new Date(),
+        box_type: is_mixed_box ? '混合箱' : '整箱',
+        last_updated_at: new Date(),
+        remark: remark ? `批量发货备注: ${remark}` : `发货单号: ${shipmentNumber}`
+      };
+      
+      outboundRecords.push(record);
+    }
+
+    // 第三步：批量插入出库记录
+    await LocalBox.bulkCreate(outboundRecords, { transaction });
+
+    await transaction.commit();
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量发货完成记录创建成功:', {
+      outboundRecords: outboundRecords.length,
+      shipmentNumber: shipmentNumber
+    });
+    
+    res.json({
+      code: 0,
+      message: '发货完成记录创建成功',
+      data: {
+        shipment_number: shipmentNumber,
+        shipment_id: shipmentRecord.shipment_id,
+        updated_count: outboundRecords.length,
+        outbound_records: outboundRecords.length
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量发货完成失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量发货完成失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
