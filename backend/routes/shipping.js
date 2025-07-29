@@ -5999,8 +5999,9 @@ router.get('/check-partial-shipment/:sku/:country', async (req, res) => {
 
 // 更新库存状态为已发货（批量发货确认第三步使用）
 router.post('/update-shipped-status', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到更新库存状态为已发货请求');
-  console.log('\x1b[35m%s\x1b[0m', '📋 请求详情:', JSON.stringify(req.body, null, 2));
+  const requestId = `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  console.log('\x1b[32m%s\x1b[0m', `🔍 [${requestId}] 收到更新库存状态为已发货请求`);
+  console.log('\x1b[35m%s\x1b[0m', `📋 [${requestId}] 请求详情:`, JSON.stringify(req.body, null, 2));
   
   const transaction = await sequelize.transaction();
   
@@ -6413,15 +6414,34 @@ router.post('/update-shipped-status', async (req, res) => {
     console.log(`🔍 最终orderRelations数组长度: ${orderRelations.length}`);
     if (orderRelations.length > 0) {
       console.log(`📋 准备插入的orderRelations:`, JSON.stringify(orderRelations, null, 2));
-      await OrderShipmentRelation.bulkCreate(orderRelations, { transaction });
-      console.log(`✅ 成功创建了 ${orderRelations.length} 条需求单发货关联记录`);
+      
+      try {
+        console.log('📤 开始执行 OrderShipmentRelation.bulkCreate...');
+        const createdRelations = await OrderShipmentRelation.bulkCreate(orderRelations, { 
+          transaction,
+          returning: true,
+          validate: true
+        });
+        console.log(`✅ 成功创建了 ${createdRelations.length} 条需求单发货关联记录`);
+        console.log('📋 创建的记录详情:', JSON.stringify(createdRelations, null, 2));
+      } catch (bulkCreateError) {
+        console.error('❌ OrderShipmentRelation.bulkCreate 执行失败:', bulkCreateError);
+        console.error('❌ 错误详情:', {
+          message: bulkCreateError.message,
+          sql: bulkCreateError.sql,
+          parameters: bulkCreateError.parameters,
+          stack: bulkCreateError.stack
+        });
+        throw bulkCreateError; // 重新抛出错误以触发事务回滚
+      }
     } else {
       console.warn(`⚠️ orderRelations数组为空，没有创建任何order_shipment_relations记录！`);
+      console.warn(`⚠️ orderSummary 最终状态:`, Array.from(orderSummary.entries()));
     }
 
     await transaction.commit();
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ 库存状态更新成功 (优化临时发货流程):', {
+    console.log('\x1b[32m%s\x1b[0m', `✅ [${requestId}] 库存状态更新成功 (优化临时发货流程):`, {
       shipmentNumber: shipmentNumber,
       outboundRecords: outboundRecords.length,
       shipmentItems: shipmentItems.length,
@@ -6448,12 +6468,23 @@ router.post('/update-shipped-status', async (req, res) => {
       }
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error('\x1b[31m%s\x1b[0m', '❌ 更新库存状态失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 更新库存状态过程中发生错误，执行事务回滚');
+    console.error('❌ 错误类型:', error.constructor.name);
+    console.error('❌ 错误消息:', error.message);
+    console.error('❌ 错误堆栈:', error.stack);
+    
+    try {
+      await transaction.rollback();
+      console.log('✅ 事务回滚成功');
+    } catch (rollbackError) {
+      console.error('❌ 事务回滚失败:', rollbackError);
+    }
+    
     res.status(500).json({
       code: 1,
       message: '更新库存状态失败',
-      error: error.message
+      error: error.message,
+      errorType: error.constructor.name
     });
   }
 });
