@@ -6323,6 +6323,53 @@ router.post('/update-shipped-status', async (req, res) => {
 
          // 第五步：创建需求单发货关联记录（这是之前缺失的关键部分）
      console.log(`🔍 准备创建order_shipment_relations记录，orderSummary大小: ${orderSummary.size}`);
+     console.log(`🔍 shipmentItems数量: ${shipmentItems.length}`);
+     
+     // 保底机制：确保所有shipmentItems都有对应的orderSummary记录
+     console.log(`🔍 检查保底机制条件 - orderSummary大小: ${orderSummary.size}, shipmentItems数量: ${shipmentItems.length}`);
+     
+     // 收集所有shipmentItems中的need_num
+     const shipmentNeedNums = shipmentItems.map(item => item.need_num);
+     const orderSummaryNeedNums = Array.from(orderSummary.keys());
+     
+     console.log(`📋 shipmentItems的need_num列表:`, shipmentNeedNums);
+     console.log(`📋 orderSummary的need_num列表:`, orderSummaryNeedNums);
+     
+     // 找出没有对应orderSummary记录的shipmentItems
+     const orphanedItems = shipmentItems.filter(item => !orderSummary.has(item.need_num));
+     
+     if (orphanedItems.length > 0) {
+       console.log(`⚠️ 发现 ${orphanedItems.length} 个孤立的shipmentItems，启用保底机制`);
+       
+       for (const shipmentItem of orphanedItems) {
+         const tempNeedNum = shipmentItem.need_num || `TEMP-FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         orderSummary.set(tempNeedNum, {
+           total_requested: shipmentItem.shipped_quantity,
+           total_shipped: shipmentItem.shipped_quantity,
+           items: [],
+           is_temporary: true,
+           fallback_created: true // 标记这是保底机制创建的
+         });
+         console.log(`🔄 保底机制创建关联记录: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
+       }
+     } else if (orderSummary.size === 0 && shipmentItems.length > 0) {
+       console.log(`⚠️ orderSummary完全为空但有shipmentItems，强制启用保底机制`);
+       
+       for (const shipmentItem of shipmentItems) {
+         const tempNeedNum = shipmentItem.need_num || `TEMP-EMERGENCY-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         orderSummary.set(tempNeedNum, {
+           total_requested: shipmentItem.shipped_quantity,
+           total_shipped: shipmentItem.shipped_quantity,
+           items: [],
+           is_temporary: true,
+           fallback_created: true,
+           emergency_created: true // 标记这是紧急保底机制创建的
+         });
+         console.log(`🚨 紧急保底机制创建关联记录: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
+       }
+     } else {
+       console.log(`✅ 所有shipmentItems都有对应的orderSummary记录，无需保底机制`);
+     }
      
      // 打印orderSummary的详细内容用于调试
      for (const [needNum, summary] of orderSummary) {
