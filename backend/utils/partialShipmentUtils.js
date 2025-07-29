@@ -119,16 +119,35 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
   console.log('\x1b[33m%s\x1b[0m', '📦 批量查询库存记录，总计:', shipmentItems.length, '个SKU');
 
   try {
-    // 批量查询所有需要的库存记录（包含所有可用库存，后续按混合箱号优先级排序）
-    const inventoryConditions = shipmentItems.map(item => ({
-      [Op.and]: [
-        { sku: item.sku },
-        { country: item.country },
-        { status: { [Op.in]: ['待出库', '部分出库'] } },
-        // 使用原始字段计算剩余数量 > 0
-        LocalBox.sequelize.literal('(total_quantity - COALESCE(shipped_quantity, 0)) > 0')
-      ]
-    }));
+    // 批量查询所有需要的库存记录（区分整箱确认和普通出库）
+    const inventoryConditions = shipmentItems.map(item => {
+      const baseCondition = {
+        [Op.and]: [
+          { sku: item.sku },
+          { country: item.country }
+        ]
+      };
+      
+      // 对于整箱确认，查询指定混合箱的所有记录（包括已全部出库但状态未更新的）
+      if (item.is_whole_box_confirmed && item.original_mix_box_num) {
+        return {
+          [Op.and]: [
+            ...baseCondition[Op.and],
+            { mix_box_num: item.original_mix_box_num },
+            { status: { [Op.in]: ['待出库', '部分出库', '已出库'] } }
+          ]
+        };
+      }
+      
+      // 普通出库只查询剩余数量>0的记录
+      return {
+        [Op.and]: [
+          ...baseCondition[Op.and],
+          { status: { [Op.in]: ['待出库', '部分出库'] } },
+          LocalBox.sequelize.literal('(total_quantity - COALESCE(shipped_quantity, 0)) > 0')
+        ]
+      };
+    });
 
     const allInventoryRecords = await LocalBox.findAll({
       where: { [Op.or]: inventoryConditions },
@@ -154,15 +173,56 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
     // 处理每个SKU
     for (const item of shipmentItems) {
       try {
-        const { sku, quantity, country, is_mixed_box, original_mix_box_num } = item;
+        const { sku, quantity, country, is_mixed_box, original_mix_box_num, is_whole_box_confirmed } = item;
         const key = `${sku}-${country}`;
         let inventoryRecords = inventoryMap.get(key) || [];
 
-        console.log(`🔍 处理SKU: ${sku}, 目标出库数量: ${quantity}, 可用记录: ${inventoryRecords.length}条, 混合箱: ${is_mixed_box}, 指定箱号: ${original_mix_box_num}`);
+        console.log(`🔍 处理SKU: ${sku}, 目标出库数量: ${quantity}, 可用记录: ${inventoryRecords.length}条, 混合箱: ${is_mixed_box}, 指定箱号: ${original_mix_box_num}, 整箱确认: ${is_whole_box_confirmed}`);
 
         if (inventoryRecords.length === 0) {
           results.errors.push(`SKU ${sku} 在 ${country} 没有可用库存`);
           continue;
+        }
+
+        // 特殊处理：整箱确认发出
+        if (is_whole_box_confirmed && original_mix_box_num) {
+          console.log(`📦 整箱确认模式：直接标记混合箱 ${original_mix_box_num} 为已出库`);
+          
+          // 找到该混合箱号下的所有记录
+          const wholeBoxRecords = inventoryRecords.filter(record => 
+            record.mix_box_num === original_mix_box_num
+          );
+          
+          if (wholeBoxRecords.length === 0) {
+            results.errors.push(`SKU ${sku} 在混合箱 ${original_mix_box_num} 中没有找到库存记录`);
+            continue;
+          }
+          
+          // 对该混合箱的所有记录直接标记为已出库
+          wholeBoxRecords.forEach(record => {
+            const currentShipped = record.shipped_quantity || 0;
+            const newShippedQuantity = record.total_quantity;
+            
+            // 如果数量还没有完全出库，更新出库数量；如果已经完全出库，只更新状态
+            const needsQuantityUpdate = currentShipped < newShippedQuantity;
+            
+            updateOperations.push({
+              where: { 记录号: record.记录号 },
+              data: {
+                shipped_quantity: newShippedQuantity,
+                status: '已出库',
+                last_updated_at: new Date(),
+                shipped_at: new Date()
+              }
+            });
+            
+            console.log(`📋 整箱确认：记录号 ${record.记录号}, SKU: ${sku}, 混合箱: ${record.mix_box_num}, ${needsQuantityUpdate ? `出库: ${currentShipped} → ${newShippedQuantity}` : '状态更新为已出库'}`);
+            
+            results.updated++;
+            results.fullyShipped++;
+          });
+          
+          continue; // 跳过常规的部分出库逻辑
         }
 
         // 如果是混合箱发货且有指定箱号，按混合箱号优先级排序

@@ -2516,9 +2516,9 @@ const ShippingPage: React.FC = () => {
                     // 准备更新的数据
                     const updateItems: any[] = [];
                     
-                    // 处理混合箱数据
+                    // 处理混合箱数据（整箱确认发出）
                     if (confirmedMixedBoxes.length > 0) {
-                      console.log('📦 处理混合箱数据:', confirmedMixedBoxes);
+                      console.log('📦 处理混合箱数据（整箱确认）:', confirmedMixedBoxes);
                       confirmedMixedBoxes.forEach(mixedItem => {
                         const selectedRecord = selectedRows.find(row => row.amz_sku === mixedItem.amz_sku);
                         updateItems.push({
@@ -2527,6 +2527,7 @@ const ShippingPage: React.FC = () => {
                           country: selectedRecord?.country || '美国',
                           is_mixed_box: true,
                           original_mix_box_num: mixedItem.box_num,
+                          is_whole_box_confirmed: true, // 标识这是整箱确认发出
                         });
                       });
                     }
