@@ -6204,11 +6204,13 @@ router.post('/update-shipped-status', async (req, res) => {
          orderSummary.set(effectiveNeedNum, {
            total_requested: Math.abs(quantity),
            total_shipped: Math.abs(quantity),
-           items: record_num ? [record_num] : [], // 如果有record_num就记录
-           is_temporary: !need_num // 只有完全没有need_num才标记为临时发货
+           items: record_num && record_num > 0 ? [record_num] : [], // 只有正数record_num才记录到items
+           is_temporary: true, // 临时发货一律标记为true
+           record_nums: record_num ? [record_num] : [] // 保存原始record_num用于调试
          });
          
          console.log(`📦 创建临时发货明细: ${effectiveNeedNum}, 数量: ${quantity}, 记录ID: ${record_num || 'null'}`);
+         console.log(`📋 当前orderSummary大小: ${orderSummary.size}, 新增临时需求单: ${effectiveNeedNum}`);
        } else {
          // 正常发货：有对应的需求记录
          let remainingQuantity = Math.abs(quantity);
@@ -6315,17 +6317,27 @@ router.post('/update-shipped-status', async (req, res) => {
     }
 
          // 第五步：创建需求单发货关联记录（这是之前缺失的关键部分）
+     console.log(`🔍 准备创建order_shipment_relations记录，orderSummary大小: ${orderSummary.size}`);
+     
+     // 打印orderSummary的详细内容用于调试
+     for (const [needNum, summary] of orderSummary) {
+       console.log(`📋 orderSummary项目: ${needNum} => `, JSON.stringify(summary, null, 2));
+     }
+     
      const orderRelations = [];
      for (const [needNum, summary] of orderSummary) {
        const completionStatus = summary.total_shipped >= summary.total_requested ? '全部完成' : '部分完成';
        
-       orderRelations.push({
+       const relationRecord = {
          need_num: needNum,
          shipment_id: shipmentRecord.shipment_id,
          total_requested: summary.total_requested,
          total_shipped: summary.total_shipped,
          completion_status: completionStatus
-       });
+       };
+       
+       orderRelations.push(relationRecord);
+       console.log(`📦 添加order_shipment_relation记录:`, JSON.stringify(relationRecord, null, 2));
 
        // 为正常需求和有record_num的情况更新需求记录状态
        if (completionStatus === '全部完成' && summary.items.length > 0) {
@@ -6345,9 +6357,13 @@ router.post('/update-shipped-status', async (req, res) => {
      }
 
     // 插入需求单发货关联记录
+    console.log(`🔍 最终orderRelations数组长度: ${orderRelations.length}`);
     if (orderRelations.length > 0) {
+      console.log(`📋 准备插入的orderRelations:`, JSON.stringify(orderRelations, null, 2));
       await OrderShipmentRelation.bulkCreate(orderRelations, { transaction });
-      console.log(`✅ 创建了 ${orderRelations.length} 条需求单发货关联记录`);
+      console.log(`✅ 成功创建了 ${orderRelations.length} 条需求单发货关联记录`);
+    } else {
+      console.warn(`⚠️ orderRelations数组为空，没有创建任何order_shipment_relations记录！`);
     }
 
     await transaction.commit();
