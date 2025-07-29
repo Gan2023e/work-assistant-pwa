@@ -150,9 +150,20 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
     });
 
     console.log(`📦 查询到的库存记录总数: ${allInventoryRecords.length}`);
+    
+    console.log('🔍 查询条件详情:');
+    inventoryConditions.forEach((condition, index) => {
+      console.log(`条件 ${index + 1}:`, JSON.stringify(condition, null, 2));
+    });
+    
+    console.log('📋 发货项目详情:');
+    shipmentItems.forEach((item, index) => {
+      console.log(`发货项目 ${index + 1}: SKU=${item.sku}, 数量=${item.quantity}, 国家=${item.country}, 整箱确认=${item.is_whole_box_confirmed}, 混合箱=${item.is_mixed_box}, 原箱号=${item.original_mix_box_num}`);
+    });
+    
     allInventoryRecords.forEach(record => {
       const remainingQty = (record.total_quantity || 0) - (record.shipped_quantity || 0);
-      console.log(`📋 库存记录: ${record.记录号}, SKU: ${record.sku}, 总量: ${record.total_quantity}, 已出库: ${record.shipped_quantity || 0}, 剩余: ${remainingQty}, 状态: ${record.status}`);
+      console.log(`📋 库存记录: ${record.记录号}, SKU: ${record.sku}, 总量: ${record.total_quantity}, 已出库: ${record.shipped_quantity || 0}, 剩余: ${remainingQty}, 状态: ${record.status}, 混合箱: ${record.mix_box_num || '无'}, 国家: ${record.country}, 时间: ${record.time}`);
     });
 
     // 按SKU和国家分组库存记录
@@ -228,8 +239,7 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
             
             console.log(`📋 整箱确认：记录号 ${record.记录号}, SKU: ${sku}, 混合箱: ${record.mix_box_num}, ${needsQuantityUpdate ? `出库: ${currentShipped} → ${newShippedQuantity}` : '状态更新为已出库'}`);
             
-            results.updated++;
-            results.fullyShipped++;
+            // 计数会在批量更新完成后统计
           });
           
           continue; // 跳过常规的部分出库逻辑
@@ -280,10 +290,10 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
             newStatus = '待出库';
           } else if (newShippedQuantity < record.total_quantity) {
             newStatus = '部分出库';
-            results.partialShipped++;
+            // 计数会在批量更新完成后统计
           } else {
             newStatus = '已出库';
-            results.fullyShipped++;
+            // 计数会在批量更新完成后统计
           }
           
           // 添加到批量更新队列
@@ -300,7 +310,7 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
           console.log(`📋 准备更新库存记录: ${record.记录号}, SKU: ${sku}, 出库: ${toShipFromThis}, 新已出库: ${newShippedQuantity}, 新状态: ${newStatus}`);
           
           remainingToShip -= toShipFromThis;
-          results.updated++;
+          // 计数会在批量更新完成后统计
         }
         
         if (remainingToShip > 0) {
@@ -320,23 +330,63 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
     if (updateOperations.length > 0) {
       console.log('\x1b[33m%s\x1b[0m', '📦 开始批量更新库存记录，总计:', updateOperations.length, '条');
       
-      // 分批处理，避免单次更新过多记录
-      const batchSize = 50;
-      for (let i = 0; i < updateOperations.length; i += batchSize) {
-        const batch = updateOperations.slice(i, i + batchSize);
-        
-        // 并发执行批次内的更新
-        await Promise.all(batch.map(operation => 
-          LocalBox.update(operation.data, {
-            where: operation.where,
-            transaction
-          })
-        ));
-        
-        console.log(`✅ 完成批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(updateOperations.length / batchSize)}`);
-      }
+      // 显示所有准备更新的操作详情
+      updateOperations.forEach((operation, index) => {
+        console.log(`📋 更新操作 ${index + 1}: 记录号=${operation.where.记录号}, 新出库量=${operation.data.shipped_quantity}, 新状态=${operation.data.status}`);
+      });
       
-      console.log('\x1b[32m%s\x1b[0m', '✅ 批量更新完成，更新记录:', updateOperations.length, '条');
+      try {
+        // 重置实际更新计数
+        let actualUpdated = 0;
+        
+        // 分批处理，避免单次更新过多记录
+        const batchSize = 50;
+        for (let i = 0; i < updateOperations.length; i += batchSize) {
+          const batch = updateOperations.slice(i, i + batchSize);
+          
+          // 并发执行批次内的更新
+          const updateResults = await Promise.all(batch.map((operation, batchIndex) => 
+            LocalBox.update(operation.data, {
+              where: operation.where,
+              transaction
+            }).catch(error => {
+              console.error(`❌ 更新记录号 ${operation.where.记录号} 失败:`, error.message);
+              results.errors.push(`更新记录号 ${operation.where.记录号} 失败: ${error.message}`);
+              return [0]; // 返回0表示更新失败
+            })
+          ));
+          
+          // 统计实际更新的记录数和状态
+          updateResults.forEach((result, batchIndex) => {
+            if (Array.isArray(result) && result[0] > 0) {
+              actualUpdated++;
+              
+              // 获取对应的更新操作
+              const operation = batch[batchIndex];
+              const newStatus = operation.data.status;
+              
+              // 统计状态
+              if (newStatus === '部分出库') {
+                results.partialShipped++;
+              } else if (newStatus === '已出库') {
+                results.fullyShipped++;
+              }
+            }
+          });
+          
+          console.log(`✅ 完成批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(updateOperations.length / batchSize)}，本批次更新: ${updateResults.filter(r => Array.isArray(r) && r[0] > 0).length}条`);
+        }
+        
+        // 更新实际的updated计数
+        results.updated = actualUpdated;
+        
+        console.log('\x1b[32m%s\x1b[0m', '✅ 批量更新完成，实际更新记录:', actualUpdated, '条，预期:', updateOperations.length, '条');
+      } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新过程中发生错误:', error.message);
+        results.errors.push(`批量更新失败: ${error.message}`);
+      }
+    } else {
+      console.log('\x1b[33m%s\x1b[0m', '⚠️ 没有需要更新的库存记录');
     }
 
   } catch (error) {
