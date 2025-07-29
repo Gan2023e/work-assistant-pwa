@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, Divider, AutoComplete, InputNumber } from 'antd';
+import React, { useState } from 'react';
+import { Modal, Card, Button, Select, Form, Input, message, Space, Row, Col, AutoComplete, InputNumber } from 'antd';
 import { SaveOutlined, UndoOutlined, FileTextOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../utils/printManager';
 import { useAuth } from '../contexts/AuthContext';
@@ -172,6 +172,35 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         message: `更新请求失败: ${error instanceof Error ? error.message : '未知错误'}`
       };
     }
+  };
+
+  // 将输入文本中的SKU转换为大写
+  const formatSkuInput = (text: string): string => {
+    if (!text.trim()) return text;
+    
+    const lines = text.split('\n');
+    return lines.map(line => {
+      // 保留空行
+      if (!line.trim()) return line;
+      
+      const parts = line.trim().split(/\s+/);
+      
+      // 如果有至少2个部分（SKU和数量）
+      if (parts.length >= 2) {
+        // 将整个SKU（第一个部分的所有字符）转换为大写
+        const sku = parts[0].toUpperCase();
+        const rest = parts.slice(1).join(' ');
+        return `${sku} ${rest}`;
+      }
+      
+      // 如果只有一个部分，可能是用户还在输入，也转换为大写
+      if (parts.length === 1) {
+        return parts[0].toUpperCase();
+      }
+      
+      // 其他情况保持原样
+      return line;
+    }).join('\n');
   };
 
   // 解析SKU及箱数输入框内容
@@ -684,6 +713,10 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   rows={8}
                   placeholder="示例：&#10;XB362D1 12（表示XB362D1产品12箱）&#10;MK048A4 8（表示MK048A4产品8箱）&#10;..."
                   style={{ fontFamily: 'monospace' }}
+                  onBlur={(e) => {
+                    const formattedValue = formatSkuInput(e.target.value);
+                    form.setFieldsValue({ skuInput: formattedValue });
+                  }}
                 />
                 </Form.Item>
 
@@ -821,6 +854,10 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                 rows={10}
                 placeholder="示例：&#10;MK048A4 56&#10;XB362D1 23&#10;..."
                 style={{ fontFamily: 'monospace' }}
+                onBlur={(e) => {
+                  const formattedValue = formatSkuInput(e.target.value);
+                  currentMixedBoxForm.setFieldsValue({ skuInput: formattedValue });
+                }}
               />
                 </Form.Item>
 
