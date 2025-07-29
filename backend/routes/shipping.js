@@ -5824,11 +5824,13 @@ router.post('/update-shipped-status', async (req, res) => {
       console.log('\x1b[33m%s\x1b[0m', '📦 创建需求单关联记录:', orderRelations.length, '条');
     }
 
-    // 第五步：处理部分出库逻辑（简化版）
+    // 第五步：处理部分出库逻辑（支持混合箱号匹配）
     const shipmentForProcessing = updateItems.map(item => ({
       sku: item.sku,
       quantity: item.quantity,
-      country: item.country
+      country: item.country,
+      is_mixed_box: item.is_mixed_box || false,
+      original_mix_box_num: item.original_mix_box_num || null
     }));
 
     const partialShipmentResult = await processPartialShipmentOptimized(shipmentForProcessing, transaction);

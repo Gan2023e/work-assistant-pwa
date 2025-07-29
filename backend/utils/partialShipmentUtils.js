@@ -119,7 +119,7 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
   console.log('\x1b[33m%s\x1b[0m', '📦 批量查询库存记录，总计:', shipmentItems.length, '个SKU');
 
   try {
-    // 批量查询所有需要的库存记录
+    // 批量查询所有需要的库存记录（包含所有可用库存，后续按混合箱号优先级排序）
     const inventoryConditions = shipmentItems.map(item => ({
       [Op.and]: [
         { sku: item.sku },
@@ -154,23 +154,46 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
     // 处理每个SKU
     for (const item of shipmentItems) {
       try {
-        const { sku, quantity, country } = item;
+        const { sku, quantity, country, is_mixed_box, original_mix_box_num } = item;
         const key = `${sku}-${country}`;
-        const inventoryRecords = inventoryMap.get(key) || [];
+        let inventoryRecords = inventoryMap.get(key) || [];
+
+        console.log(`🔍 处理SKU: ${sku}, 目标出库数量: ${quantity}, 可用记录: ${inventoryRecords.length}条, 混合箱: ${is_mixed_box}, 指定箱号: ${original_mix_box_num}`);
 
         if (inventoryRecords.length === 0) {
           results.errors.push(`SKU ${sku} 在 ${country} 没有可用库存`);
           continue;
         }
 
-        // 按先进先出原则分配出库数量
+        // 如果是混合箱发货且有指定箱号，按混合箱号优先级排序
+        if (is_mixed_box && original_mix_box_num) {
+          inventoryRecords = inventoryRecords.sort((a, b) => {
+            // 优先匹配指定的混合箱号
+            if (a.mix_box_num === original_mix_box_num && b.mix_box_num !== original_mix_box_num) return -1;
+            if (b.mix_box_num === original_mix_box_num && a.mix_box_num !== original_mix_box_num) return 1;
+            // 其他记录按时间先进先出
+            return new Date(a.time) - new Date(b.time);
+          });
+          console.log(`📦 混合箱发货，按箱号 ${original_mix_box_num} 优先级排序`);
+        } else {
+          // 整箱发货或无指定箱号，按时间先进先出
+          inventoryRecords = inventoryRecords.sort((a, b) => new Date(a.time) - new Date(b.time));
+          console.log(`📦 整箱发货，按时间先进先出排序`);
+        }
+
+        // 按优化后的顺序分配出库数量
         let remainingToShip = quantity;
+        
+        console.log(`📦 开始分配SKU ${sku}的出库数量，需要出库: ${quantity}`);
         
         for (const record of inventoryRecords) {
           if (remainingToShip <= 0) break;
           
           const currentRemaining = record.remaining_quantity;
           const toShipFromThis = Math.min(remainingToShip, currentRemaining);
+          
+          const isMatchedBox = is_mixed_box && original_mix_box_num && record.mix_box_num === original_mix_box_num;
+          console.log(`📋 记录号 ${record.记录号}: 剩余 ${currentRemaining}, 本次分配 ${toShipFromThis}, 箱号: ${record.mix_box_num}${isMatchedBox ? ' ✅匹配' : ''}`);
           
           // 计算新的已出库数量
           const newShippedQuantity = (record.shipped_quantity || 0) + toShipFromThis;
@@ -198,14 +221,17 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
             }
           });
           
-          console.log(`📋 准备更新库存记录: ${record.记录号}, SKU: ${sku}, 出库: ${toShipFromThis}, 新状态: ${newStatus}`);
+          console.log(`📋 准备更新库存记录: ${record.记录号}, SKU: ${sku}, 出库: ${toShipFromThis}, 新已出库: ${newShippedQuantity}, 新状态: ${newStatus}`);
           
           remainingToShip -= toShipFromThis;
           results.updated++;
         }
         
         if (remainingToShip > 0) {
+          console.log(`⚠️ SKU ${sku} 在 ${country} 库存不足，还需要 ${remainingToShip} 个，缺少库存`);
           results.errors.push(`SKU ${sku} 在 ${country} 库存不足，缺少 ${remainingToShip} 个`);
+        } else {
+          console.log(`✅ SKU ${sku} 出库分配完成，共出库 ${quantity} 个`);
         }
         
       } catch (error) {
