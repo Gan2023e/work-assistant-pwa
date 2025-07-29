@@ -3,7 +3,7 @@ const router = express.Router();
 const { WarehouseProductsNeed, LocalBox, AmzSkuMapping, sequelize, ShipmentRecord, ShipmentItem, OrderShipmentRelation } = require('../models/index');
 const { Sequelize, Op } = require('sequelize');
 const { shipInventoryRecords, cancelShipment } = require('../utils/inventoryUtils');
-const { processPartialShipment, getInventoryStatusSummary, checkPartialShipmentStatus } = require('../utils/partialShipmentUtils');
+const { processPartialShipment, processPartialShipmentOptimized, getInventoryStatusSummary, checkPartialShipmentStatus } = require('../utils/partialShipmentUtils');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
@@ -5657,57 +5657,99 @@ router.post('/update-shipped-status', async (req, res) => {
       logistics_provider: logistics_provider
     }, { transaction });
 
-    // 第二步：创建发货明细记录
+    // 第二步：创建发货明细记录（优化：批量查询）
     const shipmentItems = [];
     const orderSummary = new Map(); // 用于统计每个需求单的发货情况
+    
+    console.log('\x1b[33m%s\x1b[0m', '📦 开始批量查询SKU映射和需求记录，总计:', updateItems.length, '个SKU');
 
-    for (const item of updateItems) {
+    // 预处理：统一country字段并收集所有需要查询的SKU
+    const normalizedItems = updateItems.map(item => {
+      let normalizedCountry = item.country;
+      if (item.country === 'US') {
+        normalizedCountry = '美国';
+      } else if (item.country === 'UK') {
+        normalizedCountry = '英国';
+      } else if (item.country === 'AU') {
+        normalizedCountry = '澳大利亚';
+      } else if (item.country === 'AE') {
+        normalizedCountry = '阿联酋';
+      } else if (item.country === 'CA') {
+        normalizedCountry = '加拿大';
+      }
+      return { ...item, normalizedCountry };
+    });
+
+    // 批量查询Amazon SKU映射
+    const mappingConditions = normalizedItems.map(item => ({
+      [Op.and]: [
+        { local_sku: item.sku },
+        { country: item.normalizedCountry }
+      ]
+    }));
+    
+    const allMappings = await AmzSkuMapping.findAll({
+      where: { [Op.or]: mappingConditions }
+    });
+    
+    // 创建映射的快速查找表
+    const mappingMap = new Map();
+    allMappings.forEach(mapping => {
+      const key = `${mapping.local_sku}-${mapping.country}`;
+      mappingMap.set(key, mapping);
+    });
+
+    // 批量查询需求记录
+    const orderConditions = normalizedItems.map(item => ({
+      [Op.and]: [
+        { sku: item.sku },
+        { country: item.normalizedCountry },
+        { status: { [Op.in]: ['备货中', '部分发货'] } }
+      ]
+    }));
+    
+    const allOrderItems = await WarehouseProductsNeed.findAll({
+      where: { [Op.or]: orderConditions },
+      order: [['record_num', 'DESC']]
+    });
+    
+    // 创建需求记录的快速查找表
+    const orderItemMap = new Map();
+    allOrderItems.forEach(orderItem => {
+      const key = `${orderItem.sku}-${orderItem.country}`;
+      if (!orderItemMap.has(key)) {
+        orderItemMap.set(key, orderItem); // 只保留最新的记录
+      }
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', '✅ 批量查询完成:', {
+      映射记录: allMappings.length,
+      需求记录: allOrderItems.length,
+      处理时间: Date.now()
+    });
+
+    // 现在快速处理每个SKU（无需数据库查询）
+    for (const item of normalizedItems) {
       const {
         sku,
         quantity,
-        country,
+        normalizedCountry,
         is_mixed_box = false,
         total_boxes = 0,
         original_mix_box_num = null
       } = item;
 
-      // 统一country字段为中文
-      let normalizedCountry = country;
-      if (country === 'US') {
-        normalizedCountry = '美国';
-      } else if (country === 'UK') {
-        normalizedCountry = '英国';
-      } else if (country === 'AU') {
-        normalizedCountry = '澳大利亚';
-      } else if (country === 'AE') {
-        normalizedCountry = '阿联酋';
-      } else if (country === 'CA') {
-        normalizedCountry = '加拿大';
-      }
-
-      // 查询Amazon SKU映射
-      const mapping = await AmzSkuMapping.findOne({
-        where: {
-          local_sku: sku,
-          country: normalizedCountry
-        }
-      });
-
-      // 尝试查找相关的需求记录
-      const orderItem = await WarehouseProductsNeed.findOne({
-        where: {
-          sku: sku,
-          country: normalizedCountry,
-          status: { [Op.in]: ['备货中', '部分发货'] } // 查找未完成的需求
-        },
-        order: [['record_num', 'DESC']] // 优先使用最新的需求记录
-      });
+      const mappingKey = `${sku}-${normalizedCountry}`;
+      const orderKey = `${sku}-${normalizedCountry}`;
+      
+      const mapping = mappingMap.get(mappingKey);
+      const orderItem = orderItemMap.get(orderKey);
 
       // 创建发货明细记录
       const shipmentItem = {
         shipment_id: shipmentRecord.shipment_id,
-        order_item_id: orderItem?.record_num || null, // 如果没有需求记录，使用null
-        need_num: orderItem?.need_num || `MANUAL-${Date.now()}`, // 如果没有需求单，生成手动发货标识
+        order_item_id: orderItem?.record_num || null,
+        need_num: orderItem?.need_num || `MANUAL-${Date.now()}`,
         local_sku: sku,
         amz_sku: mapping?.amz_sku || sku,
         country: normalizedCountry,
@@ -5789,7 +5831,7 @@ router.post('/update-shipped-status', async (req, res) => {
       country: item.country
     }));
 
-    const partialShipmentResult = await processPartialShipment(shipmentForProcessing, transaction);
+    const partialShipmentResult = await processPartialShipmentOptimized(shipmentForProcessing, transaction);
 
     await transaction.commit();
     
