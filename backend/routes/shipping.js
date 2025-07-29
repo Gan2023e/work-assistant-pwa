@@ -5730,25 +5730,45 @@ router.post('/update-shipped-status', async (req, res) => {
     });
 
     // 批量查询需求记录
-    const orderConditions = normalizedItems.map(item => ({
-      [Op.and]: [
-        { sku: item.sku },
-        { country: item.normalizedCountry },
-        { status: { [Op.in]: ['备货中', '部分发货'] } }
-      ]
-    }));
+    const orderConditions = [];
     
-    const allOrderItems = await WarehouseProductsNeed.findAll({
+    // 优先使用record_num进行精确查询
+    const recordNums = normalizedItems
+      .filter(item => item.record_num && item.record_num > 0)
+      .map(item => item.record_num);
+    
+    if (recordNums.length > 0) {
+      orderConditions.push({ record_num: { [Op.in]: recordNums } });
+    }
+    
+    // 对于没有record_num的记录，使用sku和country查询
+    const skuCountryItems = normalizedItems.filter(item => !item.record_num || item.record_num <= 0);
+    if (skuCountryItems.length > 0) {
+      const skuCountryConditions = skuCountryItems.map(item => ({
+        [Op.and]: [
+          { sku: item.sku },
+          { country: item.normalizedCountry },
+          { status: { [Op.in]: ['待发货', '备货中', '部分发货'] } } // 添加"待发货"状态
+        ]
+      }));
+      orderConditions.push(...skuCountryConditions);
+    }
+    
+    const allOrderItems = orderConditions.length > 0 ? await WarehouseProductsNeed.findAll({
       where: { [Op.or]: orderConditions },
       order: [['record_num', 'DESC']]
-    });
+    }) : [];
     
-    // 创建需求记录的快速查找表
+    // 创建需求记录的快速查找表（支持record_num和sku-country两种查找方式）
     const orderItemMap = new Map();
+    const orderItemByRecordNum = new Map();
     allOrderItems.forEach(orderItem => {
+      // 按record_num索引
+      orderItemByRecordNum.set(orderItem.record_num, orderItem);
+      // 按sku-country索引（用于备用查找）
       const key = `${orderItem.sku}-${orderItem.country}`;
       if (!orderItemMap.has(key)) {
-        orderItemMap.set(key, orderItem); // 只保留最新的记录
+        orderItemMap.set(key, orderItem);
       }
     });
 
@@ -5766,24 +5786,40 @@ router.post('/update-shipped-status', async (req, res) => {
         normalizedCountry,
         is_mixed_box = false,
         total_boxes = 0,
-        original_mix_box_num = null
+        original_mix_box_num = null,
+        record_num = null,
+        need_num = null,
+        amz_sku = null,
+        marketplace = '亚马逊'
       } = item;
 
       const mappingKey = `${sku}-${normalizedCountry}`;
-      const orderKey = `${sku}-${normalizedCountry}`;
       
       const mapping = mappingMap.get(mappingKey);
-      const orderItem = orderItemMap.get(orderKey);
+      
+      // 优先使用前端传来的record_num查找需求记录
+      let orderItem = null;
+      if (record_num && record_num > 0) {
+        orderItem = orderItemByRecordNum.get(record_num);
+        console.log(`🔍 通过record_num ${record_num} 查找需求记录:`, orderItem ? '找到' : '未找到');
+      }
+      
+      // 如果没有找到，尝试通过sku和country查找
+      if (!orderItem) {
+        const orderKey = `${sku}-${normalizedCountry}`;
+        orderItem = orderItemMap.get(orderKey);
+        console.log(`🔍 通过sku-country ${orderKey} 查找需求记录:`, orderItem ? '找到' : '未找到');
+      }
 
       // 创建发货明细记录
       const shipmentItem = {
         shipment_id: shipmentRecord.shipment_id,
-        order_item_id: orderItem?.record_num || null,
-        need_num: orderItem?.need_num || `MANUAL-${Date.now()}`,
+        order_item_id: orderItem?.record_num || record_num || null,
+        need_num: orderItem?.need_num || need_num || `TEMP-${Date.now()}`,
         local_sku: sku,
-        amz_sku: mapping?.amz_sku || sku,
+        amz_sku: mapping?.amz_sku || amz_sku || sku,
         country: normalizedCountry,
-        marketplace: '亚马逊',
+        marketplace: marketplace,
         requested_quantity: orderItem?.ori_quantity || Math.abs(quantity),
         shipped_quantity: Math.abs(quantity),
         whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
@@ -5793,20 +5829,34 @@ router.post('/update-shipped-status', async (req, res) => {
 
       shipmentItems.push(shipmentItem);
 
-      // 如果找到了需求记录，统计需求单发货情况
+      // 统计需求单发货情况（优先使用前端传来的need_num）
+      let effectiveNeedNum = null;
       if (orderItem) {
-        const needNum = orderItem.need_num;
-        if (!orderSummary.has(needNum)) {
-          orderSummary.set(needNum, {
+        effectiveNeedNum = orderItem.need_num;
+      } else if (need_num) {
+        effectiveNeedNum = need_num;
+      }
+      
+      if (effectiveNeedNum) {
+        if (!orderSummary.has(effectiveNeedNum)) {
+          orderSummary.set(effectiveNeedNum, {
             total_requested: 0,
             total_shipped: 0,
             items: []
           });
         }
-        const summary = orderSummary.get(needNum);
-        summary.total_requested += orderItem.ori_quantity;
+        const summary = orderSummary.get(effectiveNeedNum);
+        summary.total_requested += orderItem?.ori_quantity || Math.abs(quantity);
         summary.total_shipped += Math.abs(quantity);
-        summary.items.push(orderItem.record_num);
+        summary.items.push(orderItem?.record_num || record_num || null);
+        
+        console.log(`📊 需求单 ${effectiveNeedNum} 发货统计:`, {
+          total_requested: summary.total_requested,
+          total_shipped: summary.total_shipped,
+          items_count: summary.items.filter(id => id !== null).length
+        });
+      } else {
+        console.log(`⚠️ 无法确定需求单号，SKU: ${sku}, Country: ${normalizedCountry}`);
       }
     }
 
@@ -5819,6 +5869,9 @@ router.post('/update-shipped-status', async (req, res) => {
     // 第四步：创建需求单发货关联记录
     const orderRelations = [];
     for (const [needNum, summary] of orderSummary) {
+      // 过滤掉null值的items
+      const validItems = summary.items.filter(id => id !== null && id > 0);
+      
       const completionStatus = summary.total_shipped >= summary.total_requested ? '全部完成' : '部分完成';
       
       orderRelations.push({
@@ -5829,29 +5882,39 @@ router.post('/update-shipped-status', async (req, res) => {
         completion_status: completionStatus
       });
 
-      // 更新需求记录状态
-      if (completionStatus === '全部完成') {
-        await WarehouseProductsNeed.update(
-          { status: '已发货' },
-          { 
-            where: { record_num: { [Op.in]: summary.items } },
-            transaction 
-          }
-        );
+      console.log(`📦 创建需求单关联记录: ${needNum}, 请求: ${summary.total_requested}, 发货: ${summary.total_shipped}, 状态: ${completionStatus}`);
+
+      // 更新需求记录状态（仅对有效的record_num进行更新）
+      if (validItems.length > 0) {
+        if (completionStatus === '全部完成') {
+          await WarehouseProductsNeed.update(
+            { status: '已发货' },
+            { 
+              where: { record_num: { [Op.in]: validItems } },
+              transaction 
+            }
+          );
+        } else {
+          await WarehouseProductsNeed.update(
+            { status: '部分发货' },
+            { 
+              where: { record_num: { [Op.in]: validItems } },
+              transaction 
+            }
+          );
+        }
+        console.log(`📊 更新了 ${validItems.length} 个需求记录的状态为: ${completionStatus === '全部完成' ? '已发货' : '部分发货'}`);
       } else {
-        await WarehouseProductsNeed.update(
-          { status: '部分发货' },
-          { 
-            where: { record_num: { [Op.in]: summary.items } },
-            transaction 
-          }
-        );
+        console.log(`⚠️ 需求单 ${needNum} 没有有效的record_num，跳过状态更新`);
       }
     }
 
     if (orderRelations.length > 0) {
       await OrderShipmentRelation.bulkCreate(orderRelations, { transaction });
-      console.log('\x1b[33m%s\x1b[0m', '📦 创建需求单关联记录:', orderRelations.length, '条');
+      console.log('\x1b[33m%s\x1b[0m', '📦 成功创建需求单关联记录:', orderRelations.length, '条');
+      console.log('\x1b[33m%s\x1b[0m', '📦 关联记录详情:', orderRelations.map(rel => `${rel.need_num}: ${rel.total_shipped}/${rel.total_requested}`));
+    } else {
+      console.log('\x1b[31m%s\x1b[0m', '⚠️ 没有创建任何需求单关联记录，orderSummary内容:', Array.from(orderSummary.keys()));
     }
 
     // 第五步：处理部分出库逻辑（支持混合箱号匹配和整箱确认）
