@@ -5706,7 +5706,7 @@ router.post('/update-shipped-status', async (req, res) => {
       // 创建发货明细记录
       const shipmentItem = {
         shipment_id: shipmentRecord.shipment_id,
-        order_item_id: orderItem?.record_num || 0, // 如果没有需求记录，使用0作为默认值
+        order_item_id: orderItem?.record_num || null, // 如果没有需求记录，使用null
         need_num: orderItem?.need_num || `MANUAL-${Date.now()}`, // 如果没有需求单，生成手动发货标识
         local_sku: sku,
         amz_sku: mapping?.amz_sku || sku,

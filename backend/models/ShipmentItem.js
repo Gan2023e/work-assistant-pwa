@@ -19,8 +19,8 @@ const ShipmentItem = sequelize.define('ShipmentItem', {
   },
   order_item_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: '需求记录ID',
+    allowNull: true, // 允许NULL，支持手动发货
+    comment: '需求记录ID（NULL表示手动发货）',
     references: {
       model: 'pbi_warehouse_products_need',
       key: 'record_num'
