@@ -219,8 +219,21 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
 
         console.log(`🔍 处理SKU: ${sku}, 目标出库数量: ${quantity}, 可用记录: ${inventoryRecords.length}条, 混合箱: ${is_mixed_box}, 指定箱号: ${original_mix_box_num}, 整箱确认: ${is_whole_box_confirmed}`);
 
-        // 过滤出剩余数量大于0的记录
-        const availableRecords = inventoryRecords.filter(record => record.remaining_quantity > 0);
+        // 过滤出剩余数量大于0且状态正确的记录
+        const availableRecords = inventoryRecords.filter(record => {
+          const remainingQty = record.remaining_quantity;
+          const isValidStatus = ['待出库', '部分出库'].includes(record.status);
+          const hasStock = remainingQty > 0;
+          
+          if (!isValidStatus) {
+            console.log(`⏭️ 跳过记录${record.记录号}: 状态'${record.status}'不符合条件`);
+          }
+          if (!hasStock) {
+            console.log(`⏭️ 跳过记录${record.记录号}: 剩余数量${remainingQty}<=0`);
+          }
+          
+          return isValidStatus && hasStock;
+        });
         console.log(`📋 过滤后可用记录: ${availableRecords.length}条`);
 
         if (availableRecords.length === 0) {
