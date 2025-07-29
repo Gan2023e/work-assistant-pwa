@@ -6082,7 +6082,7 @@ router.post('/update-shipped-status', async (req, res) => {
          console.log(`📦 检测到临时发货: record_num=${record_num} (负数表示临时发货)`);
          isTemporaryShipment = true;
          needRecords = [];
-       } else if (record_num && need_num && record_num > 0) {
+       } else if (record_num && need_num && need_num.trim() !== '' && record_num > 0) {
          // 前端传递了具体的需求记录信息，直接使用
          console.log(`📋 使用前端传递的需求记录: record_num=${record_num}, need_num=${need_num}`);
          
@@ -6184,9 +6184,11 @@ router.post('/update-shipped-status', async (req, res) => {
          // 临时发货：没有对应的需求记录，创建临时发货明细
          console.log(`📦 创建临时发货记录: SKU ${sku} (${normalizedCountry}), 数量: ${quantity}`);
          
-         // 使用前端传递的need_num，如果没有则生成临时需求单号
-         const effectiveNeedNum = need_num || `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         // 使用前端传递的need_num，如果没有或为空字符串则生成临时需求单号
+         const effectiveNeedNum = (need_num && need_num.trim() !== '') ? need_num : `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
          const effectiveAmzSku = amz_sku || mapping?.amz_sku || sku;
+         
+         console.log(`🔍 临时发货need_num处理: 原值='${need_num}', 有效值='${effectiveNeedNum}'`);
          
          const shipmentItem = {
            shipment_id: shipmentRecord.shipment_id,
@@ -6206,13 +6208,17 @@ router.post('/update-shipped-status', async (req, res) => {
          shipmentItems.push(shipmentItem);
 
          // 为临时发货创建需求单发货关联记录
-         orderSummary.set(effectiveNeedNum, {
+         const orderSummaryData = {
            total_requested: Math.abs(quantity),
            total_shipped: Math.abs(quantity),
            items: record_num && record_num > 0 ? [record_num] : [], // 只有正数record_num才记录到items
            is_temporary: true, // 临时发货一律标记为true
            record_nums: record_num ? [record_num] : [] // 保存原始record_num用于调试
-         });
+         };
+         
+         console.log(`📋 准备添加到orderSummary: key='${effectiveNeedNum}', data=`, JSON.stringify(orderSummaryData, null, 2));
+         orderSummary.set(effectiveNeedNum, orderSummaryData);
+         console.log(`✅ 已添加到orderSummary, 当前大小: ${orderSummary.size}`);
          
          console.log(`📦 创建临时发货明细: ${effectiveNeedNum}, 数量: ${quantity}, 记录ID: ${record_num || 'null'}`);
          console.log(`📋 当前orderSummary大小: ${orderSummary.size}, 新增临时需求单: ${effectiveNeedNum}`);
@@ -6325,50 +6331,24 @@ router.post('/update-shipped-status', async (req, res) => {
      console.log(`🔍 准备创建order_shipment_relations记录，orderSummary大小: ${orderSummary.size}`);
      console.log(`🔍 shipmentItems数量: ${shipmentItems.length}`);
      
-     // 保底机制：确保所有shipmentItems都有对应的orderSummary记录
-     console.log(`🔍 检查保底机制条件 - orderSummary大小: ${orderSummary.size}, shipmentItems数量: ${shipmentItems.length}`);
-     
-     // 收集所有shipmentItems中的need_num
-     const shipmentNeedNums = shipmentItems.map(item => item.need_num);
-     const orderSummaryNeedNums = Array.from(orderSummary.keys());
-     
-     console.log(`📋 shipmentItems的need_num列表:`, shipmentNeedNums);
-     console.log(`📋 orderSummary的need_num列表:`, orderSummaryNeedNums);
-     
-     // 找出没有对应orderSummary记录的shipmentItems
-     const orphanedItems = shipmentItems.filter(item => !orderSummary.has(item.need_num));
-     
-     if (orphanedItems.length > 0) {
-       console.log(`⚠️ 发现 ${orphanedItems.length} 个孤立的shipmentItems，启用保底机制`);
+     // 保底机制：如果orderSummary为空但有shipmentItems，说明都是临时发货
+     if (orderSummary.size === 0 && shipmentItems.length > 0) {
+       console.log(`⚠️ 检测到orderSummary为空但有shipmentItems，启用保底机制为临时发货创建关联记录`);
        
-       for (const shipmentItem of orphanedItems) {
-         const tempNeedNum = shipmentItem.need_num || `TEMP-FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-         orderSummary.set(tempNeedNum, {
+                // 为每个shipmentItem创建临时的orderSummary记录
+         for (const shipmentItem of shipmentItems) {
+           const tempNeedNum = (shipmentItem.need_num && shipmentItem.need_num.trim() !== '') 
+             ? shipmentItem.need_num 
+             : `TEMP-FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+           orderSummary.set(tempNeedNum, {
            total_requested: shipmentItem.shipped_quantity,
            total_shipped: shipmentItem.shipped_quantity,
            items: [],
            is_temporary: true,
            fallback_created: true // 标记这是保底机制创建的
          });
-         console.log(`🔄 保底机制创建关联记录: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
+         console.log(`🔄 保底机制创建临时关联: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
        }
-     } else if (orderSummary.size === 0 && shipmentItems.length > 0) {
-       console.log(`⚠️ orderSummary完全为空但有shipmentItems，强制启用保底机制`);
-       
-       for (const shipmentItem of shipmentItems) {
-         const tempNeedNum = shipmentItem.need_num || `TEMP-EMERGENCY-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-         orderSummary.set(tempNeedNum, {
-           total_requested: shipmentItem.shipped_quantity,
-           total_shipped: shipmentItem.shipped_quantity,
-           items: [],
-           is_temporary: true,
-           fallback_created: true,
-           emergency_created: true // 标记这是紧急保底机制创建的
-         });
-         console.log(`🚨 紧急保底机制创建关联记录: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
-       }
-     } else {
-       console.log(`✅ 所有shipmentItems都有对应的orderSummary记录，无需保底机制`);
      }
      
      // 打印orderSummary的详细内容用于调试
