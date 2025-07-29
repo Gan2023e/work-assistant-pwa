@@ -5696,11 +5696,11 @@ router.post('/update-shipped-status', async (req, res) => {
       // 尝试查找相关的需求记录
       const orderItem = await WarehouseProductsNeed.findOne({
         where: {
-          local_sku: sku,
+          sku: sku,
           country: normalizedCountry,
           status: { [Op.in]: ['备货中', '部分发货'] } // 查找未完成的需求
         },
-        order: [['created_at', 'DESC']] // 优先使用最新的需求记录
+        order: [['record_num', 'DESC']] // 优先使用最新的需求记录
       });
 
       // 创建发货明细记录
