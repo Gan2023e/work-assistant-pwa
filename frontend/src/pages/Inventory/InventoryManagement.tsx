@@ -21,7 +21,7 @@ interface InventoryRecord {
   打包员: string;
   mix_box_num?: string;
   marketPlace: string;
-  status: '待出库' | '部分出库' | '已出库' | '已取消';
+  status: '待出库' | '部分出库' | '已出库';
   box_type: '整箱' | '混合箱';
   time: string;
   last_updated_at: string;
@@ -521,8 +521,7 @@ const InventoryManagement: React.FC = () => {
     const statusConfig = {
       '待出库': { color: 'blue', text: '待出库' },
       '部分出库': { color: 'orange', text: '部分出库' },
-      '已出库': { color: 'green', text: '已出库' },
-      '已取消': { color: 'red', text: '已取消' }
+      '已出库': { color: 'green', text: '已出库' }
     };
     const config = statusConfig[status as keyof typeof statusConfig];
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -1041,7 +1040,7 @@ const InventoryManagement: React.FC = () => {
             <GlobalOutlined style={{ marginRight: 8 }} />
             按国家库存汇总
             <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
-              (不含已发货记录，点击卡片筛选对应国家数据)
+              (仅显示"待出库"和"部分出库"状态，不含已发货记录，点击卡片筛选对应国家数据)
             </Text>
           </span>
         } 
@@ -1169,7 +1168,6 @@ const InventoryManagement: React.FC = () => {
                 <Option value="待出库">待出库</Option>
                 <Option value="部分出库">部分出库</Option>
                 <Option value="已出库">已出库</Option>
-                <Option value="已取消">已取消</Option>
               </Select>
             )}
             <Button

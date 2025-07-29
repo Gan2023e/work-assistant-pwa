@@ -225,10 +225,10 @@ router.get('/inventory-by-country', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 已发货SKU组合数量:', shippedSkuSet.size);
 
-    // 第二步：查询所有库存数据 - 只查询待出库状态的记录
+    // 第二步：查询所有库存数据 - 查询待出库和部分出库状态的记录
     const allInventory = await LocalBox.findAll({
       where: {
-        status: '待出库',
+        status: ['待出库', '部分出库'],
         total_quantity: { [Op.gt]: 0 } // 只查询数量大于0的记录
       },
       attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
