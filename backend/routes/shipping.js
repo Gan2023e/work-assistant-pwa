@@ -6184,16 +6184,24 @@ router.post('/update-shipped-status', async (req, res) => {
          // 临时发货：没有对应的需求记录，创建临时发货明细
          console.log(`📦 创建临时发货记录: SKU ${sku} (${normalizedCountry}), 数量: ${quantity}`);
          
-         // 使用前端传递的need_num，如果没有或为空字符串则生成临时需求单号
-         const effectiveNeedNum = (need_num && need_num.trim() !== '') ? need_num : `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         // 使用系统生成的MANUAL开头的need_num，如果没有则生成一个
+         let effectiveNeedNum;
+         if (need_num && need_num.trim() !== '') {
+           // 优先使用前端传递的need_num（应该是MANUAL开头）
+           effectiveNeedNum = need_num;
+         } else {
+           // 如果没有，生成MANUAL格式的need_num
+           effectiveNeedNum = `MANUAL-${Date.now()}`;
+         }
+         
          const effectiveAmzSku = amz_sku || mapping?.amz_sku || sku;
          
-         console.log(`🔍 临时发货need_num处理: 原值='${need_num}', 有效值='${effectiveNeedNum}'`);
+         console.log(`🔍 临时发货need_num处理: 原值='${need_num}', 有效值='${effectiveNeedNum}' (MANUAL格式)`);
          
          const shipmentItem = {
            shipment_id: shipmentRecord.shipment_id,
-           order_item_id: record_num || null, // 使用前端传递的record_num，如果有的话
-           need_num: effectiveNeedNum,
+           order_item_id: record_num, // 使用程序生成的负数record_num
+           need_num: effectiveNeedNum, // 使用MANUAL开头的need_num
            local_sku: sku,
            amz_sku: effectiveAmzSku,
            country: normalizedCountry,
@@ -6204,6 +6212,8 @@ router.post('/update-shipped-status', async (req, res) => {
            mixed_box_quantity: is_mixed_box ? Math.abs(quantity) : 0,
            box_numbers: JSON.stringify(mixBoxNum ? [mixBoxNum] : [])
          };
+         
+         console.log(`📦 创建临时发货明细: record_num=${record_num}, need_num=${effectiveNeedNum}`);
 
          shipmentItems.push(shipmentItem);
 
@@ -6211,14 +6221,15 @@ router.post('/update-shipped-status', async (req, res) => {
          const orderSummaryData = {
            total_requested: Math.abs(quantity),
            total_shipped: Math.abs(quantity),
-           items: record_num && record_num > 0 ? [record_num] : [], // 只有正数record_num才记录到items
-           is_temporary: true, // 临时发货一律标记为true
-           record_nums: record_num ? [record_num] : [] // 保存原始record_num用于调试
+           items: [], // 临时发货没有对应的需求记录，items为空
+           is_temporary: true, // 临时发货标记
+           manual_need_num: effectiveNeedNum, // MANUAL开头的需求单号
+           negative_record_num: record_num // 程序生成的负数record_num
          };
          
-         console.log(`📋 准备添加到orderSummary: key='${effectiveNeedNum}', data=`, JSON.stringify(orderSummaryData, null, 2));
+         console.log(`📋 临时发货关联记录: MANUAL需求单='${effectiveNeedNum}', 负数记录号=${record_num}, 数量=${Math.abs(quantity)}`);
          orderSummary.set(effectiveNeedNum, orderSummaryData);
-         console.log(`✅ 已添加到orderSummary, 当前大小: ${orderSummary.size}`);
+         console.log(`✅ 已添加临时发货到orderSummary, 当前大小: ${orderSummary.size}`);
          
          console.log(`📦 创建临时发货明细: ${effectiveNeedNum}, 数量: ${quantity}, 记录ID: ${record_num || 'null'}`);
          console.log(`📋 当前orderSummary大小: ${orderSummary.size}, 新增临时需求单: ${effectiveNeedNum}`);
@@ -6282,13 +6293,13 @@ router.post('/update-shipped-status', async (req, res) => {
          if (remainingQuantity > 0) {
            console.warn(`⚠️ SKU ${sku} 仍有 ${remainingQuantity} 数量未分配到具体需求记录，将作为临时发货处理`);
            
-           // 为未分配的数量创建临时发货记录
-           const tempNeedNum = `TEMP-OVERFLOW-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+           // 为未分配的数量创建MANUAL格式的临时发货记录
+           const manualNeedNum = `MANUAL-OVERFLOW-${Date.now()}`;
            
            const tempShipmentItem = {
              shipment_id: shipmentRecord.shipment_id,
-             order_item_id: null,
-             need_num: tempNeedNum,
+             order_item_id: null, // 溢出发货没有具体的record_num
+             need_num: manualNeedNum,
              local_sku: sku,
              amz_sku: amz_sku || mapping?.amz_sku || sku, // 优先使用前端传递的amz_sku
              country: normalizedCountry,
@@ -6302,15 +6313,17 @@ router.post('/update-shipped-status', async (req, res) => {
 
            shipmentItems.push(tempShipmentItem);
 
-           // 为临时发货创建需求单发货关联记录
-           orderSummary.set(tempNeedNum, {
+           // 为溢出临时发货创建需求单发货关联记录
+           orderSummary.set(manualNeedNum, {
              total_requested: remainingQuantity,
              total_shipped: remainingQuantity,
              items: [],
-             is_temporary: true
+             is_temporary: true,
+             manual_need_num: manualNeedNum,
+             is_overflow: true // 标记这是溢出发货
            });
            
-           console.log(`📦 创建溢出临时发货明细: ${tempNeedNum}, 数量: ${remainingQuantity}`);
+           console.log(`📦 创建溢出MANUAL发货明细: ${manualNeedNum}, 数量: ${remainingQuantity}`);
          }
        }
     }
@@ -6335,20 +6348,22 @@ router.post('/update-shipped-status', async (req, res) => {
      if (orderSummary.size === 0 && shipmentItems.length > 0) {
        console.log(`⚠️ 检测到orderSummary为空但有shipmentItems，启用保底机制为临时发货创建关联记录`);
        
-                // 为每个shipmentItem创建临时的orderSummary记录
+                         // 为每个shipmentItem创建MANUAL格式的orderSummary记录
          for (const shipmentItem of shipmentItems) {
-           const tempNeedNum = (shipmentItem.need_num && shipmentItem.need_num.trim() !== '') 
+           const manualNeedNum = (shipmentItem.need_num && shipmentItem.need_num.trim() !== '') 
              ? shipmentItem.need_num 
-             : `TEMP-FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-           orderSummary.set(tempNeedNum, {
-           total_requested: shipmentItem.shipped_quantity,
-           total_shipped: shipmentItem.shipped_quantity,
-           items: [],
-           is_temporary: true,
-           fallback_created: true // 标记这是保底机制创建的
-         });
-         console.log(`🔄 保底机制创建临时关联: ${tempNeedNum}, 数量: ${shipmentItem.shipped_quantity}`);
-       }
+             : `MANUAL-FALLBACK-${Date.now()}`;
+           orderSummary.set(manualNeedNum, {
+             total_requested: shipmentItem.shipped_quantity,
+             total_shipped: shipmentItem.shipped_quantity,
+             items: [],
+             is_temporary: true,
+             manual_need_num: manualNeedNum,
+             fallback_created: true, // 标记这是保底机制创建的
+             negative_record_num: shipmentItem.order_item_id // 保存负数record_num
+           });
+           console.log(`🔄 保底机制创建MANUAL关联: ${manualNeedNum}, 数量: ${shipmentItem.shipped_quantity}, 负数记录: ${shipmentItem.order_item_id}`);
+         }
      }
      
      // 打印orderSummary的详细内容用于调试
@@ -6369,7 +6384,13 @@ router.post('/update-shipped-status', async (req, res) => {
        };
        
        orderRelations.push(relationRecord);
-       console.log(`📦 添加order_shipment_relation记录:`, JSON.stringify(relationRecord, null, 2));
+       
+       // 根据发货类型输出不同的日志
+       if (summary.is_temporary) {
+         console.log(`📦 添加临时发货关联记录: MANUAL需求单='${needNum}', 负数记录=${summary.negative_record_num || 'N/A'}, 数量=${summary.total_shipped}`);
+       } else {
+         console.log(`📦 添加正常发货关联记录: 需求单='${needNum}', 数量=${summary.total_shipped}`);
+       }
 
        // 为正常需求和有record_num的情况更新需求记录状态
        if (completionStatus === '全部完成' && summary.items.length > 0) {
@@ -6400,12 +6421,13 @@ router.post('/update-shipped-status', async (req, res) => {
 
     await transaction.commit();
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ 库存状态更新成功:', {
+    console.log('\x1b[32m%s\x1b[0m', '✅ 库存状态更新成功 (优化临时发货流程):', {
       shipmentNumber: shipmentNumber,
       outboundRecords: outboundRecords.length,
       shipmentItems: shipmentItems.length,
       orderRelations: orderRelations.length,
-      updated_count: updateItems.length
+      updated_count: updateItems.length,
+      临时发货_使用MANUAL格式: true
     });
     
     res.json({
