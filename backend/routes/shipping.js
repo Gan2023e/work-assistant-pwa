@@ -1029,16 +1029,16 @@ router.get('/merged-data', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查询待发货需求数据并计算剩余需求');
     
-    // 2. 查询待发货需求数据，并计算每个需求的剩余量
+    // 2. 查询待发货和部分发货需求数据，并计算每个需求的剩余量
     const needsDataRaw = await WarehouseProductsNeed.findAll({
       where: {
-        status: '待发货'
+        status: { [Op.in]: ['待发货', '部分发货'] }
       },
       order: [['create_date', 'ASC'], ['record_num', 'ASC']], // 按创建时间升序，确保最早的需求优先
       raw: true
     });
 
-    console.log('\x1b[33m%s\x1b[0m', `📋 原始待发货需求数据: ${needsDataRaw.length} 条`);
+    console.log('\x1b[33m%s\x1b[0m', `📋 原始需求数据(待发货+部分发货): ${needsDataRaw.length} 条`);
 
     // 2.1 查询每个需求记录的已发货数量，过滤掉已全部发出的记录
     const needsData = [];
@@ -1051,6 +1051,8 @@ router.get('/merged-data', async (req, res) => {
       // 计算剩余需求量
       const remainingQuantity = need.ori_quantity - shippedQuantity;
       
+      console.log(`🔍 需求记录 ${need.record_num}: 原始需求=${need.ori_quantity}, 已发货=${shippedQuantity}, 剩余=${remainingQuantity}, 状态=${need.status}`);
+      
       // 只有剩余需求量大于0的记录才参与发货操作
       if (remainingQuantity > 0) {
         needsData.push({
@@ -1059,10 +1061,12 @@ router.get('/merged-data', async (req, res) => {
           remaining_quantity: remainingQuantity,
           ori_quantity: remainingQuantity // 用剩余量替换原始需求量进行后续计算
         });
+      } else {
+        console.log(`⏭️ 跳过已完全发货的记录: ${need.record_num}`);
       }
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `📋 过滤后待发货需求数据: ${needsData.length} 条（已排除全部发出的记录）`);
+    console.log('\x1b[33m%s\x1b[0m', `📋 过滤后有效需求数据: ${needsData.length} 条（已排除全部发出的记录）`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 构建Amazon FBA库存映射表');
     
@@ -5927,7 +5931,23 @@ router.post('/update-shipped-status', async (req, res) => {
       is_whole_box_confirmed: item.is_whole_box_confirmed || false
     }));
 
+    console.log('\x1b[33m%s\x1b[0m', '🔄 第六步：开始更新库存状态（local_boxes表）');
+    console.log('\x1b[33m%s\x1b[0m', '📦 待处理的发货数据:', shipmentForProcessing.map(item => 
+      `SKU:${item.sku}, 数量:${item.quantity}, 国家:${item.country}, 混合箱:${item.is_mixed_box}, 箱号:${item.original_mix_box_num}, 整箱确认:${item.is_whole_box_confirmed}`
+    ));
+    
     const partialShipmentResult = await processPartialShipmentOptimized(shipmentForProcessing, transaction);
+
+    console.log('\x1b[32m%s\x1b[0m', '📊 库存状态更新结果:', {
+      updated: partialShipmentResult.updated,
+      partialShipped: partialShipmentResult.partialShipped,
+      fullyShipped: partialShipmentResult.fullyShipped,
+      errors: partialShipmentResult.errors
+    });
+
+    if (partialShipmentResult.errors.length > 0) {
+      console.log('\x1b[31m%s\x1b[0m', '⚠️ 库存更新过程中的错误:', partialShipmentResult.errors);
+    }
 
     await transaction.commit();
     
