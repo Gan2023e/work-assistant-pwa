@@ -161,6 +161,33 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
       console.log(`发货项目 ${index + 1}: SKU=${item.sku}, 数量=${item.quantity}, 国家=${item.country}, 整箱确认=${item.is_whole_box_confirmed}, 混合箱=${item.is_mixed_box}, 原箱号=${item.original_mix_box_num}`);
     });
     
+    // 特殊调试：查询特定记录号的库存记录
+    try {
+      const debugRecord = await LocalBox.findOne({
+        where: { 记录号: '202507292314001' },
+        transaction
+      });
+      
+      if (debugRecord) {
+        const remainingQty = (debugRecord.total_quantity || 0) - (debugRecord.shipped_quantity || 0);
+        console.log('🐛 调试记录号202507292314001:', {
+          记录号: debugRecord.记录号,
+          sku: debugRecord.sku,
+          country: debugRecord.country,
+          status: debugRecord.status,
+          total_quantity: debugRecord.total_quantity,
+          shipped_quantity: debugRecord.shipped_quantity || 0,
+          remaining_quantity: remainingQty,
+          mix_box_num: debugRecord.mix_box_num || '无',
+          time: debugRecord.time
+        });
+      } else {
+        console.log('🐛 调试：未找到记录号202507292314001的库存记录');
+      }
+    } catch (debugError) {
+      console.error('🐛 调试查询失败:', debugError.message);
+    }
+    
     allInventoryRecords.forEach(record => {
       const remainingQty = (record.total_quantity || 0) - (record.shipped_quantity || 0);
       console.log(`📋 库存记录: ${record.记录号}, SKU: ${record.sku}, 总量: ${record.total_quantity}, 已出库: ${record.shipped_quantity || 0}, 剩余: ${remainingQty}, 状态: ${record.status}, 混合箱: ${record.mix_box_num || '无'}, 国家: ${record.country}, 时间: ${record.time}`);
@@ -200,6 +227,51 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
           results.errors.push(`SKU ${sku} 在 ${country} 没有可用库存`);
           console.log(`❌ SKU ${sku} 在 ${country} 没有可用库存`);
           continue;
+        }
+
+        // 调试：检查为什么记录号202507292314001没有被匹配
+        if (sku === 'XBA039A9' && country === '英国') {
+          console.log('🐛 XBA039A9英国库存调试:');
+          console.log(`🔍 查找条件: SKU='${sku}', country='${country}'`);
+          
+          // 直接查询XBA039A9在英国的所有记录
+          const allXBA039A9Records = await LocalBox.findAll({
+            where: {
+              sku: sku,
+              country: country
+            },
+            transaction
+          });
+          
+          console.log(`📋 XBA039A9在英国的所有库存记录 (${allXBA039A9Records.length}条):`);
+          allXBA039A9Records.forEach(record => {
+            const remainingQty = (record.total_quantity || 0) - (record.shipped_quantity || 0);
+            console.log(`  记录号: ${record.记录号}, 状态: ${record.status}, 总量: ${record.total_quantity}, 已出库: ${record.shipped_quantity || 0}, 剩余: ${remainingQty}, 时间: ${record.time}`);
+          });
+          
+          // 检查记录号202507292314001是否在其中
+          const targetRecord = allXBA039A9Records.find(r => r.记录号 === '202507292314001');
+          if (targetRecord) {
+            const remainingQty = (targetRecord.total_quantity || 0) - (targetRecord.shipped_quantity || 0);
+            console.log(`✅ 找到目标记录202507292314001: 状态=${targetRecord.status}, 剩余量=${remainingQty}`);
+            
+            // 检查状态筛选条件
+            const allowedStatuses = ['待出库', '部分出库'];
+            if (allowedStatuses.includes(targetRecord.status)) {
+              console.log(`✅ 状态 '${targetRecord.status}' 符合筛选条件 ${JSON.stringify(allowedStatuses)}`);
+            } else {
+              console.log(`❌ 状态 '${targetRecord.status}' 不符合筛选条件 ${JSON.stringify(allowedStatuses)}，这是为什么找不到库存的原因`);
+            }
+            
+            // 检查剩余数量
+            if (remainingQty > 0) {
+              console.log(`✅ 剩余数量 ${remainingQty} > 0，有可用库存`);
+            } else {
+              console.log(`❌ 剩余数量 ${remainingQty} <= 0，无可用库存`);
+            }
+          } else {
+            console.log(`❌ 在XBA039A9英国记录中未找到202507292314001`);
+          }
         }
 
         // 使用过滤后的记录进行后续处理
