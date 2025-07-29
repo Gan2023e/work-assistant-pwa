@@ -124,35 +124,35 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
       const baseCondition = {
         [Op.and]: [
           { sku: item.sku },
-          { country: item.country }
+          { country: item.country },
+          { status: { [Op.in]: ['待出库', '部分出库'] } }
         ]
       };
       
-      // 对于整箱确认，查询指定混合箱的所有记录（包括已全部出库但状态未更新的）
+      // 对于整箱确认，查询指定混合箱的所有记录
       if (item.is_whole_box_confirmed && item.original_mix_box_num) {
         return {
           [Op.and]: [
             ...baseCondition[Op.and],
-            { mix_box_num: item.original_mix_box_num },
-            { status: { [Op.in]: ['待出库', '部分出库', '已出库'] } }
+            { mix_box_num: item.original_mix_box_num }
           ]
         };
       }
       
-      // 普通出库只查询剩余数量>0的记录
-      return {
-        [Op.and]: [
-          ...baseCondition[Op.and],
-          { status: { [Op.in]: ['待出库', '部分出库'] } },
-          LocalBox.sequelize.literal('(total_quantity - COALESCE(shipped_quantity, 0)) > 0')
-        ]
-      };
+      // 普通出库查询所有可用记录，包括混合箱和整箱
+      return baseCondition;
     });
 
     const allInventoryRecords = await LocalBox.findAll({
       where: { [Op.or]: inventoryConditions },
       order: [['time', 'ASC']], // 按时间先进先出
       transaction
+    });
+
+    console.log(`📦 查询到的库存记录总数: ${allInventoryRecords.length}`);
+    allInventoryRecords.forEach(record => {
+      const remainingQty = (record.total_quantity || 0) - (record.shipped_quantity || 0);
+      console.log(`📋 库存记录: ${record.记录号}, SKU: ${record.sku}, 总量: ${record.total_quantity}, 已出库: ${record.shipped_quantity || 0}, 剩余: ${remainingQty}, 状态: ${record.status}`);
     });
 
     // 按SKU和国家分组库存记录
@@ -162,6 +162,8 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
       if (!inventoryMap.has(key)) {
         inventoryMap.set(key, []);
       }
+      // 手动计算剩余数量并添加到记录中
+      record.remaining_quantity = (record.total_quantity || 0) - (record.shipped_quantity || 0);
       inventoryMap.get(key).push(record);
     });
 
@@ -179,10 +181,18 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
 
         console.log(`🔍 处理SKU: ${sku}, 目标出库数量: ${quantity}, 可用记录: ${inventoryRecords.length}条, 混合箱: ${is_mixed_box}, 指定箱号: ${original_mix_box_num}, 整箱确认: ${is_whole_box_confirmed}`);
 
-        if (inventoryRecords.length === 0) {
+        // 过滤出剩余数量大于0的记录
+        const availableRecords = inventoryRecords.filter(record => record.remaining_quantity > 0);
+        console.log(`📋 过滤后可用记录: ${availableRecords.length}条`);
+
+        if (availableRecords.length === 0) {
           results.errors.push(`SKU ${sku} 在 ${country} 没有可用库存`);
+          console.log(`❌ SKU ${sku} 在 ${country} 没有可用库存`);
           continue;
         }
+
+        // 使用过滤后的记录进行后续处理
+        inventoryRecords = availableRecords;
 
         // 特殊处理：整箱确认发出
         if (is_whole_box_confirmed && original_mix_box_num) {
@@ -251,6 +261,12 @@ async function processPartialShipmentOptimized(shipmentItems, transaction) {
           
           const currentRemaining = record.remaining_quantity;
           const toShipFromThis = Math.min(remainingToShip, currentRemaining);
+          
+          // 跳过数量为0的分配
+          if (toShipFromThis <= 0) {
+            console.log(`⏭️ 跳过记录号 ${record.记录号}: 无需分配数量`);
+            continue;
+          }
           
           const isMatchedBox = is_mixed_box && original_mix_box_num && record.mix_box_num === original_mix_box_num;
           console.log(`📋 记录号 ${record.记录号}: 剩余 ${currentRemaining}, 本次分配 ${toShipFromThis}, 箱号: ${record.mix_box_num}${isMatchedBox ? ' ✅匹配' : ''}`);
