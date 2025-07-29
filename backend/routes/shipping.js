@@ -6075,13 +6075,19 @@ router.post('/update-shipped-status', async (req, res) => {
        let needRecords = [];
        let isTemporaryShipment = false;
        
-       if (record_num && need_num) {
+       // 检查是否为临时发货（record_num为负数表示临时发货）
+       if (record_num && record_num < 0) {
+         console.log(`📦 检测到临时发货: record_num=${record_num} (负数表示临时发货)`);
+         isTemporaryShipment = true;
+         needRecords = [];
+       } else if (record_num && need_num && record_num > 0) {
          // 前端传递了具体的需求记录信息，直接使用
          console.log(`📋 使用前端传递的需求记录: record_num=${record_num}, need_num=${need_num}`);
          
          const specificNeedRecord = await WarehouseProductsNeed.findByPk(record_num, { transaction });
          if (specificNeedRecord && specificNeedRecord.status === '待发货') {
            needRecords = [specificNeedRecord];
+           console.log(`✅ 找到指定的需求记录: ${record_num}`);
          } else {
            console.warn(`⚠️ 需求记录 ${record_num} 不存在或状态不是待发货，将作为临时发货处理`);
            isTemporaryShipment = true;
