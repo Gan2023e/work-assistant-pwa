@@ -6076,6 +6076,8 @@ router.post('/update-shipped-status', async (req, res) => {
        let isTemporaryShipment = false;
        
        // 检查是否为临时发货（record_num为负数表示临时发货）
+       console.log(`🔍 检查发货类型: record_num=${record_num}, need_num=${need_num}, sku=${sku}`);
+       
        if (record_num && record_num < 0) {
          console.log(`📦 检测到临时发货: record_num=${record_num} (负数表示临时发货)`);
          isTemporaryShipment = true;
@@ -6085,6 +6087,8 @@ router.post('/update-shipped-status', async (req, res) => {
          console.log(`📋 使用前端传递的需求记录: record_num=${record_num}, need_num=${need_num}`);
          
          const specificNeedRecord = await WarehouseProductsNeed.findByPk(record_num, { transaction });
+         console.log(`🔍 查询需求记录结果: record_num=${record_num}, 找到记录=${!!specificNeedRecord}, 状态=${specificNeedRecord?.status}`);
+         
          if (specificNeedRecord && specificNeedRecord.status === '待发货') {
            needRecords = [specificNeedRecord];
            console.log(`✅ 找到指定的需求记录: ${record_num}`);
@@ -6109,6 +6113,7 @@ router.post('/update-shipped-status', async (req, res) => {
        }
 
        console.log(`🔍 最终找到的需求记录数量: ${needRecords.length} 条, 是否临时发货: ${isTemporaryShipment}`);
+       console.log(`📊 进入发货处理分支: ${isTemporaryShipment ? '临时发货分支' : '正常发货分支'}`);
 
       // 处理混合箱号
       let mixBoxNum = null;
