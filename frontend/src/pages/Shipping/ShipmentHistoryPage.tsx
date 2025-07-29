@@ -50,6 +50,9 @@ interface ShipmentHistoryRecord {
   total_shipped: number;
   completion_status: '部分完成' | '全部完成';
   order_count: number;
+  normal_orders?: number;
+  temp_orders?: number;
+  has_temp_shipment?: boolean;
 }
 
 interface Pagination {
@@ -282,8 +285,15 @@ const ShipmentHistoryPage: React.FC = () => {
       key: 'order_count',
       width: 90,
       align: 'center',
-      render: (count: number) => (
-        <Tag color="blue">{count}</Tag>
+      render: (count: number, record: ShipmentHistoryRecord) => (
+        <div>
+          <Tag color="blue">{count}</Tag>
+          {record.has_temp_shipment && (
+            <div style={{ marginTop: 2 }}>
+              <Tag color="orange" style={{ fontSize: '10px' }}>含临时</Tag>
+            </div>
+          )}
+        </div>
       )
     },
     {
@@ -581,9 +591,13 @@ const ShipmentHistoryPage: React.FC = () => {
              {/* 统计汇总 */}
              <Card title="发货汇总" size="small" style={{ marginBottom: 16 }}>
                <Row gutter={16}>
-                 <Col span={6}>
-                   <Statistic title="需求单数" value={shipmentDetails.summary.total_need_orders} />
-                 </Col>
+                                 <Col span={6}>
+                  <Statistic 
+                    title="需求单数" 
+                    value={shipmentDetails.summary.total_need_orders}
+                    suffix={shipmentDetails.summary.temp_orders > 0 ? "（含临时）" : ""}
+                  />
+                </Col>
                  <Col span={6}>
                    <Statistic title="SKU数量" value={shipmentDetails.summary.total_sku_count} />
                  </Col>
@@ -606,7 +620,27 @@ const ShipmentHistoryPage: React.FC = () => {
                <Table
                  dataSource={shipmentDetails.shipment_items}
                  columns={[
-                   { title: '需求单号', dataIndex: 'need_num', key: 'need_num', width: 120 },
+                   { 
+                    title: '需求单号', 
+                    dataIndex: 'need_num', 
+                    key: 'need_num', 
+                    width: 140,
+                    render: (needNum: string) => {
+                      const isTemporary = needNum && needNum.startsWith('TEMP-');
+                      return (
+                        <div>
+                          <Text style={{ color: isTemporary ? '#faad14' : undefined }}>
+                            {needNum}
+                          </Text>
+                          {isTemporary && (
+                            <div>
+                              <Tag color="orange">临时发货</Tag>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                  },
                    { title: '本地SKU', dataIndex: 'local_sku', key: 'local_sku', width: 120 },
                    { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku', width: 130 },
                    { title: '国家', dataIndex: 'country', key: 'country', width: 80, align: 'center' },

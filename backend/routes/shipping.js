@@ -2690,12 +2690,20 @@ router.get('/shipment-history', async (req, res) => {
         }
       }
       
+      // 统计需求单数量，区分正常需求单和临时发货
+      const normalOrders = orderRelations.filter(rel => !rel.need_num.startsWith('TEMP-')).length;
+      const tempOrders = orderRelations.filter(rel => rel.need_num.startsWith('TEMP-')).length;
+      const displayOrderCount = normalOrders + (tempOrders > 0 ? 1 : 0); // 临时发货合并显示为1个
+      
       return {
         ...row.toJSON(),
         total_requested: totalRequested,
         total_shipped: totalShipped,
         completion_status: overallStatus,
-        order_count: orderRelations.length
+        order_count: displayOrderCount,
+        normal_orders: normalOrders,
+        temp_orders: tempOrders,
+        has_temp_shipment: tempOrders > 0 // 标记是否包含临时发货
       };
     });
     
@@ -2998,6 +3006,27 @@ router.get('/shipment-history/:shipment_id', async (req, res) => {
       countries: [...new Set(shipmentItems.map(item => item.country))],
       need_nums: [...new Set(shipmentItems.map(item => item.need_num))]
     };
+
+    // 生成汇总信息，兼容前端显示需求
+    const orderRelations = shipmentRecord.orderRelations || [];
+    const totalRequested = shipmentItems.reduce((sum, item) => sum + item.requested_quantity, 0);
+    const totalShipped = shipmentItems.reduce((sum, item) => sum + item.shipped_quantity, 0);
+    const completionRate = totalRequested > 0 ? Math.round((totalShipped / totalRequested) * 100) : 100;
+    
+    // 统计需求单数量（排除临时发货的重复统计）
+    const uniqueNeedNums = [...new Set(shipmentItems.map(item => item.need_num))];
+    const normalNeedNums = uniqueNeedNums.filter(needNum => !needNum.startsWith('TEMP-'));
+    const tempNeedNums = uniqueNeedNums.filter(needNum => needNum.startsWith('TEMP-'));
+    
+    const summary = {
+      total_need_orders: normalNeedNums.length + (tempNeedNums.length > 0 ? 1 : 0), // 临时发货算作1个需求单
+      total_sku_count: [...new Set(shipmentItems.map(item => item.local_sku))].length,
+      total_requested: totalRequested,
+      total_shipped: totalShipped,
+      overall_completion_rate: completionRate,
+      normal_orders: normalNeedNums.length,
+      temp_orders: tempNeedNums.length
+    };
     
     res.json({
       code: 0,
@@ -3006,7 +3035,8 @@ router.get('/shipment-history/:shipment_id', async (req, res) => {
         shipment_record: shipmentRecord,
         shipment_items: shipmentItems,
         outbound_records: outboundRecords,
-        statistics: statistics
+        statistics: statistics,
+        summary: summary // 新增汇总信息，支持临时发货显示
       }
     });
   } catch (error) {
@@ -5962,6 +5992,365 @@ router.get('/check-partial-shipment/:sku/:country', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: 'SKU部分出库状态检查失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新库存状态为已发货（批量发货确认第三步使用）
+router.post('/update-shipped-status', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到更新库存状态为已发货请求:', JSON.stringify(req.body, null, 2));
+  
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { updateItems, shipping_method = '', logistics_provider = '', remark = '' } = req.body;
+    
+    if (!updateItems || !Array.isArray(updateItems) || updateItems.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '更新数据不能为空'
+      });
+    }
+
+    // 第一步：创建发货记录主表
+    const shipmentNumber = `SHIP-${Date.now()}`;
+    const totalBoxes = updateItems.reduce((sum, item) => sum + (item.total_boxes || 0), 0);
+    const totalItems = updateItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    console.log('\x1b[33m%s\x1b[0m', '📦 创建发货记录:', {
+      shipmentNumber,
+      totalBoxes: Math.abs(totalBoxes),
+      totalItems: Math.abs(totalItems)
+    });
+
+    const shipmentRecord = await ShipmentRecord.create({
+      shipment_number: shipmentNumber,
+      operator: '批量发货确认',
+      total_boxes: Math.abs(totalBoxes),
+      total_items: Math.abs(totalItems),
+      shipping_method: shipping_method,
+      status: '已发货',
+      remark: remark,
+      logistics_provider: logistics_provider
+    }, { transaction });
+
+    // 第二步：处理每个发货项目
+    const outboundRecords = [];
+    const shipmentItems = [];
+    const orderSummary = new Map(); // 用于统计每个需求单的发货情况
+
+    for (const updateItem of updateItems) {
+      const {
+        sku,
+        quantity,
+        total_boxes = null,
+        country,
+        is_mixed_box = false,
+        original_mix_box_num = null,
+        is_whole_box_confirmed = false
+      } = updateItem;
+      
+      // 统一country字段为中文
+      let normalizedCountry = country;
+      if (country === 'US') {
+        normalizedCountry = '美国';
+      } else if (country === 'UK') {
+        normalizedCountry = '英国';
+      } else if (country === 'AU') {
+        normalizedCountry = '澳大利亚';
+      } else if (country === 'AE') {
+        normalizedCountry = '阿联酋';
+      } else if (country === 'CA') {
+        normalizedCountry = '加拿大';
+      }
+      
+             // 查找对应的需求记录（通过SKU和国家匹配，状态为待发货）
+       const needRecords = await WarehouseProductsNeed.findAll({
+         where: {
+           sku: sku,
+           country: normalizedCountry,
+           status: '待发货'
+         },
+         order: [['create_date', 'ASC']], // 按创建时间升序，优先处理最早的需求
+         transaction
+       });
+
+       console.log(`🔍 找到 SKU ${sku} (${normalizedCountry}) 的需求记录: ${needRecords.length} 条`);
+       
+       // 如果没有找到需求记录，这可能是临时发货
+       const isTemporaryShipment = needRecords.length === 0;
+
+      // 处理混合箱号
+      let mixBoxNum = null;
+      if (is_mixed_box) {
+        if (original_mix_box_num) {
+          mixBoxNum = original_mix_box_num;
+        } else {
+          try {
+            const existingRecord = await LocalBox.findOne({
+              where: {
+                sku: sku,
+                country: normalizedCountry,
+                mix_box_num: { [Op.ne]: null }
+              },
+              attributes: ['mix_box_num'],
+              raw: true,
+              transaction
+            });
+            
+            if (existingRecord && existingRecord.mix_box_num) {
+              mixBoxNum = existingRecord.mix_box_num;
+              console.log(`📦 找到原始混合箱号: ${mixBoxNum} for SKU: ${sku}`);
+            } else {
+              console.warn(`⚠️ 无法找到SKU ${sku} 的原始混合箱号，生成新箱号`);
+              mixBoxNum = `OUT-MIX-${Date.now()}`;
+            }
+          } catch (error) {
+            console.error(`❌ 查找原始混合箱号失败: ${error.message}`);
+            mixBoxNum = `OUT-MIX-${Date.now()}`;
+          }
+        }
+      }
+      
+      // 生成唯一的记录号
+      const recordId = `OUT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      
+      // 创建出库记录
+      const record = {
+        记录号: recordId,
+        sku: sku,
+        total_quantity: -Math.abs(quantity),
+        total_boxes: total_boxes ? -Math.abs(total_boxes) : null,
+        country: normalizedCountry,
+        time: new Date(),
+        操作员: '批量发货确认',
+        marketPlace: '亚马逊',
+        mix_box_num: mixBoxNum,
+        shipment_id: shipmentRecord.shipment_id,
+        status: '已出库',
+        shipped_at: new Date(),
+        box_type: is_mixed_box ? '混合箱' : '整箱',
+        last_updated_at: new Date(),
+        remark: remark ? `发货备注: ${remark}` : `发货单号: ${shipmentNumber}`
+      };
+      
+      outboundRecords.push(record);
+
+             // 查询Amazon SKU映射（无论是否有需求记录都需要）
+       const mapping = await AmzSkuMapping.findOne({
+         where: {
+           local_sku: sku,
+           country: normalizedCountry
+         },
+         transaction
+       });
+
+       if (isTemporaryShipment) {
+         // 临时发货：没有对应的需求记录，创建临时发货明细
+         console.log(`📦 创建临时发货记录: SKU ${sku} (${normalizedCountry}), 数量: ${quantity}`);
+         
+         // 生成临时需求单号
+         const tempNeedNum = `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         
+         const shipmentItem = {
+           shipment_id: shipmentRecord.shipment_id,
+           order_item_id: null, // 临时发货没有对应的需求记录ID
+           need_num: tempNeedNum,
+           local_sku: sku,
+           amz_sku: mapping?.amz_sku || sku,
+           country: normalizedCountry,
+           marketplace: '亚马逊', // 默认平台
+           requested_quantity: Math.abs(quantity), // 临时发货的请求量等于发货量
+           shipped_quantity: Math.abs(quantity),
+           whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
+           mixed_box_quantity: is_mixed_box ? Math.abs(quantity) : 0,
+           box_numbers: JSON.stringify(mixBoxNum ? [mixBoxNum] : [])
+         };
+
+         shipmentItems.push(shipmentItem);
+
+         // 为临时发货创建需求单发货关联记录
+         orderSummary.set(tempNeedNum, {
+           total_requested: Math.abs(quantity),
+           total_shipped: Math.abs(quantity),
+           items: [], // 临时发货没有具体的需求记录ID
+           is_temporary: true // 标记为临时发货
+         });
+         
+         console.log(`📦 创建临时发货明细: ${tempNeedNum}, 数量: ${quantity}`);
+       } else {
+         // 正常发货：有对应的需求记录
+         let remainingQuantity = Math.abs(quantity);
+         
+         for (const needRecord of needRecords) {
+           if (remainingQuantity <= 0) break;
+           
+           // 查询该需求记录的已发货数量
+           const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
+             where: { order_item_id: needRecord.record_num },
+             transaction
+           }) || 0;
+           
+           // 计算剩余需求量
+           const remainingNeed = needRecord.ori_quantity - shippedQuantity;
+           
+           if (remainingNeed <= 0) continue; // 跳过已完全发货的需求
+
+           // 计算本次发货数量（不超过剩余需求量）
+           const shipQuantity = Math.min(remainingQuantity, remainingNeed);
+           
+           const shipmentItem = {
+             shipment_id: shipmentRecord.shipment_id,
+             order_item_id: needRecord.record_num,
+             need_num: needRecord.need_num,
+             local_sku: sku,
+             amz_sku: mapping?.amz_sku || sku,
+             country: normalizedCountry,
+             marketplace: needRecord.marketplace || '亚马逊',
+             requested_quantity: needRecord.ori_quantity,
+             shipped_quantity: shipQuantity,
+             whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
+             mixed_box_quantity: is_mixed_box ? shipQuantity : 0,
+             box_numbers: JSON.stringify(mixBoxNum ? [mixBoxNum] : [])
+           };
+
+           shipmentItems.push(shipmentItem);
+
+           // 统计需求单发货情况
+           const needNum = needRecord.need_num;
+           if (!orderSummary.has(needNum)) {
+             orderSummary.set(needNum, {
+               total_requested: 0,
+               total_shipped: 0,
+               items: []
+             });
+           }
+           const summary = orderSummary.get(needNum);
+           summary.total_requested += needRecord.ori_quantity;
+           summary.total_shipped += shipQuantity;
+           summary.items.push(needRecord.record_num);
+           
+           remainingQuantity -= shipQuantity;
+           
+           console.log(`📦 为需求单 ${needNum} 记录 ${needRecord.record_num} 创建发货明细: ${shipQuantity}/${needRecord.ori_quantity}`);
+         }
+         
+         if (remainingQuantity > 0) {
+           console.warn(`⚠️ SKU ${sku} 仍有 ${remainingQuantity} 数量未分配到具体需求记录，将作为临时发货处理`);
+           
+           // 为未分配的数量创建临时发货记录
+           const tempNeedNum = `TEMP-OVERFLOW-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+           
+           const tempShipmentItem = {
+             shipment_id: shipmentRecord.shipment_id,
+             order_item_id: null,
+             need_num: tempNeedNum,
+             local_sku: sku,
+             amz_sku: mapping?.amz_sku || sku,
+             country: normalizedCountry,
+             marketplace: '亚马逊',
+             requested_quantity: remainingQuantity,
+             shipped_quantity: remainingQuantity,
+             whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
+             mixed_box_quantity: is_mixed_box ? remainingQuantity : 0,
+             box_numbers: JSON.stringify(mixBoxNum ? [mixBoxNum] : [])
+           };
+
+           shipmentItems.push(tempShipmentItem);
+
+           // 为临时发货创建需求单发货关联记录
+           orderSummary.set(tempNeedNum, {
+             total_requested: remainingQuantity,
+             total_shipped: remainingQuantity,
+             items: [],
+             is_temporary: true
+           });
+           
+           console.log(`📦 创建溢出临时发货明细: ${tempNeedNum}, 数量: ${remainingQuantity}`);
+         }
+       }
+    }
+
+    // 第三步：批量插入出库记录
+    if (outboundRecords.length > 0) {
+      await LocalBox.bulkCreate(outboundRecords, { transaction });
+      console.log(`✅ 创建了 ${outboundRecords.length} 条出库记录`);
+    }
+
+    // 第四步：批量插入发货明细
+    if (shipmentItems.length > 0) {
+      await ShipmentItem.bulkCreate(shipmentItems, { transaction });
+      console.log(`✅ 创建了 ${shipmentItems.length} 条发货明细记录`);
+    }
+
+         // 第五步：创建需求单发货关联记录（这是之前缺失的关键部分）
+     const orderRelations = [];
+     for (const [needNum, summary] of orderSummary) {
+       const completionStatus = summary.total_shipped >= summary.total_requested ? '全部完成' : '部分完成';
+       
+       orderRelations.push({
+         need_num: needNum,
+         shipment_id: shipmentRecord.shipment_id,
+         total_requested: summary.total_requested,
+         total_shipped: summary.total_shipped,
+         completion_status: completionStatus
+       });
+
+       // 只为正常需求（非临时发货）更新需求记录状态
+       if (!summary.is_temporary && completionStatus === '全部完成' && summary.items.length > 0) {
+         await WarehouseProductsNeed.update(
+           { status: '已发货' },
+           { 
+             where: { record_num: { [Op.in]: summary.items } },
+             transaction 
+           }
+         );
+         console.log(`✅ 更新需求记录状态为已发货: ${summary.items.join(', ')}`);
+       } else if (summary.is_temporary) {
+         console.log(`📦 临时发货记录: ${needNum} (不更新需求记录状态)`);
+       }
+     }
+
+    // 插入需求单发货关联记录
+    if (orderRelations.length > 0) {
+      await OrderShipmentRelation.bulkCreate(orderRelations, { transaction });
+      console.log(`✅ 创建了 ${orderRelations.length} 条需求单发货关联记录`);
+    }
+
+    await transaction.commit();
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 库存状态更新成功:', {
+      shipmentNumber: shipmentNumber,
+      outboundRecords: outboundRecords.length,
+      shipmentItems: shipmentItems.length,
+      orderRelations: orderRelations.length,
+      updated_count: updateItems.length
+    });
+    
+    res.json({
+      code: 0,
+      message: '库存状态更新成功',
+      data: {
+        shipment_number: shipmentNumber,
+        shipment_id: shipmentRecord.shipment_id,
+        updated_count: updateItems.length,
+        outbound_records: outboundRecords.length,
+        shipment_items: shipmentItems.length,
+        order_relations: orderRelations.length,
+        details: {
+          outbound_records: outboundRecords,
+          shipment_items: shipmentItems,
+          order_relations: orderRelations
+        }
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('\x1b[31m%s\x1b[0m', '❌ 更新库存状态失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新库存状态失败',
       error: error.message
     });
   }
