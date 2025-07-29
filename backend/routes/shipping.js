@@ -5657,8 +5657,132 @@ router.post('/update-shipped-status', async (req, res) => {
       logistics_provider: logistics_provider
     }, { transaction });
 
-    // 第二步：处理部分出库逻辑（简化版）
-    // 不再需要创建负数出库记录，直接处理库存状态更新
+    // 第二步：创建发货明细记录
+    const shipmentItems = [];
+    const orderSummary = new Map(); // 用于统计每个需求单的发货情况
+
+    for (const item of updateItems) {
+      const {
+        sku,
+        quantity,
+        country,
+        is_mixed_box = false,
+        total_boxes = 0,
+        original_mix_box_num = null
+      } = item;
+
+      // 统一country字段为中文
+      let normalizedCountry = country;
+      if (country === 'US') {
+        normalizedCountry = '美国';
+      } else if (country === 'UK') {
+        normalizedCountry = '英国';
+      } else if (country === 'AU') {
+        normalizedCountry = '澳大利亚';
+      } else if (country === 'AE') {
+        normalizedCountry = '阿联酋';
+      } else if (country === 'CA') {
+        normalizedCountry = '加拿大';
+      }
+
+      // 查询Amazon SKU映射
+      const mapping = await AmzSkuMapping.findOne({
+        where: {
+          local_sku: sku,
+          country: normalizedCountry
+        }
+      });
+
+      // 尝试查找相关的需求记录
+      const orderItem = await WarehouseProductsNeed.findOne({
+        where: {
+          local_sku: sku,
+          country: normalizedCountry,
+          status: { [Op.in]: ['备货中', '部分发货'] } // 查找未完成的需求
+        },
+        order: [['created_at', 'DESC']] // 优先使用最新的需求记录
+      });
+
+      // 创建发货明细记录
+      const shipmentItem = {
+        shipment_id: shipmentRecord.shipment_id,
+        order_item_id: orderItem?.record_num || null,
+        need_num: orderItem?.need_num || `MANUAL-${Date.now()}`, // 如果没有需求单，生成手动发货标识
+        local_sku: sku,
+        amz_sku: mapping?.amz_sku || sku,
+        country: normalizedCountry,
+        marketplace: '亚马逊',
+        requested_quantity: orderItem?.ori_quantity || Math.abs(quantity),
+        shipped_quantity: Math.abs(quantity),
+        whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
+        mixed_box_quantity: is_mixed_box ? Math.abs(quantity) : 0,
+        box_numbers: JSON.stringify(original_mix_box_num ? [original_mix_box_num] : [])
+      };
+
+      shipmentItems.push(shipmentItem);
+
+      // 如果找到了需求记录，统计需求单发货情况
+      if (orderItem) {
+        const needNum = orderItem.need_num;
+        if (!orderSummary.has(needNum)) {
+          orderSummary.set(needNum, {
+            total_requested: 0,
+            total_shipped: 0,
+            items: []
+          });
+        }
+        const summary = orderSummary.get(needNum);
+        summary.total_requested += orderItem.ori_quantity;
+        summary.total_shipped += Math.abs(quantity);
+        summary.items.push(orderItem.record_num);
+      }
+    }
+
+    // 第三步：批量插入发货明细
+    if (shipmentItems.length > 0) {
+      await ShipmentItem.bulkCreate(shipmentItems, { transaction });
+      console.log('\x1b[33m%s\x1b[0m', '📦 创建发货明细记录:', shipmentItems.length, '条');
+    }
+
+    // 第四步：创建需求单发货关联记录
+    const orderRelations = [];
+    for (const [needNum, summary] of orderSummary) {
+      const completionStatus = summary.total_shipped >= summary.total_requested ? '全部完成' : '部分完成';
+      
+      orderRelations.push({
+        need_num: needNum,
+        shipment_id: shipmentRecord.shipment_id,
+        total_requested: summary.total_requested,
+        total_shipped: summary.total_shipped,
+        completion_status: completionStatus
+      });
+
+      // 更新需求记录状态
+      if (completionStatus === '全部完成') {
+        await WarehouseProductsNeed.update(
+          { status: '已发货' },
+          { 
+            where: { record_num: { [Op.in]: summary.items } },
+            transaction 
+          }
+        );
+      } else {
+        await WarehouseProductsNeed.update(
+          { status: '部分发货' },
+          { 
+            where: { record_num: { [Op.in]: summary.items } },
+            transaction 
+          }
+        );
+      }
+    }
+
+    if (orderRelations.length > 0) {
+      await OrderShipmentRelation.bulkCreate(orderRelations, { transaction });
+      console.log('\x1b[33m%s\x1b[0m', '📦 创建需求单关联记录:', orderRelations.length, '条');
+    }
+
+    // 第五步：处理部分出库逻辑（简化版）
     const shipmentForProcessing = updateItems.map(item => ({
       sku: item.sku,
       quantity: item.quantity,
@@ -5667,17 +5791,12 @@ router.post('/update-shipped-status', async (req, res) => {
 
     const partialShipmentResult = await processPartialShipment(shipmentForProcessing, transaction);
 
-    // 注释：不再需要创建负数出库记录，因为：
-    // 1. shipped_quantity字段已经精确记录出库数量
-    // 2. status字段已经标识出库状态  
-    // 3. shipment_id字段已经关联发货记录
-    // 4. shipment_records表已经记录发货总体信息
-    // 这样避免了数据冗余和查询复杂性
-
     await transaction.commit();
     
     console.log('\x1b[32m%s\x1b[0m', '✅ 批量发货完成记录创建成功:', {
       shipmentNumber: shipmentNumber,
+      shipmentItems: shipmentItems.length,
+      orderRelations: orderRelations.length,
       updatedRecords: partialShipmentResult.updated
     });
     
@@ -5688,6 +5807,8 @@ router.post('/update-shipped-status', async (req, res) => {
         shipment_number: shipmentNumber,
         shipment_id: shipmentRecord.shipment_id,
         updated_count: partialShipmentResult.updated,
+        shipment_items_count: shipmentItems.length,
+        order_relations_count: orderRelations.length,
         partial_shipment_summary: {
           updated: partialShipmentResult.updated,
           partialShipped: partialShipmentResult.partialShipped,
