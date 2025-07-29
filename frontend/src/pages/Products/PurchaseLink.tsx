@@ -641,6 +641,26 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 字段名称映射
+  const getFieldDisplayName = (field: string) => {
+    const fieldNameMap: { [key: string]: string } = {
+      'parent_sku': '母SKU',
+      'weblink': '产品链接',
+      'status': '产品状态',
+      'notice': '备注',
+      'cpc_status': 'CPC测试情况',
+      'cpc_submit': 'CPC提交情况',
+      'model_number': 'Style Number',
+      'recommend_age': '推荐年龄',
+      'ads_add': '广告是否创建',
+      'list_parent_sku': '上架母SKU',
+      'no_inventory_rate': '缺货率',
+      'sales_30days': '30天销量',
+      'seller_name': '供应商'
+    };
+    return fieldNameMap[field] || field;
+  };
+
   // 双击编辑单元格
   const handleCellDoubleClick = (record: ProductRecord, field: string) => {
     if (field === 'id' || field === 'update_time' || field === 'check_time') {
@@ -894,7 +914,7 @@ const Purchase: React.FC = () => {
       })
     },
     { 
-      title: '型号', 
+      title: 'Style Number', 
       dataIndex: 'model_number', 
       key: 'model_number', 
       align: 'center',
@@ -1416,7 +1436,7 @@ const Purchase: React.FC = () => {
       >
         <Form form={editForm} layout="vertical">
           <Form.Item
-            label={`编辑 ${editingCell?.field}`}
+            label={`编辑 ${editingCell?.field ? getFieldDisplayName(editingCell.field) : ''}`}
             name="value"
             rules={[{ required: false }]}
           >
