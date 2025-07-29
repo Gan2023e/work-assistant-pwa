@@ -6076,11 +6076,11 @@ router.post('/update-shipped-status', async (req, res) => {
        let needRecords = [];
        let isTemporaryShipment = false;
        
-       // 检查是否为临时发货（record_num为负数表示临时发货）
+       // 检查是否为临时发货（record_num为负数或undefined都表示临时发货）
        console.log(`🔍 检查发货类型: record_num=${record_num}, need_num=${need_num}, sku=${sku}`);
        
-       if (record_num && record_num < 0) {
-         console.log(`📦 检测到临时发货: record_num=${record_num} (负数表示临时发货)`);
+       if ((record_num && record_num < 0) || record_num === undefined || record_num === null) {
+         console.log(`📦 检测到临时发货: record_num=${record_num} (负数/undefined/null表示临时发货)`);
          isTemporaryShipment = true;
          needRecords = [];
        } else if (record_num && need_num && need_num.trim() !== '' && record_num > 0) {
@@ -6191,17 +6191,20 @@ router.post('/update-shipped-status', async (req, res) => {
            // 优先使用前端传递的need_num（应该是MANUAL开头）
            effectiveNeedNum = need_num;
          } else {
-           // 如果没有，生成MANUAL格式的need_num
-           effectiveNeedNum = `MANUAL-${Date.now()}`;
+           // 如果没有或为undefined/null，生成MANUAL格式的need_num
+           effectiveNeedNum = `MANUAL-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
          }
          
          const effectiveAmzSku = amz_sku || mapping?.amz_sku || sku;
          
          console.log(`🔍 临时发货need_num处理: 原值='${need_num}', 有效值='${effectiveNeedNum}' (MANUAL格式)`);
          
+         // 处理order_item_id：负数record_num直接使用，undefined则设为null
+         const effectiveOrderItemId = (record_num !== undefined && record_num !== null) ? record_num : null;
+         
          const shipmentItem = {
            shipment_id: shipmentRecord.shipment_id,
-           order_item_id: record_num, // 使用程序生成的负数record_num
+           order_item_id: effectiveOrderItemId, // 使用有效的record_num或null
            need_num: effectiveNeedNum, // 使用MANUAL开头的need_num
            local_sku: sku,
            amz_sku: effectiveAmzSku,
@@ -6225,10 +6228,10 @@ router.post('/update-shipped-status', async (req, res) => {
            items: [], // 临时发货没有对应的需求记录，items为空
            is_temporary: true, // 临时发货标记
            manual_need_num: effectiveNeedNum, // MANUAL开头的需求单号
-           negative_record_num: record_num // 程序生成的负数record_num
+           negative_record_num: effectiveOrderItemId // 有效的record_num（可能是负数或null）
          };
          
-         console.log(`📋 临时发货关联记录: MANUAL需求单='${effectiveNeedNum}', 负数记录号=${record_num}, 数量=${Math.abs(quantity)}`);
+         console.log(`📋 临时发货关联记录: MANUAL需求单='${effectiveNeedNum}', 记录号=${effectiveOrderItemId}, 数量=${Math.abs(quantity)}`);
          orderSummary.set(effectiveNeedNum, orderSummaryData);
          console.log(`✅ 已添加临时发货到orderSummary, 当前大小: ${orderSummary.size}`);
          
