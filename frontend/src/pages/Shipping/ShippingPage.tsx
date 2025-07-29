@@ -2528,6 +2528,11 @@ const ShippingPage: React.FC = () => {
                           is_mixed_box: true,
                           original_mix_box_num: mixedItem.box_num,
                           is_whole_box_confirmed: true, // 标识这是整箱确认发出
+                          // 添加需求记录信息
+                          record_num: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num,
+                          amz_sku: selectedRecord?.amz_sku || mixedItem.amz_sku,
+                          marketplace: selectedRecord?.marketplace || '亚马逊'
                         });
                       });
                     }
@@ -2543,6 +2548,11 @@ const ShippingPage: React.FC = () => {
                           total_boxes: wholeItem.confirm_boxes,
                           country: selectedRecord?.country || '美国',
                           is_mixed_box: false,
+                          // 添加需求记录信息
+                          record_num: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num,
+                          amz_sku: selectedRecord?.amz_sku || wholeItem.amz_sku,
+                          marketplace: selectedRecord?.marketplace || '亚马逊'
                         });
                       });
                     }
@@ -2558,6 +2568,11 @@ const ShippingPage: React.FC = () => {
                           country: selectedRecord?.country || '美国',
                           is_mixed_box: true, // 默认按混合箱处理
                           original_mix_box_num: item.box_num,
+                          // 添加需求记录信息
+                          record_num: selectedRecord?.record_num,
+                          need_num: selectedRecord?.need_num,
+                          amz_sku: selectedRecord?.amz_sku || item.amz_sku,
+                          marketplace: selectedRecord?.marketplace || '亚马逊'
                         });
                       });
                     }
@@ -2578,6 +2593,14 @@ const ShippingPage: React.FC = () => {
                     };
                     
                     console.log('📋 完整的请求体:', requestBody);
+                    console.log('📋 selectedRows示例（前3条）:', selectedRows.slice(0, 3));
+                    console.log('📋 updateItems详情:', updateItems.map(item => ({
+                      sku: item.sku,
+                      record_num: item.record_num,
+                      need_num: item.need_num,
+                      quantity: item.quantity,
+                      country: item.country
+                    })));
 
                     const response = await fetch(`${API_BASE_URL}/api/shipping/update-shipped-status`, {
                       method: 'POST',

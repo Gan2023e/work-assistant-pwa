@@ -5999,7 +5999,8 @@ router.get('/check-partial-shipment/:sku/:country', async (req, res) => {
 
 // 更新库存状态为已发货（批量发货确认第三步使用）
 router.post('/update-shipped-status', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 收到更新库存状态为已发货请求:', JSON.stringify(req.body, null, 2));
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到更新库存状态为已发货请求');
+  console.log('\x1b[35m%s\x1b[0m', '📋 请求详情:', JSON.stringify(req.body, null, 2));
   
   const transaction = await sequelize.transaction();
   
@@ -6040,16 +6041,21 @@ router.post('/update-shipped-status', async (req, res) => {
     const shipmentItems = [];
     const orderSummary = new Map(); // 用于统计每个需求单的发货情况
 
-    for (const updateItem of updateItems) {
-      const {
-        sku,
-        quantity,
-        total_boxes = null,
-        country,
-        is_mixed_box = false,
-        original_mix_box_num = null,
-        is_whole_box_confirmed = false
-      } = updateItem;
+         for (const updateItem of updateItems) {
+       const {
+         sku,
+         quantity,
+         total_boxes = null,
+         country,
+         is_mixed_box = false,
+         original_mix_box_num = null,
+         is_whole_box_confirmed = false,
+         // 新增：前端传递的需求记录信息
+         record_num = null,
+         need_num = null,
+         amz_sku = null,
+         marketplace = '亚马逊'
+       } = updateItem;
       
       // 统一country字段为中文
       let normalizedCountry = country;
@@ -6065,21 +6071,38 @@ router.post('/update-shipped-status', async (req, res) => {
         normalizedCountry = '加拿大';
       }
       
-             // 查找对应的需求记录（通过SKU和国家匹配，状态为待发货）
-       const needRecords = await WarehouseProductsNeed.findAll({
-         where: {
-           sku: sku,
-           country: normalizedCountry,
-           status: '待发货'
-         },
-         order: [['create_date', 'ASC']], // 按创建时间升序，优先处理最早的需求
-         transaction
-       });
-
-       console.log(`🔍 找到 SKU ${sku} (${normalizedCountry}) 的需求记录: ${needRecords.length} 条`);
+             // 优先使用前端传递的需求记录信息
+       let needRecords = [];
+       let isTemporaryShipment = false;
        
-       // 如果没有找到需求记录，这可能是临时发货
-       const isTemporaryShipment = needRecords.length === 0;
+       if (record_num && need_num) {
+         // 前端传递了具体的需求记录信息，直接使用
+         console.log(`📋 使用前端传递的需求记录: record_num=${record_num}, need_num=${need_num}`);
+         
+         const specificNeedRecord = await WarehouseProductsNeed.findByPk(record_num, { transaction });
+         if (specificNeedRecord && specificNeedRecord.status === '待发货') {
+           needRecords = [specificNeedRecord];
+         } else {
+           console.warn(`⚠️ 需求记录 ${record_num} 不存在或状态不是待发货，将作为临时发货处理`);
+           isTemporaryShipment = true;
+         }
+       } else {
+         // 没有具体的需求记录信息，通过SKU和国家查找
+         console.log(`🔍 通过SKU和国家查找需求记录: ${sku} (${normalizedCountry})`);
+         needRecords = await WarehouseProductsNeed.findAll({
+           where: {
+             sku: sku,
+             country: normalizedCountry,
+             status: '待发货'
+           },
+           order: [['create_date', 'ASC']], // 按创建时间升序，优先处理最早的需求
+           transaction
+         });
+         
+         isTemporaryShipment = needRecords.length === 0;
+       }
+
+       console.log(`🔍 最终找到的需求记录数量: ${needRecords.length} 条, 是否临时发货: ${isTemporaryShipment}`);
 
       // 处理混合箱号
       let mixBoxNum = null;
@@ -6150,17 +6173,18 @@ router.post('/update-shipped-status', async (req, res) => {
          // 临时发货：没有对应的需求记录，创建临时发货明细
          console.log(`📦 创建临时发货记录: SKU ${sku} (${normalizedCountry}), 数量: ${quantity}`);
          
-         // 生成临时需求单号
-         const tempNeedNum = `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         // 使用前端传递的need_num，如果没有则生成临时需求单号
+         const effectiveNeedNum = need_num || `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+         const effectiveAmzSku = amz_sku || mapping?.amz_sku || sku;
          
          const shipmentItem = {
            shipment_id: shipmentRecord.shipment_id,
-           order_item_id: null, // 临时发货没有对应的需求记录ID
-           need_num: tempNeedNum,
+           order_item_id: record_num || null, // 使用前端传递的record_num，如果有的话
+           need_num: effectiveNeedNum,
            local_sku: sku,
-           amz_sku: mapping?.amz_sku || sku,
+           amz_sku: effectiveAmzSku,
            country: normalizedCountry,
-           marketplace: '亚马逊', // 默认平台
+           marketplace: marketplace, // 使用前端传递的marketplace
            requested_quantity: Math.abs(quantity), // 临时发货的请求量等于发货量
            shipped_quantity: Math.abs(quantity),
            whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
@@ -6171,14 +6195,14 @@ router.post('/update-shipped-status', async (req, res) => {
          shipmentItems.push(shipmentItem);
 
          // 为临时发货创建需求单发货关联记录
-         orderSummary.set(tempNeedNum, {
+         orderSummary.set(effectiveNeedNum, {
            total_requested: Math.abs(quantity),
            total_shipped: Math.abs(quantity),
-           items: [], // 临时发货没有具体的需求记录ID
-           is_temporary: true // 标记为临时发货
+           items: record_num ? [record_num] : [], // 如果有record_num就记录
+           is_temporary: !need_num // 只有完全没有need_num才标记为临时发货
          });
          
-         console.log(`📦 创建临时发货明细: ${tempNeedNum}, 数量: ${quantity}`);
+         console.log(`📦 创建临时发货明细: ${effectiveNeedNum}, 数量: ${quantity}, 记录ID: ${record_num || 'null'}`);
        } else {
          // 正常发货：有对应的需求记录
          let remainingQuantity = Math.abs(quantity);
@@ -6205,9 +6229,9 @@ router.post('/update-shipped-status', async (req, res) => {
              order_item_id: needRecord.record_num,
              need_num: needRecord.need_num,
              local_sku: sku,
-             amz_sku: mapping?.amz_sku || sku,
+             amz_sku: amz_sku || mapping?.amz_sku || sku, // 优先使用前端传递的amz_sku
              country: normalizedCountry,
-             marketplace: needRecord.marketplace || '亚马逊',
+             marketplace: marketplace || needRecord.marketplace || '亚马逊', // 优先使用前端传递的marketplace
              requested_quantity: needRecord.ori_quantity,
              shipped_quantity: shipQuantity,
              whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
@@ -6247,9 +6271,9 @@ router.post('/update-shipped-status', async (req, res) => {
              order_item_id: null,
              need_num: tempNeedNum,
              local_sku: sku,
-             amz_sku: mapping?.amz_sku || sku,
+             amz_sku: amz_sku || mapping?.amz_sku || sku, // 优先使用前端传递的amz_sku
              country: normalizedCountry,
-             marketplace: '亚马逊',
+             marketplace: marketplace || '亚马逊', // 优先使用前端传递的marketplace
              requested_quantity: remainingQuantity,
              shipped_quantity: remainingQuantity,
              whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
@@ -6297,8 +6321,8 @@ router.post('/update-shipped-status', async (req, res) => {
          completion_status: completionStatus
        });
 
-       // 只为正常需求（非临时发货）更新需求记录状态
-       if (!summary.is_temporary && completionStatus === '全部完成' && summary.items.length > 0) {
+       // 为正常需求和有record_num的情况更新需求记录状态
+       if (completionStatus === '全部完成' && summary.items.length > 0) {
          await WarehouseProductsNeed.update(
            { status: '已发货' },
            { 
@@ -6309,6 +6333,8 @@ router.post('/update-shipped-status', async (req, res) => {
          console.log(`✅ 更新需求记录状态为已发货: ${summary.items.join(', ')}`);
        } else if (summary.is_temporary) {
          console.log(`📦 临时发货记录: ${needNum} (不更新需求记录状态)`);
+       } else if (summary.items.length === 0) {
+         console.log(`⚠️ 需求单 ${needNum} 没有关联的需求记录ID，跳过状态更新`);
        }
      }
 
