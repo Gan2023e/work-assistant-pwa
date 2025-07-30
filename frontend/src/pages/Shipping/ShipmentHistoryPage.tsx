@@ -179,6 +179,34 @@ const ShipmentHistoryPage: React.FC = () => {
     }
   };
 
+  // 单个删除发货记录
+  const handleSingleDelete = async (shipmentId: number, shipmentNumber: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/shipment-history`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          shipment_ids: [shipmentId]
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success(`成功删除发货记录 ${shipmentNumber} 并恢复相应库存`);
+        await fetchShipmentHistory(pagination.current, pagination.pageSize);
+      } else {
+        message.error(result.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除发货记录失败:', error);
+      message.error('删除失败，请检查网络连接');
+    }
+  };
+
   // 搜索处理
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
@@ -333,7 +361,7 @@ const ShipmentHistoryPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 80,
+      width: 120,
       fixed: 'right',
       align: 'center',
       render: (_, record) => (
@@ -350,6 +378,31 @@ const ShipmentHistoryPage: React.FC = () => {
               }}
             />
           </Tooltip>
+          <Popconfirm
+            title="确认删除发货记录"
+            description={
+              <div>
+                <div>确定要删除发货记录 <Text strong>{record.shipment_number}</Text> 吗？</div>
+                <div style={{ color: '#1890ff', marginTop: 4 }}>
+                  删除后将自动恢复相应的库存状态
+                </div>
+              </div>
+            }
+            icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}
+            onConfirm={() => handleSingleDelete(record.shipment_id, record.shipment_number)}
+            okText="确认删除"
+            cancelText="取消"
+            okType="danger"
+          >
+            <Tooltip title="删除记录并恢复库存">
+              <Button 
+                type="primary" 
+                danger 
+                size="small" 
+                icon={<DeleteOutlined />}
+              />
+            </Tooltip>
+          </Popconfirm>
         </Space>
       )
     }
@@ -514,7 +567,7 @@ const ShipmentHistoryPage: React.FC = () => {
           rowSelection={rowSelection}
           loading={loading}
           size="small"
-          scroll={{ x: 1400, y: 600 }}
+          scroll={{ x: 1440, y: 600 }}
           pagination={{
             ...pagination,
             showSizeChanger: true,

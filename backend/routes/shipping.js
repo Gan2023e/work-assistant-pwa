@@ -2769,23 +2769,74 @@ router.delete('/shipment-history', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🗑️ 开始删除发货记录:', shipment_ids);
     
-    // 1. 恢复local_boxes表中对应的库存状态（从已出库改为待出库）
-    const restoredLocalBoxes = await LocalBox.update({
-      status: '待出库',
-      shipped_at: null,
-      shipment_id: null,
-      last_updated_at: new Date(),
-      remark: sequelize.fn('CONCAT', 
-        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
-        `;\n${new Date().toISOString()} 删除发货记录，恢复库存状态`
-      )
-    }, {
+    // 1. 先查询要删除的发货明细，计算每个SKU的发货数量
+    const shipmentItems = await ShipmentItem.findAll({
       where: {
-        shipment_id: { [Op.in]: shipment_ids },
-        status: '已出库'
+        shipment_id: { [Op.in]: shipment_ids }
       },
       transaction
     });
+    
+    // 2. 按SKU和国家分组统计发货数量
+    const shipmentSummary = new Map();
+    shipmentItems.forEach(item => {
+      const key = `${item.local_sku}-${item.country}`;
+      if (!shipmentSummary.has(key)) {
+        shipmentSummary.set(key, 0);
+      }
+      shipmentSummary.set(key, shipmentSummary.get(key) + item.shipped_quantity);
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '📊 待恢复的发货汇总:', Array.from(shipmentSummary.entries()));
+    
+    // 3. 恢复local_boxes表中对应的库存状态
+    let restoredLocalBoxes = [0]; // 初始化统计
+    
+    for (const [skuCountryKey, shippedQty] of shipmentSummary) {
+      const [sku, country] = skuCountryKey.split('-');
+      
+      // 查找并更新对应的local_boxes记录
+      const localBoxRecords = await LocalBox.findAll({
+        where: {
+          sku: sku,
+          country: country,
+          shipment_id: { [Op.in]: shipment_ids }
+        },
+        transaction
+      });
+      
+      for (const record of localBoxRecords) {
+        const newShippedQuantity = Math.max(0, (record.shipped_quantity || 0) - shippedQty);
+        let newStatus;
+        
+        // 根据新的shipped_quantity确定状态
+        if (newShippedQuantity === 0) {
+          newStatus = '待出库';
+        } else if (newShippedQuantity < record.total_quantity) {
+          newStatus = '部分出库';
+        } else {
+          newStatus = '已出库';
+        }
+        
+        await LocalBox.update({
+          status: newStatus,
+          shipped_quantity: newShippedQuantity,
+          shipped_at: newStatus === '待出库' ? null : record.shipped_at,
+          shipment_id: newStatus === '待出库' ? null : record.shipment_id,
+          last_updated_at: new Date(),
+          remark: sequelize.fn('CONCAT', 
+            sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+            `;\n${new Date().toISOString()} 删除发货记录，减少出库数量${shippedQty}`
+          )
+        }, {
+          where: { 记录号: record.记录号 },
+          transaction
+        });
+        
+        restoredLocalBoxes[0]++;
+        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 减少数量: ${shippedQty}, 新状态: ${newStatus}`);
+      }
+    }
     
     // 2. 删除发货明细
     const deletedItems = await ShipmentItem.destroy({
@@ -2872,28 +2923,72 @@ router.post('/shipment-cancel/:shipment_id', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🔄 开始撤销发货记录:', shipment_id);
     
-    // 1. 恢复local_boxes表中对应的库存状态
-    const restoredLocalBoxes = await LocalBox.update({
-      status: '待出库',
-      shipped_at: null,
-      shipment_id: null,
-      last_updated_at: new Date(),
-      remark: sequelize.fn('CONCAT', 
-        sequelize.fn('IFNULL', sequelize.col('remark'), ''),
-        `;\n${new Date().toISOString()} 撤销发货: ${reason}`
-      )
-    }, {
-      where: {
-        shipment_id: shipment_id,
-        status: '已出库'
-      },
+    // 1. 先查询要撤销的发货明细，计算每个SKU的发货数量
+    const shipmentItems = await ShipmentItem.findAll({
+      where: { shipment_id: shipment_id },
       transaction
     });
     
-    // 2. 查询发货明细，恢复需求记录状态
-    const shipmentItems = await ShipmentItem.findAll({
-      where: { shipment_id: shipment_id }
+    // 2. 按SKU和国家分组统计发货数量
+    const shipmentSummary = new Map();
+    shipmentItems.forEach(item => {
+      const key = `${item.local_sku}-${item.country}`;
+      if (!shipmentSummary.has(key)) {
+        shipmentSummary.set(key, 0);
+      }
+      shipmentSummary.set(key, shipmentSummary.get(key) + item.shipped_quantity);
     });
+    
+    console.log('\x1b[33m%s\x1b[0m', '📊 待恢复的发货汇总:', Array.from(shipmentSummary.entries()));
+    
+    // 3. 恢复local_boxes表中对应的库存状态
+    let restoredLocalBoxes = [0]; // 初始化统计
+    
+    for (const [skuCountryKey, shippedQty] of shipmentSummary) {
+      const [sku, country] = skuCountryKey.split('-');
+      
+      // 查找并更新对应的local_boxes记录
+      const localBoxRecords = await LocalBox.findAll({
+        where: {
+          sku: sku,
+          country: country,
+          shipment_id: shipment_id
+        },
+        transaction
+      });
+      
+      for (const record of localBoxRecords) {
+        const newShippedQuantity = Math.max(0, (record.shipped_quantity || 0) - shippedQty);
+        let newStatus;
+        
+        // 根据新的shipped_quantity确定状态
+        if (newShippedQuantity === 0) {
+          newStatus = '待出库';
+        } else if (newShippedQuantity < record.total_quantity) {
+          newStatus = '部分出库';
+        } else {
+          newStatus = '已出库';
+        }
+        
+        await LocalBox.update({
+          status: newStatus,
+          shipped_quantity: newShippedQuantity,
+          shipped_at: newStatus === '待出库' ? null : record.shipped_at,
+          shipment_id: newStatus === '待出库' ? null : record.shipment_id,
+          last_updated_at: new Date(),
+          remark: sequelize.fn('CONCAT', 
+            sequelize.fn('IFNULL', sequelize.col('remark'), ''),
+            `;\n${new Date().toISOString()} 撤销发货: ${reason}，减少出库数量${shippedQty}`
+          )
+        }, {
+          where: { 记录号: record.记录号 },
+          transaction
+        });
+        
+        restoredLocalBoxes[0]++;
+        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 减少数量: ${shippedQty}, 新状态: ${newStatus}`);
+      }
+    }
     
     // 恢复需求记录状态（如果完全撤销）
     const needRecordIds = [...new Set(shipmentItems.map(item => item.order_item_id))];
