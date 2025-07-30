@@ -392,11 +392,10 @@ const Purchase: React.FC = () => {
     }
   };
 
-  const handleCpcFileUpload = async (file: File) => {
-    if (!currentRecord) return false;
+  // 单文件上传处理逻辑
+  const handleSingleFileUpload = async (file: File) => {
+    if (!currentRecord) return null;
 
-    setCpcUploading(true);
-    
     try {
       const formData = new FormData();
       formData.append('cpcFile', file);
@@ -409,48 +408,171 @@ const Purchase: React.FC = () => {
       const result = await res.json();
       
       if (result.code === 0) {
-        message.success(result.message);
         await loadCpcFiles(currentRecord.id);
+        return result;
+      } else {
+        console.error(`文件 ${file.name} 上传失败:`, result.message);
+        return null;
+      }
+    } catch (error) {
+      console.error(`文件 ${file.name} 上传失败:`, error);
+      return null;
+    }
+  };
+
+  // 多文件批量上传处理
+  const handleMultipleFileUpload = async (files: File[]) => {
+    if (!currentRecord || files.length === 0) return;
+
+    setCpcUploading(true);
+    const uploadResults = [];
+    let cpcCertificateExtracted = false;
+    let extractedInfo: any = null;
+
+    try {
+      const loadingMessage = message.loading(`正在批量上传 ${files.length} 个文件...`, 0);
+
+      // 筛选PDF文件
+      const pdfFiles = files.filter(file => file.type === 'application/pdf');
+      const skippedFiles = files.length - pdfFiles.length;
+
+      if (skippedFiles > 0) {
+        message.warning(`跳过 ${skippedFiles} 个非PDF文件`);
+      }
+
+      // 逐个上传PDF文件
+      for (let i = 0; i < pdfFiles.length; i++) {
+        const file = pdfFiles[i];
+        const result = await handleSingleFileUpload(file);
         
-        // 检查是否自动更新了CPC测试情况
-        const needRefreshTable = result.data.cpcStatusUpdated || 
-          (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge));
+        if (result) {
+          uploadResults.push({
+            file: file.name,
+            success: true,
+            result: result
+          });
+
+          // 检查是否为CPC证书文件且是第一个提取到信息的文件
+          if (!cpcCertificateExtracted && result.data.extractedData && 
+              (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
+            cpcCertificateExtracted = true;
+            extractedInfo = result.data.extractedData;
+          }
+        } else {
+          uploadResults.push({
+            file: file.name,
+            success: false
+          });
+        }
+      }
+
+      loadingMessage(); // 关闭loading消息
+
+      // 生成批量上传结果提示
+      const successCount = uploadResults.filter(r => r.success).length;
+      const totalPdfCount = pdfFiles.length;
+      
+      const notifications = [];
+      
+      if (successCount > 0) {
+        if (totalPdfCount === successCount) {
+          notifications.push(`成功上传 ${successCount} 个PDF文件`);
+        } else {
+          notifications.push(`成功上传 ${successCount}/${totalPdfCount} 个PDF文件`);
+        }
         
-        // 显示自动提取信息的提示
+                 if (cpcCertificateExtracted && extractedInfo) {
+           const extractedDetails = [];
+           if (extractedInfo.styleNumber) {
+             extractedDetails.push(`Style Number: ${extractedInfo.styleNumber}`);
+           }
+           if (extractedInfo.recommendAge) {
+             extractedDetails.push(`推荐年龄: ${extractedInfo.recommendAge}`);
+           }
+           notifications.push(`已从首个CPC证书文件中自动提取信息：${extractedDetails.join(', ')}`);
+         } else {
+           // 检查是否有CPC证书文件但已经提取过信息
+           const hasCpcButAlreadyExtracted = uploadResults.some(r => 
+             r.success && r.result?.data?.hasExistingData && 
+             r.result?.data?.extractedData && 
+             (r.result.data.extractedData.styleNumber || r.result.data.extractedData.recommendAge)
+           );
+           
+           if (hasCpcButAlreadyExtracted) {
+             notifications.push('检测到CPC证书文件，但信息已从之前的文件中提取过，跳过重复提取');
+           } else if (successCount > 0) {
+             notifications.push('未检测到CHILDREN\'S PRODUCT CERTIFICATE文件，无法自动提取信息');
+           }
+         }
+
+        // 检查是否更新了CPC测试状态
+        const latestResult = uploadResults.find(r => r.success && r.result?.data?.cpcStatusUpdated)?.result;
+        if (latestResult?.data?.cpcStatusUpdated) {
+          notifications.push(`CPC文件数量已达到${latestResult.data.totalFileCount}个，已自动更新CPC测试情况为"已测试"`);
+        }
+
+        message.success(notifications.join('；'));
+        handleSearch(); // 刷新表格数据
+      } else {
+        message.error('所有文件上传失败');
+      }
+
+    } catch (error) {
+      message.error('批量上传失败');
+    } finally {
+      setCpcUploading(false);
+    }
+  };
+
+  // 兼容原有的单文件上传接口
+  const handleCpcFileUpload = async (file: File) => {
+    if (!currentRecord) return false;
+
+    setCpcUploading(true);
+    
+    try {
+      const result = await handleSingleFileUpload(file);
+      
+      if (result) {
+        // 显示单文件上传的详细提示
         const notifications = [];
-        if (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
-          const extractedInfo = [];
-          if (result.data.extractedData.styleNumber) {
-            extractedInfo.push(`Style Number: ${result.data.extractedData.styleNumber}`);
-          }
-          if (result.data.extractedData.recommendAge) {
-            extractedInfo.push(`推荐年龄: ${result.data.extractedData.recommendAge}`);
-          }
-          notifications.push(`已自动提取信息：${extractedInfo.join(', ')}`);
-        } else if (result.data.extractedData && 
+        
+                 if (result.data.isFirstExtraction) {
+           const extractedInfo = [];
+           if (result.data.extractedData.styleNumber) {
+             extractedInfo.push(`Style Number: ${result.data.extractedData.styleNumber}`);
+           }
+           if (result.data.extractedData.recommendAge) {
+             extractedInfo.push(`推荐年龄: ${result.data.extractedData.recommendAge}`);
+           }
+           notifications.push(`已自动提取信息：${extractedInfo.join(', ')}`);
+         } else if (result.data.hasExistingData && 
+                   result.data.extractedData && 
+                   (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
+           notifications.push("检测到CPC证书文件，但信息已从之前的文件中提取过，跳过重复提取");
+         } else if (result.data.extractedData && 
                   !result.data.extractedData.styleNumber && 
                   !result.data.extractedData.recommendAge) {
-          // 如果没有提取到任何信息，可能是非CPC证书文件
-          notifications.push("文件上传成功，但未能提取信息（请确保上传的是CHILDREN'S PRODUCT CERTIFICATE文件）");
-        }
+           notifications.push("文件上传成功，但未能提取信息（请确保上传的是CHILDREN'S PRODUCT CERTIFICATE文件）");
+         }
         
-        // 检查CPC文件数量并显示测试状态更新提示
-        const currentFileCount = result.data.totalFileCount || (cpcFiles.length + 1);
         if (result.data.cpcStatusUpdated) {
-          notifications.push(`CPC文件数量已达到${currentFileCount}个，已自动更新CPC测试情况为"已测试"`);
+          notifications.push(`CPC文件数量已达到${result.data.totalFileCount}个，已自动更新CPC测试情况为"已测试"`);
         }
         
-        // 显示所有通知
         if (notifications.length > 0) {
-          message.info(notifications.join('；'));
+          message.success(`文件上传成功；${notifications.join('；')}`);
+        } else {
+          message.success('文件上传成功');
         }
         
         // 刷新表格数据
-        if (needRefreshTable || result.data.cpcStatusUpdated) {
+        if (result.data.cpcStatusUpdated || 
+            (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge))) {
           handleSearch();
         }
       } else {
-        message.error(result.message);
+        message.error('上传失败');
       }
     } catch (error) {
       message.error('上传失败');
@@ -1764,22 +1886,53 @@ const Purchase: React.FC = () => {
       >
         <Space direction="vertical" style={{ width: '100%' }}>
           <div style={{ marginBottom: '16px' }}>
-            <Upload
-              beforeUpload={handleCpcFileUpload}
+            <Upload.Dragger
+              beforeUpload={(file, fileList) => {
+                // 如果是单文件，使用原有逻辑
+                if (fileList.length === 1) {
+                  return handleCpcFileUpload(file);
+                }
+                
+                // 如果是多文件，使用批量上传逻辑
+                const files = Array.from(fileList);
+                handleMultipleFileUpload(files);
+                return false; // 阻止默认上传
+              }}
+              multiple
               showUploadList={false}
               accept=".pdf"
+              disabled={cpcUploading}
+              style={{
+                padding: '20px',
+                backgroundColor: '#fafafa'
+              }}
             >
-              <Button 
-                type="primary"
-                icon={<PlusOutlined />}
-                loading={cpcUploading}
-              >
-                上传CPC文件
-              </Button>
-            </Upload>
-            <span style={{ marginLeft: '8px', color: '#999', fontSize: '12px' }}>
-              支持PDF格式，最大10MB，仅对CHILDREN'S PRODUCT CERTIFICATE文件自动提取Style Number和推荐年龄信息
-            </span>
+              <div style={{ textAlign: 'center' }}>
+                <FilePdfOutlined style={{ fontSize: '48px', color: '#1890ff', marginBottom: '16px' }} />
+                <div style={{ marginBottom: '8px' }}>
+                  <Button 
+                    type="primary" 
+                    icon={<PlusOutlined />} 
+                    loading={cpcUploading}
+                    size="large"
+                  >
+                    {cpcUploading ? '上传中...' : '选择CPC文件'}
+                  </Button>
+                </div>
+                <div style={{ color: '#666', fontSize: '14px', marginBottom: '4px' }}>
+                  或将文件拖拽到此区域
+                </div>
+                <div style={{ color: '#999', fontSize: '12px' }}>
+                  支持PDF格式，最大10MB，支持多文件批量上传
+                </div>
+                <div style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>
+                  仅对CHILDREN'S PRODUCT CERTIFICATE文件自动提取Style Number和推荐年龄信息
+                </div>
+                <div style={{ color: '#52c41a', fontSize: '12px', marginTop: '8px', fontWeight: 'bold' }}>
+                  💡 智能识别：系统会自动筛选CPC证书文件进行信息提取
+                </div>
+              </div>
+            </Upload.Dragger>
           </div>
 
           <List

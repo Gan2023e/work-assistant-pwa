@@ -1079,12 +1079,23 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         cpc_files: JSON.stringify(existingFiles)
       };
 
-      // 如果解析到了有效信息，则更新相应字段
-      if (extractedData.styleNumber) {
-        updateData.model_number = extractedData.styleNumber;
-      }
-      if (extractedData.recommendAge) {
-        updateData.recommend_age = extractedData.recommendAge;
+      // 检查是否已经有提取过的信息（避免重复提取）
+      const hasExistingExtractedData = existingFiles.some(file => 
+        file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge)
+      );
+
+      // 只有在没有提取过信息且当前文件提取到了信息时，才更新数据库字段
+      if (!hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
+        if (extractedData.styleNumber) {
+          updateData.model_number = extractedData.styleNumber;
+          console.log(`📝 首次提取Style Number: ${extractedData.styleNumber} (SKU: ${record.parent_sku})`);
+        }
+        if (extractedData.recommendAge) {
+          updateData.recommend_age = extractedData.recommendAge;
+          console.log(`📝 首次提取推荐年龄: ${extractedData.recommendAge} (SKU: ${record.parent_sku})`);
+        }
+      } else if (hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
+        console.log(`ℹ️ SKU ${record.parent_sku} 已有提取信息，跳过重复提取`);
       }
 
       // 如果CPC文件数量达到2个或以上，自动更新CPC测试情况为"已测试"
@@ -1104,12 +1115,14 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
           fileInfo: fileInfo,
           extractedData: extractedData,
           autoUpdated: {
-            styleNumber: !!extractedData.styleNumber,
-            recommendAge: !!extractedData.recommendAge,
+            styleNumber: !hasExistingExtractedData && !!extractedData.styleNumber,
+            recommendAge: !hasExistingExtractedData && !!extractedData.recommendAge,
             cpcStatus: existingFiles.length >= 2
           },
           cpcStatusUpdated: existingFiles.length >= 2,
-          totalFileCount: existingFiles.length
+          totalFileCount: existingFiles.length,
+          isFirstExtraction: !hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge),
+          hasExistingData: hasExistingExtractedData
         }
       });
 
