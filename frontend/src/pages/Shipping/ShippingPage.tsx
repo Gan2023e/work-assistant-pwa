@@ -1970,7 +1970,7 @@ const ShippingPage: React.FC = () => {
                     >
                       <Statistic
                         title="有库存无需求"
-                        value={filteredData.filter((item: MergedShippingData) => item.quantity === 0 && item.total_available > 0).length}
+                        value={filteredData.filter((item: MergedShippingData) => item.record_num === null && item.status === '有库存无需求').length}
                         valueStyle={{ color: filterType === 'inventory-only' ? '#1677ff' : '#1677ff' }}
                       />
                     </div>
@@ -2174,14 +2174,14 @@ const ShippingPage: React.FC = () => {
                 case 'unmapped':
                   return item.quantity > 0 && !item.local_sku;
                 case 'inventory-only':
-                  return item.quantity === 0 && item.total_available > 0;
+                  return item.record_num === null && item.status === '有库存无需求';
                 case 'unmapped-inventory':
                   return item.status === '库存未映射';
                 default:
                   return true; // 显示所有数据
               }
             })}
-            rowKey="record_num"
+            rowKey={(record) => record.record_num !== null ? record.record_num : `manual-${record.local_sku}-${record.country}`}
             loading={mergedLoading}
             pagination={false}
             scroll={{ x: 1500 }}
@@ -2207,8 +2207,8 @@ const ShippingPage: React.FC = () => {
               }),
             }}
             rowClassName={(record) => {
-              // 有库存无需求的记录
-              if (record.quantity === 0 && record.total_available > 0) return 'inventory-only-row';
+              // 有库存无需求的记录（record_num为null且status为"有库存无需求"）
+              if (record.record_num === null && record.status === '有库存无需求') return 'inventory-only-row';
               // 有需求但缺货的记录
               if (record.quantity > 0 && record.shortage > 0) return 'shortage-row';
               // 有需求但未映射SKU的记录

@@ -1211,14 +1211,14 @@ router.get('/merged-data', async (req, res) => {
     inventoryMap.forEach((inv, key) => {
       if (!processedKeys.has(key) && inv.total_available > 0) {
         allRecords.push({
-          record_num: -1 - allRecords.length,
+          record_num: null, // 设置为null表示无需求单的库存
         need_num: '',
           amz_sku: inv.amz_sku,
         amazon_sku: inv.amazon_sku,
         local_sku: inv.local_sku,
         site: inv.site,
         fulfillment_channel: inv.fulfillment_channel,
-        quantity: 0,
+        quantity: inv.total_available, // 设置为可用库存数量，方便用户调整发货数量
         shipping_method: '',
         marketplace: '',
         country: inv.country,
@@ -1820,6 +1820,24 @@ router.post('/outbound-record', async (req, res) => {
           summary.total_shipped += Math.abs(total_quantity);
           summary.items.push(order_item_id);
         }
+      } else {
+        // 如果没有需求记录信息，创建临时发货明细
+        const shipmentItem = {
+          shipment_id: shipmentRecord.shipment_id,
+          order_item_id: null,
+          need_num: `MANUAL-${Date.now()}-${operator}`,
+          local_sku: sku,
+          amz_sku: sku,
+          country: normalizedCountry,
+          marketplace: marketplace,
+          requested_quantity: Math.abs(total_quantity),
+          shipped_quantity: Math.abs(total_quantity),
+          whole_boxes: is_mixed_box ? 0 : Math.abs(total_boxes || 0),
+          mixed_box_quantity: is_mixed_box ? Math.abs(total_quantity) : 0,
+          box_numbers: JSON.stringify(mixBoxNum ? [mixBoxNum] : [])
+        };
+
+        shipmentItems.push(shipmentItem);
       }
     }
 
@@ -2695,8 +2713,8 @@ router.get('/shipment-history', async (req, res) => {
       }
       
       // 统计需求单数量，区分正常需求单和临时发货
-      const normalOrders = orderRelations.filter(rel => !rel.need_num.startsWith('TEMP-')).length;
-      const tempOrders = orderRelations.filter(rel => rel.need_num.startsWith('TEMP-')).length;
+          const normalOrders = orderRelations.filter(rel => !rel.need_num.startsWith('TEMP-') && !rel.need_num.startsWith('MANUAL-')).length;
+    const tempOrders = orderRelations.filter(rel => rel.need_num.startsWith('TEMP-') || rel.need_num.startsWith('MANUAL-')).length;
       const displayOrderCount = normalOrders + (tempOrders > 0 ? 1 : 0); // 临时发货合并显示为1个
       
       return {
@@ -3019,8 +3037,8 @@ router.get('/shipment-history/:shipment_id', async (req, res) => {
     
     // 统计需求单数量（排除临时发货的重复统计）
     const uniqueNeedNums = [...new Set(shipmentItems.map(item => item.need_num))];
-    const normalNeedNums = uniqueNeedNums.filter(needNum => !needNum.startsWith('TEMP-'));
-    const tempNeedNums = uniqueNeedNums.filter(needNum => needNum.startsWith('TEMP-'));
+    const normalNeedNums = uniqueNeedNums.filter(needNum => !needNum.startsWith('TEMP-') && !needNum.startsWith('MANUAL-'));
+    const tempNeedNums = uniqueNeedNums.filter(needNum => needNum.startsWith('TEMP-') || needNum.startsWith('MANUAL-'));
     
     const summary = {
       total_need_orders: normalNeedNums.length + (tempNeedNums.length > 0 ? 1 : 0), // 临时发货算作1个需求单
@@ -5819,7 +5837,7 @@ router.post('/update-shipped-status', async (req, res) => {
       const shipmentItem = {
         shipment_id: shipmentRecord.shipment_id,
         order_item_id: orderItem?.record_num || record_num || null,
-        need_num: orderItem?.need_num || need_num || `TEMP-${Date.now()}`,
+        need_num: orderItem?.need_num || need_num || `MANUAL-${Date.now()}-${shipmentRecord.operator}`,
         local_sku: sku,
         amz_sku: mapping?.amz_sku || amz_sku || sku,
         country: normalizedCountry,
@@ -5839,6 +5857,9 @@ router.post('/update-shipped-status', async (req, res) => {
         effectiveNeedNum = orderItem.need_num;
       } else if (need_num) {
         effectiveNeedNum = need_num;
+      } else {
+        // 生成手动发货需求单号
+        effectiveNeedNum = `MANUAL-${Date.now()}-${shipmentRecord.operator}`;
       }
       
       if (effectiveNeedNum) {
