@@ -109,6 +109,13 @@ const Purchase: React.FC = () => {
   const [cpcFiles, setCpcFiles] = useState<CpcFile[]>([]);
   const [cpcUploading, setCpcUploading] = useState(false);
   
+  // 自动识别结果状态
+  const [extractedDataVisible, setExtractedDataVisible] = useState(false);
+  const [pendingExtractedData, setPendingExtractedData] = useState<{
+    styleNumber: string;
+    recommendAge: string;
+  } | null>(null);
+  
   // 搜索相关状态
   const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
   const [isFuzzySearch, setIsFuzzySearch] = useState(false);
@@ -377,6 +384,8 @@ const Purchase: React.FC = () => {
   const handleCpcFileManage = async (record: ProductRecord) => {
     setCurrentRecord(record);
     setCpcModalVisible(true);
+    setExtractedDataVisible(false);
+    setPendingExtractedData(null);
     await loadCpcFiles(record.id);
   };
 
@@ -481,7 +490,11 @@ const Purchase: React.FC = () => {
           notifications.push(`成功上传 ${successCount}/${totalPdfCount} 个PDF文件`);
         }
         
-                 if (cpcCertificateExtracted && extractedInfo) {
+                          if (cpcCertificateExtracted && extractedInfo) {
+           // 显示提取结果确认对话框
+           setPendingExtractedData(extractedInfo);
+           setExtractedDataVisible(true);
+           
            const extractedDetails = [];
            if (extractedInfo.styleNumber) {
              extractedDetails.push(`Style Number: ${extractedInfo.styleNumber}`);
@@ -489,8 +502,8 @@ const Purchase: React.FC = () => {
            if (extractedInfo.recommendAge) {
              extractedDetails.push(`推荐年龄: ${extractedInfo.recommendAge}`);
            }
-           notifications.push(`已从首个CPC证书文件中自动提取信息：${extractedDetails.join(', ')}`);
-         } else {
+           notifications.push(`已从CPC证书文件中自动识别信息：${extractedDetails.join(', ')}，请确认是否应用`);
+          } else {
            // 检查是否有CPC证书文件但已经提取过信息
            const hasCpcButAlreadyExtracted = uploadResults.some(r => 
              r.success && r.result?.data?.hasExistingData && 
@@ -512,6 +525,7 @@ const Purchase: React.FC = () => {
         }
 
         message.success(notifications.join('；'));
+        await loadCpcFiles(currentRecord.id); // 刷新CPC文件列表
         handleSearch(); // 刷新表格数据
       } else {
         message.error('所有文件上传失败');
@@ -538,6 +552,10 @@ const Purchase: React.FC = () => {
         const notifications = [];
         
                  if (result.data.isFirstExtraction) {
+           // 显示提取结果确认对话框
+           setPendingExtractedData(result.data.extractedData);
+           setExtractedDataVisible(true);
+           
            const extractedInfo = [];
            if (result.data.extractedData.styleNumber) {
              extractedInfo.push(`Style Number: ${result.data.extractedData.styleNumber}`);
@@ -545,7 +563,7 @@ const Purchase: React.FC = () => {
            if (result.data.extractedData.recommendAge) {
              extractedInfo.push(`推荐年龄: ${result.data.extractedData.recommendAge}`);
            }
-           notifications.push(`已自动提取信息：${extractedInfo.join(', ')}`);
+           notifications.push(`已自动识别信息：${extractedInfo.join(', ')}，请确认是否应用`);
          } else if (result.data.hasExistingData && 
                    result.data.extractedData && 
                    (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
@@ -624,6 +642,45 @@ const Purchase: React.FC = () => {
     } catch {
       return 0;
     }
+  };
+
+  // 确认应用提取的信息
+  const handleConfirmExtractedData = async () => {
+    if (!currentRecord || !pendingExtractedData) return;
+
+    try {
+      const updateData: any = {};
+      if (pendingExtractedData.styleNumber) {
+        updateData.model_number = pendingExtractedData.styleNumber;
+      }
+      if (pendingExtractedData.recommendAge) {
+        updateData.recommend_age = pendingExtractedData.recommendAge;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${currentRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+
+      if (res.ok) {
+        message.success('信息应用成功');
+        setExtractedDataVisible(false);
+        setPendingExtractedData(null);
+        handleSearch(); // 刷新表格数据
+      } else {
+        message.error('信息应用失败');
+      }
+    } catch (error) {
+      message.error('信息应用失败');
+    }
+  };
+
+  // 取消应用提取的信息
+  const handleCancelExtractedData = () => {
+    setExtractedDataVisible(false);
+    setPendingExtractedData(null);
+    message.info('已取消应用提取的信息');
   };
 
   // 批量更新状态
@@ -1880,11 +1937,67 @@ const Purchase: React.FC = () => {
           setCpcModalVisible(false);
           setCurrentRecord(null);
           setCpcFiles([]);
+          setExtractedDataVisible(false);
+          setPendingExtractedData(null);
         }}
         footer={null}
         width={800}
       >
         <Space direction="vertical" style={{ width: '100%' }}>
+          {/* 自动识别结果确认区域 */}
+          {extractedDataVisible && pendingExtractedData && (
+            <Card 
+              style={{ 
+                border: '2px solid #52c41a', 
+                backgroundColor: '#f6ffed',
+                marginBottom: '16px'
+              }}
+              title={
+                <Space>
+                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                  <span style={{ color: '#52c41a', fontWeight: 'bold' }}>自动识别结果</span>
+                </Space>
+              }
+              extra={
+                <Space>
+                  <Button type="primary" size="small" onClick={handleConfirmExtractedData}>
+                    确认应用
+                  </Button>
+                  <Button size="small" onClick={handleCancelExtractedData}>
+                    取消
+                  </Button>
+                </Space>
+              }
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                  🔍 从CPC证书文件中识别到以下信息：
+                </div>
+                <div style={{ padding: '12px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d9f7be' }}>
+                  {pendingExtractedData.styleNumber && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 'bold', color: '#262626' }}>Style Number: </span>
+                      <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: '16px' }}>
+                        {pendingExtractedData.styleNumber}
+                      </span>
+                    </div>
+                  )}
+                  {pendingExtractedData.recommendAge && (
+                    <div>
+                      <span style={{ fontWeight: 'bold', color: '#262626' }}>推荐年龄: </span>
+                      <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: '16px' }}>
+                        {pendingExtractedData.recommendAge}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
+                  💡 点击"确认应用"将更新产品的Style Number和推荐年龄信息
+                </div>
+              </Space>
+            </Card>
+          )}
+
           <div style={{ marginBottom: '16px' }}>
             <Upload.Dragger
               beforeUpload={(file, fileList) => {

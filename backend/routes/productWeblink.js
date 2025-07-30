@@ -1047,10 +1047,11 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         console.warn('PDF解析失败，跳过自动提取:', parseError.message);
       }
 
-      // 准备文件信息
+      // 准备文件信息，处理中文文件名
+      const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
       const fileInfo = {
-        uid: Date.now().toString(),
-        name: req.file.originalname,
+        uid: Date.now() + '-' + Math.random().toString(36).substr(2, 9), // 更唯一的ID
+        name: originalName,
         url: uploadResult.url,
         objectName: uploadResult.name,
         size: uploadResult.size,
@@ -1084,15 +1085,15 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge)
       );
 
-      // 只有在没有提取过信息且当前文件提取到了信息时，才更新数据库字段
+      // 不再自动更新数据库字段，改为返回提取信息让前端确认
+      // 只在控制台记录提取结果
       if (!hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
+        console.log(`📝 从CPC文件中提取信息 (SKU: ${record.parent_sku}):`);
         if (extractedData.styleNumber) {
-          updateData.model_number = extractedData.styleNumber;
-          console.log(`📝 首次提取Style Number: ${extractedData.styleNumber} (SKU: ${record.parent_sku})`);
+          console.log(`  - Style Number: ${extractedData.styleNumber}`);
         }
         if (extractedData.recommendAge) {
-          updateData.recommend_age = extractedData.recommendAge;
-          console.log(`📝 首次提取推荐年龄: ${extractedData.recommendAge} (SKU: ${record.parent_sku})`);
+          console.log(`  - 推荐年龄: ${extractedData.recommendAge}`);
         }
       } else if (hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
         console.log(`ℹ️ SKU ${record.parent_sku} 已有提取信息，跳过重复提取`);
