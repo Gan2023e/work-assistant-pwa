@@ -587,6 +587,36 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
+  // 删除需求单
+  const handleDeleteOrder = async (needNum: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/order-management/orders/${needNum}`, {
+        method: 'DELETE',
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('需求单删除成功');
+        // 刷新需求单列表
+        await fetchOrders(pagination.current, pagination.pageSize);
+        // 如果当前选中的需求单被删除，清空详情页面
+        if (selectedOrder === needNum) {
+          setSelectedOrder('');
+          setOrderDetails(null);
+        }
+      } else {
+        message.error(result.message || '删除需求单失败');
+      }
+    } catch (error) {
+      console.error('删除需求单失败:', error);
+      message.error('删除需求单失败');
+    }
+  };
+
   // 需求单表格列定义
   const orderColumns: ColumnsType<OrderSummary> = [
     {
@@ -695,7 +725,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     {
       title: '操作',
       key: 'actions',
-      width: 100,
+      width: 150,
       fixed: 'right',
       align: 'center',
       render: (_, record) => (
@@ -711,6 +741,24 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               }}
             />
           </Tooltip>
+          <Popconfirm
+            title="确认删除需求单"
+            description={`确定要删除需求单 "${record.need_num}" 吗？删除后无法恢复。`}
+            onConfirm={() => handleDeleteOrder(record.need_num)}
+            okText="确定删除"
+            cancelText="取消"
+            okType="danger"
+          >
+            <Tooltip title="删除需求单">
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<DeleteOutlined />}
+                danger
+                disabled={record.total_shipped > 0}
+              />
+            </Tooltip>
+          </Popconfirm>
         </Space>
       )
     }

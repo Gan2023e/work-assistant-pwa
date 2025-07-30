@@ -599,4 +599,71 @@ router.put('/orders/:needNum/items/:recordNum', async (req, res) => {
   }
 });
 
+// 删除需求单
+router.delete('/orders/:needNum', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 删除需求单请求:', req.params.needNum);
+  
+  try {
+    const { needNum } = req.params;
+    
+    // 查询需求单的所有记录
+    const orderItems = await WarehouseProductsNeed.findAll({
+      where: { need_num: needNum }
+    });
+
+    if (orderItems.length === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '需求单不存在'
+      });
+    }
+
+    // 检查是否有已发货的记录
+    let hasShippedItems = false;
+    for (const item of orderItems) {
+      const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
+        where: { order_item_id: item.record_num }
+      }) || 0;
+      
+      if (shippedQuantity > 0) {
+        hasShippedItems = true;
+        break;
+      }
+    }
+
+    if (hasShippedItems) {
+      return res.status(400).json({
+        code: 1,
+        message: '该需求单包含已发货的SKU，无法删除'
+      });
+    }
+
+    // 删除需求单的所有记录
+    const deletedCount = await WarehouseProductsNeed.destroy({
+      where: { need_num: needNum }
+    });
+
+    console.log('\x1b[32m%s\x1b[0m', '✅ 需求单删除成功:', {
+      needNum,
+      deletedCount
+    });
+
+    res.json({
+      code: 0,
+      message: '需求单删除成功',
+      data: {
+        need_num: needNum,
+        deleted_items: deletedCount
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 删除需求单失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
