@@ -8,10 +8,29 @@ const xlsx = require('xlsx');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
+const pdf = require('pdf-parse');
+const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
+// 配置CPC文件上传中间件
+const cpcStorage = multer.memoryStorage();
+const cpcUpload = multer({
+  storage: cpcStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB限制
+  },
+  fileFilter: (req, file, cb) => {
+    // 允许PDF文件
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传PDF文件'));
+    }
+  }
+});
 
 // 搜索功能（优化后）
 router.post('/search', async (req, res) => {
@@ -76,7 +95,8 @@ router.post('/search', async (req, res) => {
         'list_parent_sku',
         'no_inventory_rate',
         'sales_30days',
-        'seller_name'
+        'seller_name',
+        'cpc_files'
       ]
     });
 
@@ -983,5 +1003,279 @@ router.get('/test-seller-sku', async (req, res) => {
     });
   }
 });
+
+// ==================== CPC文件上传相关接口 ====================
+
+// CPC文件上传接口
+router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        code: 1,
+        message: '请选择CPC文件'
+      });
+    }
+
+    // 检查记录是否存在
+    const record = await ProductWeblink.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    try {
+      // 上传文件到OSS
+      const uploadResult = await uploadToOSS(req.file.buffer, req.file.originalname, 'cpc-files');
+      
+      if (!uploadResult.success) {
+        return res.status(500).json({
+          code: 1,
+          message: '文件上传失败'
+        });
+      }
+
+      // 解析PDF文件获取Style Number和推荐年龄
+      let extractedData = { styleNumber: '', recommendAge: '' };
+      try {
+        const pdfData = await pdf(req.file.buffer);
+        extractedData = await extractCpcInfo(pdfData.text);
+      } catch (parseError) {
+        console.warn('PDF解析失败，跳过自动提取:', parseError.message);
+      }
+
+      // 准备文件信息
+      const fileInfo = {
+        uid: Date.now().toString(),
+        name: req.file.originalname,
+        url: uploadResult.url,
+        objectName: uploadResult.name,
+        size: uploadResult.size,
+        uploadTime: new Date().toISOString(),
+        extractedData: extractedData
+      };
+
+      // 获取现有的CPC文件列表
+      let existingFiles = [];
+      if (record.cpc_files) {
+        try {
+          existingFiles = JSON.parse(record.cpc_files);
+          if (!Array.isArray(existingFiles)) {
+            existingFiles = [];
+          }
+        } catch (e) {
+          existingFiles = [];
+        }
+      }
+
+      // 添加新文件
+      existingFiles.push(fileInfo);
+
+      // 更新数据库记录
+      const updateData = {
+        cpc_files: JSON.stringify(existingFiles)
+      };
+
+      // 如果解析到了有效信息，则更新相应字段
+      if (extractedData.styleNumber) {
+        updateData.model_number = extractedData.styleNumber;
+      }
+      if (extractedData.recommendAge) {
+        updateData.recommend_age = extractedData.recommendAge;
+      }
+
+      // 如果CPC文件数量达到2个或以上，自动更新CPC测试情况为"已测试"
+      if (existingFiles.length >= 2) {
+        updateData.cpc_status = '已测试';
+        console.log(`📋 SKU ${record.parent_sku} 的CPC文件数量达到${existingFiles.length}个，自动更新CPC测试情况为"已测试"`);
+      }
+
+      await ProductWeblink.update(updateData, {
+        where: { id: id }
+      });
+
+      res.json({
+        code: 0,
+        message: 'CPC文件上传成功',
+        data: {
+          fileInfo: fileInfo,
+          extractedData: extractedData,
+          autoUpdated: {
+            styleNumber: !!extractedData.styleNumber,
+            recommendAge: !!extractedData.recommendAge,
+            cpcStatus: existingFiles.length >= 2
+          },
+          cpcStatusUpdated: existingFiles.length >= 2,
+          totalFileCount: existingFiles.length
+        }
+      });
+
+    } catch (uploadError) {
+      console.error('文件上传失败:', uploadError);
+      res.status(500).json({
+        code: 1,
+        message: '文件上传失败: ' + uploadError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('CPC文件上传处理失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
+
+// 获取CPC文件列表
+router.get('/cpc-files/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const record = await ProductWeblink.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    let cpcFiles = [];
+    if (record.cpc_files) {
+      try {
+        cpcFiles = JSON.parse(record.cpc_files);
+        if (!Array.isArray(cpcFiles)) {
+          cpcFiles = [];
+        }
+      } catch (e) {
+        cpcFiles = [];
+      }
+    }
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: cpcFiles
+    });
+
+  } catch (error) {
+    console.error('获取CPC文件列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
+
+// 删除CPC文件
+router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
+  try {
+    const { id, fileUid } = req.params;
+    
+    const record = await ProductWeblink.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    let cpcFiles = [];
+    if (record.cpc_files) {
+      try {
+        cpcFiles = JSON.parse(record.cpc_files);
+        if (!Array.isArray(cpcFiles)) {
+          cpcFiles = [];
+        }
+      } catch (e) {
+        cpcFiles = [];
+      }
+    }
+
+    // 找到要删除的文件
+    const fileIndex = cpcFiles.findIndex(file => file.uid === fileUid);
+    if (fileIndex === -1) {
+      return res.status(404).json({
+        code: 1,
+        message: '文件不存在'
+      });
+    }
+
+    const fileToDelete = cpcFiles[fileIndex];
+    
+    // 从OSS中删除文件（如果有objectName）
+    if (fileToDelete.objectName) {
+      try {
+        await deleteFromOSS(fileToDelete.objectName);
+        console.log(`✅ 已从OSS删除文件: ${fileToDelete.objectName}`);
+      } catch (ossError) {
+        console.warn(`⚠️ OSS文件删除失败: ${fileToDelete.objectName}`, ossError.message);
+        // 继续执行数据库删除，即使OSS删除失败
+      }
+    }
+
+    // 从数组中移除文件
+    cpcFiles.splice(fileIndex, 1);
+
+    // 更新数据库
+    await ProductWeblink.update(
+      { cpc_files: JSON.stringify(cpcFiles) },
+      { where: { id: id } }
+    );
+
+    res.json({
+      code: 0,
+      message: '文件删除成功'
+    });
+
+  } catch (error) {
+    console.error('删除CPC文件失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
+
+// CPC信息提取函数
+async function extractCpcInfo(pdfText) {
+  try {
+    const result = { styleNumber: '', recommendAge: '' };
+    
+    // 首先检查是否为CHILDREN'S PRODUCT CERTIFICATE文件
+    const isCpcCertificate = pdfText.includes("CHILDREN'S PRODUCT CERTIFICATE") || 
+                           pdfText.includes("CHILDREN'S PRODUCT CERTIFICATE") ||
+                           pdfText.includes("CHILDRENS PRODUCT CERTIFICATE");
+    
+    if (!isCpcCertificate) {
+      console.log("📄 非CHILDREN'S PRODUCT CERTIFICATE文件，跳过信息提取");
+      return result; // 返回空结果
+    }
+    
+    console.log("📋 检测到CHILDREN'S PRODUCT CERTIFICATE文件，开始提取信息...");
+    
+    // 提取Style Number（在"Model"后面）
+    const modelMatch = pdfText.match(/Model[:\s]*([A-Z0-9]+)/i);
+    if (modelMatch) {
+      result.styleNumber = modelMatch[1].trim();
+    }
+    
+    // 提取推荐年龄（在"Age grading"后面）
+    const ageMatch = pdfText.match(/Age\s+grading[:\s]*([^\n\r]+)/i);
+    if (ageMatch) {
+      result.recommendAge = ageMatch[1].trim();
+    }
+    
+    console.log('🔍 CPC证书信息提取结果:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('CPC信息提取失败:', error);
+    return { styleNumber: '', recommendAge: '' };
+  }
+}
 
 module.exports = router; 

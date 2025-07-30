@@ -65,6 +65,9 @@ async function uploadToOSS(buffer, filename, folder = 'purchase') {
       case 'hscode-images':
         folderPath = `hscode-images/${year}/${month}`;
         break;
+      case 'cpc-files':
+        folderPath = `cpc-files/${year}/${month}`;
+        break;
       default:
         // 默认使用采购发票路径
         folderPath = `invoices/purchase/${year}/${month}`;

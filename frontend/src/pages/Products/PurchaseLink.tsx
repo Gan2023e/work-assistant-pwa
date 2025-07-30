@@ -17,7 +17,11 @@ import {
   Statistic,
   DatePicker,
   Checkbox,
-  AutoComplete
+  AutoComplete,
+  Upload,
+  List,
+  Badge,
+  Tag
 } from 'antd';
 import { 
   UploadOutlined, 
@@ -27,7 +31,12 @@ import {
   SearchOutlined,
   CameraOutlined,
   CloudUploadOutlined,
-  FilterOutlined
+  FilterOutlined,
+  FilePdfOutlined,
+  EyeOutlined,
+  PlusOutlined,
+  DownloadOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -56,6 +65,20 @@ interface ProductRecord {
   no_inventory_rate: string;
   sales_30days: string;
   seller_name: string;
+  cpc_files?: string;
+}
+
+interface CpcFile {
+  uid: string;
+  name: string;
+  url: string;
+  objectName: string;
+  size: number;
+  uploadTime: string;
+  extractedData?: {
+    styleNumber: string;
+    recommendAge: string;
+  };
 }
 
 interface EditingCell {
@@ -79,6 +102,12 @@ const Purchase: React.FC = () => {
   const [skuPrefix, setSkuPrefix] = useState('');
   const [latestSku, setLatestSku] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // CPC文件相关状态
+  const [cpcModalVisible, setCpcModalVisible] = useState(false);
+  const [currentRecord, setCurrentRecord] = useState<ProductRecord | null>(null);
+  const [cpcFiles, setCpcFiles] = useState<CpcFile[]>([]);
+  const [cpcUploading, setCpcUploading] = useState(false);
   
   // 搜索相关状态
   const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
@@ -342,6 +371,137 @@ const Purchase: React.FC = () => {
   const getUniqueStatuses = () => {
     return allDataStats.statusStats
       .sort((a, b) => a.value.localeCompare(b.value));
+  };
+
+  // CPC文件管理相关函数
+  const handleCpcFileManage = async (record: ProductRecord) => {
+    setCurrentRecord(record);
+    setCpcModalVisible(true);
+    await loadCpcFiles(record.id);
+  };
+
+  const loadCpcFiles = async (recordId: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${recordId}`);
+      if (res.ok) {
+        const result = await res.json();
+        setCpcFiles(result.data || []);
+      }
+    } catch (error) {
+      console.error('加载CPC文件失败:', error);
+    }
+  };
+
+  const handleCpcFileUpload = async (file: File) => {
+    if (!currentRecord) return false;
+
+    setCpcUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('cpcFile', file);
+
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/upload-cpc-file/${currentRecord.id}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await res.json();
+      
+      if (result.code === 0) {
+        message.success(result.message);
+        await loadCpcFiles(currentRecord.id);
+        
+        // 检查是否自动更新了CPC测试情况
+        const needRefreshTable = result.data.cpcStatusUpdated || 
+          (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge));
+        
+        // 显示自动提取信息的提示
+        const notifications = [];
+        if (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
+          const extractedInfo = [];
+          if (result.data.extractedData.styleNumber) {
+            extractedInfo.push(`Style Number: ${result.data.extractedData.styleNumber}`);
+          }
+          if (result.data.extractedData.recommendAge) {
+            extractedInfo.push(`推荐年龄: ${result.data.extractedData.recommendAge}`);
+          }
+          notifications.push(`已自动提取信息：${extractedInfo.join(', ')}`);
+        } else if (result.data.extractedData && 
+                  !result.data.extractedData.styleNumber && 
+                  !result.data.extractedData.recommendAge) {
+          // 如果没有提取到任何信息，可能是非CPC证书文件
+          notifications.push("文件上传成功，但未能提取信息（请确保上传的是CHILDREN'S PRODUCT CERTIFICATE文件）");
+        }
+        
+        // 检查CPC文件数量并显示测试状态更新提示
+        const currentFileCount = result.data.totalFileCount || (cpcFiles.length + 1);
+        if (result.data.cpcStatusUpdated) {
+          notifications.push(`CPC文件数量已达到${currentFileCount}个，已自动更新CPC测试情况为"已测试"`);
+        }
+        
+        // 显示所有通知
+        if (notifications.length > 0) {
+          message.info(notifications.join('；'));
+        }
+        
+        // 刷新表格数据
+        if (needRefreshTable || result.data.cpcStatusUpdated) {
+          handleSearch();
+        }
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      message.error('上传失败');
+    } finally {
+      setCpcUploading(false);
+    }
+    
+    return false; // 阻止默认上传
+  };
+
+  const handleCpcFileDelete = async (fileUid: string) => {
+    if (!currentRecord) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-file/${currentRecord.id}/${fileUid}`, {
+        method: 'DELETE',
+      });
+
+      const result = await res.json();
+      
+      if (result.code === 0) {
+        await loadCpcFiles(currentRecord.id);
+        
+        // 显示删除成功消息和当前文件状态
+        const remainingCount = cpcFiles.length - 1;
+        let deleteMessage = result.message;
+        if (remainingCount === 0) {
+          deleteMessage += '，当前无CPC文件';
+        } else if (remainingCount === 1) {
+          deleteMessage += `，当前还有${remainingCount}个CPC文件`;
+        } else {
+          deleteMessage += `，当前还有${remainingCount}个CPC文件（已达到测试要求）`;
+        }
+        
+        message.success(deleteMessage);
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      message.error('删除失败');
+    }
+  };
+
+  const getCpcFileCount = (record: ProductRecord) => {
+    if (!record.cpc_files) return 0;
+    try {
+      const files = JSON.parse(record.cpc_files);
+      return Array.isArray(files) ? files.length : 0;
+    } catch {
+      return 0;
+    }
   };
 
   // 批量更新状态
@@ -888,7 +1048,30 @@ const Purchase: React.FC = () => {
         style: { cursor: 'pointer' }
       })
     },
-
+    { 
+      title: 'CPC文件', 
+      dataIndex: 'cpc_files', 
+      key: 'cpc_files', 
+      align: 'center',
+      width: 120,
+      render: (text: string, record: ProductRecord) => {
+        const fileCount = getCpcFileCount(record);
+        return (
+          <Space>
+            <Badge count={fileCount} overflowCount={99} size="small">
+              <Button
+                type="primary"
+                size="small"
+                icon={<FilePdfOutlined />}
+                onClick={() => handleCpcFileManage(record)}
+              >
+                CPC文件
+              </Button>
+            </Badge>
+          </Space>
+        );
+      }
+    },
     { 
       title: 'CPC测试情况', 
       dataIndex: 'cpc_status', 
@@ -1564,6 +1747,127 @@ const Purchase: React.FC = () => {
               </div>
             </div>
           )}
+        </Space>
+      </Modal>
+
+      {/* CPC文件管理对话框 */}
+      <Modal
+        title={`CPC文件管理 - ${currentRecord?.parent_sku || ''}`}
+        open={cpcModalVisible}
+        onCancel={() => {
+          setCpcModalVisible(false);
+          setCurrentRecord(null);
+          setCpcFiles([]);
+        }}
+        footer={null}
+        width={800}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <Upload
+              beforeUpload={handleCpcFileUpload}
+              showUploadList={false}
+              accept=".pdf"
+            >
+              <Button 
+                type="primary"
+                icon={<PlusOutlined />}
+                loading={cpcUploading}
+              >
+                上传CPC文件
+              </Button>
+            </Upload>
+            <span style={{ marginLeft: '8px', color: '#999', fontSize: '12px' }}>
+              支持PDF格式，最大10MB，仅对CHILDREN'S PRODUCT CERTIFICATE文件自动提取Style Number和推荐年龄信息
+            </span>
+          </div>
+
+          <List
+            dataSource={cpcFiles}
+            renderItem={(file) => (
+              <List.Item
+                actions={[
+                  <Button
+                    type="link"
+                    icon={<EyeOutlined />}
+                    onClick={() => window.open(file.url, '_blank')}
+                    title="在新标签页查看文件"
+                  >
+                    查看
+                  </Button>,
+                  <Button
+                    type="link"
+                    icon={<DownloadOutlined />}
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = file.url;
+                      link.download = file.name;
+                      link.target = '_blank';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    title="下载文件到本地"
+                  >
+                    下载
+                  </Button>,
+                  <Popconfirm
+                    title="确定要删除这个文件吗？"
+                    description="删除后将无法恢复，同时会从云存储中删除文件"
+                    onConfirm={() => handleCpcFileDelete(file.uid)}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button type="link" danger icon={<DeleteOutlined />}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                ]}
+              >
+                <List.Item.Meta
+                  avatar={<FilePdfOutlined style={{ fontSize: '24px', color: '#ff4d4f' }} />}
+                  title={
+                    <Space>
+                      <span style={{ fontWeight: 'bold' }}>{file.name}</span>
+                      {file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge) ? (
+                        <Tag color="green" icon={<CheckCircleOutlined />}>CPC证书已解析</Tag>
+                      ) : (
+                        <Tag color="default">其他文件</Tag>
+                      )}
+                    </Space>
+                  }
+                  description={
+                    <Space direction="vertical" size={0}>
+                      <Text type="secondary">
+                        大小: {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </Text>
+                      <Text type="secondary">
+                        上传时间: {dayjs(file.uploadTime).format('YYYY-MM-DD HH:mm:ss')}
+                      </Text>
+                      {file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge) && (
+                        <div style={{ marginTop: '4px', padding: '4px 8px', backgroundColor: '#f0f9f0', borderRadius: '4px', border: '1px solid #d9f7be' }}>
+                          <Text type="secondary" style={{ fontSize: '12px', fontWeight: 'bold', color: '#52c41a' }}>
+                            📋 已提取信息：
+                          </Text>
+                          {file.extractedData.styleNumber && (
+                            <Text type="secondary" style={{ display: 'block', fontSize: '12px' }}>
+                              Style Number: <span style={{ fontWeight: 'bold' }}>{file.extractedData.styleNumber}</span>
+                            </Text>
+                          )}
+                          {file.extractedData.recommendAge && (
+                            <Text type="secondary" style={{ display: 'block', fontSize: '12px' }}>
+                              推荐年龄: <span style={{ fontWeight: 'bold' }}>{file.extractedData.recommendAge}</span>
+                            </Text>
+                          )}
+                        </div>
+                      )}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+            locale={{ emptyText: '暂无CPC文件' }}
+          />
         </Space>
       </Modal>
 

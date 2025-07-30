@@ -23,6 +23,11 @@ const ProductWeblink = sequelize.define('ProductWeblink', {
   no_inventory_rate: DataTypes.STRING,
   sales_30days: DataTypes.STRING,
   seller_name: DataTypes.STRING,
+  // 新增CPC文件相关字段
+  cpc_files: {
+    type: DataTypes.TEXT,
+    comment: 'CPC文件信息，JSON格式存储多个文件'
+  }
 }, {
   tableName: 'product_weblink',
   timestamps: false,
