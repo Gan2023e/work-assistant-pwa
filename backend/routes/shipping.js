@@ -2789,27 +2789,36 @@ router.delete('/shipment-history', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '📊 待恢复的发货汇总:', Array.from(shipmentSummary.entries()));
     
-    // 3. 恢复local_boxes表中对应的库存状态
-    let restoredLocalBoxes = [0]; // 初始化统计
+    // 3. 恢复库存记录的shipped_quantity（按先进先出原则）
+    let restoredLocalBoxes = [0];
     
     for (const [skuCountryKey, shippedQty] of shipmentSummary) {
       const [sku, country] = skuCountryKey.split('-');
       
-      // 查找并更新对应的local_boxes记录
-      const localBoxRecords = await LocalBox.findAll({
+      // 查找参与此次发货的库存记录（按先进先出原则）
+      const inventoryRecords = await LocalBox.findAll({
         where: {
           sku: sku,
           country: country,
-          shipment_id: { [Op.in]: shipment_ids }
+          total_quantity: { [Op.gt]: 0 },  // 正数库存记录
+          shipped_quantity: { [Op.gt]: 0 }  // 有已出库数量的记录
         },
+        order: [['time', 'ASC']],  // 按时间排序
         transaction
       });
       
-      for (const record of localBoxRecords) {
-        const newShippedQuantity = Math.max(0, (record.shipped_quantity || 0) - shippedQty);
-        let newStatus;
+      // 按先进先出原则恢复库存
+      let remainingToRestore = shippedQty;
+      
+      for (const record of inventoryRecords) {
+        if (remainingToRestore <= 0) break;
+        
+        const currentShipped = record.shipped_quantity || 0;
+        const toRestoreFromThis = Math.min(remainingToRestore, currentShipped);
+        const newShippedQuantity = Math.max(0, currentShipped - toRestoreFromThis);
         
         // 根据新的shipped_quantity确定状态
+        let newStatus;
         if (newShippedQuantity === 0) {
           newStatus = '待出库';
         } else if (newShippedQuantity < record.total_quantity) {
@@ -2822,11 +2831,10 @@ router.delete('/shipment-history', async (req, res) => {
           status: newStatus,
           shipped_quantity: newShippedQuantity,
           shipped_at: newStatus === '待出库' ? null : record.shipped_at,
-          shipment_id: newStatus === '待出库' ? null : record.shipment_id,
           last_updated_at: new Date(),
           remark: sequelize.fn('CONCAT', 
             sequelize.fn('IFNULL', sequelize.col('remark'), ''),
-            `;\n${new Date().toISOString()} 删除发货记录，减少出库数量${shippedQty}`
+            `;\n${new Date().toISOString()} 删除发货记录，恢复库存数量${toRestoreFromThis}`
           )
         }, {
           where: { 记录号: record.记录号 },
@@ -2834,11 +2842,52 @@ router.delete('/shipment-history', async (req, res) => {
         });
         
         restoredLocalBoxes[0]++;
-        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 减少数量: ${shippedQty}, 新状态: ${newStatus}`);
+        remainingToRestore -= toRestoreFromThis;
+        
+        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 恢复数量: ${toRestoreFromThis}, 新状态: ${newStatus}`);
+      }
+      
+      if (remainingToRestore > 0) {
+        console.warn(`⚠️ SKU ${sku} 在 ${country} 还有 ${remainingToRestore} 数量无法恢复`);
       }
     }
     
-    // 2. 删除发货明细
+    // 4. 恢复需求记录状态
+    const needRecordIds = [...new Set(shipmentItems
+      .map(item => item.order_item_id)
+      .filter(id => id && id > 0)
+    )];
+    
+    if (needRecordIds.length > 0) {
+      console.log('\x1b[33m%s\x1b[0m', '📋 检查需求记录状态:', needRecordIds);
+      
+      // 检查这些需求记录是否还有其他发货记录
+      for (const recordId of needRecordIds) {
+        const otherShipments = await ShipmentItem.count({
+          where: {
+            order_item_id: recordId,
+            shipment_id: { [Op.notIn]: shipment_ids }
+          },
+          transaction
+        });
+        
+        // 如果没有其他发货记录，恢复为待发货状态
+        if (otherShipments === 0) {
+          await WarehouseProductsNeed.update(
+            { status: '待发货' },
+            { 
+              where: { record_num: recordId },
+              transaction 
+            }
+          );
+          console.log(`✅ 恢复需求记录状态: ${recordId} -> 待发货`);
+        } else {
+          console.log(`📋 需求记录 ${recordId} 还有其他发货记录，保持当前状态`);
+        }
+      }
+    }
+    
+    // 5. 删除发货明细
     const deletedItems = await ShipmentItem.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2846,7 +2895,7 @@ router.delete('/shipment-history', async (req, res) => {
       transaction
     });
     
-    // 3. 删除订单发货关联记录
+    // 6. 删除订单发货关联记录
     const deletedRelations = await OrderShipmentRelation.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2854,7 +2903,7 @@ router.delete('/shipment-history', async (req, res) => {
       transaction
     });
     
-    // 4. 删除发货记录主表
+    // 7. 删除发货记录主表
     const deletedRecords = await ShipmentRecord.destroy({
       where: {
         shipment_id: { [Op.in]: shipment_ids }
@@ -2941,27 +2990,36 @@ router.post('/shipment-cancel/:shipment_id', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '📊 待恢复的发货汇总:', Array.from(shipmentSummary.entries()));
     
-    // 3. 恢复local_boxes表中对应的库存状态
-    let restoredLocalBoxes = [0]; // 初始化统计
+    // 3. 恢复库存记录的shipped_quantity（按先进先出原则）
+    let restoredLocalBoxes = [0];
     
     for (const [skuCountryKey, shippedQty] of shipmentSummary) {
       const [sku, country] = skuCountryKey.split('-');
       
-      // 查找并更新对应的local_boxes记录
-      const localBoxRecords = await LocalBox.findAll({
+      // 查找参与此次发货的原有库存记录（按先进先出原则）
+      const inventoryRecords = await LocalBox.findAll({
         where: {
           sku: sku,
           country: country,
-          shipment_id: shipment_id
+          total_quantity: { [Op.gt]: 0 },  // 正数库存记录
+          shipped_quantity: { [Op.gt]: 0 }  // 有已出库数量的记录
         },
+        order: [['time', 'ASC']],  // 按时间排序
         transaction
       });
       
-      for (const record of localBoxRecords) {
-        const newShippedQuantity = Math.max(0, (record.shipped_quantity || 0) - shippedQty);
-        let newStatus;
+      // 按先进先出原则恢复库存
+      let remainingToRestore = shippedQty;
+      
+      for (const record of inventoryRecords) {
+        if (remainingToRestore <= 0) break;
+        
+        const currentShipped = record.shipped_quantity || 0;
+        const toRestoreFromThis = Math.min(remainingToRestore, currentShipped);
+        const newShippedQuantity = Math.max(0, currentShipped - toRestoreFromThis);
         
         // 根据新的shipped_quantity确定状态
+        let newStatus;
         if (newShippedQuantity === 0) {
           newStatus = '待出库';
         } else if (newShippedQuantity < record.total_quantity) {
@@ -2974,11 +3032,10 @@ router.post('/shipment-cancel/:shipment_id', async (req, res) => {
           status: newStatus,
           shipped_quantity: newShippedQuantity,
           shipped_at: newStatus === '待出库' ? null : record.shipped_at,
-          shipment_id: newStatus === '待出库' ? null : record.shipment_id,
           last_updated_at: new Date(),
           remark: sequelize.fn('CONCAT', 
             sequelize.fn('IFNULL', sequelize.col('remark'), ''),
-            `;\n${new Date().toISOString()} 撤销发货: ${reason}，减少出库数量${shippedQty}`
+            `;\n${new Date().toISOString()} 撤销发货: ${reason}，恢复库存数量${toRestoreFromThis}`
           )
         }, {
           where: { 记录号: record.记录号 },
@@ -2986,7 +3043,13 @@ router.post('/shipment-cancel/:shipment_id', async (req, res) => {
         });
         
         restoredLocalBoxes[0]++;
-        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 减少数量: ${shippedQty}, 新状态: ${newStatus}`);
+        remainingToRestore -= toRestoreFromThis;
+        
+        console.log(`✅ 恢复库存: ${record.记录号}, SKU: ${sku}, 恢复数量: ${toRestoreFromThis}, 新状态: ${newStatus}`);
+      }
+      
+      if (remainingToRestore > 0) {
+        console.warn(`⚠️ SKU ${sku} 在 ${country} 还有 ${remainingToRestore} 数量无法恢复`);
       }
     }
     
