@@ -1434,10 +1434,16 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
   }
 });
 
+// 模板文件缓存（内存缓存）
+const templateCache = new Map();
+const CACHE_TIMEOUT = 10 * 60 * 1000; // 10分钟缓存
+
 // 更新子SKU生成器接口，支持从OSS模板文件生成
 router.post('/child-sku-generator-from-template', async (req, res) => {
   try {
     const { parentSkus, templateObjectName } = req.body;
+    
+    console.log('🚀 开始处理子SKU生成请求');
     
     if (!parentSkus || parentSkus.trim() === '') {
       return res.status(400).json({ message: '请输入需要整理的SKU' });
@@ -1457,17 +1463,40 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       return res.status(400).json({ message: '请输入有效的SKU' });
     }
 
-    // 从OSS下载模板文件
-    const { downloadTemplateFromOSS } = require('../utils/oss');
+    console.log(`📋 待处理SKU数量: ${skuList.length}`);
+
+    // 检查缓存中是否有模板文件
+    let templateContent = null;
+    const cacheKey = templateObjectName;
+    const cachedTemplate = templateCache.get(cacheKey);
     
-    const templateResult = await downloadTemplateFromOSS(templateObjectName);
-    
-    if (!templateResult.success) {
-      return res.status(404).json({ message: '模板文件不存在' });
+    if (cachedTemplate && (Date.now() - cachedTemplate.timestamp < CACHE_TIMEOUT)) {
+      console.log('🎯 使用缓存的模板文件');
+      templateContent = cachedTemplate.content;
+    } else {
+      console.log('📥 从OSS下载模板文件');
+      // 从OSS下载模板文件
+      const { downloadTemplateFromOSS } = require('../utils/oss');
+      
+      const templateResult = await downloadTemplateFromOSS(templateObjectName);
+      
+      if (!templateResult.success) {
+        return res.status(404).json({ message: '模板文件不存在' });
+      }
+
+      templateContent = templateResult.content;
+      
+      // 缓存模板文件
+      templateCache.set(cacheKey, {
+        content: templateContent,
+        timestamp: Date.now()
+      });
+      console.log('💾 模板文件已缓存');
     }
 
+    console.log('📊 开始解析Excel模板');
     // 读取模板Excel文件
-    const workbook = xlsx.read(templateResult.content, { type: 'buffer' });
+    const workbook = xlsx.read(templateContent, { type: 'buffer' });
     
     // 查找Template页面
     if (!workbook.SheetNames.includes('Template')) {
@@ -1504,13 +1533,16 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       });
     }
 
-    // 从数据库查询子SKU信息
+    console.log('🔍 开始查询数据库子SKU信息');
+    // 从数据库查询子SKU信息，添加索引优化查询
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
         parent_sku: {
           [Op.in]: skuList
         }
-      }
+      },
+      attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'], // 只查询需要的字段
+      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']] // 添加排序提升性能
     });
 
     if (inventorySkus.length === 0) {
@@ -1519,24 +1551,28 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       });
     }
 
-    // 确保数据数组有足够的行数
-    while (data.length < 4 + inventorySkus.length) {
+    console.log(`✅ 找到 ${inventorySkus.length} 条子SKU记录`);
+
+    console.log('📝 开始填充Excel数据');
+    // 预分配数组大小以提升性能
+    const targetLength = 4 + inventorySkus.length;
+    while (data.length < targetLength) {
       data.push([]);
     }
 
-    // 填充数据（从第4行开始，索引3）
+    // 批量填充数据，优化循环性能
+    const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+    
     inventorySkus.forEach((sku, index) => {
       const rowIndex = 3 + index; // 第4行开始
       
-      // 确保行存在
+      // 确保行存在且有足够的列
       if (!data[rowIndex]) {
-        data[rowIndex] = [];
-      }
-      
-      // 确保行有足够的列
-      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
-      while (data[rowIndex].length <= maxCol) {
-        data[rowIndex].push('');
+        data[rowIndex] = new Array(maxCol + 1).fill('');
+      } else {
+        while (data[rowIndex].length <= maxCol) {
+          data[rowIndex].push('');
+        }
       }
       
       // 填充数据
@@ -1545,21 +1581,29 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       data[rowIndex][sizeNameCol] = sku.sellersizename || '';
     });
 
+    console.log('⚡ 开始生成Excel文件');
     // 重新创建工作表
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     workbook.Sheets['Template'] = newWorksheet;
 
-    // 生成Excel文件
-    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // 生成Excel文件，优化书写选项
+    const excelBuffer = xlsx.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      compression: true // 启用压缩减少文件大小
+    });
 
-    // 设置响应头
+    console.log('📤 准备下载文件');
+    // 设置响应头，优化文件名处理
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=processed_template.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'processed_template.xlsx');
+    res.setHeader('Content-Length', excelBuffer.length);
     
+    console.log('✅ 子SKU生成完成，发送文件');
     res.send(excelBuffer);
 
   } catch (error) {
-    console.error('子SKU生成器失败:', error);
+    console.error('❌ 子SKU生成器失败:', error);
     res.status(500).json({ message: '子SKU生成器失败: ' + error.message });
   }
 });

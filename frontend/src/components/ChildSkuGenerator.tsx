@@ -303,6 +303,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     setLoading(true);
     
     try {
+      // 显示处理开始提示
+      message.loading('正在处理子SKU生成请求...', 0);
+      
+      console.log('🚀 开始子SKU生成处理');
+      
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator-from-template`, {
         method: 'POST',
         headers: {
@@ -313,6 +318,9 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
           templateObjectName: currentTemplate!.name
         }),
       });
+
+      // 关闭loading提示
+      message.destroy();
 
       if (!response.ok) {
         let errorMessage = `请求失败 (HTTP ${response.status})`;
@@ -341,8 +349,13 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         return;
       }
 
+      console.log('📥 开始下载生成的文件');
+      message.loading('正在准备下载文件...', 0);
+
       // 处理文件下载
       const blob = await response.blob();
+      
+      message.destroy();
       
       if (blob.size === 0) {
         showErrorDialog(
@@ -352,6 +365,8 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         return;
       }
 
+      console.log(`📁 文件大小: ${(blob.size / 1024).toFixed(1)} KB`);
+      
       // 使用模板文件名+时间戳
       downloadFile(blob, currentTemplate!.fileName);
       
@@ -365,6 +380,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       onSuccess?.();
       
     } catch (error) {
+      message.destroy();
       console.error('子SKU生成器失败:', error);
       
       // 显示详细错误对话框
@@ -427,7 +443,9 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         destroyOnClose
         maskClosable={!loading && !uploadLoading}
       >
-        <Spin spinning={loading} tip="正在处理，请稍候...">
+        <Spin spinning={loading} tip={
+          loading ? "正在生成子SKU，请耐心等待..." : "正在处理，请稍候..."
+        }>
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             
             {/* SKU输入区域 */}
@@ -477,6 +495,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                           icon={<DownloadOutlined />}
                           onClick={handleTemplateDownload}
                           size="small"
+                          disabled={loading}
                         >
                           下载
                         </Button>
@@ -485,12 +504,14 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                           onConfirm={handleTemplateDelete}
                           okText="确定"
                           cancelText="取消"
+                          disabled={loading}
                         >
                           <Button
                             type="link"
                             danger
                             icon={<DeleteOutlined />}
                             size="small"
+                            disabled={loading}
                           >
                             删除
                           </Button>
@@ -522,7 +543,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 accept=".xlsx,.xls,.xlsm"
                 onChange={handleTemplateUpload}
                 style={{ display: 'none' }}
-                disabled={uploadLoading}
+                disabled={uploadLoading || loading}
               />
               
               <Button 
@@ -531,6 +552,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 loading={uploadLoading}
                 block
                 style={{ marginBottom: 8 }}
+                disabled={loading}
               >
                 {currentTemplate ? '重新上传模板文件' : '上传Excel模板文件'}
               </Button>
@@ -541,6 +563,24 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列
               </Text>
             </div>
+
+            {/* 性能优化说明 */}
+            {loading && (
+              <div style={{ 
+                backgroundColor: '#e6f7ff', 
+                padding: '12px', 
+                borderRadius: '6px',
+                border: '1px solid #91d5ff'
+              }}>
+                <Text style={{ color: '#1890ff' }}>
+                  <strong>正在处理中...</strong><br />
+                  • 正在下载并解析模板文件<br />
+                  • 正在查询数据库中的子SKU信息<br />
+                  • 正在生成包含子SKU数据的Excel文件<br />
+                  • 处理完成后将自动下载文件
+                </Text>
+              </div>
+            )}
 
             {/* 功能说明 */}
             <div style={{ 
@@ -556,6 +596,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 <li>自动填写color_name列（颜色信息）</li>
                 <li>自动填写size_name列（尺寸信息）</li>
                 <li>生成处理后的Excel文件供下载</li>
+                <li>✨ 优化后处理速度更快，支持模板缓存</li>
               </ul>
             </div>
 

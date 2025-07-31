@@ -176,10 +176,15 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
   try {
     const client = createOSSClient();
     
-    // 生成唯一文件名
-    const ext = path.extname(filename);
+    // 处理中文文件名编码问题
+    const originalName = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
+    const ext = path.extname(originalName);
+    const nameWithoutExt = path.basename(originalName, ext);
+    
+    // 生成唯一文件名，使用安全的文件名格式
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const uniqueName = `${timestamp}-${filename}`;
+    const safeName = nameWithoutExt.replace(/[<>:"/\\|?*]/g, '_'); // 替换特殊字符
+    const uniqueName = `${timestamp}-${safeName}${ext}`;
     
     // 构建文件路径
     let folderPath;
@@ -208,11 +213,12 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
       contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
     }
     
-    // 上传文件
+    // 上传文件，设置正确的文件名元数据
     const result = await client.put(objectName, buffer, {
       headers: {
         'Content-Type': contentType,
-        'x-oss-storage-class': 'Standard'
+        'x-oss-storage-class': 'Standard',
+        'x-oss-meta-original-name': encodeURIComponent(originalName) // 保存原始文件名
       }
     });
     
@@ -230,7 +236,7 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
       url: secureUrl,
       name: result.name,
       size: buffer.length,
-      originalName: filename,
+      originalName: originalName, // 返回原始文件名
       uniqueName: uniqueName,
       folder: folderPath,
       templateType: templateType,
