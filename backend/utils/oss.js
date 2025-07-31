@@ -249,10 +249,14 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
     
     console.log(`📤 开始上传模板文件: ${filename} (${(buffer.length / 1024).toFixed(1)} KB)`);
     
-    // 处理中文文件名编码问题
+    // 修复：正确处理中文文件名编码
     const originalName = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
     const ext = path.extname(originalName);
     const nameWithoutExt = path.basename(originalName, ext);
+    
+    console.log(`📝 原始文件名: ${originalName}`);
+    console.log(`📝 文件扩展名: ${ext}`);
+    console.log(`📝 文件名（无扩展名）: ${nameWithoutExt}`);
     
     // 生成唯一文件名，使用安全的文件名格式
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -298,55 +302,48 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
     if (uploadConfig.useMultipart) {
       console.log('🚀 使用智能分片上传');
       
-      const totalParts = Math.ceil(fileSize / uploadConfig.partSize);
-      console.log(`📊 分片详情: 总分片数=${totalParts}, 每片大小=${(uploadConfig.partSize/1024).toFixed(1)}KB`);
-      
-      // 分片上传，适用于大文件
       result = await client.multipartUpload(objectName, buffer, {
         partSize: uploadConfig.partSize,
         parallel: uploadConfig.parallel,
+        progress: (percentage, checkpoint) => {
+          console.log(`📊 上传进度: ${Math.round(percentage * 100)}%`);
+        },
+        meta: {
+          'original-name': Buffer.from(originalName, 'utf8').toString('base64'),  // 修复：使用base64编码保存原始文件名
+          'upload-time': new Date().toISOString(),
+          'file-size': fileSize.toString(),
+          'template-type': templateType
+        },
         headers: {
           'Content-Type': contentType,
-          'x-oss-storage-class': 'Standard',
-          'x-oss-meta-original-name': encodeURIComponent(originalName)
-        },
-        progress: (percentage, checkpoint) => {
-          const currentPart = checkpoint ? checkpoint.uploadId : 'unknown';
-          console.log(`📈 上传进度: ${(percentage * 100).toFixed(1)}% (分片进度)`);
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(originalName)}`  // 修复：正确的UTF-8文件名编码
         }
       });
     } else {
-      console.log('⚡ 使用普通上传（文件较小，无需分片）');
-      // 普通上传，适用于小文件
+      console.log('⚡ 使用直接上传');
+      
       result = await client.put(objectName, buffer, {
+        meta: {
+          'original-name': Buffer.from(originalName, 'utf8').toString('base64'),  // 修复：使用base64编码保存原始文件名
+          'upload-time': new Date().toISOString(),
+          'file-size': fileSize.toString(),
+          'template-type': templateType
+        },
         headers: {
           'Content-Type': contentType,
-          'x-oss-storage-class': 'Standard',
-          'x-oss-meta-original-name': encodeURIComponent(originalName)
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(originalName)}`  // 修复：正确的UTF-8文件名编码
         }
       });
     }
     
-    console.log('✅ 模板文件上传成功:', result.name);
-    
-    // 确保URL使用HTTPS
-    let secureUrl = result.url;
-    if (secureUrl && secureUrl.startsWith('http://')) {
-      secureUrl = secureUrl.replace('http://', 'https://');
-      console.log('🔒 将HTTP URL转换为HTTPS:', secureUrl);
-    }
+    console.log('✅ 模板文件上传成功:', objectName);
     
     return {
       success: true,
-      url: secureUrl,
-      name: result.name,
-      size: buffer.length,
-      originalName: originalName, // 返回原始文件名
-      uniqueName: uniqueName,
-      folder: folderPath,
-      templateType: templateType,
-      provider: provider,
-      country: country
+      name: objectName,
+      originalName: originalName,  // 返回原始文件名
+      url: result.url,
+      size: fileSize
     };
     
   } catch (error) {
@@ -389,17 +386,39 @@ async function listTemplateFiles(templateType, provider = null, country = null) 
       'max-keys': 100
     });
     
-    // 过滤掉 placeholder 文件，只返回实际的模板文件
-    const templateFiles = (result.objects || [])
-      .filter(obj => !obj.name.includes('.placeholder') && obj.name !== prefix)
-      .map(obj => ({
-        name: obj.name,
-        size: obj.size,
-        lastModified: obj.lastModified,
-        url: `https://${process.env.OSS_BUCKET}.${process.env.OSS_ENDPOINT}/${obj.name}`,
-        fileName: obj.name.split('/').pop(),
-        folder: obj.name.replace(/\/[^\/]+$/, '/')
-      }));
+    // 过滤掉 placeholder 文件，只返回实际的模板文件，并从元数据恢复原始文件名
+    const templateFiles = [];
+    
+    for (const obj of (result.objects || [])) {
+      if (!obj.name.includes('.placeholder') && obj.name !== prefix) {
+        let displayFileName = obj.name.split('/').pop();
+        
+        try {
+          // 修复：尝试从OSS元数据获取原始文件名
+          const objectMeta = await client.head(obj.name);
+          if (objectMeta.meta && objectMeta.meta['original-name']) {
+            const originalNameBase64 = objectMeta.meta['original-name'];
+            displayFileName = Buffer.from(originalNameBase64, 'base64').toString('utf8');
+            console.log(`📁 从元数据恢复文件名: ${obj.name} -> ${displayFileName}`);
+          } else {
+            console.log(`⚠️ 文件缺少原始文件名元数据: ${obj.name}`);
+          }
+        } catch (metaError) {
+          console.warn(`⚠️ 获取文件元数据失败: ${obj.name}`, metaError.message);
+        }
+        
+        templateFiles.push({
+          name: obj.name,  // OSS完整路径，用于删除
+          size: obj.size,
+          lastModified: obj.lastModified,
+          url: `https://${process.env.OSS_BUCKET}.${process.env.OSS_ENDPOINT}/${obj.name}`,
+          fileName: displayFileName,  // 修复：显示原始文件名
+          folder: obj.name.replace(/\/[^\/]+$/, '/')
+        });
+      }
+    }
+    
+    console.log(`📋 找到 ${templateFiles.length} 个模板文件`);
     
     return {
       success: true,
@@ -450,13 +469,38 @@ async function deleteTemplateFromOSS(objectName) {
   try {
     const client = createOSSClient();
     
-    await client.delete(objectName);
+    console.log(`🗑️ 准备删除文件: ${objectName}`);
+    
+    // 修复：添加详细的删除日志
+    try {
+      // 先检查文件是否存在
+      const headResult = await client.head(objectName);
+      console.log(`✅ 文件存在，开始删除: ${objectName}`);
+      console.log(`📄 文件信息: 大小=${headResult.res.headers['content-length']}字节, 最后修改=${headResult.res.headers['last-modified']}`);
+    } catch (headError) {
+      console.error(`❌ 文件不存在或无法访问: ${objectName}`, headError.message);
+      return { 
+        success: false, 
+        error: 'FileNotFound', 
+        message: '文件不存在或无法访问' 
+      };
+    }
+    
+    // 执行删除
+    const deleteResult = await client.delete(objectName);
     console.log('✅ 模板文件删除成功:', objectName);
+    console.log('🔍 删除结果:', deleteResult);
     
     return { success: true };
     
   } catch (error) {
     console.error('❌ 模板文件删除失败:', error);
+    console.error('🔍 错误详情:', {
+      code: error.code,
+      message: error.message,
+      status: error.status,
+      requestId: error.requestId
+    });
     
     if (error.code === 'AccessDenied') {
       return { 
@@ -466,7 +510,11 @@ async function deleteTemplateFromOSS(objectName) {
       };
     }
     
-    throw error;
+    return { 
+      success: false, 
+      error: error.code || 'UnknownError', 
+      message: error.message || '删除失败' 
+    };
   }
 }
 

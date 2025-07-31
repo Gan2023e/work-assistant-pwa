@@ -253,23 +253,43 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       return;
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${currentTemplate.name}`, {
-        method: 'DELETE',
-      });
+    // 显示确认对话框
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除模板文件 "${currentTemplate.fileName}" 吗？删除后无法恢复。`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          console.log('🗑️ 准备删除模板:', {
+            fileName: currentTemplate.fileName,
+            ossPath: currentTemplate.name,
+            size: currentTemplate.size
+          });
 
-      const result = await response.json();
+          const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${encodeURIComponent(currentTemplate.name)}`, {
+            method: 'DELETE',
+          });
 
-      if (response.ok) {
-        message.success('模板文件删除成功');
-        setCurrentTemplate(null); // 清除当前模板
-      } else {
-        message.error(result.message || '删除失败');
+          const result = await response.json();
+
+          if (response.ok) {
+            console.log('✅ 模板删除成功:', result);
+            message.success('模板文件删除成功');
+            setCurrentTemplate(null); // 清除当前模板
+            // 重新加载模板列表以确保界面同步
+            loadCurrentTemplate();
+          } else {
+            console.error('❌ 模板删除失败:', result);
+            message.error(result.message || '删除失败');
+          }
+        } catch (error) {
+          console.error('❌ 删除模板文件失败:', error);
+          message.error('删除失败: ' + (error instanceof Error ? error.message : '网络错误'));
+        }
       }
-    } catch (error) {
-      console.error('删除模板文件失败:', error);
-      message.error('删除失败');
-    }
+    });
   };
 
   // 验证输入数据
