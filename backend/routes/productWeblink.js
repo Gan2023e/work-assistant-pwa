@@ -1501,17 +1501,19 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
   }
 });
 
-// 模板文件缓存（内存缓存）
-const templateCache = new Map();
-const CACHE_TIMEOUT = 10 * 60 * 1000; // 10分钟缓存
+// 导入ExcelJS工具模块
+const excelUtils = require('../utils/excelUtils');
 
-// 更新子SKU生成器接口，支持从OSS模板文件生成
+// 优化的子SKU生成器接口，使用ExcelJS库
 router.post('/child-sku-generator-from-template', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { parentSkus, templateObjectName } = req.body;
     
     console.log('🚀 开始处理子SKU生成请求');
     
+    // 输入验证
     if (!parentSkus || parentSkus.trim() === '') {
       return res.status(400).json({ message: '请输入需要整理的SKU' });
     }
@@ -1532,14 +1534,17 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
 
     console.log(`📋 待处理SKU数量: ${skuList.length}`);
 
-    // 检查缓存中是否有模板文件
+    // 获取模板文件（从缓存或OSS）
     let templateContent = null;
+    let originalFileName = 'template.xlsx';
     const cacheKey = templateObjectName;
-    const cachedTemplate = templateCache.get(cacheKey);
     
-    if (cachedTemplate && (Date.now() - cachedTemplate.timestamp < CACHE_TIMEOUT)) {
-      console.log('🎯 使用缓存的模板文件');
+    // 尝试从缓存获取模板
+    const cachedTemplate = excelUtils.getCachedTemplate(cacheKey);
+    
+    if (cachedTemplate) {
       templateContent = cachedTemplate.content;
+      originalFileName = cachedTemplate.fileName;
     } else {
       console.log('📥 从OSS下载模板文件');
       // 从OSS下载模板文件
@@ -1548,184 +1553,120 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       const templateResult = await downloadTemplateFromOSS(templateObjectName);
       
       if (!templateResult.success) {
-        return res.status(404).json({ message: '模板文件不存在' });
+        return res.status(404).json({ message: '模板文件不存在或下载失败' });
       }
 
       templateContent = templateResult.content;
+      originalFileName = templateResult.fileName || 'template.xlsx';
       
-      // 缓存模板文件，包含文件名信息
-      templateCache.set(cacheKey, {
-        content: templateContent,
-        fileName: templateResult.fileName,
-        timestamp: Date.now()
-      });
-      console.log('💾 模板文件已缓存（包含文件名信息）');
+      // 缓存模板文件
+      excelUtils.cacheTemplate(cacheKey, templateContent, originalFileName);
     }
 
-    console.log('📊 开始解析Excel模板');
-    // 读取模板Excel文件
-    const workbook = xlsx.read(templateContent, { type: 'buffer' });
+    console.log('📊 开始解析Excel模板（使用ExcelJS）');
     
-    // 查找Template页面
-    if (!workbook.SheetNames.includes('Template')) {
-      return res.status(400).json({ message: '模板文件中未找到Template页面' });
-    }
-
-    const worksheet = workbook.Sheets['Template'];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-    if (data.length < 3) {
-      return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
-    }
-
-    // 查找第三行中列的位置
-    const headerRow = data[2]; // 第三行（索引2）
-    let itemSkuCol = -1;
-    let colorNameCol = -1;
-    let sizeNameCol = -1;
-
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = headerRow[i]?.toString().toLowerCase();
-      if (cellValue === 'item_sku') {
-        itemSkuCol = i;
-      } else if (cellValue === 'color_name') {
-        colorNameCol = i;
-      } else if (cellValue === 'size_name') {
-        sizeNameCol = i;
-      }
-    }
-
-    if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
+    // 使用ExcelJS加载工作簿
+    const workbook = await excelUtils.loadWorkbookFromBuffer(templateContent);
+    
+    // 验证模板结构
+    try {
+      excelUtils.validateTemplate(workbook, 'Template', 3);
+    } catch (validationError) {
       return res.status(400).json({ 
-        message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
+        message: `模板验证失败: ${validationError.message}` 
       });
     }
 
     console.log('🔍 开始查询数据库子SKU信息');
-    // 从数据库查询子SKU信息，添加索引优化查询
+    
+    // 从数据库查询子SKU信息（优化查询）
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
         parent_sku: {
           [Op.in]: skuList
         }
       },
-      attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'], // 只查询需要的字段
-      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']] // 添加排序提升性能
+      attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
+      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']],
+      logging: false // 禁用SQL日志以提升性能
     });
 
     if (inventorySkus.length === 0) {
       return res.status(404).json({ 
-        message: '在数据库中未找到匹配的子SKU信息' 
+        message: '在数据库中未找到匹配的子SKU信息。请检查输入的SKU是否正确。',
+        details: `查询的SKU: ${skuList.join(', ')}`
       });
     }
 
     console.log(`✅ 找到 ${inventorySkus.length} 条子SKU记录`);
 
-    console.log('📝 开始填充Excel数据（保留原始格式）');
-    
-    // 直接在原始工作表上填充数据，保留格式
-    inventorySkus.forEach((sku, index) => {
-      const rowIndex = 3 + index; // 第4行开始（Excel行号从0开始，所以第4行实际是索引3）
-      
-      // 填充item_sku列（UK + 子SKU）
-      const itemSkuCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: itemSkuCol });
-      if (!worksheet[itemSkuCellRef]) {
-        worksheet[itemSkuCellRef] = {};
-      }
-      worksheet[itemSkuCellRef].v = `UK${sku.child_sku}`;
-      worksheet[itemSkuCellRef].t = 's'; // 字符串类型
-      
-      // 填充color_name列
-      const colorNameCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: colorNameCol });
-      if (!worksheet[colorNameCellRef]) {
-        worksheet[colorNameCellRef] = {};
-      }
-      worksheet[colorNameCellRef].v = sku.sellercolorname || '';
-      worksheet[colorNameCellRef].t = 's'; // 字符串类型
-      
-      // 填充size_name列
-      const sizeNameCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: sizeNameCol });
-      if (!worksheet[sizeNameCellRef]) {
-        worksheet[sizeNameCellRef] = {};
-      }
-      worksheet[sizeNameCellRef].v = sku.sellersizename || '';
-      worksheet[sizeNameCellRef].t = 's'; // 字符串类型
-    });
+    // 将数据库结果转换为普通对象（提升性能）
+    const skuData = inventorySkus.map(sku => ({
+      child_sku: sku.child_sku,
+      parent_sku: sku.parent_sku,
+      sellercolorname: sku.sellercolorname,
+      sellersizename: sku.sellersizename
+    }));
 
-    // 更新工作表的范围（如果数据增加了行数）
-    const lastRowWithData = 3 + inventorySkus.length;
-    const currentRange = xlsx.utils.decode_range(worksheet['!ref'] || 'A1');
-    if (lastRowWithData > currentRange.e.r) {
-      currentRange.e.r = lastRowWithData;
-      worksheet['!ref'] = xlsx.utils.encode_range(currentRange);
-    }
+    console.log('📝 开始填充Excel数据（使用ExcelJS保留格式）');
+    
+    // 使用ExcelJS填充数据，传递母SKU列表以控制填充顺序
+    await excelUtils.fillSkuData(workbook, 'Template', skuData, skuList, 4);
 
-    console.log('⚡ 开始生成Excel文件（格式已保留）');
+    console.log('⚡ 开始生成Excel文件');
+    
+    // 获取文件扩展名和MIME类型
+    const fileExtension = excelUtils.getFileExtension(originalFileName);
+    const mimeType = excelUtils.getMimeType(fileExtension);
+    
+    console.log(`📋 检测到原始文件格式: ${fileExtension}, MIME类型: ${mimeType}`);
 
-    // 从模板对象名中提取原始文件名和扩展名（避免重复下载）
-    let originalFileName = 'template.xlsx';
-    let fileExt = 'xlsx';
-    
-    // 尝试从缓存的模板信息获取文件名
-    if (cachedTemplate && cachedTemplate.fileName) {
-      originalFileName = cachedTemplate.fileName;
-      fileExt = originalFileName.toLowerCase().split('.').pop();
-    } else {
-      // 如果缓存中没有文件名，从对象名中推断
-      const objectNameParts = templateObjectName.split('/').pop().split('-');
-      if (objectNameParts.length > 1) {
-        const lastPart = objectNameParts[objectNameParts.length - 1];
-        if (lastPart.includes('.')) {
-          fileExt = lastPart.toLowerCase().split('.').pop();
-        }
-      }
-      
-      // 如果还是无法确定，通过快速获取OSS对象信息来确定文件类型
-      try {
-        const { downloadTemplateFromOSS } = require('../utils/oss');
-        const templateInfo = await downloadTemplateFromOSS(templateObjectName);
-        if (templateInfo.success && templateInfo.fileName) {
-          originalFileName = templateInfo.fileName;
-          fileExt = originalFileName.toLowerCase().split('.').pop();
-        }
-      } catch (error) {
-        console.log('⚠️ 无法获取原始文件名，使用默认xlsx格式');
-      }
-    }
-    
-    let bookType = 'xlsx';
-    let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    
-    // 根据原始文件格式设置正确的输出格式
-    if (fileExt === 'xlsm') {
-      bookType = 'xlsm';
-      contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
-    } else if (fileExt === 'xls') {
-      bookType = 'xls';
-      contentType = 'application/vnd.ms-excel';
-    }
-    
-    console.log(`📋 检测到原始文件格式: ${fileExt}, 使用输出格式: ${bookType}`);
+    // 生成Excel文件缓冲区
+    const excelBuffer = await excelUtils.generateBuffer(workbook, fileExtension);
 
-    // 生成Excel文件，使用与原始文件相同的格式
-    const excelBuffer = xlsx.write(workbook, { 
-      type: 'buffer', 
-      bookType: bookType,
-      compression: true // 启用压缩减少文件大小
-    });
+    // 生成自定义文件名 (UK_SKU1_SKU2_SKU3.xlsx格式)
+    const downloadFileName = excelUtils.generateFileName(skuList, fileExtension);
+
+    // 计算处理时间
+    const processingTime = Date.now() - startTime;
+    console.log(`📊 处理完成，总耗时: ${processingTime}ms`);
 
     console.log('📤 准备下载文件');
-    // 设置响应头，使用正确的Content-Type
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''processed_template.${fileExt}`);
-    res.setHeader('Content-Length', excelBuffer.length);
     
-    console.log('✅ 子SKU生成完成，发送文件');
+    // 设置响应头，使用自定义文件名
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+    res.setHeader('Content-Length', excelBuffer.length);
+    res.setHeader('X-Processing-Time', processingTime.toString()); // 添加性能信息
+    
+    console.log(`✅ 子SKU生成完成，发送文件 (${(excelBuffer.length / 1024).toFixed(1)} KB)`);
     res.send(excelBuffer);
 
   } catch (error) {
+    const processingTime = Date.now() - startTime;
     console.error('❌ 子SKU生成器失败:', error);
-    res.status(500).json({ message: '子SKU生成器失败: ' + error.message });
+    console.error(`❌ 失败时间: ${processingTime}ms`);
+    
+    // 根据错误类型返回不同的状态码
+    let statusCode = 500;
+    let errorMessage = '子SKU生成器失败';
+    
+    if (error.message.includes('Excel文件格式错误')) {
+      statusCode = 400;
+      errorMessage = '模板文件格式错误，请上传有效的Excel文件';
+    } else if (error.message.includes('未找到工作表')) {
+      statusCode = 400;
+      errorMessage = '模板文件结构错误，请确保包含Template工作表';
+    } else if (error.message.includes('未找到必需的列')) {
+      statusCode = 400;
+      errorMessage = '模板文件格式错误，请确保第3行包含item_sku、color_name、size_name列';
+    }
+    
+    res.status(statusCode).json({ 
+      message: `${errorMessage}: ${error.message}`,
+      processingTime: processingTime,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 

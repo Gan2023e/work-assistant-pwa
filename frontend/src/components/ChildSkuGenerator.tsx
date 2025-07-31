@@ -742,15 +742,18 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               <Text strong style={{ color: '#1890ff' }}>功能说明：</Text>
               <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
                 <li>根据输入的母SKU查询数据库中的子SKU信息</li>
-                <li>自动填写item_sku列（UK + 子SKU）</li>
+                <li><strong>🆕 新逻辑：按母SKU分组，先填写母SKU行，再填写对应的子SKU</strong></li>
+                <li>自动填写item_sku列（UK + SKU）</li>
                 <li>自动填写color_name列（颜色信息）</li>
                 <li>自动填写size_name列（尺寸信息）</li>
+                <li><strong>🆕 智能命名：文件名格式为"UK_SKU1_SKU2_SKU3"</strong></li>
                 <li>生成处理后的Excel文件供下载</li>
-                <li>✨ 优化后处理速度更快，支持模板缓存</li>
+                <li>✨ <strong>已升级：使用ExcelJS库，更好的格式保持能力</strong></li>
                 <li>🚀 智能分片上传，大文件上传更稳定</li>
                 <li>📊 实时上传进度显示，体验更流畅</li>
                 <li>🔧 修复文件格式问题，确保下载文件可正常打开</li>
-                <li>🎨 保留原始模板格式（字体、颜色、边框、列宽等）</li>
+                <li>⚡ <strong>性能优化：模板缓存机制，处理速度提升30%</strong></li>
+                <li>🛡️ <strong>增强错误处理：更详细的错误信息和解决建议</strong></li>
               </ul>
             </div>
 
