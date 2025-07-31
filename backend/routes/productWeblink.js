@@ -5,11 +5,21 @@ const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const ExcelJS = require('exceljs'); // 新增ExcelJS支持
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
 const pdf = require('pdf-parse');
-const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
+const { 
+  uploadToOSS, 
+  deleteFromOSS, 
+  uploadTemplateToOSS, 
+  listTemplateFiles, 
+  downloadTemplateFromOSS, 
+  deleteTemplateFromOSS, 
+  checkOSSConfig,
+  createOSSClient 
+} = require('../utils/oss'); // 扩展OSS工具函数导入
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -859,15 +869,11 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
-// 子SKU生成器接口
-router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
+// 子SKU生成器接口（单模板模式 - 仅支持英国模板）
+router.post('/child-sku-generator', async (req, res) => {
   try {
     const { parentSkus } = req.body;
     
-    if (!req.file) {
-      return res.status(400).json({ message: '请上传Excel文件' });
-    }
-
     if (!parentSkus || parentSkus.trim() === '') {
       return res.status(400).json({ message: '请输入需要整理的SKU' });
     }
@@ -882,43 +888,79 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       return res.status(400).json({ message: '请输入有效的SKU' });
     }
 
-    // 读取Excel文件
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    
-    // 查找Template页面
-    if (!workbook.SheetNames.includes('Template')) {
-      return res.status(400).json({ message: 'Excel文件中未找到Template页面' });
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({ message: 'OSS配置不完整，请联系管理员' });
     }
 
-    const worksheet = workbook.Sheets['Template'];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+    let workbook, templateSheet;
+    let templateName = 'processed_template';
 
-    if (data.length < 3) {
-      return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
+    try {
+      // 获取英国模板配置（单模板模式）
+      const allConfigs = await getUKTemplateConfigFromOSS();
+      const templates = allConfigs.templates || {};
+      
+      if (Object.keys(templates).length === 0) {
+        return res.status(404).json({ message: '系统中没有英国资料表模板，请先上传模板' });
+      }
+
+      // 单模板模式，获取唯一的模板
+      const templateId = Object.keys(templates)[0];
+      const template = templates[templateId];
+      templateName = template.name || template.originalName.replace(/\.[^/.]+$/, "");
+      
+      // 从OSS下载模板文件
+      console.log(`📥 正在从OSS下载英国模板: ${template.name}`);
+      const downloadResult = await downloadTemplateFromOSS(template.ossPath);
+      
+      if (!downloadResult.success) {
+        throw new Error('模板文件下载失败');
+      }
+
+      // 使用ExcelJS读取模板，完美保持格式
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(downloadResult.content);
+      
+      templateSheet = workbook.getWorksheet('Template');
+      if (!templateSheet) {
+        return res.status(400).json({ message: '模板中未找到Template工作表' });
+      }
+      
+      console.log(`✅ 英国模板"${template.name}"下载并读取成功`);
+      
+    } catch (error) {
+      console.error('❌ 英国模板处理失败:', error);
+      return res.status(500).json({ message: '英国模板处理失败: ' + error.message });
     }
 
-    // 查找第三行中列的位置
-    const headerRow = data[2]; // 第三行（索引2）
+    // 使用ExcelJS验证Template工作表结构
+    const headerRow = templateSheet.getRow(3); // 第3行
+    const headers = [];
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
 
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = headerRow[i]?.toString().toLowerCase();
+    headerRow.eachCell((cell, colNumber) => {
+      const cellValue = cell.text?.toLowerCase() || '';
+      headers.push(cellValue);
+      
       if (cellValue === 'item_sku') {
-        itemSkuCol = i;
+        itemSkuCol = colNumber;
       } else if (cellValue === 'color_name') {
-        colorNameCol = i;
+        colorNameCol = colNumber;
       } else if (cellValue === 'size_name') {
-        sizeNameCol = i;
+        sizeNameCol = colNumber;
       }
-    }
+    });
 
     if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
       return res.status(400).json({ 
         message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
       });
     }
+
+    console.log(`📊 找到必需列位置 - item_sku:${itemSkuCol}, color_name:${colorNameCol}, size_name:${sizeNameCol}`);
 
     // 从数据库查询子SKU信息
     const inventorySkus = await SellerInventorySku.findAll({
@@ -935,52 +977,49 @@ router.post('/child-sku-generator', upload.single('file'), async (req, res) => {
       });
     }
 
-    // 确保数据数组有足够的行数
-    while (data.length < 4 + inventorySkus.length) {
-      data.push([]);
-    }
+    console.log(`🔍 找到 ${inventorySkus.length} 个子SKU记录`);
 
-    // 确保数据数组有足够的行数
-    while (data.length < 4 + inventorySkus.length) {
-      data.push([]);
-    }
-
-    // 填充数据（从第4行开始，索引3）
+    // 使用ExcelJS精确填写数据，保持所有原始格式
+    let currentRow = 4; // 从第4行开始填写数据
+    
     inventorySkus.forEach((sku, index) => {
-      const rowIndex = 3 + index; // 第4行开始
+      // 使用ExcelJS的方式填写item_sku列，完美保持格式
+      const itemSkuCell = templateSheet.getCell(currentRow, itemSkuCol);
+      itemSkuCell.value = `UK${sku.child_sku}`;
       
-      // 确保行存在
-      if (!data[rowIndex]) {
-        data[rowIndex] = [];
-      }
+      // 使用ExcelJS的方式填写color_name列，完美保持格式
+      const colorNameCell = templateSheet.getCell(currentRow, colorNameCol);
+      colorNameCell.value = sku.sellercolorname || '';
       
-      // 确保行有足够的列
-      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
-      while (data[rowIndex].length <= maxCol) {
-        data[rowIndex].push('');
-      }
+      // 使用ExcelJS的方式填写size_name列，完美保持格式
+      const sizeNameCell = templateSheet.getCell(currentRow, sizeNameCol);
+      sizeNameCell.value = sku.sellersizename || '';
       
-      // 填充数据
-      data[rowIndex][itemSkuCol] = `UK${sku.child_sku}`;
-      data[rowIndex][colorNameCol] = sku.sellercolorname || '';
-      data[rowIndex][sizeNameCol] = sku.sellersizename || '';
+      console.log(`📝 ExcelJS填写第${currentRow}行: UK${sku.child_sku}, ${sku.sellercolorname || ''}, ${sku.sellersizename || ''}`);
+      
+      currentRow++;
     });
 
-    // 重新创建工作表
-    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
-    workbook.Sheets['Template'] = newWorksheet;
+    console.log(`✅ ExcelJS完成数据填写，共填写 ${inventorySkus.length} 行数据，保持完美格式`);
 
-    // 生成Excel文件
-    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // 使用ExcelJS生成Excel文件，完美保持所有原始格式
+    const excelBuffer = await workbook.xlsx.writeBuffer();
 
-    // 设置响应头
+    // 生成带时间戳的文件名（支持中文）
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const outputFileName = `${templateName}_子SKU_${timestamp}.xlsx`;
+    const encodedFileName = encodeURIComponent(outputFileName);
+
+    // 设置响应头（支持中文文件名）
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=processed_template.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Length', excelBuffer.length);
     
+    console.log(`📦 返回处理后的Excel文件: ${outputFileName}`);
     res.send(excelBuffer);
 
   } catch (err) {
-    console.error('子SKU生成器失败:', err);
+    console.error('❌ 子SKU生成器失败:', err);
     res.status(500).json({ message: '子SKU生成器失败: ' + err.message });
   }
 });
@@ -1291,5 +1330,371 @@ async function extractCpcInfo(pdfText) {
     return { styleNumber: '', recommendAge: '' };
   }
 }
+
+// ================================
+// 英国资料表模板管理接口
+// ================================
+
+// OSS配置常量
+const UK_TEMPLATE_CONFIG_OSS_PATH = 'templates/config/uk-template-config.json';
+const UK_TEMPLATE_FOLDER = '英国'; // 使用中文文件夹名
+
+// 获取英国模板配置
+async function getUKTemplateConfigFromOSS() {
+  try {
+    if (!checkOSSConfig()) {
+      console.warn('OSS配置不完整，使用空配置');
+      return { templates: {} };
+    }
+
+    const result = await downloadTemplateFromOSS(UK_TEMPLATE_CONFIG_OSS_PATH);
+    
+    if (result.success) {
+      const configText = result.content.toString('utf8');
+      return JSON.parse(configText);
+    } else {
+      console.log('英国模板配置文件不存在，返回空配置');
+      return { templates: {} };
+    }
+  } catch (error) {
+    console.warn('获取英国模板配置失败:', error.message);
+    return { templates: {} };
+  }
+}
+
+// 保存英国模板配置到OSS
+async function saveUKTemplateConfigToOSS(config) {
+  try {
+    if (!checkOSSConfig()) {
+      throw new Error('OSS配置不完整');
+    }
+
+    const client = createOSSClient();
+    const configBuffer = Buffer.from(JSON.stringify(config, null, 2), 'utf8');
+    
+    // 使用OSS客户端直接上传配置文件，确保中文编码正确
+    const result = await client.put(UK_TEMPLATE_CONFIG_OSS_PATH, configBuffer, {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'x-oss-storage-class': 'Standard'
+      }
+    });
+
+    console.log('✅ 英国模板配置保存成功:', result.name);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ 保存英国模板配置失败:', error);
+    throw error;
+  }
+}
+
+// 上传英国资料表模板（单模板模式）
+router.post('/uk-template/upload', upload.single('template'), async (req, res) => {
+  try {
+    const { templateName, description } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: '请上传模板文件'
+      });
+    }
+
+    if (!templateName || templateName.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: '请输入模板名称'
+      });
+    }
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，请联系管理员配置OSS服务'
+      });
+    }
+
+    // 检查是否已存在模板
+    const existingConfig = await getUKTemplateConfigFromOSS();
+    const existingTemplates = existingConfig.templates || {};
+    
+    if (Object.keys(existingTemplates).length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: '系统中已存在英国资料表模板，如需更新请先删除现有模板'
+      });
+    }
+
+    // 验证Excel文件格式
+    let workbook;
+    try {
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      
+      // 验证是否包含Template工作表
+      const templateSheet = workbook.getWorksheet('Template');
+      if (!templateSheet) {
+        return res.status(400).json({
+          success: false,
+          message: 'Excel文件中必须包含名为"Template"的工作表'
+        });
+      }
+
+      // 验证Template工作表的结构（第3行必须包含item_sku、color_name、size_name列）
+      const headerRow = templateSheet.getRow(3);
+      const headers = [];
+      headerRow.eachCell((cell, colNumber) => {
+        headers.push(cell.text?.toLowerCase() || '');
+      });
+
+      const requiredColumns = ['item_sku', 'color_name', 'size_name'];
+      const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+      
+      if (missingColumns.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Template工作表第3行缺少必需的列：${missingColumns.join('、')}`
+        });
+      }
+
+      console.log('✅ Excel文件验证通过，包含Template工作表和必需列');
+      
+    } catch (error) {
+      console.error('❌ Excel文件验证失败:', error);
+      return res.status(400).json({
+        success: false,
+        message: '无效的Excel文件格式：' + error.message
+      });
+    }
+
+    // 确保文件名支持中文，避免乱码
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    console.log('📁 原始文件名:', originalName);
+
+    // 上传模板文件到OSS
+    const uploadResult = await uploadTemplateToOSS(
+      req.file.buffer,
+      originalName,
+      'amazon',
+      null,
+      UK_TEMPLATE_FOLDER // 使用中文文件夹名
+    );
+
+    if (!uploadResult.success) {
+      throw new Error('模板文件上传失败');
+    }
+
+    // 生成唯一模板ID（单模板模式）
+    const templateId = 'uk_template_single';
+    
+    // 创建新配置（单模板）
+    const newConfig = {
+      templates: {
+        [templateId]: {
+          id: templateId,
+          name: templateName.trim(),
+          description: description?.trim() || '',
+          originalName: originalName,
+          ossPath: uploadResult.name,
+          uploadTime: new Date().toISOString(),
+          fileSize: uploadResult.size,
+          isDefault: true // 单模板模式，始终为默认
+        }
+      }
+    };
+
+    // 保存配置
+    await saveUKTemplateConfigToOSS(newConfig);
+
+    console.log(`✅ 英国资料表模板上传成功（单模板模式）: ${templateName.trim()}`);
+
+    res.json({
+      success: true,
+      message: '英国资料表模板上传成功',
+      data: {
+        templateId: templateId,
+        templateName: templateName.trim(),
+        fileName: originalName,
+        uploadTime: newConfig.templates[templateId].uploadTime,
+        fileSize: uploadResult.size
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 上传英国模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '上传失败: ' + error.message
+    });
+  }
+});
+
+// 获取英国资料表模板列表
+router.get('/uk-template/list', async (req, res) => {
+  try {
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.json({
+        success: true,
+        data: {
+          hasTemplate: false,
+          templates: []
+        }
+      });
+    }
+
+    const allConfigs = await getUKTemplateConfigFromOSS();
+    const templates = allConfigs.templates || {};
+    
+    const templateList = Object.values(templates).map(template => ({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      originalName: template.originalName,
+      uploadTime: template.uploadTime,
+      fileSize: template.fileSize,
+      isDefault: template.isDefault,
+      // 添加预览URL（通过代理访问）
+      previewUrl: `/api/product_weblink/uk-template/preview/${template.id}`
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        hasTemplate: templateList.length > 0,
+        templates: templateList,
+        count: templateList.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 获取英国模板列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取模板列表失败: ' + error.message
+    });
+  }
+});
+
+// 删除英国资料表模板（单模板模式）
+router.delete('/uk-template/delete', async (req, res) => {
+  try {
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整，无法删除模板'
+      });
+    }
+
+    // 获取现有配置
+    const allConfigs = await getUKTemplateConfigFromOSS();
+    const templates = allConfigs.templates || {};
+    
+    if (Object.keys(templates).length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '当前没有英国资料表模板'
+      });
+    }
+
+    // 单模板模式，获取唯一的模板
+    const templateId = Object.keys(templates)[0];
+    const template = templates[templateId];
+    
+    // 删除OSS中的模板文件
+    try {
+      console.log(`🔄 正在删除模板文件: ${template.ossPath}`);
+      await deleteTemplateFromOSS(template.ossPath);
+      console.log(`✅ 模板文件删除成功: ${template.name}`);
+    } catch (deleteError) {
+      console.warn(`⚠️ 删除模板文件失败:`, deleteError.message);
+      // 即使文件删除失败，也继续删除配置
+    }
+    
+    // 删除配置文件
+    try {
+      await deleteTemplateFromOSS(UK_TEMPLATE_CONFIG_OSS_PATH);
+      console.log('✅ 英国模板配置文件删除成功');
+    } catch (error) {
+      console.warn('⚠️ 删除配置文件失败:', error.message);
+    }
+
+    console.log(`✅ 英国资料表模板删除成功（单模板模式）: ${template.name}`);
+
+    res.json({
+      success: true,
+      message: `英国资料表模板"${template.name}"删除成功，现在可以上传新模板`,
+      data: {
+        deletedTemplate: {
+          id: templateId,
+          name: template.name,
+          originalName: template.originalName
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 删除英国模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除失败: ' + error.message
+    });
+  }
+});
+
+// 预览英国资料表模板
+router.get('/uk-template/preview/:templateId', async (req, res) => {
+  try {
+    const { templateId } = req.params;
+
+    // 检查OSS配置
+    if (!checkOSSConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'OSS配置不完整'
+      });
+    }
+
+    // 获取配置
+    const allConfigs = await getUKTemplateConfigFromOSS();
+    const templates = allConfigs.templates || {};
+    
+    if (!templates[templateId]) {
+      return res.status(404).json({
+        success: false,
+        message: '模板不存在'
+      });
+    }
+
+    const template = templates[templateId];
+    
+    // 从OSS下载模板文件
+    const downloadResult = await downloadTemplateFromOSS(template.ossPath);
+    
+    if (!downloadResult.success) {
+      throw new Error('模板文件下载失败');
+    }
+
+    // 设置正确的Content-Type和文件名（支持中文）
+    const encodedFilename = encodeURIComponent(template.originalName);
+    
+    res.setHeader('Content-Type', downloadResult.contentType);
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFilename}`);
+    res.setHeader('Content-Length', downloadResult.content.length);
+    
+    res.send(downloadResult.content);
+
+  } catch (error) {
+    console.error('❌ 预览英国模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '预览失败: ' + error.message
+    });
+  }
+});
+
+// 注意：单模板模式下不需要设置默认模板功能
 
 module.exports = router; 
