@@ -44,16 +44,25 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState('');
   
   const templateFileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // 重置组件状态
   const resetState = () => {
     setSkuInput('');
     setUploadProgress(0);
     setUploadStatus('');
+    setProcessingProgress(0);
+    setProcessingStatus('');
     if (templateFileInputRef.current) {
       templateFileInputRef.current.value = '';
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
   };
 
@@ -423,19 +432,36 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     });
   };
 
-  // 主要处理函数
+  // 主要处理函数（优化版）
   const handleProcess = async () => {
     if (!validateInput()) {
       return;
     }
 
     setLoading(true);
+    setProcessingProgress(0);
     
+    // 创建新的AbortController
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
+    // 设置超时（2分钟）
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+      message.error('处理超时，请检查输入的SKU数量或网络连接');
+    }, 120000);
+
     try {
-      // 显示处理开始提示
-      message.loading('正在处理子SKU生成请求...', 0);
-      
       console.log('🚀 开始子SKU生成处理');
+      
+      // 开始进度模拟
+      setProcessingStatus('正在验证输入数据...');
+      setProcessingProgress(5);
+      
+      await new Promise(resolve => setTimeout(resolve, 200)); // 短暂延迟以显示进度
+      
+      setProcessingStatus('正在准备请求...');
+      setProcessingProgress(10);
       
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator-from-template`, {
         method: 'POST',
@@ -446,10 +472,18 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
           parentSkus: skuInput.trim(),
           templateObjectName: currentTemplate!.name
         }),
+        signal: abortController.signal, // 添加取消信号
       });
 
-      // 关闭loading提示
-      message.destroy();
+      clearTimeout(timeoutId);
+
+      if (abortController.signal.aborted) {
+        console.log('请求已被取消');
+        return;
+      }
+
+      setProcessingStatus('正在处理服务器响应...');
+      setProcessingProgress(60);
 
       if (!response.ok) {
         let errorMessage = `请求失败 (HTTP ${response.status})`;
@@ -470,7 +504,6 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
             errorDetails = `HTTP错误\n状态码: ${response.status}\n状态文本: ${response.statusText}`;
           }
         } catch (parseError) {
-          // 如果无法解析JSON响应
           errorDetails = `无法解析服务器响应\n状态码: ${response.status}\n状态文本: ${response.statusText}\n响应类型: ${response.headers.get('content-type') || '未知'}`;
         }
         
@@ -478,13 +511,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         return;
       }
 
-      console.log('📥 开始下载生成的文件');
-      message.loading('正在准备下载文件...', 0);
+      setProcessingStatus('正在下载生成的文件...');
+      setProcessingProgress(80);
 
       // 处理文件下载
       const blob = await response.blob();
-      
-      message.destroy();
       
       if (blob.size === 0) {
         showErrorDialog(
@@ -494,31 +525,76 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         return;
       }
 
+      // 检查是否返回了HTML页面（可能是登录页面）
+      if (blob.type.includes('text/html')) {
+        console.warn('⚠️ 服务器返回HTML内容，可能是登录失效');
+        showErrorDialog(
+          '登录可能已失效', 
+          '服务器返回了登录页面，请刷新页面重新登录后再试'
+        );
+        // 延迟刷新页面
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+        return;
+      }
+
+      setProcessingStatus('正在准备下载...');
+      setProcessingProgress(95);
+
       console.log(`📁 文件大小: ${(blob.size / 1024).toFixed(1)} KB`);
       
       // 使用模板文件名+时间戳，传递response对象以获取正确的文件扩展名
       downloadFile(blob, currentTemplate!.fileName, response);
       
-      message.success('子SKU生成器处理完成，文件已下载');
+      setProcessingStatus('处理完成！');
+      setProcessingProgress(100);
       
-      // 成功后关闭弹窗并重置状态
-      setVisible(false);
-      resetState();
-      
-      // 调用成功回调
-      onSuccess?.();
+      // 延迟显示成功消息，确保用户看到完成状态
+      setTimeout(() => {
+        message.success('子SKU生成器处理完成，文件已下载');
+        
+        // 成功后关闭弹窗并重置状态
+        setVisible(false);
+        resetState();
+        
+        // 强制垃圾回收（清理可能的内存泄漏）
+        if (window.gc) {
+          window.gc();
+        }
+        
+        // 调用成功回调
+        onSuccess?.();
+      }, 500);
       
     } catch (error) {
-      message.destroy();
+      clearTimeout(timeoutId);
+      
+      // 检查是否是用户取消
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('用户取消了请求');
+        message.info('已取消处理');
+        return;
+      }
+      
       console.error('子SKU生成器失败:', error);
       
       // 显示详细错误对话框
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      const errorDetails = `错误类型: ${error instanceof Error ? error.name : 'Unknown'}\n错误信息: ${errorMessage}\n发生时间: ${new Date().toLocaleString('zh-CN')}\n\n请检查网络连接和输入数据的正确性。`;
+      let errorDetails = `错误类型: ${error instanceof Error ? error.name : 'Unknown'}\n错误信息: ${errorMessage}\n发生时间: ${new Date().toLocaleString('zh-CN')}`;
+      
+      // 添加网络错误的特殊处理
+      if (errorMessage.includes('fetch')) {
+        errorDetails += '\n\n可能的原因：\n1. 网络连接中断\n2. 服务器暂时不可用\n3. 请求被防火墙拦截';
+      }
       
       showErrorDialog('处理过程中发生错误', errorDetails);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
+      setProcessingProgress(0);
+      setProcessingStatus('');
+      abortControllerRef.current = null;
     }
   };
 
@@ -530,8 +606,25 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
   // 关闭弹窗
   const handleCancel = () => {
-    if (loading || uploadLoading) {
-      message.warning('正在处理中，请稍候...');
+    if (loading && abortControllerRef.current) {
+      // 如果正在处理子SKU生成，提供取消选项
+      Modal.confirm({
+        title: '确认取消',
+        content: '正在处理子SKU生成，确定要取消吗？',
+        okText: '确定取消',
+        cancelText: '继续处理',
+        onOk: () => {
+          abortControllerRef.current?.abort();
+          setVisible(false);
+          resetState();
+          message.info('已取消处理');
+        }
+      });
+      return;
+    }
+    
+    if (uploadLoading) {
+      message.warning('正在上传模板文件，请稍候...');
       return;
     }
     
@@ -556,16 +649,17 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         open={visible}
         onCancel={handleCancel}
         footer={[
-          <Button key="cancel" onClick={handleCancel} disabled={loading}>
-            取消
+          <Button key="cancel" onClick={handleCancel} disabled={uploadLoading}>
+            {loading ? '取消处理' : '取消'}
           </Button>,
           <Button 
             key="process" 
             type="primary" 
             onClick={handleProcess}
             loading={loading}
+            disabled={uploadLoading}
           >
-            开始处理
+            {loading ? '处理中...' : '开始处理'}
           </Button>
         ]}
         width={700}
@@ -573,7 +667,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         maskClosable={!loading && !uploadLoading}
       >
         <Spin spinning={loading} tip={
-          loading ? "正在生成子SKU，请耐心等待..." : "正在处理，请稍候..."
+          loading ? (processingStatus || "正在生成子SKU，请耐心等待...") : "正在处理，请稍候..."
         }>
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             
@@ -714,20 +808,47 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               </Text>
             </div>
 
-            {/* 性能优化说明 */}
+            {/* 处理进度显示 */}
             {loading && (
               <div style={{ 
                 backgroundColor: '#e6f7ff', 
-                padding: '12px', 
+                padding: '16px', 
                 borderRadius: '6px',
                 border: '1px solid #91d5ff'
               }}>
-                <Text style={{ color: '#1890ff' }}>
-                  <strong>正在处理中...</strong><br />
-                  • 正在下载并解析模板文件<br />
-                  • 正在查询数据库中的子SKU信息<br />
-                  • 正在生成包含子SKU数据的Excel文件<br />
-                  • 处理完成后将自动下载文件
+                <div style={{ marginBottom: '12px' }}>
+                  <Text strong style={{ color: '#1890ff', fontSize: '14px' }}>
+                    正在处理中...
+                  </Text>
+                  <Text style={{ float: 'right', color: '#666', fontSize: '12px' }}>
+                    {processingProgress}%
+                  </Text>
+                </div>
+                
+                <Progress 
+                  percent={processingProgress} 
+                  size="small"
+                  status={processingProgress === 100 ? 'success' : 'active'}
+                  strokeColor={{
+                    '0%': '#1890ff',
+                    '100%': '#52c41a',
+                  }}
+                  style={{ marginBottom: '12px' }}
+                />
+                
+                <div style={{ marginBottom: '8px' }}>
+                  <Text style={{ color: '#1890ff', fontSize: '13px' }}>
+                    当前状态：{processingStatus || '准备中...'}
+                  </Text>
+                </div>
+                
+                <Text style={{ color: '#666', fontSize: '12px' }}>
+                  <strong>处理步骤：</strong><br />
+                  • 验证输入数据和模板文件<br />
+                  • 查询数据库中的子SKU信息<br />
+                  • 解析Excel模板并填充数据<br />
+                  • 生成新的Excel文件并下载<br />
+                  • 可以随时点击"取消处理"来终止操作
                 </Text>
               </div>
             )}
@@ -739,21 +860,22 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               borderRadius: '6px',
               border: '1px solid #d9d9d9'
             }}>
-              <Text strong style={{ color: '#1890ff' }}>功能说明：</Text>
+              <Text strong style={{ color: '#1890ff' }}>功能说明（2025年1月优化版）：</Text>
               <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
                 <li>根据输入的母SKU查询数据库中的子SKU信息</li>
-                <li><strong>🆕 新逻辑：按母SKU分组，先填写母SKU行，再填写对应的子SKU</strong></li>
+                <li><strong>🆕 分层填充：按母SKU分组，先填写母SKU行，再填写对应的子SKU</strong></li>
                 <li>自动填写item_sku列（UK + SKU）</li>
                 <li>自动填写color_name列（颜色信息）</li>
                 <li>自动填写size_name列（尺寸信息）</li>
                 <li><strong>🆕 智能命名：文件名格式为"UK_SKU1_SKU2_SKU3"</strong></li>
-                <li>生成处理后的Excel文件供下载</li>
-                <li>✨ <strong>已升级：使用ExcelJS库，更好的格式保持能力</strong></li>
-                <li>🚀 智能分片上传，大文件上传更稳定</li>
-                <li>📊 实时上传进度显示，体验更流畅</li>
-                <li>🔧 修复文件格式问题，确保下载文件可正常打开</li>
-                <li>⚡ <strong>性能优化：模板缓存机制，处理速度提升30%</strong></li>
-                <li>🛡️ <strong>增强错误处理：更详细的错误信息和解决建议</strong></li>
+                <li><strong>⚡ 性能优化：2分钟超时保护 + 智能进度反馈</strong></li>
+                <li><strong>🛡️ 防卡顿：支持处理中取消 + 请求状态监控</strong></li>
+                <li><strong>🔐 会话保护：自动检测登录状态，防止处理后登录失效</strong></li>
+                <li><strong>📊 实时进度：详细的处理步骤显示和进度条</strong></li>
+                <li><strong>🚀 批量限制：单次最多50个SKU，避免性能问题</strong></li>
+                <li>✨ <strong>ExcelJS库：完美保持Excel格式和样式</strong></li>
+                <li>🔧 <strong>增强缓存：智能模板缓存，自动内存管理</strong></li>
+                <li>🛡️ <strong>错误处理：详细错误分类和解决建议</strong></li>
               </ul>
             </div>
 

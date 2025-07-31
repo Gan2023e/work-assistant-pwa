@@ -1,6 +1,6 @@
 
-// 生产环境API地址配置
-export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://work-assistant-pwa-production.up.railway.app';
+// API地址配置 - 优先使用环境变量，开发环境默认使用本地地址
+export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
 // API端点
 export const API_ENDPOINTS = {
