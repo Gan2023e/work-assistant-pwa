@@ -1504,20 +1504,9 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
 // 导入ExcelJS工具模块
 const excelUtils = require('../utils/excelUtils');
 
-// 优化的子SKU生成器接口，使用ExcelJS库（增强版）
+// 优化的子SKU生成器接口，使用ExcelJS库
 router.post('/child-sku-generator-from-template', async (req, res) => {
   const startTime = Date.now();
-  
-  // 设置请求超时（3分钟）
-  req.setTimeout(180000, () => {
-    console.log('❌ 请求超时，自动终止');
-    if (!res.headersSent) {
-      res.status(408).json({ 
-        message: '请求处理超时，请减少SKU数量或稍后重试',
-        processingTime: Date.now() - startTime
-      });
-    }
-  });
   
   try {
     const { parentSkus, templateObjectName } = req.body;
@@ -1541,15 +1530,6 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
 
     if (skuList.length === 0) {
       return res.status(400).json({ message: '请输入有效的SKU' });
-    }
-
-    // 限制SKU数量以防止性能问题
-    if (skuList.length > 50) {
-      return res.status(400).json({ 
-        message: `SKU数量过多（${skuList.length}个），请分批处理，单次最多处理50个SKU`,
-        suggestedBatchSize: 50,
-        currentCount: skuList.length
-      });
     }
 
     console.log(`📋 待处理SKU数量: ${skuList.length}`);

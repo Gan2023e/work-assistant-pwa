@@ -1,9 +1,8 @@
 const ExcelJS = require('exceljs');
 
-// 模板缓存对象（增强版）
+// 模板缓存对象
 const templateCache = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
-const MAX_CACHE_SIZE = 5; // 最大缓存文件数量
 
 /**
  * 从缓冲区加载Excel工作簿
@@ -85,9 +84,9 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
       // 添加子SKU行
       groupedData[parentSku].forEach(item => {
         const childRow = worksheet.getRow(currentRow);
-        childRow.getCell(columns.item_sku).value = `UK${item.child_sku}`;
-        childRow.getCell(columns.color_name).value = item.sellercolorname || '';
-        childRow.getCell(columns.size_name).value = item.sellersizename || '';
+        childRow.getCell(columns.item_sku).value = `UK${item.sku}`;
+        childRow.getCell(columns.color_name).value = item.color_name || '';
+        childRow.getCell(columns.size_name).value = item.size_name || '';
         currentRow++;
       });
     }
@@ -141,38 +140,18 @@ function validateTemplate(workbook, worksheetName, headerRow) {
 }
 
 /**
- * 缓存模板文件（增强版）
+ * 缓存模板文件
  * @param {string} cacheKey - 缓存键
  * @param {Buffer} templateContent - 模板内容
  * @param {string} fileName - 文件名
  */
 function cacheTemplate(cacheKey, templateContent, fileName) {
-  // 检查缓存大小，如果超过限制则清理最旧的缓存
-  if (templateCache.size >= MAX_CACHE_SIZE) {
-    let oldestKey = null;
-    let oldestTime = Date.now();
-    
-    for (const [key, value] of templateCache.entries()) {
-      if (value.timestamp < oldestTime) {
-        oldestTime = value.timestamp;
-        oldestKey = key;
-      }
-    }
-    
-    if (oldestKey) {
-      templateCache.delete(oldestKey);
-      console.log(`🗑️ 清理最旧缓存以释放空间: ${oldestKey}`);
-    }
-  }
-  
   templateCache.set(cacheKey, {
     content: templateContent,
     fileName: fileName,
-    timestamp: Date.now(),
-    size: templateContent.length
+    timestamp: Date.now()
   });
-  
-  console.log(`📝 模板已缓存: ${cacheKey} (${(templateContent.length / 1024).toFixed(1)} KB)`);
+  console.log(`📝 模板已缓存: ${cacheKey}`);
 }
 
 /**
