@@ -478,7 +478,7 @@ async function downloadTemplateFromOSS(objectName) {
   try {
     const client = createOSSClient();
     
-    console.log(`📥 开始下载文件: ${objectName}`);
+    console.log(`📥 开始流式下载文件: ${objectName}`);
     
     // 检查文件是否存在并获取元数据
     let headResult;
@@ -494,62 +494,81 @@ async function downloadTemplateFromOSS(objectName) {
       throw error;
     }
     
-    // 获取文件内容 - 修复：明确请求Buffer格式
-    const result = await client.get(objectName);
+    // 修复：使用流式下载替代直接get，确保二进制文件完整性
+    console.log('🌊 使用流式下载获取文件内容');
+    const stream = await client.getStream(objectName);
     
-    console.log(`📥 下载完成: ${objectName}`);
-    console.log(`📋 Content-Type: ${result.res.headers['content-type']}`);
-    console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
+    console.log(`📥 开始读取流数据`);
+    console.log(`📋 Stream Content-Type: ${stream.res.headers['content-type']}`);
     
-    // 修复：确保content是Buffer格式
-    let content = result.content;
-    if (!Buffer.isBuffer(content)) {
-      console.log('🔄 转换内容为Buffer格式');
-      content = Buffer.from(content);
-    }
-    
-    // 获取原始文件名（从metadata中获取）
-    let originalFileName = objectName.split('/').pop();
-    try {
-      const originalNameMeta = headResult.res.headers['x-oss-meta-original-name'];
-      if (originalNameMeta) {
-        originalFileName = Buffer.from(originalNameMeta, 'base64').toString('utf8');
-        console.log(`📝 从元数据获取原始文件名: ${originalFileName}`);
-      }
-    } catch (e) {
-      console.log('⚠️ 无法从元数据获取原始文件名，使用objectName');
-    }
-    
-    // 根据文件扩展名设置正确的Content-Type
-    const ext = originalFileName.toLowerCase().split('.').pop();
-    let contentType = 'application/octet-stream'; // 默认二进制流
-    
-    switch (ext) {
-      case 'xlsx':
-        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        break;
-      case 'xls':
-        contentType = 'application/vnd.ms-excel';
-        break;
-      case 'xlsm':
-        contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
-        break;
-      default:
-        contentType = result.res.headers['content-type'] || 'application/octet-stream';
-    }
-    
-    console.log(`✅ 下载成功: ${originalFileName} (${content.length} 字节)`);
-    
-    return {
-      success: true,
-      content: content,  // 确保返回Buffer
-      fileName: originalFileName,
-      size: content.length,
-      contentType: contentType
-    };
+    // 将流转换为Buffer
+    const chunks = [];
+    return new Promise((resolve, reject) => {
+      stream.stream.on('data', (chunk) => {
+        chunks.push(chunk);
+        console.log(`📦 接收数据块: ${chunk.length} 字节`);
+      });
+      
+      stream.stream.on('end', () => {
+        try {
+          // 合并所有数据块
+          const content = Buffer.concat(chunks);
+          console.log(`✅ 流下载完成: 总大小 ${content.length} 字节`);
+          
+          // 获取原始文件名（从metadata中获取）
+          let originalFileName = objectName.split('/').pop();
+          try {
+            const originalNameMeta = headResult.res.headers['x-oss-meta-original-name'];
+            if (originalNameMeta) {
+              originalFileName = Buffer.from(originalNameMeta, 'base64').toString('utf8');
+              console.log(`📝 从元数据获取原始文件名: ${originalFileName}`);
+            }
+          } catch (e) {
+            console.log('⚠️ 无法从元数据获取原始文件名，使用objectName');
+          }
+          
+          // 根据文件扩展名设置正确的Content-Type
+          const ext = originalFileName.toLowerCase().split('.').pop();
+          let contentType = 'application/octet-stream'; // 默认二进制流
+          
+          switch (ext) {
+            case 'xlsx':
+              contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+              break;
+            case 'xls':
+              contentType = 'application/vnd.ms-excel';
+              break;
+            case 'xlsm':
+              contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+              break;
+            default:
+              contentType = stream.res.headers['content-type'] || 'application/octet-stream';
+          }
+          
+          console.log(`✅ 流式下载成功: ${originalFileName} (${content.length} 字节)`);
+          
+          resolve({
+            success: true,
+            content: content,  // 确保返回Buffer
+            fileName: originalFileName,
+            size: content.length,
+            contentType: contentType
+          });
+          
+        } catch (error) {
+          console.error('❌ 处理流数据失败:', error);
+          reject(error);
+        }
+      });
+      
+      stream.stream.on('error', (error) => {
+        console.error('❌ 流下载失败:', error);
+        reject(error);
+      });
+    });
     
   } catch (error) {
-    console.error('❌ 下载模板文件失败:', error);
+    console.error('❌ 流式下载模板文件失败:', error);
     return { success: false, message: error.message };
   }
 }
