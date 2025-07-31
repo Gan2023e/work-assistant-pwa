@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Button, 
   Modal, 
@@ -7,23 +7,11 @@ import {
   Space, 
   Typography,
   Upload,
-  Spin,
-  Form,
-  Card,
-  Alert,
-  Tooltip,
-  Descriptions,
-  Empty
+  Spin
 } from 'antd';
 import { 
   ToolOutlined, 
-  UploadOutlined,
-  EyeOutlined,
-  DeleteOutlined,
-  FileExcelOutlined,
-  PlusOutlined,
-  SettingOutlined,
-  ExclamationCircleOutlined
+  UploadOutlined 
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../config/api';
 
@@ -34,59 +22,42 @@ interface ChildSkuGeneratorProps {
   onSuccess?: () => void;
 }
 
-interface UKTemplate {
-  id: string;
-  name: string;
-  description: string;
-  originalName: string;
-  uploadTime: string;
-  fileSize: number;
-  isDefault: boolean;
-  previewUrl: string;
-}
-
 const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [skuInput, setSkuInput] = useState('');
-  
-  // 英国模板管理状态（单模板）
-  const [currentTemplate, setCurrentTemplate] = useState<UKTemplate | null>(null);
-  const [templateLoading, setTemplateLoading] = useState(false);
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadForm] = Form.useForm();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 重置组件状态
   const resetState = () => {
     setSkuInput('');
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
-  // 加载英国模板信息（单模板）
-  const loadCurrentTemplate = async () => {
-    try {
-      setTemplateLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/list`);
-      const result = await response.json();
+  // 处理文件选择
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // 验证文件类型
+      const validTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'application/vnd.ms-excel.sheet.macroEnabled.12'
+      ];
       
-      if (result.success && result.data.templates.length > 0) {
-        setCurrentTemplate(result.data.templates[0]); // 单模板模式，取第一个
-      } else {
-        setCurrentTemplate(null);
+      if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|xlsm)$/i)) {
+        message.error('请选择有效的Excel文件（.xlsx、.xls或.xlsm格式）');
+        return;
       }
-    } catch (error) {
-      console.error('加载英国模板信息失败:', error);
-      message.error('加载模板信息失败');
-    } finally {
-      setTemplateLoading(false);
+      
+      setSelectedFile(file);
+      message.success(`已选择文件：${file.name}`);
     }
   };
-
-  // 组件加载时获取模板信息
-  useEffect(() => {
-    if (visible) {
-      loadCurrentTemplate();
-    }
-  }, [visible]);
 
   // 验证输入数据
   const validateInput = (): boolean => {
@@ -95,8 +66,8 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       return false;
     }
 
-    if (!currentTemplate) {
-      message.warning('系统中没有英国资料表模板，请先上传模板');
+    if (!selectedFile) {
+      message.warning('请选择英国资料表Excel文件');
       return false;
     }
 
@@ -115,7 +86,10 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   };
 
   // 处理文件下载
-  const downloadFile = (blob: Blob, fileName: string) => {
+  const downloadFile = (blob: Blob, customFileName: string) => {
+    // 确保文件名有扩展名
+    const fileName = customFileName.endsWith('.xlsx') ? customFileName : `${customFileName}.xlsx`;
+    
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -180,9 +154,8 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     
     try {
       const formData = new FormData();
+      formData.append('file', selectedFile!);
       formData.append('parentSkus', skuInput.trim());
-      // 使用英国模板（单模板模式）
-      formData.append('useUploadedTemplate', 'false');
 
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator`, {
         method: 'POST',
@@ -227,17 +200,16 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         return;
       }
 
-      // 从响应头获取文件名，支持中文
-      const contentDisposition = response.headers.get('content-disposition');
-      let fileName = 'processed_template.xlsx';
+      // 根据输入的SKU生成文件名
+      const skuList = skuInput
+        .split('\n')
+        .map(sku => sku.trim())
+        .filter(Boolean);
       
-      if (contentDisposition) {
-        const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
-        if (fileNameMatch) {
-          fileName = decodeURIComponent(fileNameMatch[1]);
-        }
-      }
-
+      // 构建文件名：UK + SKU（多个SKU用下划线连接）
+      const skuPart = skuList.length === 1 ? skuList[0] : skuList.join('_');
+      const fileName = `UK${skuPart}`;
+      
       downloadFile(blob, fileName);
       
       message.success('子SKU生成器处理完成，文件已下载');
@@ -260,92 +232,6 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // 上传新模板
-  const handleUploadTemplate = async (values: any) => {
-    try {
-      const formData = new FormData();
-      formData.append('template', values.templateFile.file);
-      formData.append('templateName', values.templateName);
-      if (values.description) {
-        formData.append('description', values.description);
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        message.success('英国模板上传成功');
-        setUploadModalVisible(false);
-        uploadForm.resetFields();
-        await loadCurrentTemplate(); // 重新加载模板信息
-      } else {
-        message.error(result.message || '上传失败');
-      }
-    } catch (error) {
-      console.error('上传英国模板失败:', error);
-      message.error('上传失败，请重试');
-    }
-  };
-
-  // 删除模板
-  const handleDeleteTemplate = () => {
-    Modal.confirm({
-      title: '确认删除模板',
-      icon: <ExclamationCircleOutlined />,
-      content: `确定要删除英国资料表模板"${currentTemplate?.name}"吗？删除后如需使用子SKU生成器，需要重新上传模板。`,
-      okText: '确定删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/delete`, {
-            method: 'DELETE'
-          });
-
-          const result = await response.json();
-          
-          if (result.success) {
-            message.success('模板删除成功');
-            await loadCurrentTemplate(); // 重新加载模板信息
-          } else {
-            message.error(result.message || '删除失败');
-          }
-        } catch (error) {
-          console.error('删除英国模板失败:', error);
-          message.error('删除失败，请重试');
-        }
-      }
-    });
-  };
-
-  // 预览模板
-  const handlePreviewTemplate = () => {
-    if (!currentTemplate) return;
-    
-    const previewWindow = window.open(
-      `${API_BASE_URL}${currentTemplate.previewUrl}`,
-      '_blank',
-      'width=1200,height=800,scrollbars=yes,resizable=yes'
-    );
-    
-    if (!previewWindow) {
-      message.warning('请允许弹窗以预览模板文件');
-    }
-  };
-
-  // 格式化文件大小
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   // 打开弹窗
@@ -377,7 +263,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
       {/* 主弹窗 */}
       <Modal
-        title="子SKU生成器 - 英国资料表处理"
+        title="子SKU生成器"
         open={visible}
         onCancel={handleCancel}
         footer={[
@@ -389,12 +275,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
             type="primary" 
             onClick={handleProcess}
             loading={loading}
-            disabled={!currentTemplate}
           >
             开始处理
           </Button>
         ]}
-        width={800}
+        width={600}
         destroyOnClose
         maskClosable={!loading}
       >
@@ -404,7 +289,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
             {/* SKU输入区域 */}
             <div>
               <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                输入需要整理的母SKU：
+                输入需要整理的SKU：
               </Text>
               <TextArea
                 rows={6}
@@ -419,95 +304,55 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               </Text>
             </div>
 
-            {/* 英国资料表模板管理 */}
-            <Card 
-              title={
-                <Space>
-                  <SettingOutlined />
-                  <span>英国资料表模板</span>
-                </Space>
-              }
-              size="small"
-              loading={templateLoading}
-            >
-              {currentTemplate ? (
-                <div>
-                  {/* 当前模板信息 */}
-                  <Alert
-                    message="当前模板"
-                    description="系统已配置英国资料表模板，可直接使用"
-                    type="success"
-                    style={{ marginBottom: 16 }}
-                  />
-                  
-                  <Descriptions size="small" column={1}>
-                    <Descriptions.Item label="模板名称">
-                      <Space>
-                        <FileExcelOutlined style={{ color: '#52c41a' }} />
-                        <Text strong>{currentTemplate.name}</Text>
-                      </Space>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="文件名">{currentTemplate.originalName}</Descriptions.Item>
-                    <Descriptions.Item label="文件大小">{formatFileSize(currentTemplate.fileSize)}</Descriptions.Item>
-                    <Descriptions.Item label="上传时间">
-                      {new Date(currentTemplate.uploadTime).toLocaleString('zh-CN')}
-                    </Descriptions.Item>
-                    {currentTemplate.description && (
-                      <Descriptions.Item label="描述">{currentTemplate.description}</Descriptions.Item>
-                    )}
-                  </Descriptions>
-
-                  <div style={{ marginTop: 16, textAlign: 'right' }}>
-                    <Space>
-                      <Button 
-                        icon={<EyeOutlined />}
-                        onClick={handlePreviewTemplate}
-                      >
-                        预览模板
-                      </Button>
-                      <Button 
-                        icon={<DeleteOutlined />}
-                        danger
-                        onClick={handleDeleteTemplate}
-                      >
-                        删除模板
-                      </Button>
-                    </Space>
-                  </div>
-
-                  {/* 模板使用说明 */}
-                  <Alert
-                    message="如需更新模板"
-                    description="请先删除当前模板，然后上传新的模板文件"
-                    type="info"
-                    style={{ marginTop: 16 }}
-                  />
-                </div>
-              ) : (
-                <div>
-                  {/* 没有模板时的状态 */}
-                  <Empty
-                    image={<FileExcelOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
-                    description="尚未上传英国资料表模板"
-                  >
-                    <Button 
-                      type="primary"
-                      icon={<UploadOutlined />}
-                      onClick={() => setUploadModalVisible(true)}
-                    >
-                      上传模板
-                    </Button>
-                  </Empty>
-
-                  <Alert
-                    message="使用提示"
-                    description="请先上传英国资料表模板才能使用子SKU生成器功能"
-                    type="warning"
-                    style={{ marginTop: 16 }}
-                  />
+            {/* 文件选择区域 */}
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                选择英国资料表模板：
+              </Text>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                disabled={loading}
+              />
+              
+              <Button 
+                icon={<UploadOutlined />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                block
+                style={{ marginBottom: 8 }}
+              >
+                选择Excel文件
+              </Button>
+              
+              {selectedFile && (
+                <div style={{ 
+                  padding: '8px 12px', 
+                  backgroundColor: '#f0f9ff', 
+                  border: '1px solid #91d5ff',
+                  borderRadius: '6px',
+                  marginBottom: 8
+                }}>
+                  <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                    ✓ 已选择：{selectedFile.name}
+                  </Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    大小：{(selectedFile.size / 1024).toFixed(1)} KB
+                  </Text>
                 </div>
               )}
-            </Card>
+              
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                • 必须包含名为"Template"的工作表<br />
+                • 第3行必须包含：item_sku、color_name、size_name列<br />
+                • 支持.xlsx、.xls和.xlsm格式
+              </Text>
+            </div>
 
             {/* 功能说明 */}
             <div style={{ 
@@ -519,96 +364,15 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               <Text strong style={{ color: '#1890ff' }}>功能说明：</Text>
               <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
                 <li>根据输入的母SKU查询数据库中的子SKU信息</li>
-                <li>使用ExcelJS引擎，完美保持Excel原始格式</li>
                 <li>自动填写item_sku列（UK + 子SKU）</li>
                 <li>自动填写color_name列（颜色信息）</li>
                 <li>自动填写size_name列（尺寸信息）</li>
-                <li>生成处理后的Excel文件供下载，支持中文文件名</li>
+                <li>生成处理后的Excel文件供下载</li>
               </ul>
             </div>
 
           </Space>
         </Spin>
-      </Modal>
-
-      {/* 上传模板对话框 */}
-      <Modal
-        title="上传英国资料表模板"
-        open={uploadModalVisible}
-        onCancel={() => {
-          setUploadModalVisible(false);
-          uploadForm.resetFields();
-        }}
-        footer={null}
-        width={600}
-        destroyOnClose
-      >
-        <Form
-          form={uploadForm}
-          layout="vertical"
-          onFinish={handleUploadTemplate}
-        >
-          <Form.Item
-            name="templateName"
-            label="模板名称"
-            rules={[{ required: true, message: '请输入模板名称' }]}
-          >
-            <Input placeholder="例如：英国亚马逊资料表模板V1" />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="模板描述"
-          >
-            <TextArea 
-              rows={3} 
-              placeholder="可选：描述模板的用途或特点"
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="templateFile"
-            label="模板文件"
-            rules={[{ required: true, message: '请选择模板文件' }]}
-          >
-            <Upload
-              beforeUpload={() => false}
-              accept=".xlsx,.xls"
-              maxCount={1}
-            >
-              <Button icon={<UploadOutlined />}>选择Excel文件</Button>
-            </Upload>
-          </Form.Item>
-
-          <Alert
-            message="模板要求"
-            description={
-              <div>
-                <p>• 必须包含名为"Template"的工作表</p>
-                <p>• 第3行必须包含：item_sku、color_name、size_name列</p>
-                <p>• 支持.xlsx和.xls格式</p>
-                <p>• 文件将保存到阿里云OSS，支持中文文件名</p>
-                <p>• 系统仅支持一个模板，上传新模板前请先删除旧模板</p>
-              </div>
-            }
-            type="info"
-            style={{ marginBottom: 16 }}
-          />
-
-          <div style={{ textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => {
-                setUploadModalVisible(false);
-                uploadForm.resetFields();
-              }}>
-                取消
-              </Button>
-              <Button type="primary" htmlType="submit">
-                上传模板
-              </Button>
-            </Space>
-          </div>
-        </Form>
       </Modal>
     </>
   );
