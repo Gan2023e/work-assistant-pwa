@@ -334,17 +334,40 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   };
 
   // 处理文件下载
-  const downloadFile = (blob: Blob, originalFileName: string) => {
-    // 从原文件名提取名称和扩展名
+  const downloadFile = (blob: Blob, originalFileName: string, response?: Response) => {
+    // 从响应头获取正确的文件扩展名
+    let extension = '.xlsx'; // 默认扩展名
+    
+    if (response) {
+      const contentDisposition = response.headers.get('content-disposition');
+      if (contentDisposition) {
+        // 从Content-Disposition中提取文件扩展名
+        const filenameMatch = contentDisposition.match(/filename\*?=[^;]*\.([^.;\s]+)/);
+        if (filenameMatch && filenameMatch[1]) {
+          extension = '.' + filenameMatch[1];
+        }
+      }
+    }
+    
+    // 如果无法从响应头获取，则从原文件名提取
+    if (extension === '.xlsx') {
+      const lastDotIndex = originalFileName.lastIndexOf('.');
+      if (lastDotIndex > 0) {
+        extension = originalFileName.substring(lastDotIndex);
+      }
+    }
+    
+    // 从原文件名提取名称（无扩展名）
     const lastDotIndex = originalFileName.lastIndexOf('.');
     const nameWithoutExt = lastDotIndex > 0 ? originalFileName.substring(0, lastDotIndex) : originalFileName;
-    const extension = lastDotIndex > 0 ? originalFileName.substring(lastDotIndex) : '.xlsx';
     
     // 生成时间戳
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
     
-    // 构建新文件名：原名称_时间戳.扩展名
+    // 构建新文件名：原名称_时间戳.正确扩展名
     const newFileName = `${nameWithoutExt}_${timestamp}${extension}`;
+    
+    console.log(`📁 下载文件: ${newFileName} (扩展名: ${extension})`);
     
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -473,8 +496,8 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
       console.log(`📁 文件大小: ${(blob.size / 1024).toFixed(1)} KB`);
       
-      // 使用模板文件名+时间戳
-      downloadFile(blob, currentTemplate!.fileName);
+      // 使用模板文件名+时间戳，传递response对象以获取正确的文件扩展名
+      downloadFile(blob, currentTemplate!.fileName, response);
       
       message.success('子SKU生成器处理完成，文件已下载');
       
@@ -726,6 +749,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 <li>✨ 优化后处理速度更快，支持模板缓存</li>
                 <li>🚀 智能分片上传，大文件上传更稳定</li>
                 <li>📊 实时上传进度显示，体验更流畅</li>
+                <li>🔧 修复文件格式问题，确保下载文件可正常打开</li>
               </ul>
             </div>
 

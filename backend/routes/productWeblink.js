@@ -1553,12 +1553,13 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
 
       templateContent = templateResult.content;
       
-      // 缓存模板文件
+      // 缓存模板文件，包含文件名信息
       templateCache.set(cacheKey, {
         content: templateContent,
+        fileName: templateResult.fileName,
         timestamp: Date.now()
       });
-      console.log('💾 模板文件已缓存');
+      console.log('💾 模板文件已缓存（包含文件名信息）');
     }
 
     console.log('📊 开始解析Excel模板');
@@ -1653,17 +1654,62 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     workbook.Sheets['Template'] = newWorksheet;
 
-    // 生成Excel文件，优化书写选项
+    // 从模板对象名中提取原始文件名和扩展名（避免重复下载）
+    let originalFileName = 'template.xlsx';
+    let fileExt = 'xlsx';
+    
+    // 尝试从缓存的模板信息获取文件名
+    if (cachedTemplate && cachedTemplate.fileName) {
+      originalFileName = cachedTemplate.fileName;
+      fileExt = originalFileName.toLowerCase().split('.').pop();
+    } else {
+      // 如果缓存中没有文件名，从对象名中推断
+      const objectNameParts = templateObjectName.split('/').pop().split('-');
+      if (objectNameParts.length > 1) {
+        const lastPart = objectNameParts[objectNameParts.length - 1];
+        if (lastPart.includes('.')) {
+          fileExt = lastPart.toLowerCase().split('.').pop();
+        }
+      }
+      
+      // 如果还是无法确定，通过快速获取OSS对象信息来确定文件类型
+      try {
+        const { downloadTemplateFromOSS } = require('../utils/oss');
+        const templateInfo = await downloadTemplateFromOSS(templateObjectName);
+        if (templateInfo.success && templateInfo.fileName) {
+          originalFileName = templateInfo.fileName;
+          fileExt = originalFileName.toLowerCase().split('.').pop();
+        }
+      } catch (error) {
+        console.log('⚠️ 无法获取原始文件名，使用默认xlsx格式');
+      }
+    }
+    
+    let bookType = 'xlsx';
+    let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    
+    // 根据原始文件格式设置正确的输出格式
+    if (fileExt === 'xlsm') {
+      bookType = 'xlsm';
+      contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+    } else if (fileExt === 'xls') {
+      bookType = 'xls';
+      contentType = 'application/vnd.ms-excel';
+    }
+    
+    console.log(`📋 检测到原始文件格式: ${fileExt}, 使用输出格式: ${bookType}`);
+
+    // 生成Excel文件，使用与原始文件相同的格式
     const excelBuffer = xlsx.write(workbook, { 
       type: 'buffer', 
-      bookType: 'xlsx',
+      bookType: bookType,
       compression: true // 启用压缩减少文件大小
     });
 
     console.log('📤 准备下载文件');
-    // 设置响应头，优化文件名处理
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'processed_template.xlsx');
+    // 设置响应头，使用正确的Content-Type
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''processed_template.${fileExt}`);
     res.setHeader('Content-Length', excelBuffer.length);
     
     console.log('✅ 子SKU生成完成，发送文件');
