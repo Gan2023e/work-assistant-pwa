@@ -478,30 +478,79 @@ async function downloadTemplateFromOSS(objectName) {
   try {
     const client = createOSSClient();
     
-    // 检查文件是否存在
+    console.log(`📥 开始下载文件: ${objectName}`);
+    
+    // 检查文件是否存在并获取元数据
+    let headResult;
     try {
-      await client.head(objectName);
+      headResult = await client.head(objectName);
+      console.log(`✅ 文件存在: ${objectName}`);
+      console.log(`📊 文件大小: ${headResult.res.headers['content-length']} 字节`);
     } catch (error) {
       if (error.code === 'NoSuchKey') {
-        throw new Error('模板文件不存在');
+        console.error(`❌ 文件不存在: ${objectName}`);
+        return { success: false, message: '模板文件不存在' };
       }
       throw error;
     }
     
-    // 获取文件内容
+    // 获取文件内容 - 修复：明确请求Buffer格式
     const result = await client.get(objectName);
+    
+    console.log(`📥 下载完成: ${objectName}`);
+    console.log(`📋 Content-Type: ${result.res.headers['content-type']}`);
+    console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
+    
+    // 修复：确保content是Buffer格式
+    let content = result.content;
+    if (!Buffer.isBuffer(content)) {
+      console.log('🔄 转换内容为Buffer格式');
+      content = Buffer.from(content);
+    }
+    
+    // 获取原始文件名（从metadata中获取）
+    let originalFileName = objectName.split('/').pop();
+    try {
+      const originalNameMeta = headResult.res.headers['x-oss-meta-original-name'];
+      if (originalNameMeta) {
+        originalFileName = Buffer.from(originalNameMeta, 'base64').toString('utf8');
+        console.log(`📝 从元数据获取原始文件名: ${originalFileName}`);
+      }
+    } catch (e) {
+      console.log('⚠️ 无法从元数据获取原始文件名，使用objectName');
+    }
+    
+    // 根据文件扩展名设置正确的Content-Type
+    const ext = originalFileName.toLowerCase().split('.').pop();
+    let contentType = 'application/octet-stream'; // 默认二进制流
+    
+    switch (ext) {
+      case 'xlsx':
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        break;
+      case 'xls':
+        contentType = 'application/vnd.ms-excel';
+        break;
+      case 'xlsm':
+        contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+        break;
+      default:
+        contentType = result.res.headers['content-type'] || 'application/octet-stream';
+    }
+    
+    console.log(`✅ 下载成功: ${originalFileName} (${content.length} 字节)`);
     
     return {
       success: true,
-      content: result.content,
-      fileName: objectName.split('/').pop(),
-      size: result.res.size || 0,
-      contentType: result.res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      content: content,  // 确保返回Buffer
+      fileName: originalFileName,
+      size: content.length,
+      contentType: contentType
     };
     
   } catch (error) {
     console.error('❌ 下载模板文件失败:', error);
-    throw error;
+    return { success: false, message: error.message };
   }
 }
 

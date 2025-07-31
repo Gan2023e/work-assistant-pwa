@@ -1417,6 +1417,8 @@ router.get('/uk-template/download/:objectName*', async (req, res) => {
   try {
     const objectName = req.params.objectName;
     
+    console.log(`🔽 收到下载请求: ${objectName}`);
+    
     if (!objectName) {
       return res.status(400).json({ message: '缺少文件名参数' });
     }
@@ -1426,18 +1428,39 @@ router.get('/uk-template/download/:objectName*', async (req, res) => {
     const result = await downloadTemplateFromOSS(objectName);
     
     if (!result.success) {
-      return res.status(404).json({ message: '模板文件不存在' });
+      console.error(`❌ 下载失败: ${result.message}`);
+      return res.status(404).json({ message: result.message || '模板文件不存在' });
     }
 
-    // 设置响应头
+    console.log(`📤 准备发送文件: ${result.fileName} (${result.size} 字节)`);
+    
+    // 修复：设置正确的响应头用于文件下载
     res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.fileName)}"`);
+    
+    // 修复：使用RFC 5987标准的文件名编码
+    const encodedFileName = encodeURIComponent(result.fileName);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+    
+    // 设置Content-Length确保文件完整性
     res.setHeader('Content-Length', result.size);
     
-    res.send(result.content);
+    // 设置缓存控制
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+    
+    // 修复：使用end()而非send()发送二进制数据
+    if (Buffer.isBuffer(result.content)) {
+      console.log(`✅ 发送Buffer内容: ${result.content.length} 字节`);
+      res.end(result.content);
+    } else {
+      console.log(`⚠️ 内容不是Buffer，转换后发送`);
+      res.end(Buffer.from(result.content));
+    }
+    
+    console.log(`✅ 文件下载完成: ${result.fileName}`);
 
   } catch (error) {
-    console.error('下载英国资料表模板失败:', error);
+    console.error('❌ 下载英国资料表模板失败:', error);
     res.status(500).json({ message: '下载失败: ' + error.message });
   }
 });
