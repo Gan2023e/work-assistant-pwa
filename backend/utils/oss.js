@@ -2,6 +2,69 @@ const OSS = require('ali-oss');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
+// 动态分片配置函数
+function getOptimalUploadConfig(fileSize, connectionType = 'auto') {
+  // 文件大小分类
+  const MB = 1024 * 1024;
+  const GB = 1024 * MB;
+  
+  let config = {
+    partSize: 1 * MB,
+    parallel: 4,
+    useMultipart: fileSize > 5 * MB
+  };
+  
+  if (fileSize <= 10 * MB) {
+    // 小文件：直接上传，不分片
+    config = {
+      partSize: fileSize,
+      parallel: 1,
+      useMultipart: false
+    };
+  } else if (fileSize <= 100 * MB) {
+    // 中等文件：1MB分片，4-6并发
+    config = {
+      partSize: 1 * MB,
+      parallel: Math.min(6, Math.ceil(fileSize / (10 * MB))),
+      useMultipart: true
+    };
+  } else if (fileSize <= 500 * MB) {
+    // 大文件：2-5MB分片，6-8并发
+    config = {
+      partSize: Math.min(5 * MB, Math.max(2 * MB, Math.floor(fileSize / 100))),
+      parallel: 8,
+      useMultipart: true
+    };
+  } else if (fileSize <= 2 * GB) {
+    // 超大文件：5-10MB分片，8-10并发
+    config = {
+      partSize: Math.min(10 * MB, Math.max(5 * MB, Math.floor(fileSize / 200))),
+      parallel: 10,
+      useMultipart: true
+    };
+  } else {
+    // 巨大文件：10MB分片，10并发
+    config = {
+      partSize: 10 * MB,
+      parallel: 10,
+      useMultipart: true
+    };
+  }
+  
+  // 根据连接类型调整
+  switch (connectionType) {
+    case 'slow':
+      config.parallel = Math.max(1, Math.floor(config.parallel / 2));
+      config.partSize = Math.max(512 * 1024, Math.floor(config.partSize / 2));
+      break;
+    case 'fast':
+      config.parallel = Math.min(12, Math.floor(config.parallel * 1.5));
+      break;
+  }
+  
+  return config;
+}
+
 // OSS配置
 const ossConfig = {
   region: process.env.OSS_REGION || 'oss-cn-hangzhou',
@@ -11,7 +74,7 @@ const ossConfig = {
   endpoint: process.env.OSS_ENDPOINT,
   secure: true,  // 强制使用HTTPS
   timeout: 60000, // 60秒超时
-  // 分片上传配置
+  // 默认分片上传配置（会被动态配置覆盖）
   partSize: 1024 * 1024, // 1MB 分片大小
   parallel: 4, // 并发上传数
   checkPointRebuild: false, // 不重建检查点
@@ -224,28 +287,36 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
       contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
     }
     
-    // 选择上传方式：小文件直接上传，大文件分片上传
+    // 选择上传方式：智能动态配置
     let result;
     const fileSize = buffer.length;
-    const MULTIPART_THRESHOLD = 5 * 1024 * 1024; // 5MB 阈值
     
-    if (fileSize > MULTIPART_THRESHOLD) {
-      console.log('🚀 使用分片上传（文件较大）');
+    // 获取最优配置
+    const uploadConfig = getOptimalUploadConfig(fileSize);
+    console.log(`🎯 智能配置: 文件大小=${(fileSize/1024/1024).toFixed(1)}MB, 分片=${(uploadConfig.partSize/1024/1024).toFixed(1)}MB, 并发=${uploadConfig.parallel}`);
+    
+    if (uploadConfig.useMultipart) {
+      console.log('🚀 使用智能分片上传');
+      
+      const totalParts = Math.ceil(fileSize / uploadConfig.partSize);
+      console.log(`📊 分片详情: 总分片数=${totalParts}, 每片大小=${(uploadConfig.partSize/1024).toFixed(1)}KB`);
+      
       // 分片上传，适用于大文件
       result = await client.multipartUpload(objectName, buffer, {
-        partSize: 1024 * 1024, // 1MB 分片
-        parallel: 4, // 4个并发
+        partSize: uploadConfig.partSize,
+        parallel: uploadConfig.parallel,
         headers: {
           'Content-Type': contentType,
           'x-oss-storage-class': 'Standard',
           'x-oss-meta-original-name': encodeURIComponent(originalName)
         },
         progress: (percentage, checkpoint) => {
-          console.log(`📊 上传进度: ${(percentage * 100).toFixed(1)}%`);
+          const currentPart = checkpoint ? checkpoint.uploadId : 'unknown';
+          console.log(`📈 上传进度: ${(percentage * 100).toFixed(1)}% (分片进度)`);
         }
       });
     } else {
-      console.log('⚡ 使用普通上传（文件较小）');
+      console.log('⚡ 使用普通上传（文件较小，无需分片）');
       // 普通上传，适用于小文件
       result = await client.put(objectName, buffer, {
         headers: {
