@@ -1296,9 +1296,24 @@ async function extractCpcInfo(pdfText) {
 
 // 上传英国资料表模板
 router.post('/upload-uk-template', upload.single('template'), async (req, res) => {
+  const startTime = Date.now();
+  
   try {
+    console.log('🚀 收到模板上传请求');
+    
     if (!req.file) {
       return res.status(400).json({ message: '请选择模板文件' });
+    }
+
+    const fileSize = req.file.size;
+    console.log(`📋 文件信息: ${req.file.originalname} (${(fileSize / 1024).toFixed(1)} KB)`);
+
+    // 文件大小检查
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB 限制
+    if (fileSize > MAX_FILE_SIZE) {
+      return res.status(400).json({ 
+        message: `文件过大，请选择小于 ${MAX_FILE_SIZE / 1024 / 1024}MB 的文件` 
+      });
     }
 
     // 验证文件类型
@@ -1311,6 +1326,8 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
     if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls|xlsm)$/i)) {
       return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx、.xls或.xlsm格式）' });
     }
+
+    console.log('✅ 文件验证通过，开始上传到OSS');
 
     // 使用OSS上传模板功能
     const { uploadTemplateToOSS } = require('../utils/oss');
@@ -1327,6 +1344,9 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
       return res.status(500).json({ message: '模板文件上传失败' });
     }
 
+    const uploadTime = Date.now() - startTime;
+    console.log(`✅ 上传完成，耗时: ${uploadTime}ms`);
+
     res.json({
       message: '英国资料表模板上传成功',
       data: {
@@ -1335,13 +1355,29 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
         url: uploadResult.url,
         objectName: uploadResult.name,
         size: uploadResult.size,
-        uploadTime: new Date().toISOString()
+        uploadTime: new Date().toISOString(),
+        processingTime: uploadTime // 添加处理时间
       }
     });
 
   } catch (error) {
-    console.error('上传英国资料表模板失败:', error);
-    res.status(500).json({ message: '上传失败: ' + error.message });
+    const uploadTime = Date.now() - startTime;
+    console.error(`❌ 上传英国资料表模板失败 (耗时: ${uploadTime}ms):`, error);
+    
+    // 根据错误类型返回更具体的错误信息
+    let errorMessage = '上传失败: ' + error.message;
+    if (error.code === 'RequestTimeout') {
+      errorMessage = '上传超时，请检查网络连接后重试';
+    } else if (error.code === 'AccessDenied') {
+      errorMessage = 'OSS访问权限不足，请联系管理员';
+    } else if (error.code === 'NoSuchBucket') {
+      errorMessage = 'OSS存储桶配置错误，请联系管理员';
+    }
+    
+    res.status(500).json({ 
+      message: errorMessage,
+      processingTime: uploadTime
+    });
   }
 });
 

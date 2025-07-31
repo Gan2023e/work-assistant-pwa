@@ -9,7 +9,15 @@ const ossConfig = {
   accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
   bucket: process.env.OSS_BUCKET,
   endpoint: process.env.OSS_ENDPOINT,
-  secure: true  // 强制使用HTTPS
+  secure: true,  // 强制使用HTTPS
+  timeout: 60000, // 60秒超时
+  // 分片上传配置
+  partSize: 1024 * 1024, // 1MB 分片大小
+  parallel: 4, // 并发上传数
+  checkPointRebuild: false, // 不重建检查点
+  // 性能优化配置
+  retryCountMax: 3, // 最大重试次数
+  retryDelayMax: 2000 // 最大重试延迟
 };
 
 // 检查必要的环境变量
@@ -176,6 +184,8 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
   try {
     const client = createOSSClient();
     
+    console.log(`📤 开始上传模板文件: ${filename} (${(buffer.length / 1024).toFixed(1)} KB)`);
+    
     // 处理中文文件名编码问题
     const originalName = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
     const ext = path.extname(originalName);
@@ -204,6 +214,7 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
     }
     
     const objectName = `${folderPath}/${uniqueName}`;
+    console.log(`📁 目标路径: ${objectName}`);
     
     // 设置Content-Type
     let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -213,14 +224,37 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
       contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
     }
     
-    // 上传文件，设置正确的文件名元数据
-    const result = await client.put(objectName, buffer, {
-      headers: {
-        'Content-Type': contentType,
-        'x-oss-storage-class': 'Standard',
-        'x-oss-meta-original-name': encodeURIComponent(originalName) // 保存原始文件名
-      }
-    });
+    // 选择上传方式：小文件直接上传，大文件分片上传
+    let result;
+    const fileSize = buffer.length;
+    const MULTIPART_THRESHOLD = 5 * 1024 * 1024; // 5MB 阈值
+    
+    if (fileSize > MULTIPART_THRESHOLD) {
+      console.log('🚀 使用分片上传（文件较大）');
+      // 分片上传，适用于大文件
+      result = await client.multipartUpload(objectName, buffer, {
+        partSize: 1024 * 1024, // 1MB 分片
+        parallel: 4, // 4个并发
+        headers: {
+          'Content-Type': contentType,
+          'x-oss-storage-class': 'Standard',
+          'x-oss-meta-original-name': encodeURIComponent(originalName)
+        },
+        progress: (percentage, checkpoint) => {
+          console.log(`📊 上传进度: ${(percentage * 100).toFixed(1)}%`);
+        }
+      });
+    } else {
+      console.log('⚡ 使用普通上传（文件较小）');
+      // 普通上传，适用于小文件
+      result = await client.put(objectName, buffer, {
+        headers: {
+          'Content-Type': contentType,
+          'x-oss-storage-class': 'Standard',
+          'x-oss-meta-original-name': encodeURIComponent(originalName)
+        }
+      });
+    }
     
     console.log('✅ 模板文件上传成功:', result.name);
     

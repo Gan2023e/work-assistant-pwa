@@ -8,7 +8,8 @@ import {
   Typography,
   Spin,
   Popconfirm,
-  Card
+  Card,
+  Progress
 } from 'antd';
 import { 
   ToolOutlined, 
@@ -41,12 +42,16 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const [currentTemplate, setCurrentTemplate] = useState<TemplateFile | null>(null);
   const [templateLoading, setTemplateLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
   
   const templateFileInputRef = useRef<HTMLInputElement>(null);
 
   // 重置组件状态
   const resetState = () => {
     setSkuInput('');
+    setUploadProgress(0);
+    setUploadStatus('');
     if (templateFileInputRef.current) {
       templateFileInputRef.current.value = '';
     }
@@ -79,6 +84,15 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('📁 选择的文件:', file.name, '大小:', (file.size / 1024).toFixed(1), 'KB');
+
+    // 文件大小检查
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      message.error(`文件过大，请选择小于 ${MAX_FILE_SIZE / 1024 / 1024}MB 的文件`);
+      return;
+    }
+
     // 验证文件类型
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -92,10 +106,13 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     }
 
     setUploadLoading(true);
+    setUploadProgress(0);
+    setUploadStatus('准备上传...');
     
     try {
       // 如果存在当前模板，先删除OSS中的原文件
       if (currentTemplate) {
+        setUploadStatus('删除旧模板文件...');
         try {
           const deleteResponse = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${currentTemplate.name}`, {
             method: 'DELETE',
@@ -114,29 +131,83 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         }
       }
 
-      // 上传新模板文件
+      setUploadStatus(`正在上传文件 (${(file.size / 1024).toFixed(1)} KB)...`);
+      setUploadProgress(10);
+
+      // 创建XMLHttpRequest来支持进度跟踪
+      const xhr = new XMLHttpRequest();
       const formData = new FormData();
       formData.append('template', file);
 
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/upload-uk-template`, {
-        method: 'POST',
-        body: formData,
+      const uploadPromise = new Promise<any>((resolve, reject) => {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(Math.max(10, percentComplete)); // 确保至少显示10%
+            setUploadStatus(`上传中... ${percentComplete}%`);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            try {
+              const result = JSON.parse(xhr.responseText);
+              resolve(result);
+            } catch (e) {
+              reject(new Error('响应解析失败'));
+            }
+          } else {
+            try {
+              const errorResult = JSON.parse(xhr.responseText);
+              reject(new Error(errorResult.message || `HTTP ${xhr.status} 错误`));
+            } catch (e) {
+              reject(new Error(`HTTP ${xhr.status} 错误`));
+            }
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error('网络连接失败'));
+        };
+
+        xhr.ontimeout = () => {
+          reject(new Error('上传超时'));
+        };
+
+        xhr.timeout = 120000; // 2分钟超时
+        xhr.open('POST', `${API_BASE_URL}/api/product_weblink/upload-uk-template`);
+        xhr.send(formData);
       });
 
-      const result = await response.json();
+      const result = await uploadPromise;
+      
+      setUploadProgress(100);
+      setUploadStatus('上传完成！');
 
-      if (response.ok) {
-        message.success('模板文件上传成功');
-        loadCurrentTemplate(); // 重新加载当前模板
-        if (templateFileInputRef.current) {
-          templateFileInputRef.current.value = '';
-        }
-      } else {
-        message.error(result.message || '上传失败');
+      if (result.data?.processingTime) {
+        console.log(`📊 上传性能: ${result.data.processingTime}ms`);
       }
+
+      message.success('模板文件上传成功');
+      loadCurrentTemplate(); // 重新加载当前模板
+      
+      if (templateFileInputRef.current) {
+        templateFileInputRef.current.value = '';
+      }
+
+      // 延迟重置状态以显示完成状态
+      setTimeout(() => {
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 2000);
+
     } catch (error) {
       console.error('上传模板文件失败:', error);
-      message.error('上传失败');
+      setUploadProgress(0);
+      setUploadStatus('');
+      
+      const errorMessage = error instanceof Error ? error.message : '上传失败';
+      message.error(errorMessage);
     } finally {
       setUploadLoading(false);
     }
@@ -556,11 +627,32 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               >
                 {currentTemplate ? '重新上传模板文件' : '上传Excel模板文件'}
               </Button>
+
+              {/* 上传进度显示 */}
+              {uploadLoading && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ marginBottom: 4 }}>
+                    <Text style={{ fontSize: '12px', color: '#666' }}>
+                      {uploadStatus}
+                    </Text>
+                  </div>
+                  <Progress 
+                    percent={uploadProgress} 
+                    size="small" 
+                    status={uploadProgress === 100 ? 'success' : 'active'}
+                    strokeColor={{
+                      '0%': '#87d068',
+                      '100%': '#52c41a',
+                    }}
+                  />
+                </div>
+              )}
               
               <Text type="secondary" style={{ fontSize: '12px' }}>
                 • 支持.xlsx、.xls和.xlsm格式的Excel文件<br />
                 • 模板将上传到阿里云OSS的"templates/excel/amazon/UK/"文件夹<br />
-                • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列
+                • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列<br />
+                • 文件大小限制：50MB以内
               </Text>
             </div>
 
@@ -597,6 +689,8 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 <li>自动填写size_name列（尺寸信息）</li>
                 <li>生成处理后的Excel文件供下载</li>
                 <li>✨ 优化后处理速度更快，支持模板缓存</li>
+                <li>🚀 智能分片上传，大文件上传更稳定</li>
+                <li>📊 实时上传进度显示，体验更流畅</li>
               </ul>
             </div>
 
