@@ -137,7 +137,22 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       // 创建XMLHttpRequest来支持进度跟踪
       const xhr = new XMLHttpRequest();
       const formData = new FormData();
-      formData.append('template', file);
+      
+      // 修复：显式设置文件名以确保正确的UTF-8编码
+      const encodedFileName = encodeURIComponent(file.name);
+      console.log('🔤 原始文件名:', file.name);
+      console.log('🔤 编码后文件名:', encodedFileName);
+      
+      // 创建带有正确文件名的新File对象
+      const renamedFile = new File([file], file.name, {
+        type: file.type,
+        lastModified: file.lastModified,
+      });
+      
+      formData.append('template', renamedFile, file.name);
+      
+      // 同时添加显式的文件名参数确保后端能正确获取
+      formData.append('originalFileName', file.name);
 
       const uploadPromise = new Promise<any>((resolve, reject) => {
         xhr.upload.onprogress = (event) => {

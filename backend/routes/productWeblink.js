@@ -1332,9 +1332,17 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
     // 使用OSS上传模板功能
     const { uploadTemplateToOSS } = require('../utils/oss');
     
+    // 修复：优先使用前端显式传递的文件名，确保UTF-8编码正确
+    const originalFileName = req.body.originalFileName || req.file.originalname;
+    console.log('📝 接收到的文件名参数:', {
+      bodyOriginalFileName: req.body.originalFileName,
+      fileOriginalname: req.file.originalname,
+      finalFileName: originalFileName
+    });
+    
     const uploadResult = await uploadTemplateToOSS(
       req.file.buffer, 
-      req.file.originalname, 
+      originalFileName,  // 修复：使用正确编码的文件名
       'amazon', 
       null, 
       'UK'
