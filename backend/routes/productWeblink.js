@@ -1292,4 +1292,275 @@ async function extractCpcInfo(pdfText) {
   }
 }
 
+// ==================== 英国资料表模板管理接口 ====================
+
+// 上传英国资料表模板
+router.post('/upload-uk-template', upload.single('template'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: '请选择模板文件' });
+    }
+
+    // 验证文件类型
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    
+    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls)$/i)) {
+      return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx或.xls格式）' });
+    }
+
+    // 使用OSS上传模板功能
+    const { uploadTemplateToOSS } = require('../utils/oss');
+    
+    const uploadResult = await uploadTemplateToOSS(
+      req.file.buffer, 
+      req.file.originalname, 
+      'amazon', 
+      null, 
+      '英国'
+    );
+
+    if (!uploadResult.success) {
+      return res.status(500).json({ message: '模板文件上传失败' });
+    }
+
+    res.json({
+      message: '英国资料表模板上传成功',
+      data: {
+        fileName: uploadResult.originalName,
+        uniqueName: uploadResult.uniqueName,
+        url: uploadResult.url,
+        objectName: uploadResult.name,
+        size: uploadResult.size,
+        uploadTime: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('上传英国资料表模板失败:', error);
+    res.status(500).json({ message: '上传失败: ' + error.message });
+  }
+});
+
+// 获取英国资料表模板列表
+router.get('/uk-templates', async (req, res) => {
+  try {
+    const { listTemplateFiles } = require('../utils/oss');
+    
+    const result = await listTemplateFiles('amazon', null, '英国');
+    
+    if (!result.success) {
+      return res.status(500).json({ message: '获取模板列表失败' });
+    }
+
+    res.json({
+      message: '获取成功',
+      data: result.files,
+      count: result.count
+    });
+
+  } catch (error) {
+    console.error('获取英国资料表模板列表失败:', error);
+    res.status(500).json({ message: '获取模板列表失败: ' + error.message });
+  }
+});
+
+// 下载英国资料表模板
+router.get('/uk-template/download/:objectName(*)', async (req, res) => {
+  try {
+    const objectName = req.params.objectName;
+    
+    if (!objectName) {
+      return res.status(400).json({ message: '缺少文件名参数' });
+    }
+
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const result = await downloadTemplateFromOSS(objectName);
+    
+    if (!result.success) {
+      return res.status(404).json({ message: '模板文件不存在' });
+    }
+
+    // 设置响应头
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.fileName)}"`);
+    res.setHeader('Content-Length', result.size);
+    
+    res.send(result.content);
+
+  } catch (error) {
+    console.error('下载英国资料表模板失败:', error);
+    res.status(500).json({ message: '下载失败: ' + error.message });
+  }
+});
+
+// 删除英国资料表模板
+router.delete('/uk-template/:objectName(*)', async (req, res) => {
+  try {
+    const objectName = req.params.objectName;
+    
+    if (!objectName) {
+      return res.status(400).json({ message: '缺少文件名参数' });
+    }
+
+    const { deleteTemplateFromOSS, backupTemplate } = require('../utils/oss');
+    
+    // 删除前先备份
+    try {
+      await backupTemplate(objectName, 'amazon-uk');
+      console.log('✅ 模板文件已备份');
+    } catch (backupError) {
+      console.warn('⚠️ 模板文件备份失败，继续删除操作:', backupError.message);
+    }
+    
+    const result = await deleteTemplateFromOSS(objectName);
+    
+    if (!result.success) {
+      return res.status(500).json({ 
+        message: result.message || '删除失败',
+        error: result.error 
+      });
+    }
+
+    res.json({ message: '英国资料表模板删除成功' });
+
+  } catch (error) {
+    console.error('删除英国资料表模板失败:', error);
+    res.status(500).json({ message: '删除失败: ' + error.message });
+  }
+});
+
+// 更新子SKU生成器接口，支持从OSS模板文件生成
+router.post('/child-sku-generator-from-template', async (req, res) => {
+  try {
+    const { parentSkus, templateObjectName } = req.body;
+    
+    if (!parentSkus || parentSkus.trim() === '') {
+      return res.status(400).json({ message: '请输入需要整理的SKU' });
+    }
+
+    if (!templateObjectName) {
+      return res.status(400).json({ message: '请选择模板文件' });
+    }
+
+    // 解析输入的SKU列表
+    const skuList = parentSkus
+      .split('\n')
+      .map(sku => sku.trim())
+      .filter(Boolean);
+
+    if (skuList.length === 0) {
+      return res.status(400).json({ message: '请输入有效的SKU' });
+    }
+
+    // 从OSS下载模板文件
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const templateResult = await downloadTemplateFromOSS(templateObjectName);
+    
+    if (!templateResult.success) {
+      return res.status(404).json({ message: '模板文件不存在' });
+    }
+
+    // 读取模板Excel文件
+    const workbook = xlsx.read(templateResult.content, { type: 'buffer' });
+    
+    // 查找Template页面
+    if (!workbook.SheetNames.includes('Template')) {
+      return res.status(400).json({ message: '模板文件中未找到Template页面' });
+    }
+
+    const worksheet = workbook.Sheets['Template'];
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (data.length < 3) {
+      return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
+    }
+
+    // 查找第三行中列的位置
+    const headerRow = data[2]; // 第三行（索引2）
+    let itemSkuCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+
+    for (let i = 0; i < headerRow.length; i++) {
+      const cellValue = headerRow[i]?.toString().toLowerCase();
+      if (cellValue === 'item_sku') {
+        itemSkuCol = i;
+      } else if (cellValue === 'color_name') {
+        colorNameCol = i;
+      } else if (cellValue === 'size_name') {
+        sizeNameCol = i;
+      }
+    }
+
+    if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
+      return res.status(400).json({ 
+        message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
+      });
+    }
+
+    // 从数据库查询子SKU信息
+    const inventorySkus = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: {
+          [Op.in]: skuList
+        }
+      }
+    });
+
+    if (inventorySkus.length === 0) {
+      return res.status(404).json({ 
+        message: '在数据库中未找到匹配的子SKU信息' 
+      });
+    }
+
+    // 确保数据数组有足够的行数
+    while (data.length < 4 + inventorySkus.length) {
+      data.push([]);
+    }
+
+    // 填充数据（从第4行开始，索引3）
+    inventorySkus.forEach((sku, index) => {
+      const rowIndex = 3 + index; // 第4行开始
+      
+      // 确保行存在
+      if (!data[rowIndex]) {
+        data[rowIndex] = [];
+      }
+      
+      // 确保行有足够的列
+      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+      while (data[rowIndex].length <= maxCol) {
+        data[rowIndex].push('');
+      }
+      
+      // 填充数据
+      data[rowIndex][itemSkuCol] = `UK${sku.child_sku}`;
+      data[rowIndex][colorNameCol] = sku.sellercolorname || '';
+      data[rowIndex][sizeNameCol] = sku.sellersizename || '';
+    });
+
+    // 重新创建工作表
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    workbook.Sheets['Template'] = newWorksheet;
+
+    // 生成Excel文件
+    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=processed_template.xlsx');
+    
+    res.send(excelBuffer);
+
+  } catch (error) {
+    console.error('子SKU生成器失败:', error);
+    res.status(500).json({ message: '子SKU生成器失败: ' + error.message });
+  }
+});
+
 module.exports = router; 
