@@ -1368,11 +1368,9 @@ router.get('/uk-templates', async (req, res) => {
 });
 
 // 下载英国资料表模板
-router.get('/uk-template/download/*', async (req, res) => {
+router.get('/uk-template/download/:objectName*', async (req, res) => {
   try {
-    // 从请求路径中提取objectName（去掉前缀路径）
-    const fullPath = req.params[0] || req.path.replace('/api/product_weblink/uk-template/download/', '');
-    const objectName = fullPath;
+    const objectName = req.params.objectName;
     
     if (!objectName) {
       return res.status(400).json({ message: '缺少文件名参数' });
@@ -1400,11 +1398,9 @@ router.get('/uk-template/download/*', async (req, res) => {
 });
 
 // 删除英国资料表模板
-router.delete('/uk-template/*', async (req, res) => {
+router.delete('/uk-template/:objectName*', async (req, res) => {
   try {
-    // 从请求路径中提取objectName（去掉前缀路径）
-    const fullPath = req.params[0] || req.path.replace('/api/product_weblink/uk-template/', '');
-    const objectName = fullPath;
+    const objectName = req.params.objectName;
     
     if (!objectName) {
       return res.status(400).json({ message: '缺少文件名参数' });
