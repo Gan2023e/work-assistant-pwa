@@ -82,11 +82,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     // 验证文件类型
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel'
+      'application/vnd.ms-excel',
+      'application/vnd.ms-excel.sheet.macroEnabled.12'
     ];
     
-    if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
-      message.error('请选择有效的Excel文件（.xlsx或.xls格式）');
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|xlsm)$/i)) {
+      message.error('请选择有效的Excel文件（.xlsx、.xls或.xlsm格式）');
       return;
     }
 
@@ -518,7 +519,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               <input
                 ref={templateFileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx,.xls,.xlsm"
                 onChange={handleTemplateUpload}
                 style={{ display: 'none' }}
                 disabled={uploadLoading}
@@ -535,7 +536,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               </Button>
               
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                • 支持.xlsx和.xls格式的Excel文件<br />
+                • 支持.xlsx、.xls和.xlsm格式的Excel文件<br />
                 • 模板将上传到阿里云OSS的"templates/excel/amazon/UK/"文件夹<br />
                 • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列
               </Text>

@@ -1304,11 +1304,12 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
     // 验证文件类型
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel'
+      'application/vnd.ms-excel',
+      'application/vnd.ms-excel.sheet.macroEnabled.12'
     ];
     
-    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls)$/i)) {
-      return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx或.xls格式）' });
+    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls|xlsm)$/i)) {
+      return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx、.xls或.xlsm格式）' });
     }
 
     // 使用OSS上传模板功能

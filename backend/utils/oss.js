@@ -204,6 +204,8 @@ async function uploadTemplateToOSS(buffer, filename, templateType, provider = nu
     let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     if (ext.toLowerCase() === '.xls') {
       contentType = 'application/vnd.ms-excel';
+    } else if (ext.toLowerCase() === '.xlsm') {
+      contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
     }
     
     // 上传文件
