@@ -1319,7 +1319,7 @@ router.post('/upload-uk-template', upload.single('template'), async (req, res) =
       req.file.originalname, 
       'amazon', 
       null, 
-      '英国'
+      'UK'
     );
 
     if (!uploadResult.success) {
@@ -1349,7 +1349,7 @@ router.get('/uk-templates', async (req, res) => {
   try {
     const { listTemplateFiles } = require('../utils/oss');
     
-    const result = await listTemplateFiles('amazon', null, '英国');
+    const result = await listTemplateFiles('amazon', null, 'UK');
     
     if (!result.success) {
       return res.status(500).json({ message: '获取模板列表失败' });

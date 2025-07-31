@@ -536,7 +536,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               
               <Text type="secondary" style={{ fontSize: '12px' }}>
                 • 支持.xlsx和.xls格式的Excel文件<br />
-                • 模板将上传到阿里云OSS的"templates/excel/amazon/英国/"文件夹<br />
+                • 模板将上传到阿里云OSS的"templates/excel/amazon/UK/"文件夹<br />
                 • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列
               </Text>
             </div>
