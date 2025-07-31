@@ -1621,38 +1621,46 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
 
     console.log(`✅ 找到 ${inventorySkus.length} 条子SKU记录`);
 
-    console.log('📝 开始填充Excel数据');
-    // 预分配数组大小以提升性能
-    const targetLength = 4 + inventorySkus.length;
-    while (data.length < targetLength) {
-      data.push([]);
-    }
-
-    // 批量填充数据，优化循环性能
-    const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+    console.log('📝 开始填充Excel数据（保留原始格式）');
     
+    // 直接在原始工作表上填充数据，保留格式
     inventorySkus.forEach((sku, index) => {
-      const rowIndex = 3 + index; // 第4行开始
+      const rowIndex = 3 + index; // 第4行开始（Excel行号从0开始，所以第4行实际是索引3）
       
-      // 确保行存在且有足够的列
-      if (!data[rowIndex]) {
-        data[rowIndex] = new Array(maxCol + 1).fill('');
-      } else {
-        while (data[rowIndex].length <= maxCol) {
-          data[rowIndex].push('');
-        }
+      // 填充item_sku列（UK + 子SKU）
+      const itemSkuCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: itemSkuCol });
+      if (!worksheet[itemSkuCellRef]) {
+        worksheet[itemSkuCellRef] = {};
       }
+      worksheet[itemSkuCellRef].v = `UK${sku.child_sku}`;
+      worksheet[itemSkuCellRef].t = 's'; // 字符串类型
       
-      // 填充数据
-      data[rowIndex][itemSkuCol] = `UK${sku.child_sku}`;
-      data[rowIndex][colorNameCol] = sku.sellercolorname || '';
-      data[rowIndex][sizeNameCol] = sku.sellersizename || '';
+      // 填充color_name列
+      const colorNameCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: colorNameCol });
+      if (!worksheet[colorNameCellRef]) {
+        worksheet[colorNameCellRef] = {};
+      }
+      worksheet[colorNameCellRef].v = sku.sellercolorname || '';
+      worksheet[colorNameCellRef].t = 's'; // 字符串类型
+      
+      // 填充size_name列
+      const sizeNameCellRef = xlsx.utils.encode_cell({ r: rowIndex, c: sizeNameCol });
+      if (!worksheet[sizeNameCellRef]) {
+        worksheet[sizeNameCellRef] = {};
+      }
+      worksheet[sizeNameCellRef].v = sku.sellersizename || '';
+      worksheet[sizeNameCellRef].t = 's'; // 字符串类型
     });
 
-    console.log('⚡ 开始生成Excel文件');
-    // 重新创建工作表
-    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
-    workbook.Sheets['Template'] = newWorksheet;
+    // 更新工作表的范围（如果数据增加了行数）
+    const lastRowWithData = 3 + inventorySkus.length;
+    const currentRange = xlsx.utils.decode_range(worksheet['!ref'] || 'A1');
+    if (lastRowWithData > currentRange.e.r) {
+      currentRange.e.r = lastRowWithData;
+      worksheet['!ref'] = xlsx.utils.encode_range(currentRange);
+    }
+
+    console.log('⚡ 开始生成Excel文件（格式已保留）');
 
     // 从模板对象名中提取原始文件名和扩展名（避免重复下载）
     let originalFileName = 'template.xlsx';

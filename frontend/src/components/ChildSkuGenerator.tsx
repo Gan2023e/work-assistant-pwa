@@ -750,6 +750,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 <li>🚀 智能分片上传，大文件上传更稳定</li>
                 <li>📊 实时上传进度显示，体验更流畅</li>
                 <li>🔧 修复文件格式问题，确保下载文件可正常打开</li>
+                <li>🎨 保留原始模板格式（字体、颜色、边框、列宽等）</li>
               </ul>
             </div>
 
