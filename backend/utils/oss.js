@@ -73,7 +73,10 @@ const ossConfig = {
   bucket: process.env.OSS_BUCKET,
   endpoint: process.env.OSS_ENDPOINT,
   secure: true,  // 强制使用HTTPS
-  timeout: 60000, // 60秒超时
+  timeout: 300000, // 修复：增加到5分钟（300秒）超时，支持大文件上传
+  // 分片上传专用配置
+  requestTimeout: 300000, // 请求超时（5分钟）
+  responseTimeout: 300000, // 响应超时（5分钟）
   // 默认分片上传配置（会被动态配置覆盖）
   partSize: 1024 * 1024, // 1MB 分片大小
   parallel: 4, // 并发上传数
