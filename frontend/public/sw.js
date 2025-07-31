@@ -61,6 +61,12 @@ self.addEventListener('activate', (event) => {
 
 // 拦截网络请求 - 使用网络优先策略确保获取最新内容
 self.addEventListener('fetch', (event) => {
+  // 过滤掉不支持的URL scheme
+  const url = new URL(event.request.url);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return; // 不处理非HTTP/HTTPS请求（如chrome-extension:// 等）
+  }
+
   // 对于导航请求和API请求，使用网络优先策略
   if (event.request.mode === 'navigate' || event.request.url.includes('/api/')) {
     event.respondWith(
@@ -76,8 +82,13 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME)
               .then((cache) => {
                 if (event.request.method === 'GET') {
-                  cache.put(event.request, responseToCache);
+                  cache.put(event.request, responseToCache).catch((error) => {
+                    console.warn('PWA Service Worker: 缓存失败，可能是URL scheme不支持:', error);
+                  });
                 }
+              })
+              .catch((error) => {
+                console.warn('PWA Service Worker: 打开缓存失败:', error);
               });
           }
           return response;
@@ -113,7 +124,12 @@ self.addEventListener('fetch', (event) => {
                 const responseToCache = response.clone();
                 caches.open(CACHE_NAME)
                   .then((cache) => {
-                    cache.put(event.request, responseToCache);
+                    cache.put(event.request, responseToCache).catch((error) => {
+                      console.warn('PWA Service Worker: 缓存失败，可能是URL scheme不支持:', error);
+                    });
+                  })
+                  .catch((error) => {
+                    console.warn('PWA Service Worker: 打开缓存失败:', error);
                   });
               }
               return response;
