@@ -81,12 +81,12 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
       parentRow.getCell(columns.size_name).value = '';
       currentRow++;
 
-      // 添加子SKU行
+      // 添加子SKU行 - 修复字段名错误
       groupedData[parentSku].forEach(item => {
         const childRow = worksheet.getRow(currentRow);
-        childRow.getCell(columns.item_sku).value = `UK${item.sku}`;
-        childRow.getCell(columns.color_name).value = item.color_name || '';
-        childRow.getCell(columns.size_name).value = item.size_name || '';
+        childRow.getCell(columns.item_sku).value = `UK${item.child_sku}`; // 修复：使用正确的字段名
+        childRow.getCell(columns.color_name).value = item.sellercolorname || ''; // 修复：使用正确的字段名
+        childRow.getCell(columns.size_name).value = item.sellersizename || ''; // 修复：使用正确的字段名
         currentRow++;
       });
     }

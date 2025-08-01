@@ -431,6 +431,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
     setLoading(true);
     
+    // 设置请求超时控制器
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 180000); // 3分钟超时
+    
     try {
       // 显示处理开始提示
       message.loading('正在处理子SKU生成请求...', 0);
@@ -446,8 +452,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
           parentSkus: skuInput.trim(),
           templateObjectName: currentTemplate!.name
         }),
+        signal: controller.signal // 添加取消信号
       });
 
+      // 清除超时计时器
+      clearTimeout(timeoutId);
+      
       // 关闭loading提示
       message.destroy();
 
@@ -461,13 +471,17 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
           
           // 添加更多错误详情
           if (response.status === 500) {
-            errorDetails = `服务器内部错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '未知错误'}\n请求URL: ${response.url}`;
+            errorDetails = `服务器内部错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '未知错误'}\n处理时间: ${errorData.processingTime || '未知'}ms\n时间戳: ${errorData.timestamp || '未知'}`;
+          } else if (response.status === 408) {
+            errorDetails = `处理超时\n状态码: ${response.status}\n建议: 减少SKU数量或稍后重试\n处理时间: ${errorData.processingTime || '未知'}ms`;
           } else if (response.status === 404) {
-            errorDetails = `资源未找到\n状态码: ${response.status}\n可能原因: 模板文件不存在或SKU数据未找到`;
+            errorDetails = `资源未找到\n状态码: ${response.status}\n可能原因: 模板文件不存在或SKU数据未找到\n详情: ${errorData.details || '无'}`;
           } else if (response.status === 400) {
-            errorDetails = `请求参数错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '请检查输入的SKU和模板文件'}`;
+            errorDetails = `请求参数错误\n状态码: ${response.status}\n错误信息: ${errorData.message || '请检查输入的SKU和模板文件'}\n错误代码: ${errorData.errorCode || '未知'}`;
+          } else if (response.status === 503) {
+            errorDetails = `服务不可用\n状态码: ${response.status}\n建议: 服务器正忙，请稍后重试`;
           } else {
-            errorDetails = `HTTP错误\n状态码: ${response.status}\n状态文本: ${response.statusText}`;
+            errorDetails = `HTTP错误\n状态码: ${response.status}\n状态文本: ${response.statusText}\n处理时间: ${errorData.processingTime || '未知'}ms`;
           }
         } catch (parseError) {
           // 如果无法解析JSON响应
@@ -489,17 +503,23 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       if (blob.size === 0) {
         showErrorDialog(
           '返回的文件为空', 
-          '可能的原因：\n1. 输入的SKU在数据库中不存在\n2. 数据库查询未返回任何结果\n3. Excel处理过程中出现错误'
+          '可能的原因：\n1. 输入的SKU在数据库中不存在\n2. 数据库查询未返回任何结果\n3. Excel处理过程中出现错误\n4. 服务器内存不足\n\n建议：\n1. 检查SKU是否正确\n2. 减少一次处理的SKU数量\n3. 稍后重试'
         );
         return;
       }
 
       console.log(`📁 文件大小: ${(blob.size / 1024).toFixed(1)} KB`);
       
+      // 获取处理时间信息
+      const processingTime = response.headers.get('X-Processing-Time');
+      if (processingTime) {
+        console.log(`📊 服务器处理时间: ${processingTime}ms`);
+      }
+      
       // 使用模板文件名+时间戳，传递response对象以获取正确的文件扩展名
       downloadFile(blob, currentTemplate!.fileName, response);
       
-      message.success('子SKU生成器处理完成，文件已下载');
+      message.success(`子SKU生成器处理完成，文件已下载${processingTime ? ` (处理时间: ${processingTime}ms)` : ''}`);
       
       // 成功后关闭弹窗并重置状态
       setVisible(false);
@@ -509,12 +529,33 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       onSuccess?.();
       
     } catch (error) {
+      // 清除超时计时器
+      clearTimeout(timeoutId);
       message.destroy();
+      
       console.error('子SKU生成器失败:', error);
+      
+      // 检查是否是取消操作
+      if (error instanceof Error && error.name === 'AbortError') {
+        showErrorDialog(
+          '操作已超时', 
+          '处理时间超过3分钟，操作已被取消。\n\n可能原因：\n1. SKU数量过多\n2. 数据库查询耗时过长\n3. 网络连接不稳定\n4. 服务器负载过高\n\n建议：\n1. 减少一次处理的SKU数量（建议不超过20个）\n2. 检查网络连接\n3. 稍后重试\n4. 联系管理员检查服务器状态'
+        );
+        return;
+      }
       
       // 显示详细错误对话框
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      const errorDetails = `错误类型: ${error instanceof Error ? error.name : 'Unknown'}\n错误信息: ${errorMessage}\n发生时间: ${new Date().toLocaleString('zh-CN')}\n\n请检查网络连接和输入数据的正确性。`;
+      let errorDetails = `错误类型: ${error instanceof Error ? error.name : 'Unknown'}\n错误信息: ${errorMessage}\n发生时间: ${new Date().toLocaleString('zh-CN')}\n\n`;
+      
+      // 根据错误类型提供具体建议
+      if (errorMessage.includes('fetch')) {
+        errorDetails += '网络连接问题：\n1. 检查网络连接是否正常\n2. 确认服务器地址正确\n3. 检查防火墙设置\n4. 稍后重试';
+      } else if (errorMessage.includes('timeout')) {
+        errorDetails += '请求超时：\n1. 减少一次处理的SKU数量\n2. 检查网络连接速度\n3. 稍后重试';
+      } else {
+        errorDetails += '请检查：\n1. 网络连接和输入数据的正确性\n2. SKU格式是否正确\n3. 模板文件是否完整\n4. 联系管理员获取技术支持';
+      }
       
       showErrorDialog('处理过程中发生错误', errorDetails);
     } finally {

@@ -1507,6 +1507,7 @@ const excelUtils = require('../utils/excelUtils');
 // 优化的子SKU生成器接口，使用ExcelJS库
 router.post('/child-sku-generator-from-template', async (req, res) => {
   const startTime = Date.now();
+  let workbook = null; // 用于资源清理
   
   try {
     const { parentSkus, templateObjectName } = req.body;
@@ -1532,6 +1533,11 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       return res.status(400).json({ message: '请输入有效的SKU' });
     }
 
+    // 限制SKU数量，防止过载
+    if (skuList.length > 50) {
+      return res.status(400).json({ message: '一次最多处理50个SKU，请分批处理' });
+    }
+
     console.log(`📋 待处理SKU数量: ${skuList.length}`);
 
     // 获取模板文件（从缓存或OSS）
@@ -1545,6 +1551,7 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
     if (cachedTemplate) {
       templateContent = cachedTemplate.content;
       originalFileName = cachedTemplate.fileName;
+      console.log('📝 使用缓存模板');
     } else {
       console.log('📥 从OSS下载模板文件');
       // 从OSS下载模板文件
@@ -1566,7 +1573,7 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
     console.log('📊 开始解析Excel模板（使用ExcelJS）');
     
     // 使用ExcelJS加载工作簿
-    const workbook = await excelUtils.loadWorkbookFromBuffer(templateContent);
+    workbook = await excelUtils.loadWorkbookFromBuffer(templateContent);
     
     // 验证模板结构
     try {
@@ -1588,7 +1595,8 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       },
       attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
       order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']],
-      logging: false // 禁用SQL日志以提升性能
+      logging: false, // 禁用SQL日志以提升性能
+      timeout: 30000 // 30秒查询超时
     });
 
     if (inventorySkus.length === 0) {
@@ -1608,6 +1616,9 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       sellersizename: sku.sellersizename
     }));
 
+    // 清理数据库查询结果以释放内存
+    inventorySkus.length = 0;
+
     console.log('📝 开始填充Excel数据（使用ExcelJS保留格式）');
     
     // 使用ExcelJS填充数据，传递母SKU列表以控制填充顺序
@@ -1623,6 +1634,9 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
 
     // 生成Excel文件缓冲区
     const excelBuffer = await excelUtils.generateBuffer(workbook, fileExtension);
+
+    // 清理工作簿对象以释放内存
+    workbook = null;
 
     // 生成自定义文件名 (UK_SKU1_SKU2_SKU3.xlsx格式)
     const downloadFileName = excelUtils.generateFileName(skuList, fileExtension);
@@ -1647,25 +1661,47 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
     console.error('❌ 子SKU生成器失败:', error);
     console.error(`❌ 失败时间: ${processingTime}ms`);
     
+    // 清理资源
+    if (workbook) {
+      try {
+        workbook = null;
+      } catch (cleanupError) {
+        console.warn('⚠️ 工作簿清理失败:', cleanupError.message);
+      }
+    }
+    
+    // 检查是否响应已发送
+    if (res.headersSent) {
+      console.warn('⚠️ 响应已发送，无法再次响应');
+      return;
+    }
+    
     // 根据错误类型返回不同的状态码
     let statusCode = 500;
     let errorMessage = '子SKU生成器失败';
     
-    if (error.message.includes('Excel文件格式错误')) {
+    if (error.message.includes('timeout')) {
+      statusCode = 408;
+      errorMessage = '处理超时，请减少SKU数量或稍后重试';
+    } else if (error.message.includes('Excel文件格式错误')) {
       statusCode = 400;
       errorMessage = '模板文件格式错误，请上传有效的Excel文件';
     } else if (error.message.includes('未找到工作表')) {
       statusCode = 400;
       errorMessage = '模板文件结构错误，请确保包含Template工作表';
-    } else if (error.message.includes('未找到必需的列')) {
+    } else if (error.message.includes('未找到必需的列') || error.message.includes('未找到必要的列')) {
       statusCode = 400;
       errorMessage = '模板文件格式错误，请确保第3行包含item_sku、color_name、size_name列';
+    } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+      statusCode = 503;
+      errorMessage = '服务暂时不可用，请稍后重试';
     }
     
     res.status(statusCode).json({ 
       message: `${errorMessage}: ${error.message}`,
       processingTime: processingTime,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      errorCode: error.code || 'UNKNOWN'
     });
   }
 });
