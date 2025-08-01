@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { API_BASE_URL } from '../config/api';
+import { diagnoseAndFixStorage } from '../utils/storageUtils';
 
 interface User {
   id: number;
@@ -60,6 +61,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 初始化认证状态
   useEffect(() => {
     const initAuth = async () => {
+      // 首先运行localStorage诊断和修复
+      console.log('🏃‍♂️ 启动localStorage诊断...');
+      const diagnosisResult = diagnoseAndFixStorage();
+      if (diagnosisResult.hasProblems) {
+        console.warn('⚠️ 发现并修复了localStorage问题:', diagnosisResult.message);
+      }
+
       const savedToken = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
 
@@ -111,13 +119,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = (newToken: string, newUser: User) => {
     try {
+      // 验证参数类型
+      if (typeof newToken !== 'string' || !newToken) {
+        throw new Error('Invalid token: must be a non-empty string');
+      }
+      
+      if (!newUser || typeof newUser !== 'object') {
+        throw new Error('Invalid user: must be a valid user object');
+      }
+
       setToken(newToken);
       setUser(newUser);
+      
+      // 安全地存储token
       localStorage.setItem('token', newToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
+      
+      // 安全地序列化和存储用户信息
+      const userJson = JSON.stringify(newUser);
+      if (userJson === '[object Object]') {
+        throw new Error('User object serialization failed');
+      }
+      localStorage.setItem('user', userJson);
+      
       console.log('✅ 用户登录成功，数据已保存:', newUser);
     } catch (error) {
       console.error('❌ 保存用户信息失败:', error);
+      // 清理可能的损坏数据
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      throw error; // 重新抛出错误以便调用者处理
     }
   };
 

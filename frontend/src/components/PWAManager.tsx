@@ -53,11 +53,17 @@ const PWAManager: React.FC = () => {
       });
     };
 
-    // 监听PWA安装提示事件（安装提示已禁用）
+    // 监听PWA安装提示事件
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // 安装提示已禁用，不再自动显示
+      
+      // 延迟显示安装提示，让用户先体验应用
+      setTimeout(() => {
+        if (!isStandalone) {
+          setShowInstallPrompt(true);
+        }
+      }, 30000); // 30秒后显示
     };
 
     // 监听应用安装完成
@@ -222,7 +228,12 @@ const PWAManager: React.FC = () => {
 
   const handleDismissInstall = () => {
     setShowInstallPrompt(false);
-    // 安装提示已永久禁用
+    // 24小时后再次显示
+    setTimeout(() => {
+      if (deferredPrompt && !isStandalone) {
+        setShowInstallPrompt(true);
+      }
+    }, 24 * 60 * 60 * 1000);
   };
 
   return (
@@ -311,7 +322,46 @@ const PWAManager: React.FC = () => {
         </div>
       </Modal>
 
-      {/* 安装提示卡片已禁用 */}
+      {/* 安装提示卡片 */}
+      {showInstallPrompt && !isStandalone && (
+        <Card
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            right: 16,
+            zIndex: 1000,
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}
+          bodyStyle={{ padding: 16 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                <MobileOutlined style={{ fontSize: 20, color: '#1890ff', marginRight: 8 }} />
+                <strong>安装工作助手PWA</strong>
+              </div>
+              <p style={{ margin: 0, color: '#666', fontSize: 14 }}>
+                添加到主屏幕，获得更快的启动速度和更好的体验
+              </p>
+            </div>
+            <Space>
+              <Button size="small" onClick={handleDismissInstall}>
+                稍后
+              </Button>
+              <Button 
+                type="primary" 
+                size="small" 
+                icon={<DownloadOutlined />}
+                onClick={handleInstallClick}
+              >
+                安装
+              </Button>
+            </Space>
+          </div>
+        </Card>
+      )}
     </>
   );
 };

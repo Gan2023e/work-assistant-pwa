@@ -2,6 +2,87 @@
  * 本地存储工具函数
  */
 
+// 诊断和修复localStorage问题
+export const diagnoseAndFixStorage = () => {
+  console.log('🔍 开始诊断localStorage问题...');
+  
+  try {
+    const problems = [];
+    const fixes = [];
+    
+    // 遍历所有localStorage项目
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      
+      const value = localStorage.getItem(key);
+      if (!value) continue;
+      
+      console.log(`检查键: ${key}, 值: ${value}`);
+      
+      // 检查是否是 "[object Object]" 字符串
+      if (value === '[object Object]') {
+        problems.push(`发现问题: ${key} = "[object Object]"`);
+        localStorage.removeItem(key);
+        fixes.push(`已删除损坏的键: ${key}`);
+        continue;
+      }
+      
+      // 检查是否是其他对象字符串形式
+      if (value.startsWith('[object ') && value.endsWith(']')) {
+        problems.push(`发现问题: ${key} = "${value}"`);
+        localStorage.removeItem(key);
+        fixes.push(`已删除损坏的键: ${key}`);
+        continue;
+      }
+      
+      // 对于JSON字符串，尝试解析
+      if ((value.startsWith('{') && value.endsWith('}')) || 
+          (value.startsWith('[') && value.endsWith(']'))) {
+        try {
+          JSON.parse(value);
+          console.log(`✅ ${key} 格式正确`);
+                 } catch (error: any) {
+           problems.push(`发现JSON解析错误: ${key}`);
+           localStorage.removeItem(key);
+           fixes.push(`已删除损坏的JSON键: ${key}`);
+         }
+      }
+    }
+    
+    console.log('📊 诊断结果:');
+    console.log(`发现 ${problems.length} 个问题`);
+    console.log(`修复 ${fixes.length} 个问题`);
+    
+    if (problems.length > 0) {
+      console.log('🔧 问题详情:', problems);
+      console.log('✅ 修复详情:', fixes);
+      return {
+        hasProblems: true,
+        problems,
+        fixes,
+        message: `发现并修复了 ${fixes.length} 个localStorage问题`
+      };
+    } else {
+      console.log('✅ localStorage数据正常');
+      return {
+        hasProblems: false,
+        problems: [],
+        fixes: [],
+        message: 'localStorage数据正常，无需修复'
+      };
+    }
+  } catch (error: any) {
+    console.error('❌ 诊断过程中出错:', error);
+    return {
+      hasProblems: true,
+      problems: ['诊断过程出错'],
+      fixes: [],
+      message: '诊断过程中出现错误: ' + error.message
+    };
+  }
+};
+
 // 清理损坏的 localStorage 数据
 export const cleanCorruptedStorage = () => {
   try {
