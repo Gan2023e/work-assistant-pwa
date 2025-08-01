@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Button, 
   Modal, 
@@ -9,14 +9,17 @@ import {
   Spin,
   Popconfirm,
   Card,
-  Progress
+  Progress,
+  Alert
 } from 'antd';
 import { 
   ToolOutlined, 
   UploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  FileExcelOutlined
+  FileExcelOutlined,
+  ReloadOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../config/api';
 
@@ -35,6 +38,120 @@ interface TemplateFile {
   url: string;
 }
 
+// 缓存配置
+const CACHE_CONFIG = {
+  TEMPLATE_CACHE_KEY: 'uk_template_cache',
+  CACHE_DURATION: 5 * 60 * 1000, // 5分钟缓存
+  MAX_RETRY_COUNT: 3,
+  RETRY_DELAY: 1000, // 1秒
+  REQUEST_TIMEOUT: 15000 // 15秒超时
+};
+
+// 缓存管理器
+class TemplateCache {
+  static set(data: TemplateFile | null) {
+    const cacheData = {
+      data,
+      timestamp: Date.now(),
+      version: '1.0'
+    };
+    try {
+      localStorage.setItem(CACHE_CONFIG.TEMPLATE_CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn('缓存保存失败:', error);
+    }
+  }
+
+  static get(): { data: TemplateFile | null; isValid: boolean; age: number } {
+    try {
+      const cached = localStorage.getItem(CACHE_CONFIG.TEMPLATE_CACHE_KEY);
+      if (!cached) {
+        return { data: null, isValid: false, age: 0 };
+      }
+
+      const cacheData = JSON.parse(cached);
+      const age = Date.now() - cacheData.timestamp;
+      const isValid = age < CACHE_CONFIG.CACHE_DURATION;
+
+      return {
+        data: cacheData.data,
+        isValid,
+        age
+      };
+    } catch (error) {
+      console.warn('缓存读取失败:', error);
+      return { data: null, isValid: false, age: 0 };
+    }
+  }
+
+  static clear() {
+    try {
+      localStorage.removeItem(CACHE_CONFIG.TEMPLATE_CACHE_KEY);
+    } catch (error) {
+      console.warn('缓存清除失败:', error);
+    }
+  }
+
+  static getAgeText(age: number): string {
+    if (age < 60000) return '刚刚更新';
+    if (age < 300000) return `${Math.floor(age / 60000)}分钟前更新`;
+    return '需要刷新';
+  }
+}
+
+// 网络请求工具
+class NetworkUtil {
+  static async fetchWithTimeout(url: string, options: RequestInit = {}, timeout = CACHE_CONFIG.REQUEST_TIMEOUT) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
+
+  static async fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = CACHE_CONFIG.MAX_RETRY_COUNT) {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 尝试请求 (${attempt}/${maxRetries}): ${url}`);
+        const response = await this.fetchWithTimeout(url, options);
+        
+        if (response.ok) {
+          console.log(`✅ 请求成功 (尝试 ${attempt})`);
+          return response;
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`❌ 请求失败 (尝试 ${attempt}/${maxRetries}):`, error);
+
+        if (attempt < maxRetries) {
+          const delay = CACHE_CONFIG.RETRY_DELAY * Math.pow(2, attempt - 1); // 指数退避
+          console.log(`⏱️ ${delay}ms 后重试...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    throw lastError || new Error('网络请求失败');
+  }
+
+  static isOnline(): boolean {
+    return navigator.onLine;
+  }
+}
+
 const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,39 +161,135 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [networkError, setNetworkError] = useState(false);
+  const [cacheAge, setCacheAge] = useState(0);
+  const [isUsingCache, setIsUsingCache] = useState(false);
   
   const templateFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 网络状态监听
+  useEffect(() => {
+    const handleOnline = () => {
+      setNetworkError(false);
+      console.log('🌐 网络已连接');
+    };
+
+    const handleOffline = () => {
+      setNetworkError(true);
+      console.log('📶 网络已断开');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // 重置组件状态
   const resetState = () => {
     setSkuInput('');
     setUploadProgress(0);
     setUploadStatus('');
+    setNetworkError(false);
     if (templateFileInputRef.current) {
       templateFileInputRef.current.value = '';
     }
   };
 
-  // 加载当前模板
-  const loadCurrentTemplate = async () => {
+  // 优化的模板加载函数
+  const loadCurrentTemplate = async (forceRefresh = false) => {
     setTemplateLoading(true);
+    setNetworkError(false);
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-templates`);
-      const result = await response.json();
-      
-      if (response.ok) {
-        const templates = result.data || [];
-        // 只取第一个模板作为当前模板
-        setCurrentTemplate(templates.length > 0 ? templates[0] : null);
-      } else {
-        message.error(result.message || '加载模板失败');
+      // 1. 先检查缓存
+      if (!forceRefresh) {
+        const cache = TemplateCache.get();
+        if (cache.isValid && cache.data !== undefined) {
+          console.log('📋 使用缓存的模板数据', `(${TemplateCache.getAgeText(cache.age)})`);
+          setCurrentTemplate(cache.data);
+          setCacheAge(cache.age);
+          setIsUsingCache(true);
+          setTemplateLoading(false);
+
+          // 后台静默更新缓存
+          if (NetworkUtil.isOnline()) {
+            loadTemplateFromNetwork(true);
+          }
+          return;
+        }
       }
+
+      // 2. 网络请求
+      await loadTemplateFromNetwork(false);
+
     } catch (error) {
-      console.error('加载模板失败:', error);
-      message.error('加载模板失败');
+      console.error('🔥 模板加载失败:', error);
+      
+      // 3. 尝试使用过期缓存作为降级策略
+      const cache = TemplateCache.get();
+      if (cache.data !== undefined) {
+        console.log('🔄 使用过期缓存作为降级策略');
+        setCurrentTemplate(cache.data);
+        setCacheAge(cache.age);
+        setIsUsingCache(true);
+        message.warning('使用缓存数据，建议检查网络后刷新');
+      } else {
+        setNetworkError(true);
+        message.error('模板加载失败，请检查网络连接');
+      }
     } finally {
       setTemplateLoading(false);
     }
+  };
+
+  // 从网络加载模板
+  const loadTemplateFromNetwork = async (isSilent = false) => {
+    try {
+      if (!isSilent) {
+        console.log('🌐 从网络加载模板...');
+      }
+
+      const response = await NetworkUtil.fetchWithRetry(`${API_BASE_URL}/api/product_weblink/uk-templates`);
+      const result = await response.json();
+
+      if (response.ok) {
+        const templates = result.data || [];
+        const templateData = templates.length > 0 ? templates[0] : null;
+        
+        // 更新状态和缓存
+        setCurrentTemplate(templateData);
+        TemplateCache.set(templateData);
+        setCacheAge(0);
+        setIsUsingCache(false);
+        
+        if (!isSilent) {
+          console.log('✅ 模板加载成功');
+        }
+      } else {
+        throw new Error(result.message || '获取模板失败');
+      }
+    } catch (error) {
+      if (!isSilent) {
+        throw error;
+      }
+      console.warn('⚠️ 后台更新失败:', error);
+    }
+  };
+
+  // 手动刷新模板
+  const handleRefreshTemplate = () => {
+    if (!NetworkUtil.isOnline()) {
+      message.error('网络未连接，无法刷新');
+      return;
+    }
+    
+    console.log('🔄 手动刷新模板');
+    TemplateCache.clear();
+    loadCurrentTemplate(true);
   };
 
   // 上传模板文件
@@ -204,7 +417,10 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       }
 
       message.success('模板文件上传成功');
-      loadCurrentTemplate(); // 重新加载当前模板
+      
+      // 清除缓存并重新加载
+      TemplateCache.clear();
+      loadCurrentTemplate(true); // 强制刷新
       
       if (templateFileInputRef.current) {
         templateFileInputRef.current.value = '';
@@ -235,10 +451,20 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       return;
     }
 
+    if (!NetworkUtil.isOnline()) {
+      message.error('网络未连接，无法下载');
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/download/${currentTemplate.name}`, {
-        method: 'GET',
-      });
+      message.loading('正在下载模板文件...', 0);
+      
+      const response = await NetworkUtil.fetchWithRetry(
+        `${API_BASE_URL}/api/product_weblink/uk-template/download/${currentTemplate.name}`,
+        { method: 'GET' }
+      );
+
+      message.destroy();
 
       if (response.ok) {
         const blob = await response.blob();
@@ -256,8 +482,14 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         message.error(errorData.message || '下载失败');
       }
     } catch (error) {
+      message.destroy();
       console.error('下载模板文件失败:', error);
-      message.error('下载失败');
+      const errorMessage = error instanceof Error ? error.message : '下载失败';
+      if (errorMessage.includes('timeout') || errorMessage.includes('网络')) {
+        message.error('网络超时，请检查网络连接后重试');
+      } else {
+        message.error('下载失败，请稍后重试');
+      }
     }
   };
 
@@ -283,18 +515,25 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
             size: currentTemplate.size
           });
 
-          const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${encodeURIComponent(currentTemplate.name)}`, {
-            method: 'DELETE',
-          });
+          const response = await NetworkUtil.fetchWithRetry(
+            `${API_BASE_URL}/api/product_weblink/uk-template/${encodeURIComponent(currentTemplate.name)}`,
+            { method: 'DELETE' }
+          );
 
           const result = await response.json();
 
           if (response.ok) {
             console.log('✅ 模板删除成功:', result);
             message.success('模板文件删除成功');
-            setCurrentTemplate(null); // 清除当前模板
+            
+            // 清除缓存和当前模板
+            TemplateCache.clear();
+            setCurrentTemplate(null);
+            setCacheAge(0);
+            setIsUsingCache(false);
+            
             // 重新加载模板列表以确保界面同步
-            loadCurrentTemplate();
+            loadCurrentTemplate(true);
           } else {
             console.error('❌ 模板删除失败:', result);
             message.error(result.message || '删除失败');
@@ -566,7 +805,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   // 打开弹窗
   const handleOpen = () => {
     setVisible(true);
-    loadCurrentTemplate(); // 加载当前模板
+    loadCurrentTemplate(false); // 优先使用缓存，后台更新
   };
 
   // 关闭弹窗
@@ -596,19 +835,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         title="子SKU生成器"
         open={visible}
         onCancel={handleCancel}
-        footer={[
-          <Button key="cancel" onClick={handleCancel} disabled={loading}>
-            取消
-          </Button>,
-          <Button 
-            key="process" 
-            type="primary" 
-            onClick={handleProcess}
-            loading={loading}
-          >
-            开始处理
-          </Button>
-        ]}
+        footer={null}
         width={700}
         destroyOnClose
         maskClosable={!loading && !uploadLoading}
@@ -631,18 +858,89 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 style={{ fontFamily: 'monospace' }}
                 disabled={loading}
               />
-              <Text type="secondary" style={{ fontSize: '12px' }}>
+              <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: 16 }}>
                 支持多个SKU，每行输入一个
               </Text>
+              
+              {/* 操作按钮 */}
+              <Space style={{ width: '100%', justifyContent: 'center', marginBottom: 16 }}>
+                <Button onClick={handleCancel} disabled={loading}>
+                  取消
+                </Button>
+                <Button 
+                  type="primary" 
+                  onClick={handleProcess}
+                  loading={loading}
+                >
+                  开始处理
+                </Button>
+              </Space>
             </div>
 
             {/* 管理英国资料表模板区域 */}
             <div>
-              <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                管理英国资料表模板：
-              </Text>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text strong>
+                  管理英国资料表模板：
+                </Text>
+                <Space>
+                  {/* 网络状态指示器 */}
+                  {networkError ? (
+                    <Text type="danger" style={{ fontSize: '12px' }}>
+                      <WifiOutlined /> 网络异常
+                    </Text>
+                  ) : (
+                    <Text type="success" style={{ fontSize: '12px' }}>
+                      <WifiOutlined /> 网络正常
+                    </Text>
+                  )}
+                  
+                  {/* 刷新按钮 */}
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    onClick={handleRefreshTemplate}
+                    disabled={templateLoading || !NetworkUtil.isOnline()}
+                    title="刷新模板信息"
+                  >
+                    刷新
+                  </Button>
+                </Space>
+              </div>
+
+              {/* 缓存状态提示 */}
+              {isUsingCache && (
+                <Alert
+                  message={`使用缓存数据 (${TemplateCache.getAgeText(cacheAge)})`}
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 8, fontSize: '12px' }}
+                  action={
+                    <Button size="small" type="link" onClick={handleRefreshTemplate}>
+                      更新
+                    </Button>
+                  }
+                />
+              )}
+
+              {/* 网络错误提示 */}
+              {networkError && !currentTemplate && (
+                <Alert
+                  message="网络连接异常"
+                  description="无法加载模板信息，请检查网络连接后刷新重试"
+                  type="error"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  action={
+                    <Button size="small" onClick={handleRefreshTemplate} disabled={!NetworkUtil.isOnline()}>
+                      重试
+                    </Button>
+                  }
+                />
+              )}
               
-              <Spin spinning={templateLoading}>
+              <Spin spinning={templateLoading} tip="正在加载模板信息...">
                 {currentTemplate ? (
                   // 显示当前模板
                   <Card
@@ -656,6 +954,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                           <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{currentTemplate.fileName}</div>
                           <div style={{ fontSize: '12px', color: '#666' }}>
                             {(currentTemplate.size / 1024).toFixed(1)} KB • {new Date(currentTemplate.lastModified).toLocaleString('zh-CN')}
+                            {isUsingCache && (
+                              <Text type="secondary" style={{ marginLeft: 8 }}>
+                                (缓存)
+                              </Text>
+                            )}
                           </div>
                         </div>
                       </Space>
@@ -665,7 +968,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                           icon={<DownloadOutlined />}
                           onClick={handleTemplateDownload}
                           size="small"
-                          disabled={loading}
+                          disabled={loading || networkError}
                         >
                           下载
                         </Button>
@@ -674,14 +977,14 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                           onConfirm={handleTemplateDelete}
                           okText="确定"
                           cancelText="取消"
-                          disabled={loading}
+                          disabled={loading || networkError}
                         >
                           <Button
                             type="link"
                             danger
                             icon={<DeleteOutlined />}
                             size="small"
-                            disabled={loading}
+                            disabled={loading || networkError}
                           >
                             删除
                           </Button>
@@ -700,7 +1003,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                   }}>
                     <FileExcelOutlined style={{ fontSize: '32px', color: '#d9d9d9', marginBottom: 8 }} />
                     <div style={{ color: '#999', marginBottom: 12 }}>
-                      暂未上传英国资料表模板
+                      {networkError ? '网络异常，无法加载模板信息' : '暂未上传英国资料表模板'}
                     </div>
                   </div>
                 )}
@@ -751,20 +1054,23 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
                 • 支持.xlsx、.xls和.xlsm格式的Excel文件<br />
                 • 模板将上传到阿里云OSS的"templates/excel/amazon/UK/"文件夹<br />
                 • 模板必须包含名为"Template"的工作表，第3行必须包含：item_sku、color_name、size_name列<br />
-                • 文件大小限制：50MB以内
+                • 文件大小限制：50MB以内<br />
+                • <strong>🚀 新特性：智能缓存，上传后立即可用，无需重复下载</strong><br />
+                • <strong>🌐 网络优化：支持断点重试，弱网络环境下更稳定</strong>
               </Text>
             </div>
 
-            {/* 性能优化说明 */}
+            {/* 处理中状态提示 */}
             {loading && (
               <div style={{ 
                 backgroundColor: '#e6f7ff', 
-                padding: '12px', 
+                padding: '16px', 
                 borderRadius: '6px',
-                border: '1px solid #91d5ff'
+                border: '1px solid #91d5ff',
+                textAlign: 'center'
               }}>
                 <Text style={{ color: '#1890ff' }}>
-                  <strong>正在处理中...</strong><br />
+                  <strong>正在处理中，请耐心等待...</strong><br />
                   • 正在下载并解析模板文件<br />
                   • 正在查询数据库中的子SKU信息<br />
                   • 正在生成包含子SKU数据的Excel文件<br />
@@ -773,30 +1079,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
               </div>
             )}
 
-            {/* 功能说明 */}
-            <div style={{ 
-              backgroundColor: '#fafafa', 
-              padding: '12px', 
-              borderRadius: '6px',
-              border: '1px solid #d9d9d9'
-            }}>
-              <Text strong style={{ color: '#1890ff' }}>功能说明：</Text>
-              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                <li>根据输入的母SKU查询数据库中的子SKU信息</li>
-                <li><strong>🆕 新逻辑：按母SKU分组，先填写母SKU行，再填写对应的子SKU</strong></li>
-                <li>自动填写item_sku列（UK + SKU）</li>
-                <li>自动填写color_name列（颜色信息）</li>
-                <li>自动填写size_name列（尺寸信息）</li>
-                <li><strong>🆕 智能命名：文件名格式为"UK_SKU1_SKU2_SKU3"</strong></li>
-                <li>生成处理后的Excel文件供下载</li>
-                <li>✨ <strong>已升级：使用ExcelJS库，更好的格式保持能力</strong></li>
-                <li>🚀 智能分片上传，大文件上传更稳定</li>
-                <li>📊 实时上传进度显示，体验更流畅</li>
-                <li>🔧 修复文件格式问题，确保下载文件可正常打开</li>
-                <li>⚡ <strong>性能优化：模板缓存机制，处理速度提升30%</strong></li>
-                <li>🛡️ <strong>增强错误处理：更详细的错误信息和解决建议</strong></li>
-              </ul>
-            </div>
+
 
           </Space>
         </Spin>
