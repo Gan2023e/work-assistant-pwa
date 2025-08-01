@@ -115,6 +115,24 @@ const LoginPage: React.FC = () => {
         <div style={{ textAlign: 'center', marginTop: 16, color: '#666' }}>
           <small>请联系管理员获取账户</small>
         </div>
+        
+        <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+          <small style={{ color: '#999' }}>
+            遇到登录问题？
+            <a 
+              href="/fix.html" 
+              style={{ marginLeft: 8, color: '#1890ff' }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (window.confirm('访问修复工具将清理本地存储数据，是否继续？')) {
+                  window.location.href = '/fix.html';
+                }
+              }}
+            >
+              使用修复工具
+            </a>
+          </small>
+        </div>
       </Card>
     </div>
   );

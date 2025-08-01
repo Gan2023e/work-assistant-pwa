@@ -80,7 +80,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
   const loadCurrentTemplate = async () => {
     setTemplateLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-templates`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-templates`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const result = await response.json();
       
       if (response.ok) {
@@ -133,8 +138,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       if (currentTemplate) {
         setUploadStatus('删除旧模板文件...');
         try {
+          const token = localStorage.getItem('token');
           const deleteResponse = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${currentTemplate.name}`, {
             method: 'DELETE',
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
           });
 
           if (!deleteResponse.ok) {
@@ -210,6 +219,13 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
         xhr.timeout = 120000; // 2分钟超时
         xhr.open('POST', `${API_BASE_URL}/api/product_weblink/upload-uk-template`);
+        
+        // 添加认证header
+        const token = localStorage.getItem('token');
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+        
         xhr.send(formData);
       });
 
@@ -255,8 +271,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     }
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/download/${currentTemplate.name}`, {
         method: 'GET',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
 
       if (response.ok) {
@@ -302,8 +322,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
             size: currentTemplate.size
           });
 
+          const token = localStorage.getItem('token');
           const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-template/${encodeURIComponent(currentTemplate.name)}`, {
             method: 'DELETE',
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
           });
 
           const result = await response.json();
@@ -462,10 +486,14 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       
       console.log('🚀 开始子SKU生成处理');
       
+      // 获取认证token
+      const token = localStorage.getItem('token');
+      
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator-from-template`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           parentSkus: skuInput.trim(),

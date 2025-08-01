@@ -36,6 +36,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // 验证token
   const verifyToken = async (token: string) => {
@@ -50,10 +51,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const result = await response.json();
         return result.user;
       } else {
+        // 如果token无效，清理存储
+        console.log('❌ Token验证失败，状态码:', response.status);
+        if (response.status === 401 || response.status === 403) {
+          console.log('🧹 清理无效的认证数据');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
         throw new Error('Token invalid');
       }
     } catch (error) {
       console.error('Token verification failed:', error);
+      // 网络错误或其他错误时也清理存储
+      if (error instanceof Error && 
+          (error.message.includes('Failed to fetch') || 
+           error.message.includes('NetworkError') || 
+           error.message.includes('user_id'))) {
+        console.log('🧹 检测到认证错误，清理存储数据');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
       return null;
     }
   };

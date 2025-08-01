@@ -4,6 +4,7 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { cleanCorruptedStorage, getStorageInfo } from './utils/storageUtils';
+import './utils/fetchInterceptor'; // 导入fetch拦截器
 
 // 应用启动前检查和清理存储
 console.log('🚀 应用启动，检查本地存储状态...');

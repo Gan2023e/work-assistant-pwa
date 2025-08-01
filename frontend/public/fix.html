@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>紧急修复 - 工作助手PWA</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: #1890ff;
+            margin-top: 0;
+            text-align: center;
+        }
+        .status {
+            background-color: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 20px 0;
+            color: #52c41a;
+        }
+        .error {
+            background-color: #fff1f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        button {
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #40a9ff;
+        }
+        button:disabled {
+            background-color: #d9d9d9;
+            cursor: not-allowed;
+        }
+        .info {
+            background-color: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 20px 0;
+            color: #1890ff;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ 紧急修复工具</h1>
+        
+        <div class="info">
+            <strong>说明：</strong>如果您遇到"user_id is not valid JSON"错误或无法登录的问题，可以使用此工具清理损坏的本地数据。
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <h3>当前存储状态：</h3>
+        <pre id="storage-info">检查中...</pre>
+        
+        <button id="fix-btn" onclick="fixStorage()">🔧 修复存储问题</button>
+        <button id="clear-all-btn" onclick="clearAll()">🗑️ 清除所有数据（完全重置）</button>
+        <button id="back-btn" onclick="goBack()" style="background-color: #52c41a;">✅ 返回应用</button>
+    </div>
+    
+    <script>
+        // 检查存储状态
+        function checkStorage() {
+            const info = {
+                localStorage: {},
+                problems: []
+            };
+            
+            // 检查localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                info.localStorage[key] = value;
+                
+                // 检查问题
+                if (value === '[object Object]') {
+                    info.problems.push(`键 "${key}" 包含损坏的对象字符串`);
+                }
+                
+                if (key === 'user' || key === 'token') {
+                    if (key === 'user') {
+                        try {
+                            JSON.parse(value);
+                        } catch (e) {
+                            info.problems.push(`键 "${key}" 包含无效的JSON: ${value}`);
+                        }
+                    }
+                }
+            }
+            
+            document.getElementById('storage-info').textContent = JSON.stringify(info, null, 2);
+            
+            if (info.problems.length > 0) {
+                showStatus(`发现 ${info.problems.length} 个问题：\n${info.problems.join('\n')}`, 'error');
+            } else {
+                showStatus('未发现存储问题', 'success');
+            }
+        }
+        
+        // 显示状态信息
+        function showStatus(message, type = 'success') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = type === 'error' ? 'status error' : 'status';
+            statusEl.style.display = 'block';
+        }
+        
+        // 修复存储问题
+        function fixStorage() {
+            try {
+                let fixed = 0;
+                
+                // 检查并修复每个键
+                const keysToCheck = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    keysToCheck.push(localStorage.key(i));
+                }
+                
+                keysToCheck.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    
+                    // 移除损坏的值
+                    if (value === '[object Object]' || 
+                        value === 'undefined' || 
+                        value === 'null' ||
+                        (value && value.startsWith('[object ') && value.endsWith(']'))) {
+                        localStorage.removeItem(key);
+                        fixed++;
+                        console.log(`已移除损坏的键: ${key}`);
+                    }
+                    
+                    // 特别处理认证相关的键
+                    if (key === 'user' && value) {
+                        try {
+                            JSON.parse(value);
+                        } catch (e) {
+                            localStorage.removeItem(key);
+                            fixed++;
+                            console.log(`已移除无效的用户数据`);
+                        }
+                    }
+                });
+                
+                // 清理 Service Worker 缓存
+                if ('caches' in window) {
+                    caches.keys().then(names => {
+                        names.forEach(name => {
+                            caches.delete(name);
+                            console.log(`已清理缓存: ${name}`);
+                        });
+                    });
+                }
+                
+                showStatus(`修复完成！已清理 ${fixed} 个问题项。页面将在3秒后刷新...`, 'success');
+                
+                // 刷新存储信息
+                setTimeout(() => {
+                    checkStorage();
+                }, 1000);
+                
+                // 3秒后跳转到登录页
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 3000);
+                
+            } catch (error) {
+                showStatus(`修复失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 清除所有数据
+        function clearAll() {
+            if (confirm('确定要清除所有本地数据吗？这将完全重置应用状态。')) {
+                try {
+                    // 清除localStorage
+                    localStorage.clear();
+                    
+                    // 清除sessionStorage
+                    sessionStorage.clear();
+                    
+                    // 清除所有cookies
+                    document.cookie.split(";").forEach(function(c) { 
+                        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                    });
+                    
+                    // 清除Service Worker
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                            for(let registration of registrations) {
+                                registration.unregister();
+                            }
+                        });
+                    }
+                    
+                    // 清除缓存
+                    if ('caches' in window) {
+                        caches.keys().then(names => {
+                            names.forEach(name => {
+                                caches.delete(name);
+                            });
+                        });
+                    }
+                    
+                    showStatus('所有数据已清除！页面将在3秒后刷新...', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                    
+                } catch (error) {
+                    showStatus(`清除失败: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // 返回应用
+        function goBack() {
+            window.location.href = '/';
+        }
+        
+        // 页面加载时检查存储
+        window.onload = function() {
+            checkStorage();
+        };
+    </script>
+</body>
+</html> 
