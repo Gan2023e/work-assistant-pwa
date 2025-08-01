@@ -1672,6 +1672,15 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     console.log('🔍 开始生成英国资料表，选中SKU:', selectedSkus);
     const startTime = Date.now();
 
+    // 检查OSS配置
+    const { checkOSSConfig } = require('../utils/oss');
+    if (!checkOSSConfig()) {
+      console.error('❌ OSS配置不完整，请检查环境变量');
+      return res.status(500).json({ 
+        message: 'OSS存储服务配置不完整，请联系管理员检查配置' 
+      });
+    }
+
     // 从数据库查询子SKU信息
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
@@ -1692,21 +1701,40 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     // 获取英国模板
     const { listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
+    
+    console.log('📋 开始获取英国模板列表...');
     const templateResult = await listTemplateFiles('amazon', null, 'UK');
     
-    if (!templateResult.success || !templateResult.files || templateResult.files.length === 0) {
-      return res.status(404).json({ message: '未找到英国资料模板' });
+    if (!templateResult.success) {
+      console.error('❌ 获取英国模板列表失败:', templateResult.message);
+      return res.status(500).json({ 
+        message: `获取模板列表失败: ${templateResult.message}` 
+      });
+    }
+    
+    if (!templateResult.files || templateResult.files.length === 0) {
+      console.error('❌ 未找到英国资料模板');
+      return res.status(404).json({ message: '未找到英国资料模板，请先上传英国资料模板' });
     }
 
     // 使用第一个英国模板
     const templateFile = templateResult.files[0];
-    console.log('📋 使用模板文件:', templateFile.displayName);
+    console.log('📋 使用模板文件:', templateFile.displayName, '路径:', templateFile.name);
     
+    console.log('📥 开始下载模板文件...');
     const downloadResult = await downloadTemplateFromOSS(templateFile.name);
     
     if (!downloadResult.success) {
-      return res.status(500).json({ message: '下载模板失败' });
+      console.error('❌ 下载模板文件失败:', downloadResult.message);
+      const errorMsg = downloadResult.message.includes('OSS配置') 
+        ? '下载模板失败: OSS存储服务配置错误，请联系管理员'
+        : downloadResult.message.includes('不存在') 
+          ? '下载模板失败: 模板文件不存在，请重新上传英国资料模板'
+          : `下载模板失败: ${downloadResult.message}`;
+      return res.status(500).json({ message: errorMsg });
     }
+
+    console.log('✅ 模板下载成功，文件大小:', downloadResult.size, '字节');
 
     // 检测原始文件格式
     const originalExtension = templateFile.displayName.split('.').pop()?.toLowerCase() || 'xlsm';
