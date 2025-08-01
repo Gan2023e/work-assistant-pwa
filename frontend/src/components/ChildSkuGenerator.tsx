@@ -64,27 +64,41 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
   // 打开弹窗时重置状态并加载模板
   const handleOpen = () => {
-    setVisible(true);
-    setCurrentStep(0);
-    setSkuInput('');
-    setGenerationStatus({ step: 0, message: '', progress: 0 });
-    loadTemplateInfo();
+    try {
+      setVisible(true);
+      setCurrentStep(0);
+      setSkuInput('');
+      setGenerationStatus({ step: 0, message: '', progress: 0 });
+      loadTemplateInfo();
+    } catch (error) {
+      console.error('打开子SKU生成器失败:', error);
+      message.error('打开失败，请刷新页面重试');
+    }
   };
 
   // 关闭弹窗
   const handleClose = () => {
-    setVisible(false);
-    setLoading(false);
-    setUploading(false);
-    setUploadProgress(0);
+    try {
+      setVisible(false);
+      setLoading(false);
+      setUploading(false);
+      setUploadProgress(0);
+    } catch (error) {
+      console.error('关闭子SKU生成器失败:', error);
+    }
   };
 
   // 加载模板信息
   const loadTemplateInfo = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('未找到认证token');
+        return;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-templates`, {
-        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
@@ -92,9 +106,12 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         const templates = result.data || [];
         setTemplateInfo(templates.length > 0 ? templates[0] : null);
         setCurrentStep(templates.length > 0 ? 1 : 0);
+      } else {
+        console.warn('模板加载响应异常:', response.status);
       }
     } catch (error) {
       console.error('加载模板信息失败:', error);
+      // 不显示错误消息，因为这可能是网络问题
     }
   };
 
