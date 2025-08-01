@@ -9,7 +9,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
 const pdf = require('pdf-parse');
-const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
+const { uploadToOSS, deleteFromOSS, listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -1657,6 +1657,167 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
   } catch (error) {
     console.error('删除亚马逊模板失败:', error);
     res.status(500).json({ message: '删除失败: ' + error.message });
+  }
+});
+
+// 生成英国资料表
+router.post('/generate-uk-data-sheet', async (req, res) => {
+  try {
+    const { selectedSkus } = req.body;
+    
+    if (!selectedSkus || !Array.isArray(selectedSkus) || selectedSkus.length === 0) {
+      return res.status(400).json({ message: '请选择要处理的SKU' });
+    }
+
+    // 从数据库查询子SKU信息
+    const inventorySkus = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: {
+          [Op.in]: selectedSkus
+        }
+      },
+      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
+    });
+
+    if (inventorySkus.length === 0) {
+      return res.status(404).json({ 
+        message: '在数据库中未找到匹配的子SKU信息' 
+      });
+    }
+
+    // 获取英国模板
+    const templateResult = await listTemplateFiles('UK');
+    
+    if (!templateResult.success || !templateResult.data || templateResult.data.length === 0) {
+      return res.status(404).json({ message: '未找到英国资料模板' });
+    }
+
+    // 使用第一个英国模板
+    const templateFile = templateResult.data[0];
+    const downloadResult = await downloadTemplateFromOSS(templateFile.name);
+    
+    if (!downloadResult.success) {
+      return res.status(500).json({ message: '下载模板失败' });
+    }
+
+    // 读取Excel模板
+    const workbook = xlsx.read(downloadResult.data, { type: 'buffer' });
+    
+    // 查找Template页面
+    if (!workbook.SheetNames.includes('Template')) {
+      return res.status(400).json({ message: '模板文件中未找到Template页面' });
+    }
+
+    const worksheet = workbook.Sheets['Template'];
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (data.length < 3) {
+      return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
+    }
+
+    // 查找第三行中列的位置
+    const headerRow = data[2]; // 第三行（索引2）
+    let itemSkuCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+
+    for (let i = 0; i < headerRow.length; i++) {
+      const cellValue = headerRow[i]?.toString().toLowerCase();
+      if (cellValue === 'item_sku') {
+        itemSkuCol = i;
+      } else if (cellValue === 'color_name') {
+        colorNameCol = i;
+      } else if (cellValue === 'size_name') {
+        sizeNameCol = i;
+      }
+    }
+
+    if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
+      return res.status(400).json({ 
+        message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
+      });
+    }
+
+    // 准备填充数据
+    const fillData = [];
+    
+    // 按父SKU分组处理
+    const groupedSkus = {};
+    inventorySkus.forEach(sku => {
+      if (!groupedSkus[sku.parent_sku]) {
+        groupedSkus[sku.parent_sku] = [];
+      }
+      groupedSkus[sku.parent_sku].push(sku);
+    });
+
+    // 为每个母SKU及其子SKU生成数据行
+    Object.keys(groupedSkus).forEach(parentSku => {
+      const childSkus = groupedSkus[parentSku];
+      
+      // 添加母SKU行（color_name和size_name留空）
+      const parentRow = {};
+      parentRow[itemSkuCol] = parentSku;
+      parentRow[colorNameCol] = '';
+      parentRow[sizeNameCol] = '';
+      fillData.push(parentRow);
+      
+      // 添加子SKU行
+      childSkus.forEach(sku => {
+        const childRow = {};
+        childRow[itemSkuCol] = sku.child_sku;
+        childRow[colorNameCol] = sku.sellercolorname || '';
+        childRow[sizeNameCol] = sku.sellersizename || '';
+        fillData.push(childRow);
+      });
+    });
+
+    // 确保数据数组有足够的行数
+    const startRow = 3; // 从第4行开始（索引3）
+    while (data.length < startRow + fillData.length) {
+      data.push([]);
+    }
+
+    // 填充数据
+    fillData.forEach((rowData, index) => {
+      const rowIndex = startRow + index;
+      
+      // 确保行存在
+      if (!data[rowIndex]) {
+        data[rowIndex] = [];
+      }
+      
+      // 确保行有足够的列
+      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+      while (data[rowIndex].length <= maxCol) {
+        data[rowIndex].push('');
+      }
+      
+      // 填充数据
+      Object.keys(rowData).forEach(colIndex => {
+        data[rowIndex][parseInt(colIndex)] = rowData[colIndex];
+      });
+    });
+
+    // 重新创建工作表
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    workbook.Sheets['Template'] = newWorksheet;
+
+    // 生成Excel文件
+    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // 生成文件名
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const filename = `UK_Data_Sheet_${timestamp}.xlsx`;
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    
+    res.send(excelBuffer);
+
+  } catch (err) {
+    console.error('生成英国资料表失败:', err);
+    res.status(500).json({ message: '生成失败: ' + err.message });
   }
 });
 
