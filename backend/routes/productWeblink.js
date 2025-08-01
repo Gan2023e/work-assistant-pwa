@@ -1669,6 +1669,9 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       return res.status(400).json({ message: '请选择要处理的SKU' });
     }
 
+    console.log('🔍 开始生成英国资料表，选中SKU:', selectedSkus);
+    const startTime = Date.now();
+
     // 从数据库查询子SKU信息
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
@@ -1685,6 +1688,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
+    console.log(`📊 查询到 ${inventorySkus.length} 条子SKU记录`);
+
     // 获取英国模板
     const { listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
     const templateResult = await listTemplateFiles('amazon', null, 'UK');
@@ -1695,14 +1700,28 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     // 使用第一个英国模板
     const templateFile = templateResult.files[0];
+    console.log('📋 使用模板文件:', templateFile.displayName);
+    
     const downloadResult = await downloadTemplateFromOSS(templateFile.name);
     
     if (!downloadResult.success) {
       return res.status(500).json({ message: '下载模板失败' });
     }
 
-    // 读取Excel模板
-    const workbook = xlsx.read(downloadResult.content, { type: 'buffer' });
+    // 检测原始文件格式
+    const originalExtension = templateFile.displayName.split('.').pop()?.toLowerCase() || 'xlsm';
+    const isXlsm = originalExtension === 'xlsm';
+    const bookType = isXlsm ? 'xlsm' : 'xlsx';
+    
+    console.log('📁 检测到模板格式:', originalExtension, '输出格式:', bookType);
+
+    // 读取Excel模板，保持格式
+    const workbook = xlsx.read(downloadResult.content, { 
+      type: 'buffer',
+      cellStyles: true,
+      cellNF: true,
+      cellHTML: false
+    });
     
     // 查找Template页面
     if (!workbook.SheetNames.includes('Template')) {
@@ -1710,26 +1729,28 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     }
 
     const worksheet = workbook.Sheets['Template'];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-    if (data.length < 3) {
-      return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
-    }
-
+    
+    // 获取工作表范围
+    const range = xlsx.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
+    
     // 查找第三行中列的位置
-    const headerRow = data[2]; // 第三行（索引2）
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
 
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = headerRow[i]?.toString().toLowerCase();
-      if (cellValue === 'item_sku') {
-        itemSkuCol = i;
-      } else if (cellValue === 'color_name') {
-        colorNameCol = i;
-      } else if (cellValue === 'size_name') {
-        sizeNameCol = i;
+    // 遍历第3行寻找列标题
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellAddress = xlsx.utils.encode_cell({ r: 2, c: col }); // 第3行，索引为2
+      const cell = worksheet[cellAddress];
+      if (cell && cell.v) {
+        const cellValue = cell.v.toString().toLowerCase();
+        if (cellValue === 'item_sku') {
+          itemSkuCol = col;
+        } else if (cellValue === 'color_name') {
+          colorNameCol = col;
+        } else if (cellValue === 'size_name') {
+          sizeNameCol = col;
+        }
       }
     }
 
@@ -1739,9 +1760,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
-    // 准备填充数据
-    const fillData = [];
-    
+    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+
     // 按父SKU分组处理
     const groupedSkus = {};
     inventorySkus.forEach(sku => {
@@ -1751,68 +1771,94 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       groupedSkus[sku.parent_sku].push(sku);
     });
 
+    // 清除模板中第4行及以后的数据（保留格式）
+    const startRow = 3; // 从第4行开始填充数据（索引3）
+    
+    // 删除现有数据行，保留前3行
+    for (let row = startRow; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = xlsx.utils.encode_cell({ r: row, c: col });
+        if (worksheet[cellAddress]) {
+          // 只清除值，保留格式
+          delete worksheet[cellAddress].v;
+          delete worksheet[cellAddress].w;
+          if (worksheet[cellAddress].t) {
+            worksheet[cellAddress].t = 's'; // 设为字符串类型
+          }
+        }
+      }
+    }
+
+    let currentRow = startRow;
+    
     // 为每个母SKU及其子SKU生成数据行
     Object.keys(groupedSkus).forEach(parentSku => {
       const childSkus = groupedSkus[parentSku];
       
       // 添加母SKU行（color_name和size_name留空）
-      const parentRow = {};
-      parentRow[itemSkuCol] = parentSku;
-      parentRow[colorNameCol] = '';
-      parentRow[sizeNameCol] = '';
-      fillData.push(parentRow);
+      const ukParentSku = `UK${parentSku}`;
+      
+      // 创建或更新母SKU行的单元格
+      const parentItemSkuCell = xlsx.utils.encode_cell({ r: currentRow, c: itemSkuCol });
+      const parentColorCell = xlsx.utils.encode_cell({ r: currentRow, c: colorNameCol });
+      const parentSizeCell = xlsx.utils.encode_cell({ r: currentRow, c: sizeNameCol });
+      
+      worksheet[parentItemSkuCell] = { t: 's', v: ukParentSku };
+      worksheet[parentColorCell] = { t: 's', v: '' };
+      worksheet[parentSizeCell] = { t: 's', v: '' };
+      
+      currentRow++;
       
       // 添加子SKU行
       childSkus.forEach(sku => {
-        const childRow = {};
-        childRow[itemSkuCol] = sku.child_sku;
-        childRow[colorNameCol] = sku.sellercolorname || '';
-        childRow[sizeNameCol] = sku.sellersizename || '';
-        fillData.push(childRow);
+        const ukChildSku = `UK${sku.child_sku}`;
+        
+        const childItemSkuCell = xlsx.utils.encode_cell({ r: currentRow, c: itemSkuCol });
+        const childColorCell = xlsx.utils.encode_cell({ r: currentRow, c: colorNameCol });
+        const childSizeCell = xlsx.utils.encode_cell({ r: currentRow, c: sizeNameCol });
+        
+        worksheet[childItemSkuCell] = { t: 's', v: ukChildSku };
+        worksheet[childColorCell] = { t: 's', v: sku.sellercolorname || '' };
+        worksheet[childSizeCell] = { t: 's', v: sku.sellersizename || '' };
+        
+        currentRow++;
       });
     });
 
-    // 确保数据数组有足够的行数
-    const startRow = 3; // 从第4行开始（索引3）
-    while (data.length < startRow + fillData.length) {
-      data.push([]);
-    }
+    // 更新工作表范围
+    const newRange = xlsx.utils.encode_range({
+      s: { c: range.s.c, r: range.s.r },
+      e: { c: range.e.c, r: Math.max(currentRow - 1, range.e.r) }
+    });
+    worksheet['!ref'] = newRange;
 
-    // 填充数据
-    fillData.forEach((rowData, index) => {
-      const rowIndex = startRow + index;
-      
-      // 确保行存在
-      if (!data[rowIndex]) {
-        data[rowIndex] = [];
-      }
-      
-      // 确保行有足够的列
-      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
-      while (data[rowIndex].length <= maxCol) {
-        data[rowIndex].push('');
-      }
-      
-      // 填充数据
-      Object.keys(rowData).forEach(colIndex => {
-        data[rowIndex][parseInt(colIndex)] = rowData[colIndex];
-      });
+    console.log(`📝 填充完成，共 ${currentRow - startRow} 行数据`);
+
+    // 生成Excel文件，保持原格式
+    const excelBuffer = xlsx.write(workbook, { 
+      type: 'buffer', 
+      bookType: bookType,
+      cellStyles: true
     });
 
-    // 重新创建工作表
-    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
-    workbook.Sheets['Template'] = newWorksheet;
+    // 生成文件名 - 格式：UK_母SKU (多个SKU时列出所有母SKU)
+    const filename = selectedSkus.length === 1 
+      ? `UK_${selectedSkus[0]}.${originalExtension}`
+      : `UK_${selectedSkus.join('_')}.${originalExtension}`;
 
-    // 生成Excel文件
-    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    console.log('📄 生成文件名:', filename);
 
-    // 生成文件名
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-    const filename = `UK_Data_Sheet_${timestamp}.xlsx`;
+    // 设置正确的Content-Type
+    const contentType = isXlsm 
+      ? 'application/vnd.ms-excel.sheet.macroEnabled.12'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
     // 设置响应头
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(filename)}`);
+    
+    const processingTime = Date.now() - startTime;
+    console.log(`✅ 英国资料表生成完成 (耗时: ${processingTime}ms)`);
     
     res.send(excelBuffer);
 

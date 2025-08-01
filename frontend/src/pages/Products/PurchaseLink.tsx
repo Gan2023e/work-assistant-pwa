@@ -1493,23 +1493,44 @@ const Purchase: React.FC = () => {
 
       console.log('🔍 生成英国资料表 - 选中的SKU:', selectedSkus);
 
+      // 显示处理中消息
+      const hideMessage = message.loading('正在生成英国资料表，请稍候...', 0);
+
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedSkus }),
       });
 
+      hideMessage();
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
       }
 
-      // 检查响应是否为Excel文件
+      // 检查响应是否为Excel文件（支持xlsx和xlsm格式）
       const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+      const isExcelFile = contentType && (
+        contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
+        contentType.includes('application/vnd.ms-excel.sheet.macroEnabled.12')
+      );
+      
+      if (isExcelFile) {
         // 处理文件下载
         const blob = await res.blob();
-        const filename = res.headers.get('content-disposition')?.match(/filename=(.+)/)?.[1] || 'UK_Data_Sheet.xlsx';
+        let filename = res.headers.get('content-disposition')?.match(/filename=(.+)/)?.[1];
+        
+        // 处理URL编码的文件名
+        if (filename) {
+          try {
+            filename = decodeURIComponent(filename);
+          } catch (e) {
+            console.warn('文件名解码失败，使用原始文件名');
+          }
+        }
+        
+        filename = filename || `UK_${selectedSkus[0]}.xlsm`;
         
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1520,7 +1541,12 @@ const Purchase: React.FC = () => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         
-        message.success(`英国资料表生成成功，已下载：${filename}`);
+        const skuCount = selectedSkus.length;
+        const successMsg = skuCount === 1 
+          ? `英国资料表生成成功！文件已下载：${filename}`
+          : `英国资料表生成成功！已处理${skuCount}个SKU(${selectedSkus.join(', ')})，文件已下载：${filename}`;
+        
+        message.success(successMsg);
       } else {
         // 处理JSON响应（错误信息）
         const result = await res.json();
