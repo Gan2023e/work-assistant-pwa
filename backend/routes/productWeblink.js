@@ -1687,9 +1687,19 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     }
 
     // 获取英国模板
-    const templateResult = await listTemplateFiles('UK');
+    console.log('🔍 开始获取英国模板...');
+    const templateResult = await listTemplateFiles('amazon', null, 'UK');
+    console.log('📋 模板查询结果:', templateResult);
     
-    if (!templateResult.success || !templateResult.data || templateResult.data.length === 0) {
+    if (!templateResult.success) {
+      console.error('❌ 模板查询失败:', templateResult.error);
+      return res.status(500).json({ message: `获取模板失败: ${templateResult.error}` });
+    }
+    
+    if (!templateResult.data || templateResult.data.length === 0) {
+      console.log('⚠️ 未找到模板文件，尝试查看所有amazon模板...');
+      const allAmazonTemplates = await listTemplateFiles('amazon');
+      console.log('📋 所有amazon模板:', allAmazonTemplates);
       return res.status(404).json({ message: '未找到英国资料模板' });
     }
 
