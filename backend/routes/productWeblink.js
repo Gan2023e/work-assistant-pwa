@@ -1504,111 +1504,170 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
 // 导入ExcelJS工具模块
 const excelUtils = require('../utils/excelUtils');
 
-// 优化的子SKU生成器接口，使用ExcelJS库
+/**
+ * 优化的子SKU生成器接口
+ * 功能：根据母SKU生成包含子SKU信息的Excel文件
+ */
 router.post('/child-sku-generator-from-template', async (req, res) => {
   const startTime = Date.now();
-  let workbook = null; // 用于资源清理
+  let workbook = null;
   
   try {
     const { parentSkus, templateObjectName } = req.body;
     
-    console.log('🚀 开始处理子SKU生成请求');
+    console.log('🚀 子SKU生成器请求开始', {
+      timestamp: new Date().toISOString(),
+      templateObjectName,
+      inputLength: parentSkus?.length || 0
+    });
     
-    // 输入验证
-    if (!parentSkus || parentSkus.trim() === '') {
-      return res.status(400).json({ message: '请输入需要整理的SKU' });
+    // ============ 1. 输入验证 ============
+    if (!parentSkus || typeof parentSkus !== 'string' || parentSkus.trim() === '') {
+      return res.status(400).json({ 
+        success: false,
+        message: '请输入需要处理的SKU',
+        errorCode: 'INVALID_INPUT'
+      });
     }
 
-    if (!templateObjectName) {
-      return res.status(400).json({ message: '请选择模板文件' });
+    if (!templateObjectName || typeof templateObjectName !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        message: '请选择有效的模板文件',
+        errorCode: 'INVALID_TEMPLATE'
+      });
     }
 
-    // 解析输入的SKU列表
+    // 解析SKU列表
     const skuList = parentSkus
       .split('\n')
       .map(sku => sku.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(sku => sku.length > 0); // 过滤空字符串
 
     if (skuList.length === 0) {
-      return res.status(400).json({ message: '请输入有效的SKU' });
+      return res.status(400).json({ 
+        success: false,
+        message: '请输入有效的SKU列表',
+        errorCode: 'EMPTY_SKU_LIST'
+      });
     }
 
-    // 限制SKU数量，防止过载
-    if (skuList.length > 50) {
-      return res.status(400).json({ message: '一次最多处理50个SKU，请分批处理' });
+    // SKU数量限制
+    const MAX_SKUS = 50;
+    if (skuList.length > MAX_SKUS) {
+      return res.status(400).json({ 
+        success: false,
+        message: `一次最多处理${MAX_SKUS}个SKU，当前输入${skuList.length}个，请分批处理`,
+        errorCode: 'TOO_MANY_SKUS',
+        maxAllowed: MAX_SKUS,
+        currentCount: skuList.length
+      });
     }
 
-    console.log(`📋 待处理SKU数量: ${skuList.length}`);
+    console.log(`📋 待处理SKU: ${skuList.length}个`);
 
-    // 获取模板文件（从缓存或OSS）
+    // ============ 2. 加载模板文件 ============
     let templateContent = null;
     let originalFileName = 'template.xlsx';
-    const cacheKey = templateObjectName;
     
-    // 尝试从缓存获取模板
-    const cachedTemplate = excelUtils.getCachedTemplate(cacheKey);
+    // 尝试从缓存获取
+    const cachedTemplate = excelUtils.getCachedTemplate(templateObjectName);
     
     if (cachedTemplate) {
       templateContent = cachedTemplate.content;
       originalFileName = cachedTemplate.fileName;
       console.log('📝 使用缓存模板');
     } else {
-      console.log('📥 从OSS下载模板文件');
-      // 从OSS下载模板文件
+      console.log('📥 从OSS下载模板');
       const { downloadTemplateFromOSS } = require('../utils/oss');
       
       const templateResult = await downloadTemplateFromOSS(templateObjectName);
       
       if (!templateResult.success) {
-        return res.status(404).json({ message: '模板文件不存在或下载失败' });
+        return res.status(404).json({ 
+          success: false,
+          message: '模板文件不存在或下载失败',
+          errorCode: 'TEMPLATE_NOT_FOUND',
+          templateName: templateObjectName
+        });
       }
 
       templateContent = templateResult.content;
       originalFileName = templateResult.fileName || 'template.xlsx';
       
-      // 缓存模板文件
-      excelUtils.cacheTemplate(cacheKey, templateContent, originalFileName);
+      // 缓存模板
+      excelUtils.cacheTemplate(templateObjectName, templateContent, originalFileName);
     }
 
-    console.log('📊 开始解析Excel模板（使用ExcelJS）');
+    // ============ 3. 解析Excel模板 ============
+    console.log('📊 解析Excel模板');
     
-    // 使用ExcelJS加载工作簿
-    workbook = await excelUtils.loadWorkbookFromBuffer(templateContent);
+    try {
+      workbook = await excelUtils.loadWorkbookFromBuffer(templateContent);
+    } catch (loadError) {
+      return res.status(400).json({ 
+        success: false,
+        message: '模板文件格式错误，请上传有效的Excel文件',
+        errorCode: 'INVALID_EXCEL_FORMAT',
+        details: loadError.message
+      });
+    }
     
     // 验证模板结构
     try {
       excelUtils.validateTemplate(workbook, 'Template', 3);
     } catch (validationError) {
       return res.status(400).json({ 
-        message: `模板验证失败: ${validationError.message}` 
+        success: false,
+        message: '模板格式不符合要求',
+        errorCode: 'INVALID_TEMPLATE_FORMAT',
+        details: validationError.message,
+        requirements: [
+          '必须包含名为"Template"的工作表',
+          '第3行必须包含：item_sku、color_name、size_name列'
+        ]
       });
     }
 
-    console.log('🔍 开始查询数据库子SKU信息');
+    // ============ 4. 查询数据库 ============
+    console.log('🔍 查询子SKU数据');
     
-    // 从数据库查询子SKU信息（优化查询）
-    const inventorySkus = await SellerInventorySku.findAll({
-      where: {
-        parent_sku: {
-          [Op.in]: skuList
-        }
-      },
-      attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
-      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']],
-      logging: false, // 禁用SQL日志以提升性能
-      timeout: 30000 // 30秒查询超时
-    });
+    let inventorySkus;
+    try {
+      inventorySkus = await SellerInventorySku.findAll({
+        where: {
+          parent_sku: {
+            [Op.in]: skuList
+          }
+        },
+        attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
+        order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']],
+        logging: false, // 禁用SQL日志
+        timeout: 30000  // 30秒超时
+      });
+    } catch (dbError) {
+      console.error('❌ 数据库查询失败:', dbError);
+      return res.status(500).json({ 
+        success: false,
+        message: '数据库查询失败，请稍后重试',
+        errorCode: 'DATABASE_ERROR'
+      });
+    }
 
     if (inventorySkus.length === 0) {
       return res.status(404).json({ 
-        message: '在数据库中未找到匹配的子SKU信息。请检查输入的SKU是否正确。',
-        details: `查询的SKU: ${skuList.join(', ')}`
+        success: false,
+        message: '未找到匹配的子SKU信息',
+        errorCode: 'NO_SKU_DATA',
+        searchedSkus: skuList,
+        suggestion: '请检查输入的SKU是否正确，或联系管理员确认数据是否已录入系统'
       });
     }
 
-    console.log(`✅ 找到 ${inventorySkus.length} 条子SKU记录`);
+    console.log(`✅ 找到${inventorySkus.length}条子SKU记录`);
 
-    // 将数据库结果转换为普通对象（提升性能）
+    // 转换数据格式
     const skuData = inventorySkus.map(sku => ({
       child_sku: sku.child_sku,
       parent_sku: sku.parent_sku,
@@ -1616,92 +1675,123 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
       sellersizename: sku.sellersizename
     }));
 
-    // 清理数据库查询结果以释放内存
+    // 释放数据库查询结果内存
     inventorySkus.length = 0;
 
-    console.log('📝 开始填充Excel数据（使用ExcelJS保留格式）');
+    // ============ 5. 填充Excel数据 ============
+    console.log('📝 填充Excel数据');
     
-    // 使用ExcelJS填充数据，传递母SKU列表以控制填充顺序
-    await excelUtils.fillSkuData(workbook, 'Template', skuData, skuList, 4);
+    let fillResult;
+    try {
+      fillResult = await excelUtils.fillSkuData(workbook, 'Template', skuData, skuList, 4);
+    } catch (fillError) {
+      console.error('❌ 数据填充失败:', fillError);
+      return res.status(500).json({ 
+        success: false,
+        message: 'Excel数据填充失败',
+        errorCode: 'DATA_FILL_ERROR',
+        details: fillError.message
+      });
+    }
 
-    console.log('⚡ 开始生成Excel文件');
+    // ============ 6. 生成Excel文件 ============
+    console.log('⚡ 生成Excel文件');
     
-    // 获取文件扩展名和MIME类型
     const fileExtension = excelUtils.getFileExtension(originalFileName);
     const mimeType = excelUtils.getMimeType(fileExtension);
     
-    console.log(`📋 检测到原始文件格式: ${fileExtension}, MIME类型: ${mimeType}`);
+    let excelBuffer;
+    try {
+      excelBuffer = await excelUtils.generateBuffer(workbook, fileExtension);
+    } catch (generateError) {
+      console.error('❌ 文件生成失败:', generateError);
+      return res.status(500).json({ 
+        success: false,
+        message: 'Excel文件生成失败',
+        errorCode: 'FILE_GENERATION_ERROR',
+        details: generateError.message
+      });
+    }
 
-    // 生成Excel文件缓冲区
-    const excelBuffer = await excelUtils.generateBuffer(workbook, fileExtension);
-
-    // 清理工作簿对象以释放内存
+    // 清理工作簿对象
     workbook = null;
 
-    // 生成自定义文件名 (UK_SKU1_SKU2_SKU3.xlsx格式)
+    // 生成文件名
     const downloadFileName = excelUtils.generateFileName(skuList, fileExtension);
 
-    // 计算处理时间
+    // ============ 7. 返回文件 ============
     const processingTime = Date.now() - startTime;
-    console.log(`📊 处理完成，总耗时: ${processingTime}ms`);
-
-    console.log('📤 准备下载文件');
     
-    // 设置响应头，使用自定义文件名
+    console.log(`✅ 子SKU生成完成`, {
+      processingTime: `${processingTime}ms`,
+      fileSize: `${(excelBuffer.length / 1024).toFixed(1)}KB`,
+      totalRows: fillResult.totalRows,
+      processedSkus: fillResult.processedSkus,
+      fileName: downloadFileName
+    });
+    
+    // 设置响应头
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
     res.setHeader('Content-Length', excelBuffer.length);
-    res.setHeader('X-Processing-Time', processingTime.toString()); // 添加性能信息
+    res.setHeader('X-Processing-Time', processingTime.toString());
+    res.setHeader('X-Processed-Rows', fillResult.totalRows.toString());
+    res.setHeader('X-Processed-Skus', fillResult.processedSkus.toString());
     
-    console.log(`✅ 子SKU生成完成，发送文件 (${(excelBuffer.length / 1024).toFixed(1)} KB)`);
     res.send(excelBuffer);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    console.error('❌ 子SKU生成器失败:', error);
-    console.error(`❌ 失败时间: ${processingTime}ms`);
+    
+    console.error('❌ 子SKU生成器发生未预期错误:', {
+      error: error.message,
+      stack: error.stack,
+      processingTime: `${processingTime}ms`,
+      timestamp: new Date().toISOString()
+    });
     
     // 清理资源
     if (workbook) {
-      try {
-        workbook = null;
-      } catch (cleanupError) {
-        console.warn('⚠️ 工作簿清理失败:', cleanupError.message);
-      }
+      workbook = null;
     }
     
-    // 检查是否响应已发送
+    // 防止重复响应
     if (res.headersSent) {
       console.warn('⚠️ 响应已发送，无法再次响应');
       return;
     }
     
-    // 根据错误类型返回不同的状态码
+    // 根据错误类型返回适当的响应
     let statusCode = 500;
-    let errorMessage = '子SKU生成器失败';
+    let errorCode = 'INTERNAL_ERROR';
+    let userMessage = '服务器内部错误，请稍后重试';
     
     if (error.message.includes('timeout')) {
       statusCode = 408;
-      errorMessage = '处理超时，请减少SKU数量或稍后重试';
-    } else if (error.message.includes('Excel文件格式错误')) {
-      statusCode = 400;
-      errorMessage = '模板文件格式错误，请上传有效的Excel文件';
-    } else if (error.message.includes('未找到工作表')) {
-      statusCode = 400;
-      errorMessage = '模板文件结构错误，请确保包含Template工作表';
-    } else if (error.message.includes('未找到必需的列') || error.message.includes('未找到必要的列')) {
-      statusCode = 400;
-      errorMessage = '模板文件格式错误，请确保第3行包含item_sku、color_name、size_name列';
+      errorCode = 'TIMEOUT';
+      userMessage = '处理超时，请减少SKU数量或稍后重试';
     } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
       statusCode = 503;
-      errorMessage = '服务暂时不可用，请稍后重试';
+      errorCode = 'SERVICE_UNAVAILABLE';
+      userMessage = '服务暂时不可用，请稍后重试';
+    } else if (error.message.includes('内存')) {
+      statusCode = 507;
+      errorCode = 'INSUFFICIENT_STORAGE';
+      userMessage = '服务器资源不足，请减少SKU数量重试';
     }
     
     res.status(statusCode).json({ 
-      message: `${errorMessage}: ${error.message}`,
-      processingTime: processingTime,
+      success: false,
+      message: userMessage,
+      errorCode,
+      processingTime,
       timestamp: new Date().toISOString(),
-      errorCode: error.code || 'UNKNOWN'
+      ...(process.env.NODE_ENV === 'development' && { 
+        debugInfo: {
+          originalError: error.message,
+          stack: error.stack
+        }
+      })
     });
   }
 });

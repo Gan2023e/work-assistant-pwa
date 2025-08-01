@@ -10,9 +10,14 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
  * @returns {Promise<ExcelJS.Workbook>} - ExcelJS工作簿对象
  */
 async function loadWorkbookFromBuffer(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  return workbook;
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    return workbook;
+  } catch (error) {
+    console.error('❌ Excel文件加载失败:', error.message);
+    throw new Error(`Excel文件格式错误: ${error.message}`);
+  }
 }
 
 /**
@@ -56,7 +61,7 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
   const columns = findColumns(worksheet, 3, ['item_sku', 'color_name', 'size_name']);
   
   if (!columns.item_sku || !columns.color_name || !columns.size_name) {
-    throw new Error('未找到必要的列：item_sku、color_name、size_name');
+    throw new Error('模板格式错误：未找到必要的列（item_sku、color_name、size_name）');
   }
 
   // 按母SKU分组
@@ -70,6 +75,9 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
   });
 
   let currentRow = startRow;
+  let totalProcessed = 0;
+
+  console.log(`📝 开始填充数据，母SKU数量: ${skuList.length}`);
 
   // 按照skuList的顺序处理
   skuList.forEach(parentSku => {
@@ -80,23 +88,30 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
       parentRow.getCell(columns.color_name).value = '';
       parentRow.getCell(columns.size_name).value = '';
       currentRow++;
+      totalProcessed++;
 
-      // 添加子SKU行 - 修复字段名错误
+      // 添加子SKU行
       groupedData[parentSku].forEach(item => {
         const childRow = worksheet.getRow(currentRow);
-        childRow.getCell(columns.item_sku).value = `UK${item.child_sku}`; // 修复：使用正确的字段名
-        childRow.getCell(columns.color_name).value = item.sellercolorname || ''; // 修复：使用正确的字段名
-        childRow.getCell(columns.size_name).value = item.sellersizename || ''; // 修复：使用正确的字段名
+        childRow.getCell(columns.item_sku).value = `UK${item.child_sku}`;
+        childRow.getCell(columns.color_name).value = item.sellercolorname || '';
+        childRow.getCell(columns.size_name).value = item.sellersizename || '';
         currentRow++;
+        totalProcessed++;
       });
+
+      console.log(`✅ 已处理母SKU: ${parentSku}, 子SKU数量: ${groupedData[parentSku].length}`);
+    } else {
+      console.warn(`⚠️ 未找到母SKU的子SKU数据: ${parentSku}`);
     }
   });
 
-  console.log(`✅ 数据填充完成，共填充 ${currentRow - startRow} 行`);
+  console.log(`✅ 数据填充完成，共填充 ${totalProcessed} 行`);
+  return { totalRows: totalProcessed, processedSkus: Object.keys(groupedData).length };
 }
 
 /**
- * 生成指定格式的Excel文件缓冲区
+ * 生成指定格式的Excel文件缓冲区（修复xlsm格式支持）
  * @param {ExcelJS.Workbook} workbook - 工作簿对象
  * @param {string} fileExtension - 文件扩展名
  * @returns {Promise<Buffer>} - Excel文件缓冲区
@@ -104,32 +119,38 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
 async function generateBuffer(workbook, fileExtension) {
   console.log(`📁 生成文件格式: ${fileExtension}`);
   
-  // 根据文件扩展名选择相应的写入方法
-  switch (fileExtension.toLowerCase()) {
-    case '.xlsm':
-      // xlsm格式 - 包含宏的Excel文件
-      console.log('📋 生成xlsm格式文件 (包含宏)');
-      const xlsmBuffer = await workbook.xlsx.writeBuffer();
-      return xlsmBuffer;
-      
-    case '.xlsx':
-      // xlsx格式 - 标准Excel文件
-      console.log('📋 生成xlsx格式文件');
-      const xlsxBuffer = await workbook.xlsx.writeBuffer();
-      return xlsxBuffer;
-      
-    case '.xls':
-      // xls格式 - 旧版Excel文件
-      // 注意：ExcelJS不直接支持写入xls格式，转换为xlsx
-      console.log('⚠️ xls格式不支持直接写入，转换为xlsx格式');
-      const xlsBuffer = await workbook.xlsx.writeBuffer();
-      return xlsBuffer;
-      
-    default:
-      // 默认使用xlsx格式
-      console.log(`⚠️ 未知格式 ${fileExtension}，使用默认xlsx格式`);
-      const defaultBuffer = await workbook.xlsx.writeBuffer();
-      return defaultBuffer;
+  try {
+    // 根据文件扩展名选择相应的写入方法
+    switch (fileExtension.toLowerCase()) {
+      case '.xlsm':
+        // xlsm格式 - 包含宏的Excel文件
+        console.log('📋 生成xlsm格式文件 (包含宏)');
+        // 注意：ExcelJS会尽量保持原有格式，包括宏
+        const xlsmBuffer = await workbook.xlsx.writeBuffer();
+        return xlsmBuffer;
+        
+      case '.xlsx':
+        // xlsx格式 - 标准Excel文件
+        console.log('📋 生成xlsx格式文件');
+        const xlsxBuffer = await workbook.xlsx.writeBuffer();
+        return xlsxBuffer;
+        
+      case '.xls':
+        // xls格式 - 旧版Excel文件
+        // 注意：ExcelJS不直接支持写入xls格式，转换为xlsx
+        console.log('⚠️ xls格式不支持直接写入，转换为xlsx格式');
+        const xlsBuffer = await workbook.xlsx.writeBuffer();
+        return xlsBuffer;
+        
+      default:
+        // 默认使用xlsx格式
+        console.log(`⚠️ 未知格式 ${fileExtension}，使用默认xlsx格式`);
+        const defaultBuffer = await workbook.xlsx.writeBuffer();
+        return defaultBuffer;
+    }
+  } catch (error) {
+    console.error('❌ 生成Excel文件失败:', error.message);
+    throw new Error(`Excel文件生成失败: ${error.message}`);
   }
 }
 
@@ -141,77 +162,51 @@ async function generateBuffer(workbook, fileExtension) {
  */
 function generateFileName(skuList, fileExtension) {
   const prefix = 'UK';
-  const skuPart = skuList.slice(0, 3).join('_'); // 最多取前3个SKU
-  return `${prefix}_${skuPart}${fileExtension}`;
+  const maxSkus = 3; // 最多取前3个SKU
+  const skuPart = skuList.slice(0, maxSkus).join('_');
+  
+  // 如果SKU数量超过3个，添加省略号标识
+  const suffix = skuList.length > maxSkus ? '_more' : '';
+  
+  const fileName = `${prefix}_${skuPart}${suffix}${fileExtension}`;
+  console.log(`📝 生成文件名: ${fileName} (基于${skuList.length}个SKU)`);
+  
+  return fileName;
 }
 
 /**
  * 验证Excel模板的基本结构
  * @param {ExcelJS.Workbook} workbook - 工作簿对象
- * @param {string} worksheetName - 工作表名称
+ * @param {string} worksheetName - 期望的工作表名称
  * @param {number} headerRow - 表头行号
+ * @throws {Error} - 如果验证失败
  */
 function validateTemplate(workbook, worksheetName, headerRow) {
+  console.log(`🔍 开始验证模板结构...`);
+  
+  // 检查工作表是否存在
   const worksheet = workbook.getWorksheet(worksheetName);
   if (!worksheet) {
-    throw new Error(`模板验证失败：未找到名为 ${worksheetName} 的工作表`);
+    const availableSheets = workbook.worksheets.map(ws => ws.name).join(', ');
+    throw new Error(`模板错误：未找到工作表"${worksheetName}"。可用工作表: ${availableSheets}`);
   }
 
-  const columns = findColumns(worksheet, headerRow, ['item_sku', 'color_name', 'size_name']);
+  // 检查必要的列
+  const requiredColumns = ['item_sku', 'color_name', 'size_name'];
+  const columns = findColumns(worksheet, headerRow, requiredColumns);
   
-  if (!columns.item_sku || !columns.color_name || !columns.size_name) {
-    throw new Error('模板验证失败：第3行必须包含 item_sku、color_name、size_name 列');
+  const missingColumns = requiredColumns.filter(col => !columns[col]);
+  if (missingColumns.length > 0) {
+    throw new Error(`模板错误：第${headerRow}行缺少必要的列: ${missingColumns.join(', ')}`);
   }
 
-  console.log('✅ 模板验证通过');
-}
-
-/**
- * 缓存模板文件
- * @param {string} cacheKey - 缓存键
- * @param {Buffer} templateContent - 模板内容
- * @param {string} fileName - 文件名
- */
-function cacheTemplate(cacheKey, templateContent, fileName) {
-  templateCache.set(cacheKey, {
-    content: templateContent,
-    fileName: fileName,
-    timestamp: Date.now()
-  });
-  console.log(`📝 模板已缓存: ${cacheKey}`);
-}
-
-/**
- * 获取缓存的模板
- * @param {string} cacheKey - 缓存键
- * @returns {Object|null} - 缓存的模板对象或null
- */
-function getCachedTemplate(cacheKey) {
-  const cached = templateCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-    console.log(`📝 使用缓存模板: ${cacheKey}`);
-    return cached;
+  // 检查工作表是否有基本的行数据
+  if (worksheet.rowCount < headerRow) {
+    throw new Error(`模板错误：工作表行数不足，需要至少${headerRow}行`);
   }
-  
-  if (cached) {
-    templateCache.delete(cacheKey);
-    console.log(`📝 缓存已过期，删除: ${cacheKey}`);
-  }
-  
-  return null;
-}
 
-/**
- * 清理过期的缓存
- */
-function cleanExpiredCache() {
-  const now = Date.now();
-  for (const [key, value] of templateCache.entries()) {
-    if (now - value.timestamp >= CACHE_DURATION) {
-      templateCache.delete(key);
-      console.log(`🗑️ 清理过期缓存: ${key}`);
-    }
-  }
+  console.log(`✅ 模板验证通过`);
+  return true;
 }
 
 /**
@@ -221,25 +216,108 @@ function cleanExpiredCache() {
  */
 function getFileExtension(fileName) {
   const lastDotIndex = fileName.lastIndexOf('.');
-  return lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '.xlsx';
+  if (lastDotIndex === -1) {
+    return '.xlsx'; // 默认扩展名
+  }
+  return fileName.substring(lastDotIndex).toLowerCase();
 }
 
 /**
- * 获取MIME类型
- * @param {string} fileExtension - 文件扩展名
+ * 根据文件扩展名获取MIME类型
+ * @param {string} extension - 文件扩展名
  * @returns {string} - MIME类型
  */
-function getMimeType(fileExtension) {
+function getMimeType(extension) {
   const mimeTypes = {
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
     '.xls': 'application/vnd.ms-excel'
   };
-  return mimeTypes[fileExtension.toLowerCase()] || mimeTypes['.xlsx'];
+  
+  return mimeTypes[extension.toLowerCase()] || mimeTypes['.xlsx'];
 }
 
-// 定期清理过期缓存（每5分钟）
-setInterval(cleanExpiredCache, 5 * 60 * 1000);
+/**
+ * 缓存模板文件
+ * @param {string} key - 缓存键
+ * @param {Buffer} content - 模板内容
+ * @param {string} fileName - 文件名
+ */
+function cacheTemplate(key, content, fileName) {
+  const cacheEntry = {
+    content,
+    fileName,
+    timestamp: Date.now()
+  };
+  
+  templateCache.set(key, cacheEntry);
+  console.log(`💾 模板已缓存: ${fileName} (${(content.length / 1024).toFixed(1)} KB)`);
+  
+  // 定期清理过期缓存
+  setTimeout(() => {
+    cleanExpiredCache();
+  }, CACHE_DURATION);
+}
+
+/**
+ * 获取缓存的模板
+ * @param {string} key - 缓存键
+ * @returns {Object|null} - 缓存的模板对象或null
+ */
+function getCachedTemplate(key) {
+  const cacheEntry = templateCache.get(key);
+  
+  if (!cacheEntry) {
+    return null;
+  }
+  
+  // 检查缓存是否过期
+  if (Date.now() - cacheEntry.timestamp > CACHE_DURATION) {
+    templateCache.delete(key);
+    console.log(`🗑️ 缓存已过期并清理: ${key}`);
+    return null;
+  }
+  
+  console.log(`📖 使用缓存模板: ${cacheEntry.fileName}`);
+  return cacheEntry;
+}
+
+/**
+ * 清理过期的缓存
+ */
+function cleanExpiredCache() {
+  const now = Date.now();
+  const expiredKeys = [];
+  
+  for (const [key, entry] of templateCache.entries()) {
+    if (now - entry.timestamp > CACHE_DURATION) {
+      expiredKeys.push(key);
+    }
+  }
+  
+  expiredKeys.forEach(key => {
+    templateCache.delete(key);
+  });
+  
+  if (expiredKeys.length > 0) {
+    console.log(`🗑️ 清理了 ${expiredKeys.length} 个过期缓存`);
+  }
+}
+
+/**
+ * 获取缓存统计信息
+ * @returns {Object} - 缓存统计
+ */
+function getCacheStats() {
+  const totalSize = Array.from(templateCache.values())
+    .reduce((sum, entry) => sum + entry.content.length, 0);
+  
+  return {
+    count: templateCache.size,
+    totalSize: totalSize,
+    totalSizeMB: (totalSize / 1024 / 1024).toFixed(2)
+  };
+}
 
 module.exports = {
   loadWorkbookFromBuffer,
@@ -248,9 +326,10 @@ module.exports = {
   generateBuffer,
   generateFileName,
   validateTemplate,
+  getFileExtension,
+  getMimeType,
   cacheTemplate,
   getCachedTemplate,
   cleanExpiredCache,
-  getFileExtension,
-  getMimeType
+  getCacheStats
 }; 
