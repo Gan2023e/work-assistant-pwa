@@ -36,7 +36,8 @@ import {
   EyeOutlined,
   PlusOutlined,
   DownloadOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  FileExcelOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -98,10 +99,12 @@ const Purchase: React.FC = () => {
   const [editForm] = Form.useForm();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [skuQueryModalVisible, setSkuQueryModalVisible] = useState(false);
-  const [skuPrefix, setSkuPrefix] = useState('');
-  const [latestSku, setLatestSku] = useState('');
+  const [templateModalVisible, setTemplateModalVisible] = useState(false);
+  const [templateFiles, setTemplateFiles] = useState<any[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('US');
+  const [templateLoading, setTemplateLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
   
   // CPC文件相关状态
   const [cpcModalVisible, setCpcModalVisible] = useState(false);
@@ -1112,32 +1115,7 @@ const Purchase: React.FC = () => {
       });
   };
 
-  // SKU查询功能
-  const handleSkuQuery = async () => {
-    if (!skuPrefix.trim()) {
-      message.warning('请输入SKU前缀');
-      return;
-    }
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/latest-sku`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prefix: skuPrefix.trim() }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const result = await res.json();
-      setLatestSku(result.latestSku || '未找到该前缀的SKU');
-    } catch (e) {
-      console.error('查询失败:', e);
-      message.error('查询失败');
-      setLatestSku('查询失败');
-    }
-  };
 
 
 
@@ -1390,6 +1368,110 @@ const Purchase: React.FC = () => {
       disabled: false,
       name: record.parent_sku,
     }),
+  };
+
+  // 亚马逊模板管理相关函数
+  const fetchTemplateFiles = async (country?: string) => {
+    try {
+      setTemplateLoading(true);
+      const queryParam = country ? `?country=${country}` : '';
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates${queryParam}`);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const result = await res.json();
+      setTemplateFiles(result.data || []);
+    } catch (error) {
+      console.error('获取模板列表失败:', error);
+      message.error('获取模板列表失败');
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
+  const handleTemplateUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('country', selectedCountry);
+    formData.append('originalFileName', file.name);
+
+    try {
+      setTemplateLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      
+      // 重新获取模板列表
+      await fetchTemplateFiles(selectedCountry);
+      
+    } catch (error) {
+      console.error('上传模板失败:', error);
+      message.error('上传模板失败');
+    } finally {
+      setTemplateLoading(false);
+      // 清空文件选择
+      if (templateFileInputRef.current) {
+        templateFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleTemplateDelete = async (objectName: string) => {
+    try {
+      setTemplateLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/${encodeURIComponent(objectName)}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      
+      // 重新获取模板列表
+      await fetchTemplateFiles(selectedCountry);
+      
+    } catch (error) {
+      console.error('删除模板失败:', error);
+      message.error('删除模板失败');
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
+  const handleTemplateDownload = (objectName: string, fileName: string) => {
+    const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleOpenTemplateModal = () => {
+    setTemplateModalVisible(true);
+    fetchTemplateFiles(selectedCountry);
+  };
+
+  const handleCountryChange = (country: string) => {
+    setSelectedCountry(country);
+    fetchTemplateFiles(country);
   };
 
   return (
@@ -1714,12 +1796,13 @@ const Purchase: React.FC = () => {
                 批量上传新品
               </Button>
 
-              {/* SKU最新编号查询 */}
+              {/* 管理亚马逊资料模板 */}
               <Button 
-                icon={<SearchOutlined />}
-                onClick={() => setSkuQueryModalVisible(true)}
+                icon={<FileExcelOutlined />}
+                onClick={handleOpenTemplateModal}
+                loading={templateLoading}
               >
-                SKU最新编号查询
+                管理亚马逊资料模板
               </Button>
 
               
@@ -1885,48 +1968,7 @@ const Purchase: React.FC = () => {
         </Space>
       </Modal>
 
-      {/* SKU查询对话框 */}
-      <Modal
-        title="SKU最新编号查询"
-        open={skuQueryModalVisible}
-        onOk={handleSkuQuery}
-        onCancel={() => {
-          setSkuQueryModalVisible(false);
-          setSkuPrefix('');
-          setLatestSku('');
-        }}
-        okText="查询"
-        cancelText="取消"
-        width={400}
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <div>
-            <Text>请输入SKU前缀：</Text>
-            <Input
-              value={skuPrefix}
-              onChange={e => setSkuPrefix(e.target.value)}
-              placeholder="例如：XBC"
-              style={{ marginTop: '8px' }}
-            />
-          </div>
-          
-          {latestSku && (
-            <div style={{ marginTop: '16px' }}>
-              <Text strong>最新SKU：</Text>
-              <div style={{ 
-                padding: '8px 12px', 
-                backgroundColor: '#f5f5f5', 
-                borderRadius: '4px',
-                marginTop: '8px',
-                fontFamily: 'monospace',
-                fontSize: '14px'
-              }}>
-                {latestSku}
-              </div>
-            </div>
-          )}
-        </Space>
-      </Modal>
+
 
       {/* CPC文件管理对话框 */}
       <Modal
@@ -2135,6 +2177,110 @@ const Purchase: React.FC = () => {
           />
         </Space>
       </Modal>
+
+             {/* 亚马逊模板管理对话框 */}
+       <Modal
+         title="亚马逊资料模板管理"
+         open={templateModalVisible}
+         onCancel={() => setTemplateModalVisible(false)}
+         footer={null}
+         width={900}
+       >
+         <Space direction="vertical" style={{ width: '100%' }}>
+           {/* 站点选择 */}
+           <div style={{ marginBottom: '16px' }}>
+             <Text strong>选择站点：</Text>
+             <Select
+               value={selectedCountry}
+               onChange={handleCountryChange}
+               style={{ width: 200, marginLeft: '8px' }}
+               loading={templateLoading}
+             >
+               <Select.Option value="US">美国</Select.Option>
+               <Select.Option value="UK">英国</Select.Option>
+               <Select.Option value="DE">德国</Select.Option>
+               <Select.Option value="FR">法国</Select.Option>
+               <Select.Option value="IT">意大利</Select.Option>
+               <Select.Option value="ES">西班牙</Select.Option>
+               <Select.Option value="CA">加拿大</Select.Option>
+               <Select.Option value="JP">日本</Select.Option>
+             </Select>
+           </div>
+
+           {/* 文件上传 */}
+           <div style={{ marginBottom: '16px' }}>
+             <Text strong>上传新模板：</Text>
+             <div style={{ marginTop: '8px' }}>
+               <input
+                 ref={templateFileInputRef}
+                 type="file"
+                 accept=".xlsx,.xls,.xlsm"
+                 onChange={handleTemplateUpload}
+                 style={{ display: 'none' }}
+               />
+               <Button 
+                 icon={<UploadOutlined />}
+                 onClick={() => templateFileInputRef.current?.click()}
+                 loading={templateLoading}
+               >
+                 选择Excel文件上传
+               </Button>
+               <Text type="secondary" style={{ marginLeft: '8px' }}>
+                 支持 .xlsx、.xls、.xlsm 格式
+               </Text>
+             </div>
+           </div>
+
+           {/* 模板列表 */}
+           <div>
+             <Text strong>当前模板列表 ({selectedCountry}站点)：</Text>
+             {templateLoading ? (
+               <div style={{ textAlign: 'center', padding: '20px' }}>
+                 <Text>加载中...</Text>
+               </div>
+             ) : (
+               <List
+                 size="small"
+                 style={{ marginTop: '8px', maxHeight: '300px', overflow: 'auto' }}
+                 dataSource={templateFiles}
+                 renderItem={(file: any) => (
+                   <List.Item
+                     actions={[
+                       <Button
+                         type="link"
+                         icon={<DownloadOutlined />}
+                         onClick={() => handleTemplateDownload(file.name, file.fileName)}
+                       >
+                         下载
+                       </Button>,
+                       <Popconfirm
+                         title="确定要删除这个模板吗？"
+                         onConfirm={() => handleTemplateDelete(file.name)}
+                         okText="确定"
+                         cancelText="取消"
+                       >
+                         <Button
+                           type="link"
+                           danger
+                           icon={<DeleteOutlined />}
+                         >
+                           删除
+                         </Button>
+                       </Popconfirm>
+                     ]}
+                   >
+                     <List.Item.Meta
+                       title={file.fileName}
+                       description={`大小: ${(file.size / 1024).toFixed(1)} KB | 上传时间: ${new Date(file.lastModified).toLocaleString()}`}
+                     />
+                   </List.Item>
+                 )}
+                 locale={{ emptyText: '暂无模板文件' }}
+               />
+             )}
+           </div>
+         </Space>
+       </Modal>
 
     </div>
   );

@@ -579,38 +579,6 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
   }
 });
 
-// SKU最新编号查询
-router.post('/latest-sku', async (req, res) => {
-  try {
-    const { prefix } = req.body;
-    if (!prefix || prefix.trim() === '') {
-      return res.status(400).json({ message: '请提供SKU前缀' });
-    }
-
-    const trimmedPrefix = prefix.trim();
-    
-    // 使用正则表达式精确匹配：前缀 + 数字
-    // 例如：XB001, XB002, ... XB999，但不包括XBC001
-    const result = await ProductWeblink.findOne({
-      where: {
-        parent_sku: {
-          [Op.regexp]: `^${trimmedPrefix}[0-9]+$`
-        }
-      },
-      order: [['parent_sku', 'DESC']],
-      attributes: ['parent_sku']
-    });
-
-    res.json({ 
-      latestSku: result ? result.parent_sku : '未找到该前缀的SKU'
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: '查询失败: ' + err.message });
-  }
-});
-
 // 筛选数据接口
 router.post('/filter', async (req, res) => {
   try {
@@ -1501,8 +1469,195 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
   }
 });
 
+// 亚马逊模板管理 - 通用API
+// 上传亚马逊资料模板
+router.post('/amazon-templates/upload', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    console.log('📤 收到亚马逊模板上传请求');
+    
+    if (!req.file) {
+      return res.status(400).json({ message: '请选择要上传的文件' });
+    }
 
+    const { country } = req.body;
+    if (!country) {
+      return res.status(400).json({ message: '请指定站点' });
+    }
 
+    console.log(`📋 文件信息: ${req.file.originalname}, 大小: ${req.file.size} 字节, 站点: ${country}`);
 
+    // 验证文件类型
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/vnd.ms-excel.sheet.macroEnabled.12'
+    ];
+    
+    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls|xlsm)$/i)) {
+      return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx、.xls或.xlsm格式）' });
+    }
+
+    // 使用OSS上传模板功能
+    const { uploadTemplateToOSS } = require('../utils/oss');
+    
+    const originalFileName = req.body.originalFileName || req.file.originalname;
+    console.log('📝 使用文件名:', originalFileName);
+    
+    const uploadResult = await uploadTemplateToOSS(
+      req.file.buffer, 
+      originalFileName,
+      'amazon', 
+      null, 
+      country
+    );
+
+    if (!uploadResult.success) {
+      return res.status(500).json({ message: '模板文件上传失败' });
+    }
+
+    const uploadTime = Date.now() - startTime;
+    console.log(`✅ 上传完成，耗时: ${uploadTime}ms`);
+
+    res.json({
+      message: `${country}站点资料表模板上传成功`,
+      data: {
+        fileName: uploadResult.originalName,
+        url: uploadResult.url,
+        objectName: uploadResult.name,
+        size: uploadResult.size,
+        country: country,
+        uploadTime: new Date().toISOString(),
+        processingTime: uploadTime
+      }
+    });
+
+  } catch (error) {
+    const uploadTime = Date.now() - startTime;
+    console.error(`❌ 上传亚马逊资料表模板失败 (耗时: ${uploadTime}ms):`, error);
+    
+    let errorMessage = '上传失败: ' + error.message;
+    if (error.code === 'RequestTimeout') {
+      errorMessage = '上传超时，请检查网络连接后重试';
+    } else if (error.code === 'AccessDenied') {
+      errorMessage = 'OSS访问权限不足，请联系管理员';
+    }
+    
+    res.status(500).json({ 
+      message: errorMessage,
+      processingTime: uploadTime
+    });
+  }
+});
+
+// 获取亚马逊模板列表
+router.get('/amazon-templates', async (req, res) => {
+  try {
+    const { country } = req.query;
+    
+    console.log(`📋 获取亚马逊模板列表，站点: ${country || '全部'}`);
+    
+    const { listTemplateFiles } = require('../utils/oss');
+    
+    const result = await listTemplateFiles('amazon', null, country);
+    
+    if (!result.success) {
+      return res.status(500).json({ message: '获取模板列表失败' });
+    }
+
+    res.json({
+      message: '获取成功',
+      data: result.files,
+      count: result.count
+    });
+
+  } catch (error) {
+    console.error('获取亚马逊模板列表失败:', error);
+    res.status(500).json({ message: '获取模板列表失败: ' + error.message });
+  }
+});
+
+// 下载亚马逊模板
+router.get('/amazon-templates/download/:objectName*', async (req, res) => {
+  try {
+    const objectName = req.params.objectName + (req.params[0] || '');
+    
+    console.log(`🔽 收到下载请求: ${objectName}`);
+    
+    if (!objectName) {
+      return res.status(400).json({ message: '缺少文件名参数' });
+    }
+
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const result = await downloadTemplateFromOSS(objectName);
+    
+    if (!result.success) {
+      console.error(`❌ 下载失败: ${result.message}`);
+      return res.status(404).json({ message: result.message || '模板文件不存在' });
+    }
+
+    console.log(`📤 准备发送文件: ${result.fileName} (${result.size} 字节)`);
+    
+    // 设置响应头
+    res.setHeader('Content-Type', result.contentType);
+    const encodedFileName = encodeURIComponent(result.fileName);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Length', result.size);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+    
+    // 发送文件内容
+    if (Buffer.isBuffer(result.content)) {
+      res.end(result.content);
+    } else {
+      res.end(Buffer.from(result.content));
+    }
+    
+    console.log(`✅ 文件下载完成: ${result.fileName}`);
+
+  } catch (error) {
+    console.error('❌ 下载亚马逊模板失败:', error);
+    res.status(500).json({ message: '下载失败: ' + error.message });
+  }
+});
+
+// 删除亚马逊模板
+router.delete('/amazon-templates/:objectName*', async (req, res) => {
+  try {
+    const objectName = req.params.objectName + (req.params[0] || '');
+    
+    console.log(`🗑️ 收到删除请求: ${objectName}`);
+    
+    if (!objectName) {
+      return res.status(400).json({ message: '缺少文件名参数' });
+    }
+
+    const { deleteTemplateFromOSS, backupTemplate } = require('../utils/oss');
+    
+    // 删除前先备份
+    try {
+      await backupTemplate(objectName, 'amazon');
+      console.log('✅ 模板文件已备份');
+    } catch (backupError) {
+      console.warn('⚠️ 模板文件备份失败，继续删除操作:', backupError.message);
+    }
+    
+    const result = await deleteTemplateFromOSS(objectName);
+    
+    if (!result.success) {
+      return res.status(500).json({ 
+        message: result.message || '删除失败',
+        error: result.error 
+      });
+    }
+
+    res.json({ message: '模板删除成功' });
+
+  } catch (error) {
+    console.error('删除亚马逊模板失败:', error);
+    res.status(500).json({ message: '删除失败: ' + error.message });
+  }
+});
 
 module.exports = router; 
