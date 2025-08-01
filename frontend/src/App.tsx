@@ -46,10 +46,7 @@ const AppContent: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuth();
   const [openKeys, setOpenKeys] = useState<string[]>([]);
 
-  // 添加调试信息
-  console.log('Current user:', user);
-  console.log('User role:', user?.role);
-  console.log('Is admin:', user?.role === 'admin');
+  // 调试信息已移至 AuthContext 中
 
   // 如果未登录且不在登录页面，重定向到登录页
   if (!isAuthenticated && location.pathname !== '/login') {

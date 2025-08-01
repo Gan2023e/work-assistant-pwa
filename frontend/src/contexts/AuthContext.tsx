@@ -63,23 +63,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const savedToken = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
 
+      console.log('🔍 初始化认证状态...');
+      console.log('保存的 token:', savedToken ? '存在' : '不存在');
+      console.log('保存的 user:', savedUser);
+
       if (savedToken && savedUser) {
         try {
+          // 先尝试解析保存的用户信息
+          let parsedUser;
+          try {
+            parsedUser = JSON.parse(savedUser);
+          } catch (parseError) {
+            console.error('用户信息 JSON 解析失败:', parseError);
+            console.error('原始用户数据:', savedUser);
+            // 清除损坏的数据
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setLoading(false);
+            return;
+          }
+
           // 验证token是否仍然有效
           const verifiedUser = await verifyToken(savedToken);
           if (verifiedUser) {
             setToken(savedToken);
             setUser(verifiedUser);
+            console.log('✅ 用户认证成功:', verifiedUser);
           } else {
             // Token无效，清除本地存储
+            console.log('❌ Token 验证失败，清除本地存储');
             localStorage.removeItem('token');
             localStorage.removeItem('user');
           }
         } catch (error) {
-          console.error('Auth initialization failed:', error);
+          console.error('❌ 认证初始化失败:', error);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
         }
+      } else {
+        console.log('🔍 无保存的认证信息');
       }
       setLoading(false);
     };
@@ -88,10 +110,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = (newToken: string, newUser: User) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
+    try {
+      setToken(newToken);
+      setUser(newUser);
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(newUser));
+      console.log('✅ 用户登录成功，数据已保存:', newUser);
+    } catch (error) {
+      console.error('❌ 保存用户信息失败:', error);
+    }
   };
 
   const logout = () => {

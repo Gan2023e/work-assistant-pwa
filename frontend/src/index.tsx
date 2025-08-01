@@ -3,6 +3,20 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { cleanCorruptedStorage, getStorageInfo } from './utils/storageUtils';
+
+// 应用启动前检查和清理存储
+console.log('🚀 应用启动，检查本地存储状态...');
+const storageInfo = getStorageInfo();
+console.log('📊 存储状态:', storageInfo);
+
+if (!storageInfo.userValid || !storageInfo.tokenValid) {
+  console.log('⚠️ 检测到存储数据异常，开始清理...');
+  const cleaned = cleanCorruptedStorage();
+  if (cleaned) {
+    console.log('✅ 存储清理完成，应用将以全新状态启动');
+  }
+}
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

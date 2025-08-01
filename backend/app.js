@@ -17,7 +17,7 @@ const dingtalkRouter = require('./routes/dingtalk');
 const inventoryRouter = require('./routes/inventory');
 const { router: authRouter } = require('./routes/auth');
 
-// 触发Railway重新部署 - 2024-06-21
+// 强制触发Railway重新部署 - 2025-01-08 - 修复URL配置和子SKU生成器
 const app = express();
 const PORT = process.env.PORT || 3001;
 

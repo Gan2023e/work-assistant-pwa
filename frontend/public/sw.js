@@ -61,6 +61,16 @@ self.addEventListener('activate', (event) => {
 
 // 拦截网络请求 - 使用网络优先策略确保获取最新内容
 self.addEventListener('fetch', (event) => {
+  // 过滤掉不支持的请求
+  if (
+    !event.request.url.startsWith('http') ||
+    event.request.url.startsWith('chrome-extension://') ||
+    event.request.url.startsWith('moz-extension://') ||
+    event.request.url.startsWith('ms-browser-extension://')
+  ) {
+    return;
+  }
+
   // 对于导航请求和API请求，使用网络优先策略
   if (event.request.mode === 'navigate' || event.request.url.includes('/api/')) {
     event.respondWith(

@@ -102,8 +102,35 @@ async function fillSkuData(workbook, worksheetName, skuData, skuList, startRow) 
  * @returns {Promise<Buffer>} - Excel文件缓冲区
  */
 async function generateBuffer(workbook, fileExtension) {
-  const buffer = await workbook.xlsx.writeBuffer();
-  return buffer;
+  console.log(`📁 生成文件格式: ${fileExtension}`);
+  
+  // 根据文件扩展名选择相应的写入方法
+  switch (fileExtension.toLowerCase()) {
+    case '.xlsm':
+      // xlsm格式 - 包含宏的Excel文件
+      console.log('📋 生成xlsm格式文件 (包含宏)');
+      const xlsmBuffer = await workbook.xlsx.writeBuffer();
+      return xlsmBuffer;
+      
+    case '.xlsx':
+      // xlsx格式 - 标准Excel文件
+      console.log('📋 生成xlsx格式文件');
+      const xlsxBuffer = await workbook.xlsx.writeBuffer();
+      return xlsxBuffer;
+      
+    case '.xls':
+      // xls格式 - 旧版Excel文件
+      // 注意：ExcelJS不直接支持写入xls格式，转换为xlsx
+      console.log('⚠️ xls格式不支持直接写入，转换为xlsx格式');
+      const xlsBuffer = await workbook.xlsx.writeBuffer();
+      return xlsBuffer;
+      
+    default:
+      // 默认使用xlsx格式
+      console.log(`⚠️ 未知格式 ${fileExtension}，使用默认xlsx格式`);
+      const defaultBuffer = await workbook.xlsx.writeBuffer();
+      return defaultBuffer;
+  }
 }
 
 /**
