@@ -41,7 +41,7 @@ import {
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
-import ChildSkuGenerator from '../../components/ChildSkuGenerator';
+
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -1722,8 +1722,7 @@ const Purchase: React.FC = () => {
                 SKU最新编号查询
               </Button>
 
-              {/* 子SKU生成器 */}
-              <ChildSkuGenerator onSuccess={fetchAllDataStatistics} />
+              
 
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (

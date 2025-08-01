@@ -12,9 +12,9 @@
 
 ## 解决方案
 
-### 1. 修复子SKU生成器的认证问题
+### 1. 修复API认证问题
 
-在 `frontend/src/components/ChildSkuGenerator.tsx` 中，为所有API请求添加了认证header：
+在相关组件中，为所有API请求添加了认证header：
 
 ```typescript
 // 获取认证token
