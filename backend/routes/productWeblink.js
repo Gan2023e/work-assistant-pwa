@@ -1719,7 +1719,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     // 使用第一个英国模板
     const templateFile = templateResult.files[0];
-    console.log('📋 使用模板文件:', templateFile.displayName, '路径:', templateFile.name);
+    console.log('📋 模板文件对象结构:', JSON.stringify(templateFile, null, 2));
+    console.log('📋 使用模板文件:', templateFile.fileName || '无fileName', '路径:', templateFile.name || '无name');
     
     console.log('📥 开始下载模板文件...');
     const downloadResult = await downloadTemplateFromOSS(templateFile.name);
@@ -1736,8 +1737,21 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     console.log('✅ 模板下载成功，文件大小:', downloadResult.size, '字节');
 
-    // 检测原始文件格式
-    const originalExtension = templateFile.displayName.split('.').pop()?.toLowerCase() || 'xlsm';
+    // 检测原始文件格式 - 安全处理可能的undefined值
+    let originalExtension = 'xlsm'; // 默认值
+    if (templateFile.fileName && typeof templateFile.fileName === 'string') {
+      const parts = templateFile.fileName.split('.');
+      if (parts.length > 1) {
+        originalExtension = parts.pop().toLowerCase();
+      }
+    } else if (templateFile.name && typeof templateFile.name === 'string') {
+      // 如果fileName不可用，尝试使用name
+      const parts = templateFile.name.split('.');
+      if (parts.length > 1) {
+        originalExtension = parts.pop().toLowerCase();
+      }
+    }
+    
     const isXlsm = originalExtension === 'xlsm';
     const bookType = isXlsm ? 'xlsm' : 'xlsx';
     
