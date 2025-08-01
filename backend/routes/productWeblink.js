@@ -1503,6 +1503,7 @@ router.delete('/uk-template/:objectName*', async (req, res) => {
 
 // 导入ExcelJS工具模块
 const excelUtils = require('../utils/excelUtils');
+const { sequelize } = require('../models/database'); // 正确导入sequelize实例
 
 /**
  * 优化的子SKU生成器接口
@@ -1631,10 +1632,18 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
     }
 
     // ============ 4. 查询数据库 ============
-    console.log('🔍 查询子SKU数据');
+    console.log('🔍 查询子SKU数据', {
+      skuCount: skuList.length,
+      skuList: skuList,
+      timestamp: new Date().toISOString()
+    });
     
     let inventorySkus;
     try {
+      // 添加数据库连接检查
+      const connectionTest = await sequelize.authenticate();
+      console.log('✅ 数据库连接正常');
+      
       inventorySkus = await SellerInventorySku.findAll({
         where: {
           parent_sku: {
@@ -1643,15 +1652,41 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
         },
         attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
         order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']],
-        logging: false, // 禁用SQL日志
-        timeout: 30000  // 30秒超时
+        logging: (sql) => console.log('🔍 SQL:', sql), // 启用SQL日志以便调试
+        timeout: 15000  // 减少超时时间到15秒
       });
+      
+      console.log(`🔍 数据库查询完成，耗时: ${Date.now() - startTime}ms`);
+      
     } catch (dbError) {
-      console.error('❌ 数据库查询失败:', dbError);
+      console.error('❌ 数据库查询失败:', {
+        error: dbError.message,
+        code: dbError.code,
+        sqlState: dbError.sqlState,
+        stack: dbError.stack,
+        timestamp: new Date().toISOString()
+      });
+      
+      // 根据不同错误类型返回不同信息
+      let errorMessage = '数据库查询失败，请稍后重试';
+      let errorCode = 'DATABASE_ERROR';
+      
+      if (dbError.name === 'SequelizeTimeoutError') {
+        errorMessage = '数据库查询超时，请减少SKU数量或稍后重试';
+        errorCode = 'DATABASE_TIMEOUT';
+      } else if (dbError.name === 'SequelizeConnectionError') {
+        errorMessage = '数据库连接失败，请联系管理员';
+        errorCode = 'DATABASE_CONNECTION_ERROR';
+      } else if (dbError.code === 'ER_ACCESS_DENIED_ERROR') {
+        errorMessage = '数据库访问权限不足，请联系管理员';
+        errorCode = 'DATABASE_ACCESS_DENIED';
+      }
+      
       return res.status(500).json({ 
         success: false,
-        message: '数据库查询失败，请稍后重试',
-        errorCode: 'DATABASE_ERROR'
+        message: errorMessage,
+        errorCode,
+        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
       });
     }
 
@@ -1792,6 +1827,85 @@ router.post('/child-sku-generator-from-template', async (req, res) => {
           stack: error.stack
         }
       })
+    });
+  }
+});
+
+// 调试端点：测试子SKU生成器相关功能
+router.post('/debug-child-sku-generator', async (req, res) => {
+  try {
+    const { testSkus } = req.body;
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      results: {}
+    };
+
+    // 1. 测试数据库连接
+    try {
+      await sequelize.authenticate();
+      debugInfo.results.databaseConnection = '✅ 成功';
+    } catch (dbError) {
+      debugInfo.results.databaseConnection = `❌ 失败: ${dbError.message}`;
+      return res.json({ success: false, debug: debugInfo });
+    }
+
+    // 2. 测试SellerInventorySku表访问
+    try {
+      const count = await SellerInventorySku.count();
+      debugInfo.results.tableAccess = `✅ 成功，总记录数: ${count}`;
+    } catch (tableError) {
+      debugInfo.results.tableAccess = `❌ 失败: ${tableError.message}`;
+      return res.json({ success: false, debug: debugInfo });
+    }
+
+    // 3. 测试SKU查询
+    if (testSkus && testSkus.length > 0) {
+      try {
+        const startTime = Date.now();
+        const testResults = await SellerInventorySku.findAll({
+          where: {
+            parent_sku: {
+              [Op.in]: testSkus
+            }
+          },
+          attributes: ['child_sku', 'parent_sku', 'sellercolorname', 'sellersizename'],
+          limit: 10,
+          logging: false
+        });
+        const queryTime = Date.now() - startTime;
+        
+        debugInfo.results.skuQuery = {
+          status: '✅ 成功',
+          queryTime: `${queryTime}ms`,
+          foundRecords: testResults.length,
+          sampleData: testResults.slice(0, 3)
+        };
+      } catch (queryError) {
+        debugInfo.results.skuQuery = `❌ 失败: ${queryError.message}`;
+      }
+    }
+
+    // 4. 测试模板缓存
+    const cacheStats = excelUtils.getCacheStats();
+    debugInfo.results.templateCache = {
+      status: '✅ 正常',
+      cachedTemplates: cacheStats.count,
+      totalSize: `${cacheStats.totalSizeMB}MB`
+    };
+
+    res.json({
+      success: true,
+      message: '调试测试完成',
+      debug: debugInfo
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: '调试测试失败',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

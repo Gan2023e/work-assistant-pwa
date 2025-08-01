@@ -188,6 +188,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
       });
 
       const token = localStorage.getItem('token');
+      
+      // 创建带超时的fetch请求
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+      
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/child-sku-generator-from-template`, {
         method: 'POST',
         headers: {
@@ -197,8 +202,11 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         body: JSON.stringify({
           parentSkus: skuInput,
           templateObjectName: templateInfo.name
-        })
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       // 步骤3：生成文件
       setGenerationStatus({
@@ -216,6 +224,14 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
         });
 
         const blob = await response.blob();
+        
+        // 检查返回的是否是错误响应
+        if (blob.size < 1000 && blob.type.includes('application/json')) {
+          const text = await blob.text();
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.message || '服务器返回错误');
+        }
+        
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -253,12 +269,34 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
 
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.message || '生成失败');
+        
+        // 根据错误代码提供具体的解决建议
+        let userMessage = errorData.message || '生成失败';
+        
+        if (errorData.errorCode === 'DATABASE_TIMEOUT') {
+          userMessage += '，建议减少SKU数量重试';
+        } else if (errorData.errorCode === 'DATABASE_CONNECTION_ERROR') {
+          userMessage += '，请稍后重试或联系管理员';
+        } else if (errorData.errorCode === 'NO_SKU_DATA') {
+          userMessage = '未找到匹配的子SKU数据，请检查输入的SKU是否正确';
+        }
+        
+        throw new Error(userMessage);
       }
 
     } catch (error) {
       console.error('生成子SKU文件失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '生成失败';
+      
+      let errorMessage = '生成失败';
+      
+      if (error.name === 'AbortError') {
+        errorMessage = '请求超时，请稍后重试或减少SKU数量';
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage = '网络连接失败，请检查网络状态后重试';
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       message.error(errorMessage);
       setCurrentStep(1);
       setGenerationStatus({ step: 0, message: '', progress: 0 });
