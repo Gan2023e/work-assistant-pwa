@@ -5,6 +5,7 @@ const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
@@ -1700,37 +1701,37 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       return res.status(500).json({ message: '下载模板失败' });
     }
 
-    // 读取Excel模板
-    const workbook = xlsx.read(downloadResult.data, { type: 'buffer' });
+    // 使用ExcelJS读取模板文件以保持格式
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(downloadResult.data);
     
-    // 查找Template页面
-    if (!workbook.SheetNames.includes('Template')) {
+    // 查找Template工作表
+    const worksheet = workbook.getWorksheet('Template');
+    if (!worksheet) {
       return res.status(400).json({ message: '模板文件中未找到Template页面' });
     }
 
-    const worksheet = workbook.Sheets['Template'];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-    if (data.length < 3) {
+    // 检查是否有足够的行数
+    if (worksheet.rowCount < 3) {
       return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
     }
 
     // 查找第三行中列的位置
-    const headerRow = data[2]; // 第三行（索引2）
+    const headerRow = worksheet.getRow(3); // 第三行
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
 
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = headerRow[i]?.toString().toLowerCase();
+    headerRow.eachCell((cell, colNumber) => {
+      const cellValue = cell.value?.toString().toLowerCase();
       if (cellValue === 'item_sku') {
-        itemSkuCol = i;
+        itemSkuCol = colNumber;
       } else if (cellValue === 'color_name') {
-        colorNameCol = i;
+        colorNameCol = colNumber;
       } else if (cellValue === 'size_name') {
-        sizeNameCol = i;
+        sizeNameCol = colNumber;
       }
-    }
+    });
 
     if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
       return res.status(400).json({ 
@@ -1738,9 +1739,6 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
-    // 准备填充数据
-    const fillData = [];
-    
     // 按父SKU分组处理
     const groupedSkus = {};
     inventorySkus.forEach(sku => {
@@ -1750,60 +1748,34 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       groupedSkus[sku.parent_sku].push(sku);
     });
 
-    // 为每个母SKU及其子SKU生成数据行
+    // 从第4行开始填充数据
+    let currentRow = 4;
+    
+    // 为每个母SKU及其子SKU填充数据
     Object.keys(groupedSkus).forEach(parentSku => {
       const childSkus = groupedSkus[parentSku];
       
       // 添加母SKU行（color_name和size_name留空）
-      const parentRow = {};
-      parentRow[itemSkuCol] = parentSku;
-      parentRow[colorNameCol] = '';
-      parentRow[sizeNameCol] = '';
-      fillData.push(parentRow);
+      const parentRowObj = worksheet.getRow(currentRow);
+      parentRowObj.getCell(itemSkuCol).value = parentSku;
+      parentRowObj.getCell(colorNameCol).value = '';
+      parentRowObj.getCell(sizeNameCol).value = '';
+      parentRowObj.commit();
+      currentRow++;
       
       // 添加子SKU行
       childSkus.forEach(sku => {
-        const childRow = {};
-        childRow[itemSkuCol] = sku.child_sku;
-        childRow[colorNameCol] = sku.sellercolorname || '';
-        childRow[sizeNameCol] = sku.sellersizename || '';
-        fillData.push(childRow);
+        const childRowObj = worksheet.getRow(currentRow);
+        childRowObj.getCell(itemSkuCol).value = sku.child_sku;
+        childRowObj.getCell(colorNameCol).value = sku.sellercolorname || '';
+        childRowObj.getCell(sizeNameCol).value = sku.sellersizename || '';
+        childRowObj.commit();
+        currentRow++;
       });
     });
 
-    // 确保数据数组有足够的行数
-    const startRow = 3; // 从第4行开始（索引3）
-    while (data.length < startRow + fillData.length) {
-      data.push([]);
-    }
-
-    // 填充数据
-    fillData.forEach((rowData, index) => {
-      const rowIndex = startRow + index;
-      
-      // 确保行存在
-      if (!data[rowIndex]) {
-        data[rowIndex] = [];
-      }
-      
-      // 确保行有足够的列
-      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
-      while (data[rowIndex].length <= maxCol) {
-        data[rowIndex].push('');
-      }
-      
-      // 填充数据
-      Object.keys(rowData).forEach(colIndex => {
-        data[rowIndex][parseInt(colIndex)] = rowData[colIndex];
-      });
-    });
-
-    // 重新创建工作表
-    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
-    workbook.Sheets['Template'] = newWorksheet;
-
-    // 生成Excel文件
-    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // 生成Excel文件buffer
+    const excelBuffer = await workbook.xlsx.writeBuffer();
 
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
