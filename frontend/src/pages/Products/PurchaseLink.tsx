@@ -1530,7 +1530,10 @@ const Purchase: React.FC = () => {
           }
         }
         
-        filename = filename || `UK_${selectedSkus[0]}.xlsm`;
+        // 生成备用文件名 - 格式：UK_母SKU (多个SKU时列出所有母SKU)
+        filename = filename || (selectedSkus.length === 1 
+          ? `UK_${selectedSkus[0]}.xlsm`
+          : `UK_${selectedSkus.join('_')}.xlsm`);
         
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
