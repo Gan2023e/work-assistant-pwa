@@ -23,6 +23,7 @@ import {
   WarningOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../config/api';
+import { getUserFriendlyErrorMessage } from '../utils/errorUtils';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -287,15 +288,7 @@ const ChildSkuGenerator: React.FC<ChildSkuGeneratorProps> = ({ onSuccess }) => {
     } catch (error) {
       console.error('生成子SKU文件失败:', error);
       
-      let errorMessage = '生成失败';
-      
-      if (error.name === 'AbortError') {
-        errorMessage = '请求超时，请稍后重试或减少SKU数量';
-      } else if (error.message.includes('Failed to fetch')) {
-        errorMessage = '网络连接失败，请检查网络状态后重试';
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      const errorMessage = getUserFriendlyErrorMessage(error, '生成失败');
       
       message.error(errorMessage);
       setCurrentStep(1);
