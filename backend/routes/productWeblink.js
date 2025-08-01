@@ -5,12 +5,11 @@ const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const multer = require('multer');
 const xlsx = require('xlsx');
-const ExcelJS = require('exceljs');
 const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
 const pdf = require('pdf-parse');
-const { uploadToOSS, deleteFromOSS, listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
+const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -1687,61 +1686,52 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     }
 
     // 获取英国模板
-    console.log('🔍 开始获取英国模板...');
+    const { listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
     const templateResult = await listTemplateFiles('amazon', null, 'UK');
-    console.log('📋 模板查询结果:', templateResult);
     
-    if (!templateResult.success) {
-      console.error('❌ 模板查询失败:', templateResult.error);
-      return res.status(500).json({ message: `获取模板失败: ${templateResult.error}` });
-    }
-    
-    if (!templateResult.data || templateResult.data.length === 0) {
-      console.log('⚠️ 未找到模板文件，尝试查看所有amazon模板...');
-      const allAmazonTemplates = await listTemplateFiles('amazon');
-      console.log('📋 所有amazon模板:', allAmazonTemplates);
+    if (!templateResult.success || !templateResult.files || templateResult.files.length === 0) {
       return res.status(404).json({ message: '未找到英国资料模板' });
     }
 
     // 使用第一个英国模板
-    const templateFile = templateResult.data[0];
+    const templateFile = templateResult.files[0];
     const downloadResult = await downloadTemplateFromOSS(templateFile.name);
     
     if (!downloadResult.success) {
       return res.status(500).json({ message: '下载模板失败' });
     }
 
-    // 使用ExcelJS读取模板文件以保持格式
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(downloadResult.data);
+    // 读取Excel模板
+    const workbook = xlsx.read(downloadResult.content, { type: 'buffer' });
     
-    // 查找Template工作表
-    const worksheet = workbook.getWorksheet('Template');
-    if (!worksheet) {
+    // 查找Template页面
+    if (!workbook.SheetNames.includes('Template')) {
       return res.status(400).json({ message: '模板文件中未找到Template页面' });
     }
 
-    // 检查是否有足够的行数
-    if (worksheet.rowCount < 3) {
+    const worksheet = workbook.Sheets['Template'];
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (data.length < 3) {
       return res.status(400).json({ message: 'Template页面至少需要3行数据（包含表头）' });
     }
 
     // 查找第三行中列的位置
-    const headerRow = worksheet.getRow(3); // 第三行
+    const headerRow = data[2]; // 第三行（索引2）
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
 
-    headerRow.eachCell((cell, colNumber) => {
-      const cellValue = cell.value?.toString().toLowerCase();
+    for (let i = 0; i < headerRow.length; i++) {
+      const cellValue = headerRow[i]?.toString().toLowerCase();
       if (cellValue === 'item_sku') {
-        itemSkuCol = colNumber;
+        itemSkuCol = i;
       } else if (cellValue === 'color_name') {
-        colorNameCol = colNumber;
+        colorNameCol = i;
       } else if (cellValue === 'size_name') {
-        sizeNameCol = colNumber;
+        sizeNameCol = i;
       }
-    });
+    }
 
     if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
       return res.status(400).json({ 
@@ -1749,6 +1739,9 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
+    // 准备填充数据
+    const fillData = [];
+    
     // 按父SKU分组处理
     const groupedSkus = {};
     inventorySkus.forEach(sku => {
@@ -1758,34 +1751,60 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       groupedSkus[sku.parent_sku].push(sku);
     });
 
-    // 从第4行开始填充数据
-    let currentRow = 4;
-    
-    // 为每个母SKU及其子SKU填充数据
+    // 为每个母SKU及其子SKU生成数据行
     Object.keys(groupedSkus).forEach(parentSku => {
       const childSkus = groupedSkus[parentSku];
       
       // 添加母SKU行（color_name和size_name留空）
-      const parentRowObj = worksheet.getRow(currentRow);
-      parentRowObj.getCell(itemSkuCol).value = parentSku;
-      parentRowObj.getCell(colorNameCol).value = '';
-      parentRowObj.getCell(sizeNameCol).value = '';
-      parentRowObj.commit();
-      currentRow++;
+      const parentRow = {};
+      parentRow[itemSkuCol] = parentSku;
+      parentRow[colorNameCol] = '';
+      parentRow[sizeNameCol] = '';
+      fillData.push(parentRow);
       
       // 添加子SKU行
       childSkus.forEach(sku => {
-        const childRowObj = worksheet.getRow(currentRow);
-        childRowObj.getCell(itemSkuCol).value = sku.child_sku;
-        childRowObj.getCell(colorNameCol).value = sku.sellercolorname || '';
-        childRowObj.getCell(sizeNameCol).value = sku.sellersizename || '';
-        childRowObj.commit();
-        currentRow++;
+        const childRow = {};
+        childRow[itemSkuCol] = sku.child_sku;
+        childRow[colorNameCol] = sku.sellercolorname || '';
+        childRow[sizeNameCol] = sku.sellersizename || '';
+        fillData.push(childRow);
       });
     });
 
-    // 生成Excel文件buffer
-    const excelBuffer = await workbook.xlsx.writeBuffer();
+    // 确保数据数组有足够的行数
+    const startRow = 3; // 从第4行开始（索引3）
+    while (data.length < startRow + fillData.length) {
+      data.push([]);
+    }
+
+    // 填充数据
+    fillData.forEach((rowData, index) => {
+      const rowIndex = startRow + index;
+      
+      // 确保行存在
+      if (!data[rowIndex]) {
+        data[rowIndex] = [];
+      }
+      
+      // 确保行有足够的列
+      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+      while (data[rowIndex].length <= maxCol) {
+        data[rowIndex].push('');
+      }
+      
+      // 填充数据
+      Object.keys(rowData).forEach(colIndex => {
+        data[rowIndex][parseInt(colIndex)] = rowData[colIndex];
+      });
+    });
+
+    // 重新创建工作表
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    workbook.Sheets['Template'] = newWorksheet;
+
+    // 生成Excel文件
+    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];

@@ -1477,74 +1477,59 @@ const Purchase: React.FC = () => {
   // 生成英国资料表
   const handleGenerateUKDataSheet = async () => {
     if (selectedRowKeys.length === 0) {
-      message.warning('请先选择要处理的记录');
+      message.warning('请先选择要生成资料表的记录');
       return;
     }
 
     try {
       setLoading(true);
       
-      // 获取选中记录的母SKU
+      // 获取选中记录的SKU
       const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
       const selectedRecords = currentData.filter(record => 
         selectedRowKeys.some(key => Number(key) === record.id)
       );
-      
       const selectedSkus = selectedRecords.map(record => record.parent_sku);
-      
-      if (selectedSkus.length === 0) {
-        message.warning('未找到有效的母SKU');
-        return;
-      }
 
-      message.loading('正在生成英国资料表...', 0);
+      console.log('🔍 生成英国资料表 - 选中的SKU:', selectedSkus);
 
-      // 调用后端API生成英国资料表
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          selectedSkus: selectedSkus
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedSkus }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
       }
 
-      // 获取文件blob
-      const blob = await response.blob();
-      
-      // 获取文件名
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = 'UK_Data_Sheet.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename=(.+)/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
+      // 检查响应是否为Excel文件
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+        // 处理文件下载
+        const blob = await res.blob();
+        const filename = res.headers.get('content-disposition')?.match(/filename=(.+)/)?.[1] || 'UK_Data_Sheet.xlsx';
+        
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        message.success(`英国资料表生成成功，已下载：${filename}`);
+      } else {
+        // 处理JSON响应（错误信息）
+        const result = await res.json();
+        throw new Error(result.message || '生成失败');
       }
 
-      // 创建下载链接
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      message.destroy(); // 关闭loading消息
-      message.success(`成功生成英国资料表，已下载到本地 (${selectedSkus.length}个母SKU)`);
-      
     } catch (error) {
-      message.destroy(); // 关闭loading消息
       console.error('生成英国资料表失败:', error);
-      message.error(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      message.error(`生成英国资料表失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setLoading(false);
     }
@@ -1884,15 +1869,14 @@ const Purchase: React.FC = () => {
               {/* 生成英国资料表 */}
               <Button 
                 icon={<FileExcelOutlined />}
-                onClick={handleGenerateUKDataSheet}
-                disabled={selectedRowKeys.length === 0}
                 type="primary"
                 style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                onClick={handleGenerateUKDataSheet}
+                disabled={selectedRowKeys.length === 0}
+                loading={loading}
               >
                 生成英国资料表
               </Button>
-
-              
 
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (
