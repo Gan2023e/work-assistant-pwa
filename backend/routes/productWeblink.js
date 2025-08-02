@@ -1689,11 +1689,12 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     console.log('🚀 开始并行处理：数据库查询 + 模板获取...');
     const templateCache = require('../utils/templateCache');
     
-    let inventorySkus, templateData;
+        let inventorySkus, templateData;
     try {
       [inventorySkus, templateData] = await Promise.all([
-        // 并行任务1：查询数据库SKU信息
+        // 并行任务1：优化的数据库查询（只查询必需字段，提升性能）
         SellerInventorySku.findAll({
+          attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename'], // 只查询必需字段
           where: {
             parent_sku: {
               [Op.in]: selectedSkus
@@ -1727,143 +1728,40 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       console.log('📥 首次下载模板并缓存，后续使用将大幅提速');
     }
 
-    console.log('✅ 模板获取成功，文件大小:', templateData.size, '字节');
+        console.log('✅ 模板获取成功，文件大小:', templateData.size, '字节');
     console.log('📁 检测到模板格式:', templateData.originalExtension);
 
-    // 使用ExcelJS读取模板，完美保持格式
-    const ExcelJS = require('exceljs');
-    let workbook, worksheet;
+    // 🚀 使用超级优化的Excel处理器
+    const excelOptimizer = require('../utils/excelOptimizer');
+    const cacheKey = `UK_${templateData.fileName}_parsed`;
     
+    let parsedTemplate;
     try {
-      console.log('🔍 使用ExcelJS读取模板，完美保持所有格式...');
-      workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(templateData.content);
-    
-    // 查找Template页面
-      worksheet = workbook.getWorksheet('Template');
-      if (!worksheet) {
-        return res.status(400).json({ 
-          success: false,
-          message: '模板文件中未找到Template页面' 
-        });
-      }
-      
-      console.log('✅ 模板文件读取成功，使用ExcelJS保持完整格式');
-      console.log(`📊 工作表信息: 行数=${worksheet.rowCount}, 列数=${worksheet.columnCount}`);
-    } catch (readError) {
-      console.error('❌ 读取模板文件失败:', readError);
+      // 优化的模板解析（支持解析缓存）
+      parsedTemplate = await excelOptimizer.parseTemplate(templateData, cacheKey);
+      console.log(`📊 工作表信息: 行数=${parsedTemplate.worksheet.rowCount}, 列数=${parsedTemplate.worksheet.columnCount}`);
+    } catch (parseError) {
+      console.error('❌ 解析模板文件失败:', parseError);
       return res.status(500).json({ 
         success: false,
-        message: `读取模板文件失败: ${readError.message}` 
-      });
-    }
-    
-    // 查找第三行中列的位置
-    let itemSkuCol = -1;
-    let colorNameCol = -1;
-    let sizeNameCol = -1;
-
-    console.log('🔍 正在查找列标题位置...');
-    // 遍历第3行寻找列标题
-    const headerRow = worksheet.getRow(3);
-    headerRow.eachCell((cell, colNumber) => {
-      if (cell.value) {
-        const cellValue = cell.value.toString().toLowerCase();
-        if (cellValue === 'item_sku') {
-          itemSkuCol = colNumber;
-        } else if (cellValue === 'color_name') {
-          colorNameCol = colNumber;
-        } else if (cellValue === 'size_name') {
-          sizeNameCol = colNumber;
-        }
-      }
-    });
-
-    if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
-      return res.status(400).json({ 
-        success: false,
-        message: '在第三行中未找到必需的列：item_sku、color_name、size_name' 
+        message: `解析模板文件失败: ${parseError.message}` 
       });
     }
 
-    console.log(`✅ 找到列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    // 🚀 高性能数据分组（使用Map替代Object）
+    const groupedSkus = excelOptimizer.optimizedGrouping(inventorySkus);
 
-    // 按父SKU分组处理
-    const groupedSkus = {};
-    inventorySkus.forEach(sku => {
-      if (!groupedSkus[sku.parent_sku]) {
-        groupedSkus[sku.parent_sku] = [];
-      }
-      groupedSkus[sku.parent_sku].push(sku);
-    });
+    // ⚡ 超高性能批量数据准备
+    const batchData = excelOptimizer.prepareBatchData(groupedSkus);
 
-    // 使用duplicateRow方法批量写入数据，保持完整格式
-    console.log('📝 开始批量写入数据，使用duplicateRow保持完整格式...');
-    const templateRowNumber = 4; // 模板行（第4行）
-    
-    // 清除第4行以后的数据，但保留模板行
-    if (worksheet.rowCount > 3) {
-      worksheet.spliceRows(templateRowNumber + 1, worksheet.rowCount - templateRowNumber);
-    }
+    // 🚀 超级优化的Excel批量写入
+    const writeResult = await excelOptimizer.superFastBatchWrite(
+      parsedTemplate.worksheet, 
+      batchData, 
+      parsedTemplate.columnMap
+    );
 
-    // 准备批量数据
-    console.log('📊 正在准备批量数据...');
-    const batchData = [];
-    Object.keys(groupedSkus).forEach(parentSku => {
-      const childSkus = groupedSkus[parentSku];
-      
-      // 添加母SKU数据（color_name和size_name留空）
-      const ukParentSku = `UK${parentSku}`;
-      batchData.push({
-        itemSku: ukParentSku,
-        colorName: '',
-        sizeName: '',
-        type: 'parent',
-        originalSku: parentSku
-      });
-      
-      // 添加子SKU数据
-      childSkus.forEach(sku => {
-        const ukChildSku = `UK${sku.child_sku}`;
-        batchData.push({
-          itemSku: ukChildSku,
-          colorName: sku.sellercolorname || '',
-          sizeName: sku.sellersizename || '',
-          type: 'child',
-          originalSku: sku.child_sku
-        });
-      });
-    });
-
-    console.log(`📊 批量数据准备完成，共 ${batchData.length} 行数据`);
-
-    // 使用duplicateRow批量创建行并填写数据
-    console.log('🚀 开始批量复制模板行并填写数据...');
-    batchData.forEach((rowData, index) => {
-      const targetRowNumber = templateRowNumber + 1 + index;
-      
-      // 复制模板行到目标位置（包含完整格式）
-      worksheet.duplicateRow(templateRowNumber, targetRowNumber, true);
-      
-      // 填写数据到复制的行
-      const targetRow = worksheet.getRow(targetRowNumber);
-      targetRow.getCell(itemSkuCol).value = rowData.itemSku;
-      targetRow.getCell(colorNameCol).value = rowData.colorName;
-      targetRow.getCell(sizeNameCol).value = rowData.sizeName;
-      
-      // 根据数据类型记录不同的日志
-      if (rowData.type === 'parent') {
-        console.log(`📝 批量写入母SKU: 行${targetRowNumber} = ${rowData.itemSku}`);
-      } else {
-        console.log(`📝 批量写入子SKU: 行${targetRowNumber} = ${rowData.itemSku} (${rowData.colorName}, ${rowData.sizeName})`);
-      }
-    });
-
-    // 删除原模板行
-    console.log('🗑️ 删除原模板行...');
-    worksheet.spliceRows(templateRowNumber, 1);
-
-    console.log(`✅ 批量写入完成！共写入 ${batchData.length} 行数据，格式完全保持`);
+    console.log(`🎯 写入性能统计: 平均每行耗时 ${writeResult.avgTimePerRow}ms`);
 
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -1873,7 +1771,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     console.log('📄 生成文件名:', filename);
 
-    // 保存到临时文件
+    // 🚀 优化的文件保存
     const path = require('path');
     const fs = require('fs');
     const uploadsDir = path.join(__dirname, '../uploads');
@@ -1885,29 +1783,39 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     
     const outputPath = path.join(uploadsDir, filename);
     
-    // 使用ExcelJS保存文件，完美保持所有原始格式
-    console.log(`💾 使用ExcelJS保存文件到: ${outputPath}`);
-    await workbook.xlsx.writeFile(outputPath);
-    console.log(`✅ 文件保存成功，所有格式完美保持`);
+    // 使用优化的保存方法
+    const saveResult = await excelOptimizer.optimizedSave(parsedTemplate.workbook, outputPath);
 
     const processingTime = Date.now() - startTime;
-    console.log(`✅ 英国资料表生成完成 (耗时: ${processingTime}ms)`);
+    console.log(`✅ 英国资料表生成完成 (总耗时: ${processingTime}ms)`);
 
-    // 统计信息
+    // 性能统计信息
     const totalChildSkus = inventorySkus.length;
-    const totalParentSkus = Object.keys(groupedSkus).length;
+    const totalParentSkus = groupedSkus.size;
     
-    // 返回下载URL而不是直接发送文件
+    // 详细性能报告
+    console.log(`🎯 性能详情: 解析${parsedTemplate.parseTime}ms + 写入${writeResult.writeTime}ms + 保存${saveResult.saveTime}ms = 总计${processingTime}ms`);
+    
+    // 返回下载URL和详细性能统计
     res.json({
       success: true,
-      message: `英国资料表生成成功！处理了${totalParentSkus}个母SKU和${totalChildSkus}个子SKU`,
+      message: `英国资料表生成成功！处理了${totalParentSkus}个母SKU和${totalChildSkus}个子SKU (${processingTime}ms)`,
       data: {
         filename: filename,
         downloadUrl: `/api/product_weblink/uk-data-sheet/download/${filename}`,
         totalParentSkus: totalParentSkus,
         totalChildSkus: totalChildSkus,
         selectedSkus: selectedSkus,
-        processingTime: processingTime
+        processingTime: processingTime,
+        // 详细性能统计
+        performance: {
+          templateFromCache: templateData.fromCache,
+          parseTime: parsedTemplate.parseTime,
+          writeTime: writeResult.writeTime,
+          saveTime: saveResult.saveTime,
+          avgTimePerRow: parseFloat(writeResult.avgTimePerRow),
+          rowsWritten: writeResult.rowsWritten
+        }
       }
     });
 
