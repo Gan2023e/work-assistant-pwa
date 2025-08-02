@@ -1496,68 +1496,53 @@ const Purchase: React.FC = () => {
       // 显示处理中消息
       const hideMessage = message.loading('正在生成英国资料表，请稍候...', 0);
 
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedSkus }),
       });
 
+      const result = await response.json();
       hideMessage();
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      // 检查响应是否为Excel文件（支持xlsx和xlsm格式）
-      const contentType = res.headers.get('content-type');
-      const isExcelFile = contentType && (
-        contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
-        contentType.includes('application/vnd.ms-excel.sheet.macroEnabled.12')
-      );
-      
-      if (isExcelFile) {
-        // 处理文件下载
-        const blob = await res.blob();
-        let filename = res.headers.get('content-disposition')?.match(/filename=(.+)/)?.[1];
+      if (result.success) {
+        const data = result.data;
+        message.success(
+          `英国资料表生成成功！处理了 ${data.totalParentSkus} 个母SKU和 ${data.totalChildSkus} 个子SKU (耗时: ${data.processingTime}ms)`
+        );
         
-        // 处理URL编码的文件名
-        if (filename) {
-          try {
-            filename = decodeURIComponent(filename);
-          } catch (e) {
-            console.warn('文件名解码失败，使用原始文件名');
+        // 自动下载文件
+        try {
+          const downloadUrl = `${API_BASE_URL}${data.downloadUrl}`;
+          
+          // 先检查文件是否存在
+          const checkResponse = await fetch(downloadUrl, { method: 'HEAD' });
+          if (!checkResponse.ok) {
+            console.error('❌ 文件不存在或无法访问:', data.filename);
+            message.error(`文件 ${data.filename} 下载失败：文件不存在`);
+            return;
           }
+          
+          // 创建下载链接
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = data.filename;
+          link.target = '_blank'; // 在新标签页打开，如果直接下载失败
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          console.log('✅ 文件下载成功:', data.filename);
+        } catch (downloadError) {
+          console.error('❌ 文件下载失败:', downloadError);
+          message.error(`文件下载失败: ${downloadError instanceof Error ? downloadError.message : '未知错误'}`);
         }
-        
-        // 生成备用文件名 - 格式：UK_母SKU (多个SKU时列出所有母SKU)
-        filename = filename || (selectedSkus.length === 1 
-          ? `UK_${selectedSkus[0]}.xlsm`
-          : `UK_${selectedSkus.join('_')}.xlsm`);
-        
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-        const skuCount = selectedSkus.length;
-        const successMsg = skuCount === 1 
-          ? `英国资料表生成成功！文件已下载：${filename}`
-          : `英国资料表生成成功！已处理${skuCount}个SKU(${selectedSkus.join(', ')})，文件已下载：${filename}`;
-        
-        message.success(successMsg);
       } else {
-        // 处理JSON响应（错误信息）
-        const result = await res.json();
-        throw new Error(result.message || '生成失败');
+        message.error(result.message || '生成失败');
       }
 
     } catch (error) {
-      console.error('生成英国资料表失败:', error);
+      console.error('❌ 生成英国资料表失败:', error);
       message.error(`生成英国资料表失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setLoading(false);
