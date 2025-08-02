@@ -1685,16 +1685,32 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
-    // 从数据库查询子SKU信息
-    console.log('📊 正在查询SKU信息...');
-    const inventorySkus = await SellerInventorySku.findAll({
-      where: {
-        parent_sku: {
-          [Op.in]: selectedSkus
-        }
-      },
-      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
-    });
+    // 🚀 并行处理：同时进行数据库查询和模板获取（进一步提升性能）
+    console.log('🚀 开始并行处理：数据库查询 + 模板获取...');
+    const templateCache = require('../utils/templateCache');
+    
+    let inventorySkus, templateData;
+    try {
+      [inventorySkus, templateData] = await Promise.all([
+        // 并行任务1：查询数据库SKU信息
+        SellerInventorySku.findAll({
+          where: {
+            parent_sku: {
+              [Op.in]: selectedSkus
+            }
+          },
+          order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
+        }),
+        // 并行任务2：获取模板（优先使用缓存）
+        templateCache.getTemplate('UK')
+      ]);
+    } catch (error) {
+      console.error('❌ 并行处理失败:', error.message);
+      return res.status(500).json({ 
+        success: false,
+        message: `处理失败: ${error.message}` 
+      });
+    }
 
     if (inventorySkus.length === 0) {
       return res.status(404).json({ 
@@ -1703,63 +1719,16 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
     }
 
-    console.log(`✅ 查询到 ${inventorySkus.length} 条子SKU记录`);
-
-    // 获取英国模板
-    const { listTemplateFiles, downloadTemplateFromOSS } = require('../utils/oss');
+    console.log(`✅ 并行处理完成！查询到 ${inventorySkus.length} 条子SKU记录`);
     
-    console.log('📋 正在获取英国模板列表...');
-    const templateResult = await listTemplateFiles('amazon', null, 'UK');
-    
-    if (!templateResult.success) {
-      console.error('❌ 获取英国模板列表失败:', templateResult.message);
-      return res.status(500).json({ 
-        success: false,
-        message: `获取模板列表失败: ${templateResult.message}` 
-      });
-    }
-    
-    if (!templateResult.files || templateResult.files.length === 0) {
-      console.error('❌ 未找到英国资料模板');
-      return res.status(404).json({ 
-        success: false,
-        message: '未找到英国资料模板，请先上传英国资料模板' 
-      });
+    if (templateData.fromCache) {
+      console.log('⚡ 从缓存加载模板，性能大幅提升！');
+    } else {
+      console.log('📥 首次下载模板并缓存，后续使用将大幅提速');
     }
 
-    // 使用第一个英国模板
-    const templateFile = templateResult.files[0];
-    console.log('📋 使用模板文件:', templateFile.fileName || templateFile.name);
-    
-    console.log('📥 正在下载模板文件...');
-    const downloadResult = await downloadTemplateFromOSS(templateFile.name);
-    
-    if (!downloadResult.success) {
-      console.error('❌ 下载模板文件失败:', downloadResult.message);
-      const errorMsg = downloadResult.message.includes('OSS配置') 
-        ? '下载模板失败: OSS存储服务配置错误，请联系管理员'
-        : downloadResult.message.includes('不存在') 
-          ? '下载模板失败: 模板文件不存在，请重新上传英国资料模板'
-          : `下载模板失败: ${downloadResult.message}`;
-      return res.status(500).json({ 
-        success: false,
-        message: errorMsg 
-      });
-    }
-
-    console.log('✅ 模板下载成功，文件大小:', downloadResult.size, '字节');
-
-    // 检测原始文件格式
-    let originalExtension = 'xlsm';
-    const fileName = templateFile.fileName || templateFile.name || '';
-    if (fileName && typeof fileName === 'string') {
-      const parts = fileName.split('.');
-      if (parts.length > 1) {
-        originalExtension = parts.pop().toLowerCase();
-      }
-    }
-    
-    console.log('📁 检测到模板格式:', originalExtension);
+    console.log('✅ 模板获取成功，文件大小:', templateData.size, '字节');
+    console.log('📁 检测到模板格式:', templateData.originalExtension);
 
     // 使用ExcelJS读取模板，完美保持格式
     const ExcelJS = require('exceljs');
@@ -1768,7 +1737,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     try {
       console.log('🔍 使用ExcelJS读取模板，完美保持所有格式...');
       workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(downloadResult.content);
+      await workbook.xlsx.load(templateData.content);
     
     // 查找Template页面
       worksheet = workbook.getWorksheet('Template');
@@ -1899,8 +1868,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filename = selectedSkus.length === 1 
-      ? `UK_${selectedSkus[0]}_${timestamp}.${originalExtension}`
-      : `UK_${selectedSkus.join('_')}_${timestamp}.${originalExtension}`;
+      ? `UK_${selectedSkus[0]}_${timestamp}.${templateData.originalExtension}`
+      : `UK_${selectedSkus.join('_')}_${timestamp}.${templateData.originalExtension}`;
 
     console.log('📄 生成文件名:', filename);
 
@@ -1999,6 +1968,53 @@ router.get('/uk-data-sheet/download/:filename', (req, res) => {
     res.status(500).json({
       success: false,
       message: '文件下载失败: ' + error.message
+    });
+  }
+});
+
+// 缓存管理路由
+router.get('/template-cache/stats', (req, res) => {
+  try {
+    const templateCache = require('../utils/templateCache');
+    const stats = templateCache.getCacheStats();
+    
+    res.json({
+      success: true,
+      message: '缓存统计信息获取成功',
+      data: {
+        ...stats,
+        description: `共缓存 ${stats.totalFiles} 个模板文件，总大小 ${stats.totalSizeKB}KB`
+      }
+    });
+  } catch (error) {
+    console.error('❌ 获取缓存统计失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取缓存统计失败: ' + error.message
+    });
+  }
+});
+
+router.delete('/template-cache/:country?', (req, res) => {
+  try {
+    const templateCache = require('../utils/templateCache');
+    const country = req.params.country;
+    
+    templateCache.clearCache(country);
+    
+    const message = country 
+      ? `已清除${country}模板缓存`
+      : '已清除所有模板缓存';
+    
+    res.json({
+      success: true,
+      message: message
+    });
+  } catch (error) {
+    console.error('❌ 清除缓存失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '清除缓存失败: ' + error.message
     });
   }
 });
