@@ -1828,48 +1828,73 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       groupedSkus[sku.parent_sku].push(sku);
     });
 
-    // 清除第4行以后的数据，保留格式
-    console.log('🗑️ 正在清除模板中的旧数据，保留格式...');
-    const startRow = 4; // 从第4行开始填充数据
+    // 使用duplicateRow方法批量写入数据，保持完整格式
+    console.log('📝 开始批量写入数据，使用duplicateRow保持完整格式...');
+    const templateRowNumber = 4; // 模板行（第4行）
     
-    // 删除现有数据行，保留前3行
+    // 清除第4行以后的数据，但保留模板行
     if (worksheet.rowCount > 3) {
-      worksheet.spliceRows(startRow, worksheet.rowCount - 3);
+      worksheet.spliceRows(templateRowNumber + 1, worksheet.rowCount - templateRowNumber);
     }
 
-    let currentRow = startRow;
-    
-    console.log('📝 开始使用ExcelJS填写数据...');
-    // 为每个母SKU及其子SKU生成数据行
+    // 准备批量数据
+    console.log('📊 正在准备批量数据...');
+    const batchData = [];
     Object.keys(groupedSkus).forEach(parentSku => {
       const childSkus = groupedSkus[parentSku];
       
-      // 添加母SKU行（color_name和size_name留空）
+      // 添加母SKU数据（color_name和size_name留空）
       const ukParentSku = `UK${parentSku}`;
+      batchData.push({
+        itemSku: ukParentSku,
+        colorName: '',
+        sizeName: '',
+        type: 'parent',
+        originalSku: parentSku
+      });
       
-      const parentRow = worksheet.getRow(currentRow);
-      parentRow.getCell(itemSkuCol).value = ukParentSku;
-      parentRow.getCell(colorNameCol).value = '';
-      parentRow.getCell(sizeNameCol).value = '';
-      
-      console.log(`📝 ExcelJS填写母SKU: 行${currentRow} = ${ukParentSku}`);
-      currentRow++;
-      
-      // 添加子SKU行
+      // 添加子SKU数据
       childSkus.forEach(sku => {
         const ukChildSku = `UK${sku.child_sku}`;
-        
-        const childRow = worksheet.getRow(currentRow);
-        childRow.getCell(itemSkuCol).value = ukChildSku;
-        childRow.getCell(colorNameCol).value = sku.sellercolorname || '';
-        childRow.getCell(sizeNameCol).value = sku.sellersizename || '';
-        
-        console.log(`📝 ExcelJS填写子SKU: 行${currentRow} = ${ukChildSku} (${sku.sellercolorname || ''}, ${sku.sellersizename || ''})`);
-        currentRow++;
+        batchData.push({
+          itemSku: ukChildSku,
+          colorName: sku.sellercolorname || '',
+          sizeName: sku.sellersizename || '',
+          type: 'child',
+          originalSku: sku.child_sku
+        });
       });
     });
 
-    console.log(`✅ ExcelJS完成数据填写，共填写 ${currentRow - startRow} 行数据`);
+    console.log(`📊 批量数据准备完成，共 ${batchData.length} 行数据`);
+
+    // 使用duplicateRow批量创建行并填写数据
+    console.log('🚀 开始批量复制模板行并填写数据...');
+    batchData.forEach((rowData, index) => {
+      const targetRowNumber = templateRowNumber + 1 + index;
+      
+      // 复制模板行到目标位置（包含完整格式）
+      worksheet.duplicateRow(templateRowNumber, targetRowNumber, true);
+      
+      // 填写数据到复制的行
+      const targetRow = worksheet.getRow(targetRowNumber);
+      targetRow.getCell(itemSkuCol).value = rowData.itemSku;
+      targetRow.getCell(colorNameCol).value = rowData.colorName;
+      targetRow.getCell(sizeNameCol).value = rowData.sizeName;
+      
+      // 根据数据类型记录不同的日志
+      if (rowData.type === 'parent') {
+        console.log(`📝 批量写入母SKU: 行${targetRowNumber} = ${rowData.itemSku}`);
+      } else {
+        console.log(`📝 批量写入子SKU: 行${targetRowNumber} = ${rowData.itemSku} (${rowData.colorName}, ${rowData.sizeName})`);
+      }
+    });
+
+    // 删除原模板行
+    console.log('🗑️ 删除原模板行...');
+    worksheet.spliceRows(templateRowNumber, 1);
+
+    console.log(`✅ 批量写入完成！共写入 ${batchData.length} 行数据，格式完全保持`);
 
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
