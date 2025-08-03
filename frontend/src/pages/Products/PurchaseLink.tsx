@@ -153,6 +153,14 @@ const Purchase: React.FC = () => {
     supplierStats: [] as { value: string; count: number }[]
   });
 
+  // 生成英国资料表相关状态
+  const [ukDataSheetModalVisible, setUkDataSheetModalVisible] = useState(false);
+  const [ukDataSheetLoading, setUkDataSheetLoading] = useState(false);
+  const [ukDataSheetProgress, setUkDataSheetProgress] = useState(0);
+  const [ukDataSheetStep, setUkDataSheetStep] = useState<string>('');
+  const [ukDataSheetMessage, setUkDataSheetMessage] = useState<string>('');
+  const [buttonsDisabled, setButtonsDisabled] = useState(false);
+
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
     try {
@@ -1474,7 +1482,134 @@ const Purchase: React.FC = () => {
     fetchTemplateFiles(country);
   };
 
+  // ==================== 生成英国资料表相关函数 ====================
 
+  // 生成英国资料表
+  const handleGenerateUkDataSheet = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要生成资料表的记录');
+      return;
+    }
+
+    // 获取选中记录的母SKU
+    const selectedRecords = data.filter(record => 
+      selectedRowKeys.some(key => Number(key) === record.id)
+    );
+    const selectedParentSkus = selectedRecords.map(record => record.parent_sku);
+
+    console.log('🎯 准备生成英国资料表，选中的母SKU:', selectedParentSkus);
+
+    setUkDataSheetModalVisible(true);
+    setUkDataSheetLoading(true);
+    setUkDataSheetProgress(0);
+    setUkDataSheetStep('准备开始...');
+    setUkDataSheetMessage('');
+    setButtonsDisabled(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedParentSkus }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // 处理流式响应
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let buffer = '';
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // 保留不完整的行
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const progressData = JSON.parse(line);
+                
+                if (progressData.step !== undefined) {
+                  // 进度更新
+                  setUkDataSheetProgress(progressData.progress || 0);
+                  setUkDataSheetStep(`步骤 ${progressData.step}`);
+                  setUkDataSheetMessage(progressData.message || '');
+                  console.log(`📊 进度更新: ${progressData.progress}% - ${progressData.message}`);
+                } else if (progressData.success !== undefined) {
+                  // 最终结果
+                  if (progressData.success) {
+                    console.log('✅ 英国资料表生成成功:', progressData);
+                    
+                    // 下载文件
+                    const fileBuffer = progressData.fileBuffer;
+                    if (fileBuffer) {
+                      const binaryString = atob(fileBuffer);
+                      const bytes = new Uint8Array(binaryString.length);
+                      for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                      }
+                      const blob = new Blob([bytes], { 
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                      });
+                      
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = progressData.fileName;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    }
+                    
+                    setUkDataSheetProgress(100);
+                    setUkDataSheetStep('完成');
+                    setUkDataSheetMessage(progressData.message);
+                    
+                    message.success(`英国资料表生成完成！包含 ${progressData.parentSkuCount} 个母SKU，${progressData.childSkuCount} 个子SKU`);
+                    
+                    // 2秒后关闭模态框
+                    setTimeout(() => {
+                      setUkDataSheetModalVisible(false);
+                      setButtonsDisabled(false);
+                    }, 2000);
+                  } else {
+                    throw new Error(progressData.message || '生成失败');
+                  }
+                }
+              } catch (parseError) {
+                console.error('解析响应数据失败:', parseError, '原始数据:', line);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('生成英国资料表失败:', error);
+      message.error('生成英国资料表失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      
+      setUkDataSheetProgress(0);
+      setUkDataSheetStep('失败');
+      setUkDataSheetMessage('生成失败，请重试');
+      setButtonsDisabled(false);
+      
+      // 3秒后关闭模态框
+      setTimeout(() => {
+        setUkDataSheetModalVisible(false);
+      }, 3000);
+    } finally {
+      setUkDataSheetLoading(false);
+    }
+  };
 
   return (
     <div style={{ padding: '20px' }}>
@@ -1752,7 +1887,7 @@ const Purchase: React.FC = () => {
                 placeholder="批量修改状态"
                 style={{ width: 140 }}
                 onSelect={(value) => handleBatchUpdateStatus(value)}
-                disabled={selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
               >
                 {getUniqueStatuses().map(statusItem => (
                   <Option key={statusItem.value} value={statusItem.value}>
@@ -1765,7 +1900,7 @@ const Purchase: React.FC = () => {
               <Button 
                 icon={<LinkOutlined />}
                 onClick={handleBatchOpenLinks}
-                disabled={selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
               >
                 批量打开链接
               </Button>
@@ -1774,7 +1909,7 @@ const Purchase: React.FC = () => {
               <Button 
                 type="primary"
                 onClick={handleBatchSendCpcTest}
-                disabled={selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
               >
                 发送CPC测试申请
               </Button>
@@ -1784,7 +1919,7 @@ const Purchase: React.FC = () => {
                 type="primary"
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
                 onClick={handleBatchMarkCpcSampleSent}
-                disabled={selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
               >
                 标记CPC样品已发
               </Button>
@@ -1794,6 +1929,7 @@ const Purchase: React.FC = () => {
                 icon={<UploadOutlined />}
                 onClick={() => setUploadModalVisible(true)}
                 loading={loading}
+                disabled={buttonsDisabled}
               >
                 批量上传新品
               </Button>
@@ -1803,8 +1939,21 @@ const Purchase: React.FC = () => {
                 icon={<FileExcelOutlined />}
                 onClick={handleOpenTemplateModal}
                 loading={templateLoading}
+                disabled={buttonsDisabled}
               >
                 管理亚马逊资料模板
+              </Button>
+
+              {/* 生成英国资料表 */}
+              <Button 
+                type="primary"
+                icon={<FileExcelOutlined />}
+                onClick={handleGenerateUkDataSheet}
+                loading={ukDataSheetLoading}
+                disabled={buttonsDisabled || selectedRowKeys.length === 0}
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                生成英国资料表
               </Button>
 
 
@@ -2281,6 +2430,107 @@ const Purchase: React.FC = () => {
                />
              )}
            </div>
+         </Space>
+       </Modal>
+
+       {/* 生成英国资料表进度模态框 */}
+       <Modal
+         title="生成英国资料表"
+         open={ukDataSheetModalVisible}
+         onCancel={() => {
+           if (!ukDataSheetLoading) {
+             setUkDataSheetModalVisible(false);
+             setButtonsDisabled(false);
+           }
+         }}
+         footer={[
+           <Button 
+             key="close" 
+             onClick={() => {
+               setUkDataSheetModalVisible(false);
+               setButtonsDisabled(false);
+             }}
+             disabled={ukDataSheetLoading}
+           >
+             {ukDataSheetLoading ? '生成中...' : '关闭'}
+           </Button>
+         ]}
+         width={600}
+         closable={!ukDataSheetLoading}
+         maskClosable={false}
+       >
+         <Space direction="vertical" style={{ width: '100%' }}>
+           <div style={{ marginBottom: '16px' }}>
+             <Text strong>当前进度：</Text>
+             <Text style={{ marginLeft: '8px', color: '#1890ff' }}>
+               {ukDataSheetStep}
+             </Text>
+           </div>
+           
+           <div style={{ marginBottom: '16px' }}>
+             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+               <Text>进度：</Text>
+               <Text strong style={{ marginLeft: '8px', color: '#52c41a' }}>
+                 {ukDataSheetProgress}%
+               </Text>
+             </div>
+             <div style={{ width: '100%', backgroundColor: '#f0f0f0', borderRadius: '6px', overflow: 'hidden' }}>
+               <div 
+                 style={{
+                   width: `${ukDataSheetProgress}%`,
+                   height: '20px',
+                   backgroundColor: ukDataSheetProgress === 100 ? '#52c41a' : '#1890ff',
+                   transition: 'width 0.3s ease',
+                   borderRadius: '6px'
+                 }}
+               />
+             </div>
+           </div>
+           
+           {ukDataSheetMessage && (
+             <div style={{ 
+               padding: '12px', 
+               backgroundColor: '#f6ffed', 
+               border: '1px solid #d9f7be', 
+               borderRadius: '6px',
+               marginBottom: '16px'
+             }}>
+               <Text style={{ color: '#52c41a' }}>
+                 📝 {ukDataSheetMessage}
+               </Text>
+             </div>
+           )}
+           
+           <div style={{ 
+             padding: '12px', 
+             backgroundColor: '#fafafa', 
+             borderRadius: '6px',
+             fontSize: '12px',
+             color: '#666'
+           }}>
+             <div>💡 <strong>功能说明：</strong></div>
+             <div>• 从英国模板复制文件并填写数据</div>
+             <div>• 保留原始Excel格式和样式</div>
+             <div>• 母SKU和子SKU都添加UK前缀</div>
+             <div>• 完成后自动下载到本地</div>
+           </div>
+           
+           {ukDataSheetLoading && (
+             <div style={{ textAlign: 'center', marginTop: '16px' }}>
+               <div style={{ 
+                 display: 'inline-block',
+                 width: '20px',
+                 height: '20px',
+                 border: '2px solid #f3f3f3',
+                 borderTop: '2px solid #1890ff',
+                 borderRadius: '50%',
+                 animation: 'spin 1s linear infinite'
+               }} />
+               <Text style={{ marginLeft: '8px', color: '#1890ff' }}>
+                 正在处理中，请耐心等待...
+               </Text>
+             </div>
+           )}
          </Space>
        </Modal>
 
