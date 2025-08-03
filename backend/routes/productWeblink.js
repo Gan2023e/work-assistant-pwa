@@ -1550,9 +1550,11 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     
     try {
       console.log('📥 开始加载Excel工作簿...');
+      const loadStartTime = Date.now();
+      
       // 从buffer加载工作簿
       await workbook.xlsx.load(downloadResult.content);
-      console.log('✅ Excel工作簿加载成功');
+      console.log(`✅ Excel工作簿加载成功，耗时: ${Date.now() - loadStartTime}ms`);
       
       // 获取Template工作表
       const worksheet = workbook.getWorksheet('Template');
@@ -1564,28 +1566,44 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       }
 
       console.log('📋 找到Template工作表，开始查找列位置...');
-      sendProgress(3, 'Excel文件加载完成，开始填写数据...', 60);
+      sendProgress(3, 'Excel文件加载完成，开始查找列位置...', 60);
 
-      // 查找列位置（第3行是标题行）
+      // 优化后的列查找逻辑 - 只查找前50列，提高效率
       const headerRow = worksheet.getRow(3);
       let itemSkuCol = -1;
       let colorNameCol = -1;
       let sizeNameCol = -1;
-
-      console.log('🔍 开始扫描第3行标题...');
-      headerRow.eachCell((cell, colNumber) => {
-        const cellValue = cell.value?.toString().toLowerCase();
-        console.log(`第${colNumber}列: "${cellValue}"`);
+      
+      const columnSearchStartTime = Date.now();
+      
+      // 限制搜索范围，避免遍历过多列
+      const maxColumnsToSearch = Math.min(50, headerRow.cellCount || 50);
+      console.log(`🔍 开始搜索列位置，最多搜索 ${maxColumnsToSearch} 列...`);
+      
+      for (let colNumber = 1; colNumber <= maxColumnsToSearch; colNumber++) {
+        const cell = headerRow.getCell(colNumber);
+        const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+        
         if (cellValue === 'item_sku') {
           itemSkuCol = colNumber;
+          console.log(`✅ 找到 item_sku 列: ${colNumber}`);
         } else if (cellValue === 'color_name') {
           colorNameCol = colNumber;
+          console.log(`✅ 找到 color_name 列: ${colNumber}`);
         } else if (cellValue === 'size_name') {
           sizeNameCol = colNumber;
+          console.log(`✅ 找到 size_name 列: ${colNumber}`);
         }
-      });
-
-      console.log(`📍 列位置查找结果 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+        
+        // 如果找到所有必需列，提前退出
+        if (itemSkuCol !== -1 && colorNameCol !== -1 && sizeNameCol !== -1) {
+          console.log(`🎯 所有必需列已找到，停止搜索`);
+          break;
+        }
+      }
+      
+      console.log(`📍 列位置查找完成，耗时: ${Date.now() - columnSearchStartTime}ms`);
+      console.log(`📍 列位置结果 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
       if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
         console.error('❌ 模板文件格式错误：未找到必需的列');
@@ -1598,9 +1616,10 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       }
 
       console.log(`✅ 找到所有必需列，开始数据处理...`);
-      sendProgress(3, '找到必需的列，开始填写数据...', 65);
+      sendProgress(3, '找到必需的列，开始准备数据...', 65);
 
       // 按母SKU分组整理数据
+      const dataGroupStartTime = Date.now();
       const parentSkuGroups = {};
       inventorySkus.forEach(sku => {
         if (!parentSkuGroups[sku.parent_sku]) {
@@ -1609,60 +1628,72 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         parentSkuGroups[sku.parent_sku].push(sku);
       });
 
-      console.log(`📊 数据分组完成，共${Object.keys(parentSkuGroups).length}个母SKU组`);
+      console.log(`📊 数据分组完成，共${Object.keys(parentSkuGroups).length}个母SKU组，耗时: ${Date.now() - dataGroupStartTime}ms`);
 
-      // 准备要插入的数据
+      // 优化后的数据准备逻辑
       const dataToInsert = [];
       let processedParents = 0;
+      
+      const dataConstructStartTime = Date.now();
+      console.log(`🏗️ 开始构建 ${selectedParentSkus.length} 个母SKU的数据...`);
       
       for (const parentSku of selectedParentSkus) {
         const childSkus = parentSkuGroups[parentSku] || [];
         console.log(`📝 处理母SKU: ${parentSku}, 子SKU数量: ${childSkus.length}`);
         
+        // 优化：直接创建对象而不是遍历所有列
         // 先添加母SKU行（color_name和size_name留空）
-        const parentRow = [];
-        for (let i = 1; i <= Math.max(itemSkuCol, colorNameCol, sizeNameCol); i++) {
-          if (i === itemSkuCol) {
-            parentRow.push(`UK${parentSku}`);
-          } else if (i === colorNameCol || i === sizeNameCol) {
-            parentRow.push(''); // 母SKU的color_name和size_name留空
-          } else {
-            parentRow.push('');
-          }
-        }
-        dataToInsert.push(parentRow);
+        const parentRowCells = {};
+        parentRowCells[itemSkuCol] = `UK${parentSku}`;
+        parentRowCells[colorNameCol] = '';
+        parentRowCells[sizeNameCol] = '';
+        dataToInsert.push(parentRowCells);
         
         // 然后添加子SKU行
         childSkus.forEach(sku => {
-          const rowData = [];
-          // 填充到正确的列位置
-          for (let i = 1; i <= Math.max(itemSkuCol, colorNameCol, sizeNameCol); i++) {
-            if (i === itemSkuCol) {
-              rowData.push(`UK${sku.child_sku}`);
-            } else if (i === colorNameCol) {
-              rowData.push(sku.sellercolorname || '');
-            } else if (i === sizeNameCol) {
-              rowData.push(sku.sellersizename || '');
-            } else {
-              rowData.push('');
-            }
-          }
-          dataToInsert.push(rowData);
+          const childRowCells = {};
+          childRowCells[itemSkuCol] = `UK${sku.child_sku}`;
+          childRowCells[colorNameCol] = sku.sellercolorname || '';
+          childRowCells[sizeNameCol] = sku.sellersizename || '';
+          dataToInsert.push(childRowCells);
         });
         
         processedParents++;
-        const progress = 65 + (processedParents / selectedParentSkus.length) * 20;
+        const progress = 65 + (processedParents / selectedParentSkus.length) * 15;
         sendProgress(3, `已处理 ${processedParents}/${selectedParentSkus.length} 个母SKU`, Math.round(progress));
       }
+      
+      console.log(`🏗️ 数据构建完成，准备插入 ${dataToInsert.length} 行数据，耗时: ${Date.now() - dataConstructStartTime}ms`);
+      sendProgress(3, `准备插入 ${dataToInsert.length} 行数据...`, 80);
 
-      console.log(`📝 数据准备完成，准备插入 ${dataToInsert.length} 行数据`);
-      sendProgress(3, `准备插入 ${dataToInsert.length} 行数据...`, 85);
-
-      // 批量插入数据，从第4行开始，使用'i+'选项继承样式包括空单元格
+      // 优化后的批量插入逻辑
       if (dataToInsert.length > 0) {
         console.log('📋 开始批量插入数据...');
-        worksheet.insertRows(4, dataToInsert, 'i+');
-        console.log('✅ 数据插入完成');
+        const insertStartTime = Date.now();
+        
+        // 先插入空行，然后逐行填充数据
+        worksheet.insertRows(4, dataToInsert.length);
+        
+        // 分批次填充数据，提高性能
+        const batchSize = 50; // 每次处理50行
+        for (let i = 0; i < dataToInsert.length; i += batchSize) {
+          const batch = dataToInsert.slice(i, Math.min(i + batchSize, dataToInsert.length));
+          
+          batch.forEach((rowData, index) => {
+            const rowNumber = 4 + i + index;
+            const row = worksheet.getRow(rowNumber);
+            
+            // 只设置有数据的列，保持效率
+            Object.keys(rowData).forEach(colNumber => {
+              row.getCell(parseInt(colNumber)).value = rowData[colNumber];
+            });
+          });
+          
+          const progress = 80 + ((i + batch.length) / dataToInsert.length) * 10;
+          sendProgress(3, `已插入 ${Math.min(i + batchSize, dataToInsert.length)}/${dataToInsert.length} 行数据`, Math.round(progress));
+        }
+        
+        console.log(`✅ 数据插入完成，耗时: ${Date.now() - insertStartTime}ms`);
       }
 
       sendProgress(3, '数据填写完成', 90);

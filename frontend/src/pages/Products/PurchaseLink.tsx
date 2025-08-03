@@ -1685,20 +1685,70 @@ const Purchase: React.FC = () => {
 
   // 检查英国模板文件
   const handleCheckUkTemplate = async () => {
+    console.log('🔍 开始检查英国模板文件...');
+    message.loading('正在检查英国模板文件...', 0);
+    
     try {
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/check-uk-template`);
       const result = await response.json();
       
+      message.destroy(); // 清除loading消息
+      
       if (result.success) {
-        message.success('英国模板文件检查完成，模板有效');
-        console.log('📋 模板检查结果:', result);
+        Modal.success({
+          title: '英国模板检查结果',
+          content: (
+            <div>
+              <p>✅ 英国模板文件检查通过</p>
+              <p><strong>模板文件名:</strong> {result.templateInfo.fileName}</p>
+              <p><strong>文件大小:</strong> {(result.templateInfo.size / 1024).toFixed(2)} KB</p>
+              <p><strong>工作表数量:</strong> {result.templateInfo.worksheetCount}</p>
+              <p><strong>是否有Template工作表:</strong> {result.templateInfo.hasTemplateSheet ? '是' : '否'}</p>
+              {result.templateInfo.hasTemplateSheet && (
+                <>
+                  <p><strong>找到的列:</strong></p>
+                  <ul>
+                    <li>item_sku: 第 {result.templateInfo.columns.itemSkuCol} 列</li>
+                    <li>color_name: 第 {result.templateInfo.columns.colorNameCol} 列</li>
+                    <li>size_name: 第 {result.templateInfo.columns.sizeNameCol} 列</li>
+                  </ul>
+                </>
+              )}
+            </div>
+          ),
+          width: 500
+        });
       } else {
-        message.error('模板文件检查失败: ' + result.message);
-        console.error('❌ 模板检查失败:', result);
+        Modal.error({
+          title: '英国模板检查失败',
+          content: (
+            <div>
+              <p>❌ {result.message}</p>
+              {result.availableFiles && result.availableFiles.length > 0 && (
+                <>
+                  <p><strong>可用的模板文件:</strong></p>
+                  <ul>
+                    {result.availableFiles.map((file: any, index: number) => (
+                      <li key={index}>{file.fileName}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p><strong>解决建议:</strong></p>
+              <ul>
+                <li>确保已上传英国站点的模板文件</li>
+                <li>检查模板文件是否包含 Template 工作表</li>
+                <li>确认第3行包含 item_sku、color_name、size_name 列标题</li>
+              </ul>
+            </div>
+          ),
+          width: 600
+        });
       }
     } catch (error) {
-      message.error('模板检查失败: ' + (error instanceof Error ? error.message : '未知错误'));
-      console.error('模板检查请求失败:', error);
+      console.error('检查英国模板失败:', error);
+      message.destroy();
+      message.error('检查英国模板失败，请稍后重试');
     }
   };
 
