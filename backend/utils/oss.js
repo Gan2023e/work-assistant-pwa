@@ -409,43 +409,12 @@ async function listTemplateFiles(templateType, provider = null, country = null) 
             // 兼容性处理：为旧文件（没有元数据的）尝试提取可读文件名
             const rawFileName = obj.name.split('/').pop();
             
-            // 如果文件名包含乱码，尝试提取有意义的部分
-            if (rawFileName.includes('è±') || rawFileName.includes('æ') || rawFileName.includes('ã')) {
-              // 尝试从乱码文件名中提取版本号或扩展名
-              const versionMatch = rawFileName.match(/(Version[\d.]+)/);
-              const extMatch = rawFileName.match(/(\.[a-zA-Z]+)$/);
-              const timestampMatch = rawFileName.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
-              
-              let friendlyName = '英国资料表模板';
-              
-              if (timestampMatch) {
-                const timestamp = timestampMatch[1].replace('T', ' ').replace(/-/g, ':');
-                friendlyName += `_${timestamp}`;
-              }
-              
-              if (versionMatch) {
-                friendlyName += `_${versionMatch[1]}`;
-              }
-              
-              if (extMatch) {
-                friendlyName += extMatch[1];
-              } else {
-                friendlyName += '.xlsm'; // 默认扩展名
-              }
-              
-              displayFileName = friendlyName;
-              console.log(`🔧 为乱码文件生成友好名称: ${rawFileName} -> ${displayFileName}`);
-            }
+
           }
         } catch (metaError) {
           console.warn(`⚠️ 获取文件元数据失败: ${obj.name}`, metaError.message);
           
-          // 如果获取元数据失败，也尝试生成一个友好的文件名
-          const rawFileName = obj.name.split('/').pop();
-          if (rawFileName.includes('è±') || rawFileName.includes('æ') || rawFileName.includes('ã')) {
-            displayFileName = `英国资料表模板_${new Date(obj.lastModified).toLocaleDateString().replace(/\//g, '-')}.xlsm`;
-            console.log(`🔧 为问题文件生成默认名称: ${rawFileName} -> ${displayFileName}`);
-          }
+
         }
         
         templateFiles.push({

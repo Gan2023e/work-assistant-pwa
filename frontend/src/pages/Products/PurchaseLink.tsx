@@ -1474,95 +1474,7 @@ const Purchase: React.FC = () => {
     fetchTemplateFiles(country);
   };
 
-  // 生成英国资料表
-  const handleGenerateUKDataSheet = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('请先选择要生成资料表的记录');
-      return;
-    }
 
-    try {
-      setLoading(true);
-      
-      // 获取选中记录的SKU
-      const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
-      const selectedRecords = currentData.filter(record => 
-        selectedRowKeys.some(key => Number(key) === record.id)
-      );
-      const selectedSkus = selectedRecords.map(record => record.parent_sku);
-
-      console.log('🔍 生成英国资料表 - 选中的SKU:', selectedSkus);
-
-      // 显示处理中消息
-      const hideMessage = message.loading('正在生成英国资料表，请稍候...', 0);
-
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selectedSkus }),
-      });
-
-      hideMessage();
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      // 检查响应是否为Excel文件（支持xlsx和xlsm格式）
-      const contentType = res.headers.get('content-type');
-      const isExcelFile = contentType && (
-        contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
-        contentType.includes('application/vnd.ms-excel.sheet.macroEnabled.12')
-      );
-      
-      if (isExcelFile) {
-        // 处理文件下载
-        const blob = await res.blob();
-        let filename = res.headers.get('content-disposition')?.match(/filename=(.+)/)?.[1];
-        
-        // 处理URL编码的文件名
-        if (filename) {
-          try {
-            filename = decodeURIComponent(filename);
-          } catch (e) {
-            console.warn('文件名解码失败，使用原始文件名');
-          }
-        }
-        
-        // 生成备用文件名 - 格式：UK_母SKU (多个SKU时列出所有母SKU)
-        filename = filename || (selectedSkus.length === 1 
-          ? `UK_${selectedSkus[0]}.xlsm`
-          : `UK_${selectedSkus.join('_')}.xlsm`);
-        
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-        const skuCount = selectedSkus.length;
-        const successMsg = skuCount === 1 
-          ? `英国资料表生成成功！文件已下载：${filename}`
-          : `英国资料表生成成功！已处理${skuCount}个SKU(${selectedSkus.join(', ')})，文件已下载：${filename}`;
-        
-        message.success(successMsg);
-      } else {
-        // 处理JSON响应（错误信息）
-        const result = await res.json();
-        throw new Error(result.message || '生成失败');
-      }
-
-    } catch (error) {
-      console.error('生成英国资料表失败:', error);
-      message.error(`生成英国资料表失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div style={{ padding: '20px' }}>
@@ -1895,17 +1807,7 @@ const Purchase: React.FC = () => {
                 管理亚马逊资料模板
               </Button>
 
-              {/* 生成英国资料表 */}
-              <Button 
-                icon={<FileExcelOutlined />}
-                type="primary"
-                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
-                onClick={handleGenerateUKDataSheet}
-                disabled={selectedRowKeys.length === 0}
-                loading={loading}
-              >
-                生成英国资料表
-              </Button>
+
 
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (
