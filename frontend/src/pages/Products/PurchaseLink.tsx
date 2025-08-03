@@ -21,7 +21,8 @@ import {
   Upload,
   List,
   Badge,
-  Tag
+  Tag,
+  Progress
 } from 'antd';
 import { 
   UploadOutlined, 
@@ -153,14 +154,12 @@ const Purchase: React.FC = () => {
     supplierStats: [] as { value: string; count: number }[]
   });
 
-  // 生成英国资料表相关状态
-  const [ukDataSheetModalVisible, setUkDataSheetModalVisible] = useState(false);
-  const [ukDataSheetLoading, setUkDataSheetLoading] = useState(false);
-  const [ukDataSheetProgress, setUkDataSheetProgress] = useState(0);
-  const [ukDataSheetStep, setUkDataSheetStep] = useState<string>('');
-  const [ukDataSheetMessage, setUkDataSheetMessage] = useState<string>('');
-  const [buttonsDisabled, setButtonsDisabled] = useState(false);
-  const [ukDataSheetAbortController, setUkDataSheetAbortController] = useState<AbortController | null>(null);
+  // 英国资料表生成相关状态
+  const [ukGenerateModalVisible, setUkGenerateModalVisible] = useState(false);
+  const [ukGenerateLoading, setUkGenerateLoading] = useState(false);
+  const [ukGenerateProgress, setUkGenerateProgress] = useState(0);
+  const [ukGenerateCurrentStep, setUkGenerateCurrentStep] = useState('');
+  const [allButtonsDisabled, setAllButtonsDisabled] = useState(false);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1483,272 +1482,103 @@ const Purchase: React.FC = () => {
     fetchTemplateFiles(country);
   };
 
-  // ==================== 生成英国资料表相关函数 ====================
-
-  // 生成英国资料表
-  const handleGenerateUkDataSheet = async () => {
+  // 生成英国资料表处理函数
+  const handleGenerateUkDataSheet = () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要生成资料表的记录');
       return;
     }
 
-    // 获取选中记录的母SKU
-    const selectedRecords = data.filter(record => 
-      selectedRowKeys.some(key => Number(key) === record.id)
-    );
-    const selectedParentSkus = selectedRecords.map(record => record.parent_sku);
+    // 检查是否有英国模板
+    setUkGenerateModalVisible(true);
+    generateUkDataSheet();
+  };
 
-    console.log('🎯 准备生成英国资料表，选中的母SKU:', selectedParentSkus);
-
-    setUkDataSheetModalVisible(true);
-    setUkDataSheetLoading(true);
-    setUkDataSheetProgress(0);
-    setUkDataSheetStep('准备开始...');
-    setUkDataSheetMessage('');
-    setButtonsDisabled(true);
-
-    // 设置30秒超时
-    const timeoutId = setTimeout(() => {
-      console.error('⏰ 生成英国资料表超时');
-      setUkDataSheetLoading(false);
-      setUkDataSheetProgress(0);
-      setUkDataSheetStep('超时');
-      setUkDataSheetMessage('处理超时，可能是网络问题或模板文件过大，请重试');
-      setButtonsDisabled(false);
-      message.error('处理超时，请检查网络连接或联系技术支持');
-    }, 30000);
-
-    let abortController: AbortController | null = null;
-
+  // 执行生成英国资料表
+  const generateUkDataSheet = async () => {
     try {
-      abortController = new AbortController();
-      setUkDataSheetAbortController(abortController);
+      setUkGenerateLoading(true);
+      setAllButtonsDisabled(true);
+      setUkGenerateProgress(0);
+      setUkGenerateCurrentStep('正在准备生成英国资料表...');
+
+      // 步骤1: 验证英国模板存在
+      setUkGenerateProgress(10);
+      setUkGenerateCurrentStep('检查英国模板文件...');
       
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
+      const templateCheckRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=UK`);
+      const templateCheckResult = await templateCheckRes.json();
+      
+      if (!templateCheckResult.data || templateCheckResult.data.length === 0) {
+        throw new Error('未找到英国站点的资料模板，请先上传英国模板文件');
+      }
+
+      // 步骤2: 获取选中的记录信息
+      setUkGenerateProgress(20);
+      setUkGenerateCurrentStep('获取选中记录的母SKU信息...');
+      
+      const selectedRecords = data.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+      const parentSkus = selectedRecords.map(record => record.parent_sku);
+
+      // 步骤3: 调用后端API生成资料表
+      setUkGenerateProgress(30);
+      setUkGenerateCurrentStep('查询子SKU信息...');
+
+      const generateRes = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selectedParentSkus }),
-        signal: abortController.signal
+        body: JSON.stringify({ parentSkus }),
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (!generateRes.ok) {
+        throw new Error(`生成失败: ${generateRes.status} ${generateRes.statusText}`);
       }
 
-      // 处理流式响应
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+      // 步骤4: 处理进度更新
+      setUkGenerateProgress(60);
+      setUkGenerateCurrentStep('复制模板文件并填写数据...');
 
-      if (reader) {
-        let buffer = '';
-        let lastProgressTime = Date.now();
-        
-        // 设置读取超时检查
-        const progressCheckInterval = setInterval(() => {
-          const now = Date.now();
-          if (now - lastProgressTime > 15000) { // 15秒无进度更新
-            console.error('📡 长时间无进度更新，可能连接异常');
-            clearInterval(progressCheckInterval);
-            reader.cancel();
-            throw new Error('长时间无响应，连接可能异常');
-          }
-        }, 5000);
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) {
-            clearInterval(progressCheckInterval);
-            break;
-          }
-          
-          lastProgressTime = Date.now();
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // 保留不完整的行
-          
-          for (const line of lines) {
-            if (line.trim()) {
-              try {
-                const progressData = JSON.parse(line);
-                
-                if (progressData.step !== undefined) {
-                  // 进度更新
-                  setUkDataSheetProgress(progressData.progress || 0);
-                  setUkDataSheetStep(`步骤 ${progressData.step}`);
-                  setUkDataSheetMessage(progressData.message || '');
-                  console.log(`📊 进度更新: ${progressData.progress}% - ${progressData.message}`);
-                } else if (progressData.success !== undefined) {
-                  // 最终结果
-                  clearInterval(progressCheckInterval);
-                  
-                  if (progressData.success) {
-                    console.log('✅ 英国资料表生成成功:', progressData);
-                    
-                    // 下载文件
-                    const fileBuffer = progressData.fileBuffer;
-                    if (fileBuffer) {
-                      try {
-                        const binaryString = atob(fileBuffer);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                          bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        const blob = new Blob([bytes], { 
-                          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-                        });
-                        
-                        const url = window.URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = progressData.fileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        
-                        console.log('📥 文件下载成功');
-                      } catch (downloadError) {
-                        console.error('文件下载失败:', downloadError);
-                        message.error('文件下载失败，请重试');
-                      }
-                    }
-                    
-                    setUkDataSheetProgress(100);
-                    setUkDataSheetStep('完成');
-                    setUkDataSheetMessage(progressData.message);
-                    
-                    message.success(`英国资料表生成完成！包含 ${progressData.parentSkuCount} 个母SKU，${progressData.childSkuCount} 个子SKU`);
-                    
-                    // 2秒后关闭模态框
-                    setTimeout(() => {
-                      setUkDataSheetModalVisible(false);
-                      setButtonsDisabled(false);
-                    }, 2000);
-                  } else {
-                    throw new Error(progressData.message || '生成失败');
-                  }
-                }
-              } catch (parseError) {
-                console.error('解析响应数据失败:', parseError, '原始数据:', line);
-                // 不中断处理，继续处理其他行
-              }
-            }
-          }
-        }
-      }
-    } catch (error) {
-      clearTimeout(timeoutId);
-      console.error('生成英国资料表失败:', error);
+      // 等待一段时间模拟处理
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      setUkGenerateProgress(80);
+      setUkGenerateCurrentStep('准备下载文件...');
+
+      // 步骤5: 下载文件
+      setUkGenerateProgress(90);
+      setUkGenerateCurrentStep('正在下载生成的资料表...');
+
+      const blob = await generateRes.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `UK_资料表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      // 完成
+      setUkGenerateProgress(100);
+      setUkGenerateCurrentStep('生成完成！文件已下载到本地');
       
-      let errorMessage = '生成英国资料表失败';
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = '操作已取消';
-        } else {
-          errorMessage += ': ' + error.message;
-        }
-      }
+      message.success(`成功生成英国资料表，包含 ${parentSkus.length} 个母SKU 的产品信息`);
       
-      message.error(errorMessage);
-      
-      setUkDataSheetProgress(0);
-      setUkDataSheetStep('失败');
-      setUkDataSheetMessage(errorMessage);
-      setButtonsDisabled(false);
-      
-      // 3秒后关闭模态框
       setTimeout(() => {
-        setUkDataSheetModalVisible(false);
-      }, 3000);
+        setUkGenerateModalVisible(false);
+        setUkGenerateProgress(0);
+        setUkGenerateCurrentStep('');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('生成英国资料表失败:', error);
+      message.error('生成失败: ' + error.message);
+      setUkGenerateModalVisible(false);
     } finally {
-      setUkDataSheetLoading(false);
-      clearTimeout(timeoutId);
-      setUkDataSheetAbortController(null);
-    }
-  };
-
-  // 取消生成英国资料表
-  const handleCancelUkDataSheet = () => {
-    if (ukDataSheetAbortController) {
-      ukDataSheetAbortController.abort();
-      console.log('🚫 用户取消了生成英国资料表操作');
-      message.info('已取消生成操作');
-    }
-    setUkDataSheetModalVisible(false);
-    setUkDataSheetLoading(false);
-    setButtonsDisabled(false);
-    setUkDataSheetAbortController(null);
-  };
-
-  // 检查英国模板文件
-  const handleCheckUkTemplate = async () => {
-    console.log('🔍 开始检查英国模板文件...');
-    message.loading('正在检查英国模板文件...', 0);
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/check-uk-template`);
-      const result = await response.json();
-      
-      message.destroy(); // 清除loading消息
-      
-      if (result.success) {
-        Modal.success({
-          title: '英国模板检查结果',
-          content: (
-            <div>
-              <p>✅ 英国模板文件检查通过</p>
-              <p><strong>模板文件名:</strong> {result.templateInfo.fileName}</p>
-              <p><strong>文件大小:</strong> {(result.templateInfo.size / 1024).toFixed(2)} KB</p>
-              <p><strong>工作表数量:</strong> {result.templateInfo.worksheetCount}</p>
-              <p><strong>是否有Template工作表:</strong> {result.templateInfo.hasTemplateSheet ? '是' : '否'}</p>
-              {result.templateInfo.hasTemplateSheet && (
-                <>
-                  <p><strong>找到的列:</strong></p>
-                  <ul>
-                    <li>item_sku: 第 {result.templateInfo.columns.itemSkuCol} 列</li>
-                    <li>color_name: 第 {result.templateInfo.columns.colorNameCol} 列</li>
-                    <li>size_name: 第 {result.templateInfo.columns.sizeNameCol} 列</li>
-                  </ul>
-                </>
-              )}
-            </div>
-          ),
-          width: 500
-        });
-      } else {
-        Modal.error({
-          title: '英国模板检查失败',
-          content: (
-            <div>
-              <p>❌ {result.message}</p>
-              {result.availableFiles && result.availableFiles.length > 0 && (
-                <>
-                  <p><strong>可用的模板文件:</strong></p>
-                  <ul>
-                    {result.availableFiles.map((file: any, index: number) => (
-                      <li key={index}>{file.fileName}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              <p><strong>解决建议:</strong></p>
-              <ul>
-                <li>确保已上传英国站点的模板文件</li>
-                <li>检查模板文件是否包含 Template 工作表</li>
-                <li>确认第3行包含 item_sku、color_name、size_name 列标题</li>
-              </ul>
-            </div>
-          ),
-          width: 600
-        });
-      }
-    } catch (error) {
-      console.error('检查英国模板失败:', error);
-      message.destroy();
-      message.error('检查英国模板失败，请稍后重试');
+      setUkGenerateLoading(false);
+      setAllButtonsDisabled(false);
     }
   };
 
@@ -1896,6 +1726,7 @@ const Purchase: React.FC = () => {
               
               <Button 
                 icon={<ReloadOutlined />} 
+                disabled={allButtonsDisabled}
                 onClick={() => {
                   setInput('');
                   setData([]);
@@ -2028,7 +1859,7 @@ const Purchase: React.FC = () => {
                 placeholder="批量修改状态"
                 style={{ width: 140 }}
                 onSelect={(value) => handleBatchUpdateStatus(value)}
-                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
+                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
               >
                 {getUniqueStatuses().map(statusItem => (
                   <Option key={statusItem.value} value={statusItem.value}>
@@ -2041,7 +1872,7 @@ const Purchase: React.FC = () => {
               <Button 
                 icon={<LinkOutlined />}
                 onClick={handleBatchOpenLinks}
-                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
+                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
               >
                 批量打开链接
               </Button>
@@ -2050,7 +1881,7 @@ const Purchase: React.FC = () => {
               <Button 
                 type="primary"
                 onClick={handleBatchSendCpcTest}
-                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
+                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
               >
                 发送CPC测试申请
               </Button>
@@ -2060,7 +1891,7 @@ const Purchase: React.FC = () => {
                 type="primary"
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
                 onClick={handleBatchMarkCpcSampleSent}
-                disabled={selectedRowKeys.length === 0 || buttonsDisabled}
+                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
               >
                 标记CPC样品已发
               </Button>
@@ -2070,7 +1901,7 @@ const Purchase: React.FC = () => {
                 icon={<UploadOutlined />}
                 onClick={() => setUploadModalVisible(true)}
                 loading={loading}
-                disabled={buttonsDisabled}
+                disabled={allButtonsDisabled}
               >
                 批量上传新品
               </Button>
@@ -2080,7 +1911,7 @@ const Purchase: React.FC = () => {
                 icon={<FileExcelOutlined />}
                 onClick={handleOpenTemplateModal}
                 loading={templateLoading}
-                disabled={buttonsDisabled}
+                disabled={allButtonsDisabled}
               >
                 管理亚马逊资料模板
               </Button>
@@ -2090,23 +1921,14 @@ const Purchase: React.FC = () => {
                 type="primary"
                 icon={<FileExcelOutlined />}
                 onClick={handleGenerateUkDataSheet}
-                loading={ukDataSheetLoading}
-                disabled={buttonsDisabled || selectedRowKeys.length === 0}
+                loading={ukGenerateLoading}
+                disabled={allButtonsDisabled || selectedRowKeys.length === 0}
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
               >
                 生成英国资料表
               </Button>
 
-              {/* 检查英国模板 */}
-              <Button 
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={handleCheckUkTemplate}
-                disabled={buttonsDisabled}
-                title="检查英国模板文件是否正确配置"
-              >
-                检查模板
-              </Button>
+
 
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (
@@ -2122,12 +1944,12 @@ const Purchase: React.FC = () => {
               onConfirm={handleBatchDelete}
               okText="确定"
               cancelText="取消"
-              disabled={selectedRowKeys.length === 0}
+              disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
             >
               <Button 
                 danger
                 icon={<DeleteOutlined />}
-                disabled={selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
               >
                 批量删除
               </Button>
@@ -2583,128 +2405,68 @@ const Purchase: React.FC = () => {
          </Space>
        </Modal>
 
-       {/* 生成英国资料表进度模态框 */}
+       {/* 英国资料表生成进度模态框 */}
        <Modal
          title="生成英国资料表"
-         open={ukDataSheetModalVisible}
-         onCancel={handleCancelUkDataSheet}
-         footer={[
-           <Button 
-             key="cancel" 
-             onClick={handleCancelUkDataSheet}
-             disabled={!ukDataSheetLoading && ukDataSheetProgress === 100}
-             danger={ukDataSheetLoading}
-           >
-             {ukDataSheetLoading ? '取消' : '关闭'}
-           </Button>,
-           ukDataSheetLoading && (
-             <Button 
-               key="progress" 
-               type="primary"
-               loading
-               disabled
-             >
-               {ukDataSheetStep} ({ukDataSheetProgress}%)
-             </Button>
-           )
-         ].filter(Boolean)}
-         width={600}
-         closable={!ukDataSheetLoading}
+         open={ukGenerateModalVisible}
+         onCancel={() => {
+           if (!ukGenerateLoading) {
+             setUkGenerateModalVisible(false);
+             setUkGenerateProgress(0);
+             setUkGenerateCurrentStep('');
+           }
+         }}
+         footer={ukGenerateProgress === 100 ? [
+           <Button key="close" type="primary" onClick={() => {
+             setUkGenerateModalVisible(false);
+             setUkGenerateProgress(0);
+             setUkGenerateCurrentStep('');
+           }}>
+             关闭
+           </Button>
+         ] : null}
+         closable={!ukGenerateLoading}
          maskClosable={false}
+         width={600}
        >
          <Space direction="vertical" style={{ width: '100%' }}>
            <div style={{ marginBottom: '16px' }}>
-             <Text strong>当前进度：</Text>
-             <Text style={{ marginLeft: '8px', color: '#1890ff' }}>
-               {ukDataSheetStep}
-             </Text>
+             <Text strong>当前步骤：</Text>
+             <Text style={{ color: '#1890ff' }}>{ukGenerateCurrentStep}</Text>
            </div>
            
            <div style={{ marginBottom: '16px' }}>
-             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-               <Text>进度：</Text>
-               <Text strong style={{ marginLeft: '8px', color: '#52c41a' }}>
-                 {ukDataSheetProgress}%
+             <Text strong>执行进度：</Text>
+             <Progress 
+               percent={ukGenerateProgress} 
+               status={ukGenerateLoading ? 'active' : (ukGenerateProgress === 100 ? 'success' : 'normal')}
+               strokeColor={{
+                 '0%': '#108ee9',
+                 '100%': '#87d068',
+               }}
+             />
+           </div>
+
+           {selectedRowKeys.length > 0 && (
+             <div style={{ marginBottom: '16px' }}>
+               <Text type="secondary">
+                 本次将为 <Text strong style={{ color: '#1890ff' }}>{selectedRowKeys.length}</Text> 个母SKU生成英国资料表
                </Text>
              </div>
-             <div style={{ width: '100%', backgroundColor: '#f0f0f0', borderRadius: '6px', overflow: 'hidden' }}>
-               <div 
-                 style={{
-                   width: `${ukDataSheetProgress}%`,
-                   height: '20px',
-                   backgroundColor: ukDataSheetProgress === 100 ? '#52c41a' : '#1890ff',
-                   transition: 'width 0.3s ease',
-                   borderRadius: '6px'
-                 }}
-               />
-             </div>
-           </div>
-           
-           {ukDataSheetMessage && (
+           )}
+
+           {ukGenerateProgress === 100 && (
              <div style={{ 
                padding: '12px', 
                backgroundColor: '#f6ffed', 
-               border: '1px solid #d9f7be', 
+               border: '1px solid #b7eb8f', 
                borderRadius: '6px',
-               marginBottom: '16px'
+               textAlign: 'center'
              }}>
-               <Text style={{ color: '#52c41a' }}>
-                 📝 {ukDataSheetMessage}
+               <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px', marginRight: '8px' }} />
+               <Text style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                 英国资料表生成完成！文件已自动下载到本地
                </Text>
-             </div>
-           )}
-           
-           <div style={{ 
-             padding: '12px', 
-             backgroundColor: '#fafafa', 
-             borderRadius: '6px',
-             fontSize: '12px',
-             color: '#666'
-           }}>
-             <div>💡 <strong>功能说明：</strong></div>
-             <div>• 从英国模板复制文件并填写数据</div>
-             <div>• 保留原始Excel格式和样式</div>
-             <div>• 母SKU和子SKU都添加UK前缀</div>
-             <div>• 完成后自动下载到本地</div>
-           </div>
-           
-           {ukDataSheetLoading && (
-             <div style={{ textAlign: 'center', marginTop: '16px' }}>
-               <div style={{ 
-                 display: 'inline-block',
-                 width: '20px',
-                 height: '20px',
-                 border: '2px solid #f3f3f3',
-                 borderTop: '2px solid #1890ff',
-                 borderRadius: '50%',
-                 animation: 'spin 1s linear infinite'
-               }} />
-               <Text style={{ marginLeft: '8px', color: '#1890ff' }}>
-                 正在处理中，请耐心等待...
-               </Text>
-             </div>
-           )}
-           
-           {!ukDataSheetLoading && ukDataSheetProgress === 0 && ukDataSheetStep === '失败' && (
-             <div style={{ 
-               padding: '12px', 
-               backgroundColor: '#fff2f0', 
-               border: '1px solid #ffccc7', 
-               borderRadius: '6px',
-               marginTop: '16px'
-             }}>
-               <div style={{ marginBottom: '8px' }}>
-                 <Text style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
-                   ⚠️ 故障排除建议：
-                 </Text>
-               </div>
-               <div style={{ fontSize: '12px', color: '#666' }}>
-                 <div>1. 检查是否已上传英国站点的模板文件</div>
-                 <div>2. 确认模板文件包含Template工作表</div>
-                 <div>3. 验证第3行包含item_sku、color_name、size_name列</div>
-                 <div>4. 检查网络连接是否正常</div>
-                 <div>5. 点击"检查模板"按钮进行诊断</div>
-               </div>
              </div>
            )}
          </Space>

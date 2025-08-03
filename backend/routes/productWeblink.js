@@ -1453,420 +1453,228 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
   }
 });
 
-// ==================== 生成英国资料表相关接口 ====================
+// ==================== 生成英国资料表接口 ====================
 
-// 生成英国资料表接口
+// 生成英国资料表
 router.post('/generate-uk-data-sheet', async (req, res) => {
   const startTime = Date.now();
-  
   try {
-    console.log('📤 收到生成英国资料表请求');
+    console.log('📋 收到生成英国资料表请求');
     
-    const { selectedParentSkus } = req.body;
+    const { parentSkus } = req.body;
     
-    if (!selectedParentSkus || !Array.isArray(selectedParentSkus) || selectedParentSkus.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '请选择要生成资料表的母SKU' 
-      });
+    if (!Array.isArray(parentSkus) || parentSkus.length === 0) {
+      return res.status(400).json({ message: '请提供要生成资料表的母SKU列表' });
     }
 
-    console.log(`📋 准备为 ${selectedParentSkus.length} 个母SKU生成英国资料表:`, selectedParentSkus);
+    console.log(`📝 处理 ${parentSkus.length} 个母SKU:`, parentSkus);
 
-    // 设置响应头用于流式进度更新
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    });
-
-    // 发送进度更新函数
-    const sendProgress = (step, message, progress) => {
-      const progressData = {
-        step,
-        message,
-        progress,
-        timestamp: new Date().toISOString()
-      };
-      res.write(JSON.stringify(progressData) + '\n');
-    };
-
-    // 步骤1: 查询子SKU信息 (10%)
-    sendProgress(1, '正在查询子SKU信息...', 10);
-    
-    const inventorySkus = await SellerInventorySku.findAll({
-      where: {
-        parent_sku: {
-          [Op.in]: selectedParentSkus
-        }
-      },
-      attributes: ['parent_sku', 'child_sku', 'sellercolorname', 'sellersizename']
-    });
-
-    if (inventorySkus.length === 0) {
-      sendProgress(1, '未找到匹配的子SKU信息', 100);
-      res.end(JSON.stringify({ success: false, message: '在数据库中未找到匹配的子SKU信息' }));
-      return;
-    }
-
-    console.log(`📊 查询到 ${inventorySkus.length} 条子SKU记录`);
-    sendProgress(1, `查询到 ${inventorySkus.length} 条子SKU记录`, 20);
-
-    // 步骤2: 获取英国模板文件 (30%)
-    sendProgress(2, '正在获取英国模板文件...', 30);
-    
-    const { downloadTemplateFromOSS } = require('../utils/oss');
-    
-    // 查找英国模板文件
+    // 步骤1: 获取英国模板文件
+    console.log('🔍 查找英国模板文件...');
     const { listTemplateFiles } = require('../utils/oss');
+    
     const templateResult = await listTemplateFiles('amazon', null, 'UK');
     
     if (!templateResult.success || templateResult.files.length === 0) {
-      sendProgress(2, '未找到英国模板文件', 100);
-      res.end(JSON.stringify({ success: false, message: '未找到英国站点的资料模板文件' }));
-      return;
+      return res.status(400).json({ message: '未找到英国站点的资料模板，请先上传英国模板文件' });
     }
 
-    // 使用第一个找到的英国模板
-    const templateFile = templateResult.files[0];
-    console.log(`📁 使用模板文件: ${templateFile.fileName}`);
-    sendProgress(2, `找到模板文件: ${templateFile.fileName}`, 40);
+    // 使用第一个英国模板
+    const ukTemplate = templateResult.files[0];
+    console.log(`📄 使用英国模板: ${ukTemplate.fileName}`);
 
-    // 下载模板文件
-    const downloadResult = await downloadTemplateFromOSS(templateFile.name);
+    // 步骤2: 下载模板文件
+    console.log('📥 下载英国模板文件...');
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const downloadResult = await downloadTemplateFromOSS(ukTemplate.name);
+    
     if (!downloadResult.success) {
-      sendProgress(2, '下载模板文件失败', 100);
-      res.end(JSON.stringify({ success: false, message: '下载模板文件失败: ' + downloadResult.message }));
-      return;
+      return res.status(500).json({ message: '下载英国模板失败: ' + downloadResult.message });
     }
 
-    sendProgress(2, '模板文件下载完成', 50);
-
-    // 步骤3: 处理Excel文件 (50%-90%)
-    sendProgress(3, '正在处理Excel文件...', 50);
-    
-    const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.Workbook();
-    
-    try {
-      console.log('📥 开始加载Excel工作簿...');
-      const loadStartTime = Date.now();
-      
-      // 从buffer加载工作簿
-      await workbook.xlsx.load(downloadResult.content);
-      console.log(`✅ Excel工作簿加载成功，耗时: ${Date.now() - loadStartTime}ms`);
-      
-      // 获取Template工作表
-      const worksheet = workbook.getWorksheet('Template');
-      if (!worksheet) {
-        console.error('❌ 未找到Template工作表');
-        sendProgress(3, 'Excel文件中未找到Template工作表', 100);
-        res.end(JSON.stringify({ success: false, message: 'Excel文件中未找到Template工作表' }));
-        return;
-      }
-
-      console.log('📋 找到Template工作表，开始查找列位置...');
-      sendProgress(3, 'Excel文件加载完成，开始查找列位置...', 60);
-
-      // 优化后的列查找逻辑 - 只查找前50列，提高效率
-      const headerRow = worksheet.getRow(3);
-      let itemSkuCol = -1;
-      let colorNameCol = -1;
-      let sizeNameCol = -1;
-      
-      const columnSearchStartTime = Date.now();
-      
-      // 限制搜索范围，避免遍历过多列
-      const maxColumnsToSearch = Math.min(50, headerRow.cellCount || 50);
-      console.log(`🔍 开始搜索列位置，最多搜索 ${maxColumnsToSearch} 列...`);
-      
-      for (let colNumber = 1; colNumber <= maxColumnsToSearch; colNumber++) {
-        const cell = headerRow.getCell(colNumber);
-        const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
-        
-        if (cellValue === 'item_sku') {
-          itemSkuCol = colNumber;
-          console.log(`✅ 找到 item_sku 列: ${colNumber}`);
-        } else if (cellValue === 'color_name') {
-          colorNameCol = colNumber;
-          console.log(`✅ 找到 color_name 列: ${colNumber}`);
-        } else if (cellValue === 'size_name') {
-          sizeNameCol = colNumber;
-          console.log(`✅ 找到 size_name 列: ${colNumber}`);
+    // 步骤3: 查询sellerinventory_sku表获取子SKU信息
+    console.log('🔍 查询子SKU信息...');
+    const inventorySkus = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: {
+          [Op.in]: parentSkus
         }
-        
-        // 如果找到所有必需列，提前退出
-        if (itemSkuCol !== -1 && colorNameCol !== -1 && sizeNameCol !== -1) {
-          console.log(`🎯 所有必需列已找到，停止搜索`);
-          break;
-        }
-      }
-      
-      console.log(`📍 列位置查找完成，耗时: ${Date.now() - columnSearchStartTime}ms`);
-      console.log(`📍 列位置结果 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+      },
+      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
+    });
 
-      if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
-        console.error('❌ 模板文件格式错误：未找到必需的列');
-        sendProgress(3, '模板文件格式错误：未找到必需的列', 100);
-        res.end(JSON.stringify({ 
-          success: false, 
-          message: '模板文件格式错误：在第三行中未找到必需的列（item_sku、color_name、size_name）' 
-        }));
-        return;
-      }
-
-      console.log(`✅ 找到所有必需列，开始数据处理...`);
-      sendProgress(3, '找到必需的列，开始准备数据...', 65);
-
-      // 按母SKU分组整理数据
-      const dataGroupStartTime = Date.now();
-      const parentSkuGroups = {};
-      inventorySkus.forEach(sku => {
-        if (!parentSkuGroups[sku.parent_sku]) {
-          parentSkuGroups[sku.parent_sku] = [];
-        }
-        parentSkuGroups[sku.parent_sku].push(sku);
+    if (inventorySkus.length === 0) {
+      return res.status(404).json({ 
+        message: '在数据库中未找到这些母SKU对应的子SKU信息' 
       });
-
-      console.log(`📊 数据分组完成，共${Object.keys(parentSkuGroups).length}个母SKU组，耗时: ${Date.now() - dataGroupStartTime}ms`);
-
-      // 优化后的数据准备逻辑
-      const dataToInsert = [];
-      let processedParents = 0;
-      
-      const dataConstructStartTime = Date.now();
-      console.log(`🏗️ 开始构建 ${selectedParentSkus.length} 个母SKU的数据...`);
-      
-      for (const parentSku of selectedParentSkus) {
-        const childSkus = parentSkuGroups[parentSku] || [];
-        console.log(`📝 处理母SKU: ${parentSku}, 子SKU数量: ${childSkus.length}`);
-        
-        // 优化：直接创建对象而不是遍历所有列
-        // 先添加母SKU行（color_name和size_name留空）
-        const parentRowCells = {};
-        parentRowCells[itemSkuCol] = `UK${parentSku}`;
-        parentRowCells[colorNameCol] = '';
-        parentRowCells[sizeNameCol] = '';
-        dataToInsert.push(parentRowCells);
-        
-        // 然后添加子SKU行
-        childSkus.forEach(sku => {
-          const childRowCells = {};
-          childRowCells[itemSkuCol] = `UK${sku.child_sku}`;
-          childRowCells[colorNameCol] = sku.sellercolorname || '';
-          childRowCells[sizeNameCol] = sku.sellersizename || '';
-          dataToInsert.push(childRowCells);
-        });
-        
-        processedParents++;
-        const progress = 65 + (processedParents / selectedParentSkus.length) * 15;
-        sendProgress(3, `已处理 ${processedParents}/${selectedParentSkus.length} 个母SKU`, Math.round(progress));
-      }
-      
-      console.log(`🏗️ 数据构建完成，准备插入 ${dataToInsert.length} 行数据，耗时: ${Date.now() - dataConstructStartTime}ms`);
-      sendProgress(3, `准备插入 ${dataToInsert.length} 行数据...`, 80);
-
-      // 优化后的批量插入逻辑
-      if (dataToInsert.length > 0) {
-        console.log('📋 开始批量插入数据...');
-        const insertStartTime = Date.now();
-        
-        // 先插入空行，然后逐行填充数据
-        worksheet.insertRows(4, dataToInsert.length);
-        
-        // 分批次填充数据，提高性能
-        const batchSize = 50; // 每次处理50行
-        for (let i = 0; i < dataToInsert.length; i += batchSize) {
-          const batch = dataToInsert.slice(i, Math.min(i + batchSize, dataToInsert.length));
-          
-          batch.forEach((rowData, index) => {
-            const rowNumber = 4 + i + index;
-            const row = worksheet.getRow(rowNumber);
-            
-            // 只设置有数据的列，保持效率
-            Object.keys(rowData).forEach(colNumber => {
-              row.getCell(parseInt(colNumber)).value = rowData[colNumber];
-            });
-          });
-          
-          const progress = 80 + ((i + batch.length) / dataToInsert.length) * 10;
-          sendProgress(3, `已插入 ${Math.min(i + batchSize, dataToInsert.length)}/${dataToInsert.length} 行数据`, Math.round(progress));
-        }
-        
-        console.log(`✅ 数据插入完成，耗时: ${Date.now() - insertStartTime}ms`);
-      }
-
-      sendProgress(3, '数据填写完成', 90);
-
-    } catch (excelError) {
-      console.error('❌ Excel处理失败:', excelError);
-      sendProgress(3, 'Excel处理失败: ' + excelError.message, 100);
-      res.end(JSON.stringify({ 
-        success: false, 
-        message: 'Excel处理失败: ' + excelError.message 
-      }));
-      return;
     }
 
-    // 步骤4: 生成文件并准备下载 (90%-100%)
-    sendProgress(4, '正在生成最终文件...', 90);
+    console.log(`📊 找到 ${inventorySkus.length} 条子SKU记录`);
+
+    // 步骤4: 处理Excel文件
+    console.log('📝 开始处理Excel文件...');
+    const workbook = xlsx.read(downloadResult.content, { type: 'buffer' });
     
-    // 生成文件buffer
-    const buffer = await workbook.xlsx.writeBuffer();
+    // 检查是否有Template工作表
+    if (!workbook.SheetNames.includes('Template')) {
+      return res.status(400).json({ message: '模板文件中未找到Template工作表' });
+    }
+
+    const worksheet = workbook.Sheets['Template'];
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (data.length < 3) {
+      return res.status(400).json({ message: 'Template工作表至少需要3行数据（包含标题行）' });
+    }
+
+    // 查找列位置（第3行是标题行，索引2）
+    const headerRow = data[2];
+    let itemSkuCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+
+    for (let i = 0; i < headerRow.length; i++) {
+      const cellValue = headerRow[i]?.toString().toLowerCase();
+      if (cellValue === 'item_sku') {
+        itemSkuCol = i;
+      } else if (cellValue === 'color_name') {
+        colorNameCol = i;
+      } else if (cellValue === 'size_name') {
+        sizeNameCol = i;
+      }
+    }
+
+    if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
+      return res.status(400).json({ 
+        message: '在模板第3行中未找到必需的列：item_sku、color_name、size_name' 
+      });
+    }
+
+    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+
+    // 步骤5: 准备填写数据
+    console.log('✍️ 准备填写数据到Excel...');
     
-    // 生成文件名
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const fileName = `UK_DataSheet_${selectedParentSkus.length}SKUs_${timestamp}.xlsx`;
+    // 按母SKU分组
+    const skuGroups = {};
+    inventorySkus.forEach(sku => {
+      if (!skuGroups[sku.parent_sku]) {
+        skuGroups[sku.parent_sku] = [];
+      }
+      skuGroups[sku.parent_sku].push(sku);
+    });
+
+    // 计算需要的总行数
+    let totalRowsNeeded = 0;
+    Object.keys(skuGroups).forEach(parentSku => {
+      totalRowsNeeded += 1; // 母SKU行
+      totalRowsNeeded += skuGroups[parentSku].length; // 子SKU行
+    });
+
+    // 确保数据数组有足够的行数
+    const startRow = 3; // 从第4行开始（索引3）
+    while (data.length < startRow + 1 + totalRowsNeeded) {
+      data.push([]);
+    }
+
+    // 填写数据
+    let currentRowIndex = startRow + 1; // 从第4行开始（索引3）
     
+    Object.keys(skuGroups).forEach(parentSku => {
+      // 填写母SKU行
+      if (!data[currentRowIndex]) {
+        data[currentRowIndex] = [];
+      }
+      
+      // 确保行有足够的列
+      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
+      while (data[currentRowIndex].length <= maxCol) {
+        data[currentRowIndex].push('');
+      }
+      
+      // 填写母SKU信息
+      data[currentRowIndex][itemSkuCol] = `UK${parentSku}`;
+      data[currentRowIndex][colorNameCol] = ''; // 母SKU的color_name留空
+      data[currentRowIndex][sizeNameCol] = ''; // 母SKU的size_name留空
+      
+      currentRowIndex++;
+      
+      // 填写子SKU行
+      skuGroups[parentSku].forEach(childSku => {
+        if (!data[currentRowIndex]) {
+          data[currentRowIndex] = [];
+        }
+        
+        // 确保行有足够的列
+        while (data[currentRowIndex].length <= maxCol) {
+          data[currentRowIndex].push('');
+        }
+        
+        // 填写子SKU信息
+        data[currentRowIndex][itemSkuCol] = `UK${childSku.child_sku}`;
+        data[currentRowIndex][colorNameCol] = childSku.sellercolorname || '';
+        data[currentRowIndex][sizeNameCol] = childSku.sellersizename || '';
+        
+        currentRowIndex++;
+      });
+    });
+
+    console.log(`📊 填写完成，共填写了 ${currentRowIndex - startRow - 1} 行数据`);
+
+    // 步骤6: 重新创建工作表（保持格式）
+    console.log('🔄 重新生成工作表...');
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    
+    // 尝试保持原有格式（复制列宽等）
+    if (worksheet['!cols']) {
+      newWorksheet['!cols'] = worksheet['!cols'];
+    }
+    if (worksheet['!rows']) {
+      newWorksheet['!rows'] = worksheet['!rows'];
+    }
+    if (worksheet['!merges']) {
+      newWorksheet['!merges'] = worksheet['!merges'];
+    }
+    
+    workbook.Sheets['Template'] = newWorksheet;
+
+    // 步骤7: 生成Excel文件
+    console.log('💾 生成Excel文件...');
+    const excelBuffer = xlsx.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      cellStyles: true // 尝试保持样式
+    });
+
     const processingTime = Date.now() - startTime;
     console.log(`✅ 英国资料表生成完成，耗时: ${processingTime}ms`);
+
+    // 设置响应头
+    const fileName = `UK_资料表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader('Content-Length', excelBuffer.length);
     
-    sendProgress(4, '文件生成完成，准备下载...', 95);
-
-    // 发送最终结果
-    const finalResult = {
-      success: true,
-      message: `成功生成英国资料表，包含 ${selectedParentSkus.length} 个母SKU，${inventorySkus.length} 个子SKU`,
-      fileName: fileName,
-      fileSize: buffer.length,
-      parentSkuCount: selectedParentSkus.length,
-      childSkuCount: inventorySkus.length,
-      totalRows: dataToInsert.length,
-      processingTime: processingTime,
-      downloadUrl: `/api/product_weblink/download-generated-file/${encodeURIComponent(fileName)}`,
-      fileBuffer: buffer.toString('base64') // 用于直接下载
-    };
-
-    sendProgress(4, '准备文件下载...', 100);
-    res.end(JSON.stringify(finalResult));
+    res.send(excelBuffer);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
     console.error(`❌ 生成英国资料表失败 (耗时: ${processingTime}ms):`, error);
     
-    const errorResult = {
-      success: false,
-      message: '生成英国资料表失败: ' + error.message,
+    let errorMessage = '生成失败: ' + error.message;
+    if (error.code === 'ENOTFOUND') {
+      errorMessage = '网络连接失败，请检查网络设置';
+    } else if (error.code === 'AccessDenied') {
+      errorMessage = 'OSS访问权限不足，请联系管理员';
+    }
+    
+    res.status(500).json({ 
+      message: errorMessage,
       processingTime: processingTime
-    };
-    
-    try {
-      res.end(JSON.stringify(errorResult));
-    } catch (resError) {
-      console.error('响应发送失败:', resError);
-    }
-  }
-});
-
-// 调试接口：检查英国模板文件
-router.get('/check-uk-template', async (req, res) => {
-  try {
-    console.log('🔍 开始检查英国模板文件...');
-    
-    const { listTemplateFiles } = require('../utils/oss');
-    const templateResult = await listTemplateFiles('amazon', null, 'UK');
-    
-    if (!templateResult.success) {
-      return res.json({
-        success: false,
-        message: '获取模板文件列表失败',
-        error: templateResult.message
-      });
-    }
-
-    if (templateResult.files.length === 0) {
-      return res.json({
-        success: false,
-        message: '未找到英国站点的模板文件',
-        availableFiles: templateResult.files
-      });
-    }
-
-    const templateFile = templateResult.files[0];
-    console.log(`📁 找到模板文件: ${templateFile.fileName}`);
-
-    // 尝试下载模板文件
-    const { downloadTemplateFromOSS } = require('../utils/oss');
-    const downloadResult = await downloadTemplateFromOSS(templateFile.name);
-    
-    if (!downloadResult.success) {
-      return res.json({
-        success: false,
-        message: '下载模板文件失败',
-        templateFile: templateFile,
-        error: downloadResult.message
-      });
-    }
-
-    // 尝试解析Excel文件
-    const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.Workbook();
-    
-    try {
-      await workbook.xlsx.load(downloadResult.content);
-      
-      const worksheet = workbook.getWorksheet('Template');
-      if (!worksheet) {
-        return res.json({
-          success: false,
-          message: '模板文件中未找到Template工作表',
-          templateFile: templateFile,
-          availableSheets: workbook.worksheets.map(ws => ws.name)
-        });
-      }
-
-      // 检查第3行的列名
-      const headerRow = worksheet.getRow(3);
-      const headers = [];
-      headerRow.eachCell((cell, colNumber) => {
-        headers.push({
-          column: colNumber,
-          value: cell.value?.toString() || '',
-          lowercase: cell.value?.toString().toLowerCase() || ''
-        });
-      });
-
-      const requiredColumns = ['item_sku', 'color_name', 'size_name'];
-      const foundColumns = {};
-      
-      headers.forEach(header => {
-        requiredColumns.forEach(required => {
-          if (header.lowercase === required) {
-            foundColumns[required] = header.column;
-          }
-        });
-      });
-
-      return res.json({
-        success: true,
-        message: '英国模板文件检查完成',
-        templateFile: {
-          fileName: templateFile.fileName,
-          size: templateFile.size,
-          lastModified: templateFile.lastModified
-        },
-        headers: headers,
-        foundColumns: foundColumns,
-        missingColumns: requiredColumns.filter(col => !foundColumns[col]),
-        isValid: requiredColumns.every(col => foundColumns[col])
-      });
-
-    } catch (excelError) {
-      return res.json({
-        success: false,
-        message: 'Excel文件解析失败',
-        templateFile: templateFile,
-        error: excelError.message
-      });
-    }
-
-  } catch (error) {
-    console.error('检查英国模板文件失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '检查模板文件失败: ' + error.message
     });
   }
 });
+
 
 module.exports = router; 
