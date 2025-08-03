@@ -160,6 +160,7 @@ const Purchase: React.FC = () => {
   const [ukDataSheetStep, setUkDataSheetStep] = useState<string>('');
   const [ukDataSheetMessage, setUkDataSheetMessage] = useState<string>('');
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
+  const [ukDataSheetAbortController, setUkDataSheetAbortController] = useState<AbortController | null>(null);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1506,12 +1507,31 @@ const Purchase: React.FC = () => {
     setUkDataSheetMessage('');
     setButtonsDisabled(true);
 
+    // 设置30秒超时
+    const timeoutId = setTimeout(() => {
+      console.error('⏰ 生成英国资料表超时');
+      setUkDataSheetLoading(false);
+      setUkDataSheetProgress(0);
+      setUkDataSheetStep('超时');
+      setUkDataSheetMessage('处理超时，可能是网络问题或模板文件过大，请重试');
+      setButtonsDisabled(false);
+      message.error('处理超时，请检查网络连接或联系技术支持');
+    }, 30000);
+
+    let abortController: AbortController | null = null;
+
     try {
+      abortController = new AbortController();
+      setUkDataSheetAbortController(abortController);
+      
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedParentSkus }),
+        signal: abortController.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1523,12 +1543,28 @@ const Purchase: React.FC = () => {
 
       if (reader) {
         let buffer = '';
+        let lastProgressTime = Date.now();
+        
+        // 设置读取超时检查
+        const progressCheckInterval = setInterval(() => {
+          const now = Date.now();
+          if (now - lastProgressTime > 15000) { // 15秒无进度更新
+            console.error('📡 长时间无进度更新，可能连接异常');
+            clearInterval(progressCheckInterval);
+            reader.cancel();
+            throw new Error('长时间无响应，连接可能异常');
+          }
+        }, 5000);
         
         while (true) {
           const { done, value } = await reader.read();
           
-          if (done) break;
+          if (done) {
+            clearInterval(progressCheckInterval);
+            break;
+          }
           
+          lastProgressTime = Date.now();
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; // 保留不完整的行
@@ -1546,29 +1582,38 @@ const Purchase: React.FC = () => {
                   console.log(`📊 进度更新: ${progressData.progress}% - ${progressData.message}`);
                 } else if (progressData.success !== undefined) {
                   // 最终结果
+                  clearInterval(progressCheckInterval);
+                  
                   if (progressData.success) {
                     console.log('✅ 英国资料表生成成功:', progressData);
                     
                     // 下载文件
                     const fileBuffer = progressData.fileBuffer;
                     if (fileBuffer) {
-                      const binaryString = atob(fileBuffer);
-                      const bytes = new Uint8Array(binaryString.length);
-                      for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
+                      try {
+                        const binaryString = atob(fileBuffer);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                          bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const blob = new Blob([bytes], { 
+                          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                        });
+                        
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = progressData.fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                        
+                        console.log('📥 文件下载成功');
+                      } catch (downloadError) {
+                        console.error('文件下载失败:', downloadError);
+                        message.error('文件下载失败，请重试');
                       }
-                      const blob = new Blob([bytes], { 
-                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-                      });
-                      
-                      const url = window.URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = progressData.fileName;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
                     }
                     
                     setUkDataSheetProgress(100);
@@ -1588,18 +1633,30 @@ const Purchase: React.FC = () => {
                 }
               } catch (parseError) {
                 console.error('解析响应数据失败:', parseError, '原始数据:', line);
+                // 不中断处理，继续处理其他行
               }
             }
           }
         }
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('生成英国资料表失败:', error);
-      message.error('生成英国资料表失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      
+      let errorMessage = '生成英国资料表失败';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = '操作已取消';
+        } else {
+          errorMessage += ': ' + error.message;
+        }
+      }
+      
+      message.error(errorMessage);
       
       setUkDataSheetProgress(0);
       setUkDataSheetStep('失败');
-      setUkDataSheetMessage('生成失败，请重试');
+      setUkDataSheetMessage(errorMessage);
       setButtonsDisabled(false);
       
       // 3秒后关闭模态框
@@ -1608,6 +1665,40 @@ const Purchase: React.FC = () => {
       }, 3000);
     } finally {
       setUkDataSheetLoading(false);
+      clearTimeout(timeoutId);
+      setUkDataSheetAbortController(null);
+    }
+  };
+
+  // 取消生成英国资料表
+  const handleCancelUkDataSheet = () => {
+    if (ukDataSheetAbortController) {
+      ukDataSheetAbortController.abort();
+      console.log('🚫 用户取消了生成英国资料表操作');
+      message.info('已取消生成操作');
+    }
+    setUkDataSheetModalVisible(false);
+    setUkDataSheetLoading(false);
+    setButtonsDisabled(false);
+    setUkDataSheetAbortController(null);
+  };
+
+  // 检查英国模板文件
+  const handleCheckUkTemplate = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/check-uk-template`);
+      const result = await response.json();
+      
+      if (result.success) {
+        message.success('英国模板文件检查完成，模板有效');
+        console.log('📋 模板检查结果:', result);
+      } else {
+        message.error('模板文件检查失败: ' + result.message);
+        console.error('❌ 模板检查失败:', result);
+      }
+    } catch (error) {
+      message.error('模板检查失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      console.error('模板检查请求失败:', error);
     }
   };
 
@@ -1956,7 +2047,16 @@ const Purchase: React.FC = () => {
                 生成英国资料表
               </Button>
 
-
+              {/* 检查英国模板 */}
+              <Button 
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={handleCheckUkTemplate}
+                disabled={buttonsDisabled}
+                title="检查英国模板文件是否正确配置"
+              >
+                检查模板
+              </Button>
 
               {/* 选择状态提示 */}
               {selectedRowKeys.length > 0 && (
@@ -2437,24 +2537,27 @@ const Purchase: React.FC = () => {
        <Modal
          title="生成英国资料表"
          open={ukDataSheetModalVisible}
-         onCancel={() => {
-           if (!ukDataSheetLoading) {
-             setUkDataSheetModalVisible(false);
-             setButtonsDisabled(false);
-           }
-         }}
+         onCancel={handleCancelUkDataSheet}
          footer={[
            <Button 
-             key="close" 
-             onClick={() => {
-               setUkDataSheetModalVisible(false);
-               setButtonsDisabled(false);
-             }}
-             disabled={ukDataSheetLoading}
+             key="cancel" 
+             onClick={handleCancelUkDataSheet}
+             disabled={!ukDataSheetLoading && ukDataSheetProgress === 100}
+             danger={ukDataSheetLoading}
            >
-             {ukDataSheetLoading ? '生成中...' : '关闭'}
-           </Button>
-         ]}
+             {ukDataSheetLoading ? '取消' : '关闭'}
+           </Button>,
+           ukDataSheetLoading && (
+             <Button 
+               key="progress" 
+               type="primary"
+               loading
+               disabled
+             >
+               {ukDataSheetStep} ({ukDataSheetProgress}%)
+             </Button>
+           )
+         ].filter(Boolean)}
          width={600}
          closable={!ukDataSheetLoading}
          maskClosable={false}
@@ -2529,6 +2632,29 @@ const Purchase: React.FC = () => {
                <Text style={{ marginLeft: '8px', color: '#1890ff' }}>
                  正在处理中，请耐心等待...
                </Text>
+             </div>
+           )}
+           
+           {!ukDataSheetLoading && ukDataSheetProgress === 0 && ukDataSheetStep === '失败' && (
+             <div style={{ 
+               padding: '12px', 
+               backgroundColor: '#fff2f0', 
+               border: '1px solid #ffccc7', 
+               borderRadius: '6px',
+               marginTop: '16px'
+             }}>
+               <div style={{ marginBottom: '8px' }}>
+                 <Text style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
+                   ⚠️ 故障排除建议：
+                 </Text>
+               </div>
+               <div style={{ fontSize: '12px', color: '#666' }}>
+                 <div>1. 检查是否已上传英国站点的模板文件</div>
+                 <div>2. 确认模板文件包含Template工作表</div>
+                 <div>3. 验证第3行包含item_sku、color_name、size_name列</div>
+                 <div>4. 检查网络连接是否正常</div>
+                 <div>5. 点击"检查模板"按钮进行诊断</div>
+               </div>
              </div>
            )}
          </Space>
