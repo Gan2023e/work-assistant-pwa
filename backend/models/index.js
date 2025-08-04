@@ -19,7 +19,7 @@ const FbaInventory = require('./FbaInventory');
 const SheinProduct = require('./SheinProduct');
 const PurchaseOrder = require('./PurchaseOrder');
 const Invoice = require('./Invoice');
-const TemplateLinks = require('./TemplateLinks');
+const TemplateLink = require('./TemplateLink');
 
 // 设置模型关联关系
 
@@ -88,5 +88,5 @@ module.exports = {
   SheinProduct,
   PurchaseOrder,
   Invoice,
-  TemplateLinks
+  TemplateLink
 };

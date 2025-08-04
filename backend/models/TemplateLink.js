@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
-const TemplateLinks = sequelize.define('TemplateLinks', {
+const TemplateLink = sequelize.define('TemplateLink', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -10,17 +10,12 @@ const TemplateLinks = sequelize.define('TemplateLinks', {
   template_type: {
     type: DataTypes.STRING,
     allowNull: false,
-    comment: '模板类型：amazon, logistics, packing-list, others'
+    comment: '模板类型，如amazon'
   },
   country: {
     type: DataTypes.STRING,
     allowNull: false,
-    comment: '国家代码：US, UK, DE, FR, IT, ES, CA, JP'
-  },
-  provider: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: '提供商（物流商等）'
+    comment: '国家代码，如UK、US、DE等'
   },
   file_name: {
     type: DataTypes.STRING,
@@ -30,34 +25,26 @@ const TemplateLinks = sequelize.define('TemplateLinks', {
   oss_object_name: {
     type: DataTypes.STRING,
     allowNull: false,
-    comment: 'OSS对象名称'
+    comment: 'OSS对象名'
   },
-  file_url: {
+  oss_url: {
     type: DataTypes.STRING,
     allowNull: false,
-    comment: '文件访问URL'
+    comment: 'OSS文件链接'
   },
   file_size: {
     type: DataTypes.INTEGER,
-    allowNull: true,
     comment: '文件大小（字节）'
   },
   upload_time: {
     type: DataTypes.DATE,
-    allowNull: false,
     defaultValue: DataTypes.NOW,
     comment: '上传时间'
   },
   is_active: {
     type: DataTypes.BOOLEAN,
-    allowNull: false,
     defaultValue: true,
-    comment: '是否有效'
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    comment: '模板描述'
+    comment: '是否激活'
   }
 }, {
   tableName: 'template_links',
@@ -65,13 +52,9 @@ const TemplateLinks = sequelize.define('TemplateLinks', {
   indexes: [
     {
       unique: false,
-      fields: ['template_type', 'country', 'provider']
-    },
-    {
-      unique: false,
-      fields: ['template_type', 'country', 'is_active']
+      fields: ['template_type', 'country']
     }
   ]
 });
 
-module.exports = TemplateLinks; 
+module.exports = TemplateLink; 
