@@ -11,6 +11,18 @@ const path = require('path');
 const pdf = require('pdf-parse');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
+// 内存管理优化 - 大文件处理时强制垃圾回收
+const forceGarbageCollection = () => {
+  if (global.gc && typeof global.gc === 'function') {
+    try {
+      global.gc();
+      console.log('🧹 手动触发垃圾回收成功');
+    } catch (error) {
+      console.log('⚠️ 垃圾回收触发失败（这是正常的）:', error.message);
+    }
+  }
+};
+
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -1468,19 +1480,97 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     // 步骤4: 使用ExcelJS处理Excel文件（保留格式）
     console.log('📝 开始使用ExcelJS处理Excel文件，保留原有格式...');
     const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.Workbook();
-    
-    // 从buffer加载工作簿，保留所有格式
-    await workbook.xlsx.load(downloadResult.content);
-    
-    // 检查是否有Template工作表
-    const worksheet = workbook.getWorksheet('Template');
-    if (!worksheet) {
-      return res.status(400).json({ message: '模板文件中未找到Template工作表' });
+
+    // 创建工作簿实例
+    let workbook;
+    let worksheet;
+
+    try {
+      console.log(`📊 开始加载Excel文件，文件大小: ${downloadResult.size} 字节`);
+      
+      // 检查文件大小是否合理（限制在50MB以内）
+      if (downloadResult.size > 50 * 1024 * 1024) {
+        console.error('❌ 模板文件过大，可能导致处理超时');
+        return res.status(400).json({ 
+          message: '模板文件过大（超过50MB），请上传较小的模板文件或简化模板格式' 
+        });
+      }
+
+      // 使用更严格的超时控制
+      workbook = new ExcelJS.Workbook();
+      
+      // 设置ExcelJS的内存使用选项
+      const loadOptions = {
+        useSharedStrings: false, // 禁用共享字符串以节省内存
+        useStyles: true,         // 保留样式
+        ignoreInvalidCells: true // 忽略无效单元格
+      };
+
+      // 创建超时Promise，减少超时时间到30秒
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          console.error('❌ Excel文件加载超时（30秒）');
+          reject(new Error('Excel文件加载超时，可能文件格式复杂或损坏'));
+        }, 30000); // 30秒超时
+      });
+
+      // 创建加载Promise
+      const loadPromise = new Promise(async (resolve, reject) => {
+        try {
+          await workbook.xlsx.load(downloadResult.content, loadOptions);
+          console.log('✅ Excel文件加载完成');
+          resolve();
+        } catch (error) {
+          console.error('❌ Excel文件加载出错:', error.message);
+          reject(error);
+        }
+      });
+
+      // 使用Promise.race进行超时控制
+      await Promise.race([loadPromise, timeoutPromise]);
+
+    } catch (error) {
+      console.error('❌ Excel文件处理失败:', error.message);
+      
+      // 清理内存
+      if (workbook) {
+        try {
+          workbook = null;
+        } catch (cleanupError) {
+          console.error('❌ 清理工作簿失败:', cleanupError.message);
+        }
+      }
+      
+      if (error.message.includes('超时')) {
+        return res.status(500).json({ 
+          message: 'Excel模板文件处理超时，请检查模板文件：1) 文件是否损坏 2) 格式是否过于复杂 3) 文件大小是否合理',
+          suggestion: '建议重新上传一个简化版本的模板文件'
+        });
+      }
+      
+      return res.status(500).json({ 
+        message: `Excel文件处理失败: ${error.message}`,
+        suggestion: '请检查模板文件格式是否正确'
+      });
     }
 
-    console.log('✅ 成功加载Template工作表，格式已保留');
-    
+    // 检查是否有Template工作表
+    try {
+      worksheet = workbook.getWorksheet('Template');
+      if (!worksheet) {
+        console.error('❌ 未找到Template工作表');
+        return res.status(400).json({ 
+          message: '模板文件中未找到Template工作表，请确保模板文件包含名为"Template"的工作表' 
+        });
+      }
+      console.log('✅ 成功加载Template工作表，格式已保留');
+    } catch (error) {
+      console.error('❌ 获取Template工作表失败:', error.message);
+      return res.status(500).json({ 
+        message: `获取Template工作表失败: ${error.message}` 
+      });
+    }
+
     // 查找列位置（在第3行查找标题）
     let itemSkuCol = -1;
     let colorNameCol = -1;
@@ -1511,54 +1601,153 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     // 步骤5: 准备填写数据
     console.log('✍️ 准备填写数据到Excel，保持原有格式...');
     
-    // 按母SKU分组
-    const skuGroups = {};
-    inventorySkus.forEach(sku => {
-      if (!skuGroups[sku.parent_sku]) {
-        skuGroups[sku.parent_sku] = [];
-      }
-      skuGroups[sku.parent_sku].push(sku);
-    });
-
-    // 从第4行开始填写数据
-    let currentRowIndex = 4; // 第4行开始
-    
-    Object.keys(skuGroups).forEach(parentSku => {
-      // 获取当前行并保持格式
-      const parentRow = worksheet.getRow(currentRowIndex);
-      
-      // 填写母SKU信息（保持单元格原有格式）
-      const parentSkuCell = parentRow.getCell(itemSkuCol);
-      const parentColorCell = parentRow.getCell(colorNameCol);
-      const parentSizeCell = parentRow.getCell(sizeNameCol);
-      
-      parentSkuCell.value = `UK${parentSku}`;
-      parentColorCell.value = '';
-      parentSizeCell.value = '';
-      
-      currentRowIndex++;
-      
-      // 填写子SKU行
-      skuGroups[parentSku].forEach(childSku => {
-        const childRow = worksheet.getRow(currentRowIndex);
-        
-        const childSkuCell = childRow.getCell(itemSkuCol);
-        const childColorCell = childRow.getCell(colorNameCol);
-        const childSizeCell = childRow.getCell(sizeNameCol);
-        
-        childSkuCell.value = `UK${childSku.child_sku}`;
-        childColorCell.value = childSku.sellercolorname || '';
-        childSizeCell.value = childSku.sellersizename || '';
-        
-        currentRowIndex++;
+    try {
+      // 按母SKU分组
+      const skuGroups = {};
+      inventorySkus.forEach(sku => {
+        if (!skuGroups[sku.parent_sku]) {
+          skuGroups[sku.parent_sku] = [];
+        }
+        skuGroups[sku.parent_sku].push(sku);
       });
-    });
 
-    console.log(`📊 填写完成，共填写了 ${currentRowIndex - 4} 行数据，原有格式已保留`);
+      const totalParentSkus = Object.keys(skuGroups).length;
+      console.log(`📊 准备处理 ${totalParentSkus} 个母SKU，${inventorySkus.length} 条子SKU记录`);
+
+      // 从第4行开始填写数据
+      let currentRowIndex = 4; // 第4行开始
+      let processedParentSkus = 0;
+      
+      // 分批处理，避免一次性处理过多数据
+      const BATCH_SIZE = 50; // 每批处理50个母SKU
+      const parentSkuKeys = Object.keys(skuGroups);
+      
+      for (let i = 0; i < parentSkuKeys.length; i += BATCH_SIZE) {
+        const batch = parentSkuKeys.slice(i, Math.min(i + BATCH_SIZE, parentSkuKeys.length));
+        console.log(`📝 处理第 ${Math.floor(i / BATCH_SIZE) + 1} 批次，共 ${batch.length} 个母SKU`);
+        
+        batch.forEach(parentSku => {
+          try {
+            // 获取当前行并保持格式
+            const parentRow = worksheet.getRow(currentRowIndex);
+            
+            // 填写母SKU信息（保持单元格原有格式）
+            const parentSkuCell = parentRow.getCell(itemSkuCol);
+            const parentColorCell = parentRow.getCell(colorNameCol);
+            const parentSizeCell = parentRow.getCell(sizeNameCol);
+            
+            parentSkuCell.value = `UK${parentSku}`;
+            parentColorCell.value = '';
+            parentSizeCell.value = '';
+            
+            currentRowIndex++;
+            
+            // 填写子SKU行
+            const childSkus = skuGroups[parentSku];
+            childSkus.forEach((childSku, index) => {
+              try {
+                const childRow = worksheet.getRow(currentRowIndex);
+                
+                const childSkuCell = childRow.getCell(itemSkuCol);
+                const childColorCell = childRow.getCell(colorNameCol);
+                const childSizeCell = childRow.getCell(sizeNameCol);
+                
+                childSkuCell.value = `UK${childSku.child_sku}`;
+                childColorCell.value = childSku.sellercolorname || '';
+                childSizeCell.value = childSku.sellersizename || '';
+                
+                currentRowIndex++;
+              } catch (childError) {
+                console.error(`❌ 填写子SKU ${childSku.child_sku} 时出错:`, childError.message);
+                // 继续处理其他子SKU，不中断整个流程
+              }
+            });
+            
+            processedParentSkus++;
+            
+            // 每处理10个母SKU输出一次进度
+            if (processedParentSkus % 10 === 0 || processedParentSkus === totalParentSkus) {
+              console.log(`📊 进度: ${processedParentSkus}/${totalParentSkus} 个母SKU已处理 (${Math.round(processedParentSkus / totalParentSkus * 100)}%)`);
+            }
+            
+          } catch (parentError) {
+            console.error(`❌ 处理母SKU ${parentSku} 时出错:`, parentError.message);
+            // 继续处理其他母SKU，不中断整个流程
+          }
+        });
+        
+        // 批次间短暂休息，释放事件循环
+        if (i + BATCH_SIZE < parentSkuKeys.length) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      }
+
+      console.log(`📊 填写完成，共填写了 ${currentRowIndex - 4} 行数据，原有格式已保留`);
+
+    } catch (dataError) {
+      console.error('❌ 数据填写过程中出错:', dataError.message);
+      return res.status(500).json({ 
+        message: `数据填写失败: ${dataError.message}`,
+        suggestion: '请检查数据库中的SKU数据是否正确'
+      });
+    }
 
     // 步骤6: 生成Excel文件（保持所有原有格式）
     console.log('💾 生成Excel文件，保持所有原有格式...');
-    const excelBuffer = await workbook.xlsx.writeBuffer();
+    
+    let excelBuffer;
+    try {
+      // 设置写入选项以优化性能
+      const writeOptions = {
+        useSharedStrings: false, // 禁用共享字符串以提高性能
+        useStyles: true          // 保留样式
+      };
+      
+      // 创建写入超时保护
+      const writeTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          console.error('❌ Excel文件写入超时（30秒）');
+          reject(new Error('Excel文件写入超时'));
+        }, 30000); // 30秒超时
+      });
+      
+      const writePromise = workbook.xlsx.writeBuffer(writeOptions);
+      
+      excelBuffer = await Promise.race([writePromise, writeTimeoutPromise]);
+      console.log(`✅ Excel文件生成完成，文件大小: ${excelBuffer.length} 字节`);
+      
+    } catch (writeError) {
+      console.error('❌ Excel文件生成失败:', writeError.message);
+      
+      if (writeError.message.includes('超时')) {
+        return res.status(500).json({ 
+          message: 'Excel文件生成超时，可能数据量过大或格式过于复杂',
+          suggestion: '请尝试减少母SKU数量或简化模板格式'
+        });
+      }
+      
+      return res.status(500).json({ 
+        message: `Excel文件生成失败: ${writeError.message}`,
+        suggestion: '请检查数据内容或模板格式'
+      });
+    } finally {
+      // 清理内存资源
+      try {
+        if (workbook) {
+          workbook = null;
+        }
+        if (worksheet) {
+          worksheet = null;
+        }
+        console.log('🧹 内存资源已清理');
+        
+        // 强制触发垃圾回收，释放大文件处理占用的内存
+        forceGarbageCollection();
+        
+      } catch (cleanupError) {
+        console.error('❌ 内存清理出错:', cleanupError.message);
+      }
+    }
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ 英国资料表生成完成，耗时: ${processingTime}ms`);
@@ -1574,17 +1763,45 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
   } catch (error) {
     const processingTime = Date.now() - startTime;
     console.error(`❌ 生成英国资料表失败 (耗时: ${processingTime}ms):`, error);
-    
-    let errorMessage = '生成失败: ' + error.message;
-    if (error.code === 'ENOTFOUND') {
-      errorMessage = '网络连接失败，请检查网络设置';
-    } else if (error.code === 'AccessDenied') {
-      errorMessage = 'OSS访问权限不足，请联系管理员';
+
+    // 确保在出错时也清理内存资源
+    try {
+      if (typeof workbook !== 'undefined' && workbook) {
+        workbook = null;
+      }
+      if (typeof worksheet !== 'undefined' && worksheet) {
+        worksheet = null;
+      }
+      console.log('🧹 错误处理中已清理内存资源');
+      
+      // 错误情况下也强制触发垃圾回收
+      forceGarbageCollection();
+      
+    } catch (cleanupError) {
+      console.error('❌ 错误处理中的内存清理失败:', cleanupError.message);
     }
-    
-    res.status(500).json({ 
-      message: errorMessage,
-      processingTime: processingTime
+
+    // 根据错误类型返回相应的错误信息
+    if (error.message && error.message.includes('超时')) {
+      return res.status(500).json({ 
+        message: 'Excel处理超时，请检查模板文件或减少数据量',
+        error: error.message,
+        suggestion: '1) 检查模板文件是否过于复杂 2) 减少处理的母SKU数量 3) 重新上传简化的模板文件'
+      });
+    }
+
+    if (error.message && error.message.includes('内存')) {
+      return res.status(500).json({ 
+        message: '内存不足，无法处理这么多数据',
+        error: error.message,
+        suggestion: '请减少选择的母SKU数量，分批次进行处理'
+      });
+    }
+
+    return res.status(500).json({ 
+      message: '生成英国资料表时发生错误',
+      error: error.message,
+      suggestion: '请检查模板文件格式和数据完整性'
     });
   }
 });

@@ -1563,21 +1563,11 @@ const Purchase: React.FC = () => {
       setUkGenerateProgress(30);
       setUkGenerateCurrentStep('查询子SKU信息...');
 
-      // 设置5分钟超时
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5分钟超时
-
       const generateRes = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ parentSkus }),
-        signal: controller.signal
       });
-      
-      clearTimeout(timeoutId);
 
       if (!generateRes.ok) {
         throw new Error(`生成失败: ${generateRes.status} ${generateRes.statusText}`);
