@@ -1239,13 +1239,70 @@ router.get('/merged-data', async (req, res) => {
       }
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤7: 应用分页和排序');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤6: 查询无需求未映射的库存');
+
+    // 7. 查询所有没有映射关系的库存（无需求未映射）
+    const unmappedInventoryQuery = `
+      SELECT 
+        lb.sku as local_sku,
+        lb.country,
+        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
+        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
+        SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
+        SUM(lb.total_quantity) as total_available
+      FROM local_boxes lb
+      LEFT JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
+      WHERE lb.total_quantity > 0
+        AND lb.status = '待出库'
+        AND asm.local_sku IS NULL
+      GROUP BY lb.sku, lb.country
+      HAVING SUM(lb.total_quantity) > 0
+    `;
+
+    const unmappedInventory = await sequelize.query(unmappedInventoryQuery, {
+      type: sequelize.QueryTypes.SELECT,
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `📦 未映射库存数据: ${unmappedInventory.length} 条`);
+
+    // 8. 添加未映射库存记录
+    unmappedInventory.forEach(inv => {
+      allRecords.push({
+        record_num: null, // 设置为null表示无需求单的库存
+        need_num: '',
+        amz_sku: inv.local_sku, // 使用local_sku作为amz_sku显示
+        amazon_sku: '', // 未映射，所以Amazon SKU为空
+        local_sku: inv.local_sku,
+        site: '',
+        fulfillment_channel: '',
+        quantity: 0, // 无需求量
+        shipping_method: '',
+        marketplace: '',
+        country: inv.country,
+        status: '库存未映射',
+        created_at: new Date().toISOString(),
+        // 库存信息
+        whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
+        whole_box_count: parseInt(inv.whole_box_count) || 0,
+        mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
+        total_available: parseInt(inv.total_available) || 0,
+        shortage: 0,
+        data_source: 'unmapped_inventory',
+        inventory_source: 'local_only',
+        mapping_method: 'no_mapping'
+      });
+      
+      console.log(`🔍 未映射库存: ${inv.local_sku}_${inv.country} - 可用数量: ${inv.total_available}`);
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤9: 应用分页和排序');
     
-    // 7. 应用分页和排序
+    // 9. 应用分页和排序
     const sortedRecords = allRecords.sort((a, b) => {
-      // 先按状态排序：库存充足 > 库存不足 > 缺货 > 有库存无需求
-      const statusOrder = { '库存充足': 1, '库存不足': 2, '缺货': 3, '有库存无需求': 4 };
-      const statusDiff = (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5);
+      // 先按状态排序：库存充足 > 库存不足 > 缺货 > 有库存无需求 > 库存未映射
+      const statusOrder = { '库存充足': 1, '库存不足': 2, '缺货': 3, '有库存无需求': 4, '库存未映射': 5 };
+      const statusDiff = (statusOrder[a.status] || 6) - (statusOrder[b.status] || 6);
       if (statusDiff !== 0) return statusDiff;
       
       // 相同状态下按创建时间排序
@@ -1257,22 +1314,25 @@ router.get('/merged-data', async (req, res) => {
     const endIndex = parseInt(limit) === 1000 ? sortedRecords.length : startIndex + parseInt(limit);
     const paginatedRecords = sortedRecords.slice(startIndex, endIndex);
     
-    // 8. 统计信息
+    // 10. 统计信息
     const statsMap = {
       库存充足: sortedRecords.filter(r => r.status === '库存充足').length,
       库存不足: sortedRecords.filter(r => r.status === '库存不足').length,
       缺货: sortedRecords.filter(r => r.status === '缺货').length,
       有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求').length,
+      库存未映射: sortedRecords.filter(r => r.status === '库存未映射').length,
       总记录数: sortedRecords.length,
       Amazon_FBA库存SKU数: inventoryMap.size,
-      待发货需求SKU数: needsMap.size
+      待发货需求SKU数: needsMap.size,
+      未映射库存SKU数: unmappedInventory.length
     };
 
     console.log('\x1b[35m%s\x1b[0m', '📊 FBA发货分析完成统计:', statsMap);
     console.log('\x1b[32m%s\x1b[0m', '✅ FBA发货分析成功:', {
       Amazon_FBA库存数据: inventoryWithMapping.length,
       待发货需求数据: needsData.length,
-      分析结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 = ${statsMap.总记录数}条`
+      未映射库存数据: unmappedInventory.length,
+      分析结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 + ${statsMap.库存未映射}未映射 = ${statsMap.总记录数}条`
     });
 
     res.json({
@@ -1288,7 +1348,8 @@ router.get('/merged-data', async (req, res) => {
           库存充足: sortedRecords.filter(r => r.status === '库存充足'),
           库存不足: sortedRecords.filter(r => r.status === '库存不足'),
           缺货: sortedRecords.filter(r => r.status === '缺货'),
-          有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求')
+          有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求'),
+          库存未映射: sortedRecords.filter(r => r.status === '库存未映射')
         },
         summary: statsMap,
         mapping_method: 'inventory_need_analysis'
