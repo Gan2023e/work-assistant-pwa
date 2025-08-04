@@ -1186,8 +1186,9 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     }
 
     // 保存模板信息到数据库
+    let templateLink = null;
     try {
-      const templateLink = await TemplateLink.create({
+      templateLink = await TemplateLink.create({
         template_type: 'amazon',
         country: country,
         file_name: originalFileName,
@@ -1207,18 +1208,25 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     const uploadTime = Date.now() - startTime;
     console.log(`✅ 上传完成，耗时: ${uploadTime}ms`);
 
+    // 构建响应数据
+    const responseData = {
+      fileName: uploadResult.originalName,
+      url: uploadResult.url,
+      objectName: uploadResult.name,
+      size: uploadResult.size,
+      country: country,
+      uploadTime: new Date().toISOString(),
+      processingTime: uploadTime
+    };
+
+    // 只有当模板信息成功保存到数据库时才返回templateId
+    if (templateLink && templateLink.id) {
+      responseData.templateId = templateLink.id;
+    }
+
     res.json({
       message: `${country}站点资料表模板上传成功`,
-      data: {
-        fileName: uploadResult.originalName,
-        url: uploadResult.url,
-        objectName: uploadResult.name,
-        size: uploadResult.size,
-        country: country,
-        uploadTime: new Date().toISOString(),
-        processingTime: uploadTime,
-        templateId: templateLink.id // 返回模板ID
-      }
+      data: responseData
     });
 
   } catch (error) {
