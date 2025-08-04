@@ -1522,27 +1522,38 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     }
 
     const worksheet = workbook.Sheets['Template'];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-    if (data.length < 3) {
-      return res.status(400).json({ message: 'Template工作表至少需要3行数据（包含标题行）' });
-    }
-
-    // 查找列位置（第3行是标题行，索引2）
-    const headerRow = data[2];
+    
+    // 只读取第3行的标题信息来确定列位置，不破坏原表格式
     let itemSkuCol = -1;
     let colorNameCol = -1;
     let sizeNameCol = -1;
-
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = headerRow[i]?.toString().toLowerCase();
-      if (cellValue === 'item_sku') {
-        itemSkuCol = i;
-      } else if (cellValue === 'color_name') {
-        colorNameCol = i;
-      } else if (cellValue === 'size_name') {
-        sizeNameCol = i;
+    
+    // 读取第3行（标题行）的信息
+    const headerRowIndex = 3; // 第3行，从1开始计数
+    let colIndex = 1; // 从A列开始，从1开始计数
+    
+    // 遍历第3行的单元格来找到需要的列
+    while (true) {
+      const cellAddress = xlsx.utils.encode_cell({ r: headerRowIndex - 1, c: colIndex - 1 }); // 转换为0-based索引
+      const cell = worksheet[cellAddress];
+      
+      if (!cell || !cell.v) {
+        colIndex++;
+        if (colIndex > 50) break; // 防止无限循环，最多检查50列
+        continue;
       }
+      
+      const cellValue = cell.v.toString().toLowerCase();
+      if (cellValue === 'item_sku') {
+        itemSkuCol = colIndex - 1; // 转换为0-based索引
+      } else if (cellValue === 'color_name') {
+        colorNameCol = colIndex - 1;
+      } else if (cellValue === 'size_name') {
+        sizeNameCol = colIndex - 1;
+      }
+      
+      colIndex++;
+      if (colIndex > 50) break; // 防止无限循环
     }
 
     if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
@@ -1565,116 +1576,51 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       skuGroups[sku.parent_sku].push(sku);
     });
 
-    // 计算需要的总行数
-    let totalRowsNeeded = 0;
-    Object.keys(skuGroups).forEach(parentSku => {
-      totalRowsNeeded += 1; // 母SKU行
-      totalRowsNeeded += skuGroups[parentSku].length; // 子SKU行
-    });
-
-    // 确保数据数组有足够的行数，并且每行都是正确的数组
-    const startRow = 3; // 从第4行开始（索引3）
-    while (data.length < startRow + 1 + totalRowsNeeded) {
-      data.push([]); // 添加空数组行
-    }
-
-    // 确保所有现有行都是数组
-    for (let i = 0; i < data.length; i++) {
-      if (!Array.isArray(data[i])) {
-        data[i] = [];
-      }
-    }
-
-    // 填写数据
-    let currentRowIndex = startRow + 1; // 从第4行开始（索引3）
+    // 直接在原工作表上填写数据，从第4行开始（索引3）
+    let currentRowIndex = 3; // 第4行，从0开始计数
     
     Object.keys(skuGroups).forEach(parentSku => {
       // 填写母SKU行
-      if (!Array.isArray(data[currentRowIndex])) {
-        data[currentRowIndex] = [];
-      }
-      
-      // 确保行有足够的列
-      const maxCol = Math.max(itemSkuCol, colorNameCol, sizeNameCol);
-      while (data[currentRowIndex].length <= maxCol) {
-        data[currentRowIndex].push('');
-      }
+      const parentRowAddress = { r: currentRowIndex, c: itemSkuCol };
+      const parentColorAddress = { r: currentRowIndex, c: colorNameCol };
+      const parentSizeAddress = { r: currentRowIndex, c: sizeNameCol };
       
       // 填写母SKU信息
-      data[currentRowIndex][itemSkuCol] = `UK${parentSku}`;
-      data[currentRowIndex][colorNameCol] = ''; // 母SKU的color_name留空
-      data[currentRowIndex][sizeNameCol] = ''; // 母SKU的size_name留空
+      worksheet[xlsx.utils.encode_cell(parentRowAddress)] = { v: `UK${parentSku}`, t: 's' };
+      worksheet[xlsx.utils.encode_cell(parentColorAddress)] = { v: '', t: 's' }; // 母SKU的color_name留空
+      worksheet[xlsx.utils.encode_cell(parentSizeAddress)] = { v: '', t: 's' }; // 母SKU的size_name留空
       
       currentRowIndex++;
       
       // 填写子SKU行
       skuGroups[parentSku].forEach(childSku => {
-        if (!Array.isArray(data[currentRowIndex])) {
-          data[currentRowIndex] = [];
-        }
-        
-        // 确保行有足够的列
-        while (data[currentRowIndex].length <= maxCol) {
-          data[currentRowIndex].push('');
-        }
+        const childRowAddress = { r: currentRowIndex, c: itemSkuCol };
+        const childColorAddress = { r: currentRowIndex, c: colorNameCol };
+        const childSizeAddress = { r: currentRowIndex, c: sizeNameCol };
         
         // 填写子SKU信息
-        data[currentRowIndex][itemSkuCol] = `UK${childSku.child_sku}`;
-        data[currentRowIndex][colorNameCol] = childSku.sellercolorname || '';
-        data[currentRowIndex][sizeNameCol] = childSku.sellersizename || '';
+        worksheet[xlsx.utils.encode_cell(childRowAddress)] = { v: `UK${childSku.child_sku}`, t: 's' };
+        worksheet[xlsx.utils.encode_cell(childColorAddress)] = { v: childSku.sellercolorname || '', t: 's' };
+        worksheet[xlsx.utils.encode_cell(childSizeAddress)] = { v: childSku.sellersizename || '', t: 's' };
         
         currentRowIndex++;
       });
     });
 
-    console.log(`📊 填写完成，共填写了 ${currentRowIndex - startRow - 1} 行数据`);
+    console.log(`📊 填写完成，共填写了 ${currentRowIndex - 3} 行数据`);
 
-    // 步骤6: 重新创建工作表（保持格式）
-    console.log('🔄 重新生成工作表...');
-    
-    // 确保数据完全是二维数组格式
-    const cleanData = data.map(row => {
-      if (!Array.isArray(row)) {
-        return [];
-      }
-      return row.map(cell => cell === null || cell === undefined ? '' : cell);
-    });
-    
-    const newWorksheet = xlsx.utils.aoa_to_sheet(cleanData);
-    
-    // 安全地复制原有格式（添加错误处理）
-    try {
-      if (worksheet['!cols'] && Array.isArray(worksheet['!cols'])) {
-        newWorksheet['!cols'] = JSON.parse(JSON.stringify(worksheet['!cols']));
-      }
-    } catch (e) {
-      console.warn('⚠️ 复制列宽信息失败:', e.message);
+    // 更新工作表的范围
+    const range = xlsx.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    if (currentRowIndex > range.e.r) {
+      range.e.r = currentRowIndex - 1;
+      worksheet['!ref'] = xlsx.utils.encode_range(range);
     }
-    
-    try {
-      if (worksheet['!rows'] && Array.isArray(worksheet['!rows'])) {
-        newWorksheet['!rows'] = JSON.parse(JSON.stringify(worksheet['!rows']));
-      }
-    } catch (e) {
-      console.warn('⚠️ 复制行高信息失败:', e.message);
-    }
-    
-    try {
-      if (worksheet['!merges'] && Array.isArray(worksheet['!merges'])) {
-        newWorksheet['!merges'] = JSON.parse(JSON.stringify(worksheet['!merges']));
-      }
-    } catch (e) {
-      console.warn('⚠️ 复制合并单元格信息失败:', e.message);
-    }
-    
-    workbook.Sheets['Template'] = newWorksheet;
 
-    // 步骤7: 生成Excel文件
+    // 步骤6: 生成Excel文件（保持原有格式）
     console.log('💾 生成Excel文件...');
     const excelBuffer = xlsx.write(workbook, { 
       type: 'buffer', 
-      bookType: 'xlsx',
-      cellStyles: true // 尝试保持样式
+      bookType: 'xlsx'
     });
 
     const processingTime = Date.now() - startTime;
