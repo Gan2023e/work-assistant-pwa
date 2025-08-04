@@ -85,6 +85,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.warn('⚠️ 发现并修复了localStorage问题:', diagnosisResult.message);
       }
 
+      // 设置全局storage错误处理
+      try {
+        const { setupGlobalStorageErrorHandling } = await import('../utils/storageUtils');
+        setupGlobalStorageErrorHandling();
+        console.log('✅ 全局storage错误处理已设置');
+      } catch (error) {
+        console.warn('⚠️ 设置全局storage错误处理失败:', error);
+      }
+
       const savedToken = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
 

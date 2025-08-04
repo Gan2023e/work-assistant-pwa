@@ -1403,6 +1403,17 @@ const Purchase: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // 在上传前确保localStorage中没有损坏的数据
+    try {
+      const { cleanStorageForTemplateUpload } = await import('../../utils/storageUtils');
+      const cleanResult = cleanStorageForTemplateUpload();
+      if (cleanResult.success && cleanResult.cleanedKeys > 0) {
+        console.log('🔧 模板上传前清理了存储问题:', cleanResult.message);
+      }
+    } catch (storageError) {
+      console.warn('⚠️ localStorage诊断失败，继续上传流程:', storageError);
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('country', selectedCountry);
@@ -1410,16 +1421,27 @@ const Purchase: React.FC = () => {
 
     try {
       setTemplateLoading(true);
+      
+      // 添加更详细的上传日志
+      console.log('📤 开始上传亚马逊模板:', {
+        fileName: file.name,
+        fileSize: file.size,
+        country: selectedCountry
+      });
+      
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/upload`, {
         method: 'POST',
         body: formData,
       });
 
       if (!res.ok) {
+        const errorText = await res.text();
+        console.error('上传请求失败:', { status: res.status, statusText: res.statusText, errorText });
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
       const result = await res.json();
+      console.log('✅ 模板上传成功:', result);
       message.success(result.message);
       
       // 重新获取模板列表
@@ -1427,7 +1449,22 @@ const Purchase: React.FC = () => {
       
     } catch (error) {
       console.error('上传模板失败:', error);
-      message.error('上传模板失败');
+      
+      // 根据错误类型提供更具体的错误信息
+      let errorMessage = '上传模板失败';
+      if (error instanceof Error) {
+        if (error.message.includes('JSON')) {
+          errorMessage = '数据格式错误，请刷新页面后重试';
+        } else if (error.message.includes('Network')) {
+          errorMessage = '网络连接失败，请检查网络后重试';
+        } else if (error.message.includes('413')) {
+          errorMessage = '文件太大，请选择较小的文件';
+        } else if (error.message.includes('400')) {
+          errorMessage = '文件格式不正确，请上传有效的Excel文件';
+        }
+      }
+      
+      message.error(errorMessage);
     } finally {
       setTemplateLoading(false);
       // 清空文件选择

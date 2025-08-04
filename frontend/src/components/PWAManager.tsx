@@ -178,11 +178,31 @@ const PWAManager: React.FC = () => {
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && !key.startsWith('user') && !key.startsWith('token')) {
+        if (key && key !== 'user' && key !== 'token') {
           keysToRemove.push(key);
         }
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // 安全地清理localStorage，避免JSON解析错误
+      keysToRemove.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+          console.log(`✅ 已清理缓存键: ${key}`);
+        } catch (error) {
+          console.warn(`⚠️ 清理键 ${key} 时出错:`, error);
+        }
+      });
+
+      // 额外的localStorage诊断和修复
+      try {
+        const { diagnoseAndFixStorage } = await import('../utils/storageUtils');
+        const diagnosisResult = diagnoseAndFixStorage();
+        if (diagnosisResult.hasProblems) {
+          console.log('🔧 PWA更新期间修复了localStorage问题:', diagnosisResult.message);
+        }
+      } catch (importError) {
+        console.warn('⚠️ 无法导入storageUtils，跳过诊断:', importError);
+      }
 
       // 告诉Service Worker跳过等待
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
