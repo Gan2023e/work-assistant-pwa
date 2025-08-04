@@ -65,7 +65,7 @@ function getOptimalUploadConfig(fileSize, connectionType = 'auto') {
   return config;
 }
 
-// OSS配置
+// OSS配置 - 修复超时问题
 const ossConfig = {
   region: process.env.OSS_REGION || 'oss-cn-hangzhou',
   accessKeyId: process.env.OSS_ACCESS_KEY_ID,
@@ -75,15 +75,20 @@ const ossConfig = {
   secure: true,  // 强制使用HTTPS
   timeout: 300000, // 修复：增加到5分钟（300秒）超时，支持大文件上传
   // 分片上传专用配置
-  requestTimeout: 300000, // 请求超时（5分钟）
-  responseTimeout: 300000, // 响应超时（5分钟）
+  requestTimeout: 120000, // 请求超时（2分钟）
+  responseTimeout: 120000, // 响应超时（2分钟）
   // 默认分片上传配置（会被动态配置覆盖）
   partSize: 1024 * 1024, // 1MB 分片大小
   parallel: 4, // 并发上传数
   checkPointRebuild: false, // 不重建检查点
   // 性能优化配置
-  retryCountMax: 3, // 最大重试次数
-  retryDelayMax: 2000 // 最大重试延迟
+  retryCountMax: 5, // 最大重试次数
+  retryDelayMax: 3000, // 最大重试延迟
+  // 网络优化配置
+  keepAlive: true, // 保持连接
+  keepAliveTimeout: 30000, // 保持连接超时时间
+  maxFreeSockets: 10, // 最大空闲Socket数
+  maxSockets: 50 // 最大Socket数
 };
 
 // 检查必要的环境变量
@@ -444,83 +449,143 @@ async function listTemplateFiles(templateType, provider = null, country = null) 
 
 // 下载模板文件
 async function downloadTemplateFromOSS(objectName) {
-  try {
-    const client = createOSSClient();
-    
-    console.log(`📥 开始下载文件: ${objectName}`);
-    
-    // 检查文件是否存在并获取元数据
-    let headResult;
+  const maxRetries = 3;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      headResult = await client.head(objectName);
-      console.log(`✅ 文件存在: ${objectName}`);
-      console.log(`📊 文件大小: ${headResult.res.headers['content-length']} 字节`);
+      console.log(`📥 开始下载文件 (尝试 ${attempt}/${maxRetries}): ${objectName}`);
+      
+      const client = createOSSClient();
+      
+      // 检查文件是否存在并获取元数据
+      let headResult;
+      try {
+        headResult = await client.head(objectName);
+        console.log(`✅ 文件存在: ${objectName}`);
+        console.log(`📊 文件大小: ${headResult.res.headers['content-length']} 字节`);
+      } catch (error) {
+        if (error.code === 'NoSuchKey') {
+          console.error(`❌ 文件不存在: ${objectName}`);
+          return { success: false, message: '模板文件不存在' };
+        }
+        throw error;
+      }
+      
+      // 获取文件内容 - 使用更宽松的超时配置
+      const downloadOptions = {
+        timeout: 60000, // 60秒超时
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      };
+      
+      console.log(`🔄 开始下载文件内容 (尝试 ${attempt}/${maxRetries})...`);
+      const result = await client.get(objectName, downloadOptions);
+      
+      console.log(`📥 下载完成: ${objectName}`);
+      console.log(`📋 Content-Type: ${result.res.headers['content-type']}`);
+      console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
+      
+      // 确保content是Buffer格式
+      let content = result.content;
+      if (!Buffer.isBuffer(content)) {
+        console.log('🔄 转换内容为Buffer格式');
+        content = Buffer.from(content);
+      }
+      
+      // 验证下载内容
+      if (!content || content.length === 0) {
+        throw new Error('下载的文件内容为空');
+      }
+      
+      // 获取原始文件名（从metadata中获取）
+      let originalFileName = objectName.split('/').pop();
+      try {
+        const originalNameMeta = headResult.res.headers['x-oss-meta-original-name'];
+        if (originalNameMeta) {
+          originalFileName = Buffer.from(originalNameMeta, 'base64').toString('utf8');
+          console.log(`📝 从元数据获取原始文件名: ${originalFileName}`);
+        }
+      } catch (e) {
+        console.log('⚠️ 无法从元数据获取原始文件名，使用objectName');
+      }
+      
+      // 根据文件扩展名设置正确的Content-Type
+      const ext = originalFileName.toLowerCase().split('.').pop();
+      let contentType = 'application/octet-stream'; // 默认二进制流
+      
+      switch (ext) {
+        case 'xlsx':
+          contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          break;
+        case 'xls':
+          contentType = 'application/vnd.ms-excel';
+          break;
+        case 'xlsm':
+          contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+          break;
+        default:
+          contentType = 'application/octet-stream';
+      }
+      
+      console.log(`✅ 文件下载成功: ${originalFileName}, 大小: ${content.length} 字节`);
+      
+      return {
+        success: true,
+        content: content,
+        fileName: originalFileName,
+        contentType: contentType,
+        size: content.length
+      };
+      
     } catch (error) {
-      if (error.code === 'NoSuchKey') {
-        console.error(`❌ 文件不存在: ${objectName}`);
-        return { success: false, message: '模板文件不存在' };
+      lastError = error;
+      console.error(`❌ 下载尝试 ${attempt}/${maxRetries} 失败:`, error.message);
+      
+      // 如果是网络相关错误，等待后重试
+      if (attempt < maxRetries && (
+        error.code === 'RequestTimeout' || 
+        error.code === 'ConnectionTimeout' ||
+        error.code === 'ResponseError' ||
+        error.message.includes('socket') ||
+        error.message.includes('network') ||
+        error.message.includes('TLS') ||
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('ETIMEDOUT')
+      )) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // 指数退避：1s, 2s, 4s
+        console.log(`⏳ 等待 ${delay}ms 后重试...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
       }
-      throw error;
+      
+      // 其他错误直接返回
+      break;
     }
-    
-    // 获取文件内容 - 修复：明确请求Buffer格式
-    const result = await client.get(objectName);
-    
-    console.log(`📥 下载完成: ${objectName}`);
-    console.log(`📋 Content-Type: ${result.res.headers['content-type']}`);
-    console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
-    
-    // 修复：确保content是Buffer格式
-    let content = result.content;
-    if (!Buffer.isBuffer(content)) {
-      console.log('🔄 转换内容为Buffer格式');
-      content = Buffer.from(content);
-    }
-    
-    // 获取原始文件名（从metadata中获取）
-    let originalFileName = objectName.split('/').pop();
-    try {
-      const originalNameMeta = headResult.res.headers['x-oss-meta-original-name'];
-      if (originalNameMeta) {
-        originalFileName = Buffer.from(originalNameMeta, 'base64').toString('utf8');
-        console.log(`📝 从元数据获取原始文件名: ${originalFileName}`);
-      }
-    } catch (e) {
-      console.log('⚠️ 无法从元数据获取原始文件名，使用objectName');
-    }
-    
-    // 根据文件扩展名设置正确的Content-Type
-    const ext = originalFileName.toLowerCase().split('.').pop();
-    let contentType = 'application/octet-stream'; // 默认二进制流
-    
-    switch (ext) {
-      case 'xlsx':
-        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        break;
-      case 'xls':
-        contentType = 'application/vnd.ms-excel';
-        break;
-      case 'xlsm':
-        contentType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
-        break;
-      default:
-        contentType = result.res.headers['content-type'] || 'application/octet-stream';
-    }
-    
-    console.log(`✅ 下载成功: ${originalFileName} (${content.length} 字节)`);
-    
-    return {
-      success: true,
-      content: content,  // 确保返回Buffer
-      fileName: originalFileName,
-      size: content.length,
-      contentType: contentType
-    };
-    
-  } catch (error) {
-    console.error('❌ 下载模板文件失败:', error);
-    return { success: false, message: error.message };
   }
+  
+  // 所有重试都失败了
+  console.error(`❌ 所有下载尝试都失败了:`, lastError);
+  
+  let errorMessage = '下载模板文件失败';
+  if (lastError) {
+    if (lastError.code === 'AccessDenied') {
+      errorMessage = 'OSS访问权限不足，请检查AccessKey配置';
+    } else if (lastError.code === 'NoSuchBucket') {
+      errorMessage = 'OSS存储桶不存在，请检查配置';
+    } else if (lastError.message.includes('socket') || lastError.message.includes('network')) {
+      errorMessage = '网络连接失败，请检查网络设置或稍后重试';
+    } else {
+      errorMessage = `下载失败: ${lastError.message}`;
+    }
+  }
+  
+  return { 
+    success: false, 
+    message: errorMessage,
+    error: lastError?.message
+  };
 }
 
 // 删除模板文件

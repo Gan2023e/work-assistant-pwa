@@ -1554,8 +1554,14 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     const downloadResult = await downloadTemplateFromOSS(ukTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      return res.status(500).json({ message: '下载英国模板失败: ' + downloadResult.message });
+      console.error('❌ 下载英国模板失败:', downloadResult.message);
+      return res.status(500).json({ 
+        message: `下载英国模板失败: ${downloadResult.message}`,
+        details: downloadResult.error
+      });
     }
+
+    console.log(`✅ 英国模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤3: 查询sellerinventory_sku表获取子SKU信息
     console.log('🔍 查询子SKU信息...');
