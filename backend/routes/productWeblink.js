@@ -3,6 +3,7 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
+const TemplateLinks = require('../models/TemplateLinks');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const axios = require('axios');
@@ -1309,6 +1310,39 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
       return res.status(500).json({ message: '模板文件上传失败' });
     }
 
+    // 保存模板信息到数据库
+    try {
+      // 先检查是否已存在相同的模板记录
+      const existingTemplate = await TemplateLinks.findOne({
+        where: {
+          template_type: 'amazon',
+          country: country,
+          oss_object_name: uploadResult.name
+        }
+      });
+
+      if (!existingTemplate) {
+        // 创建新的模板记录
+        await TemplateLinks.create({
+          template_type: 'amazon',
+          country: country,
+          file_name: uploadResult.originalName,
+          oss_object_name: uploadResult.name,
+          file_url: uploadResult.url,
+          file_size: uploadResult.size,
+          upload_time: new Date(),
+          is_active: true,
+          description: `${country}站点亚马逊资料模板`
+        });
+        console.log(`📝 已保存模板信息到数据库: ${uploadResult.originalName}`);
+      } else {
+        console.log(`📝 模板记录已存在，跳过保存: ${uploadResult.originalName}`);
+      }
+    } catch (dbError) {
+      console.warn('⚠️ 保存模板信息到数据库失败:', dbError.message);
+      // 不影响上传成功，只是记录警告
+    }
+
     const uploadTime = Date.now() - startTime;
     console.log(`✅ 上传完成，耗时: ${uploadTime}ms`);
 
@@ -1445,6 +1479,24 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
       });
     }
 
+    // 删除数据库中的模板记录
+    try {
+      const deletedCount = await TemplateLinks.destroy({
+        where: {
+          oss_object_name: objectName
+        }
+      });
+      
+      if (deletedCount > 0) {
+        console.log(`📝 已从数据库删除模板记录: ${objectName}`);
+      } else {
+        console.log(`📝 数据库中未找到模板记录: ${objectName}`);
+      }
+    } catch (dbError) {
+      console.warn('⚠️ 删除数据库模板记录失败:', dbError.message);
+      // 不影响删除成功，只是记录警告
+    }
+
     res.json({ message: '模板删除成功' });
 
   } catch (error) {
@@ -1471,23 +1523,27 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     // 步骤1: 获取英国模板文件
     console.log('🔍 查找英国模板文件...');
-    const { listTemplateFiles } = require('../utils/oss');
-    
-    const templateResult = await listTemplateFiles('amazon', null, 'UK');
-    
-    if (!templateResult.success || templateResult.files.length === 0) {
+    const templateLinks = await TemplateLinks.findOne({
+      where: { 
+        template_type: 'amazon', 
+        country: 'UK',
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']] // 获取最新上传的模板
+    });
+
+    if (!templateLinks || !templateLinks.oss_object_name) {
       return res.status(400).json({ message: '未找到英国站点的资料模板，请先上传英国模板文件' });
     }
 
-    // 使用第一个英国模板
-    const ukTemplate = templateResult.files[0];
-    console.log(`📄 使用英国模板: ${ukTemplate.fileName}`);
+    const ukTemplateObject = templateLinks.oss_object_name;
+    console.log(`📄 使用英国模板: ${templateLinks.file_name}`);
 
     // 步骤2: 下载模板文件
     console.log('📥 下载英国模板文件...');
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
-    const downloadResult = await downloadTemplateFromOSS(ukTemplate.name);
+    const downloadResult = await downloadTemplateFromOSS(ukTemplateObject);
     
     if (!downloadResult.success) {
       return res.status(500).json({ message: '下载英国模板失败: ' + downloadResult.message });
