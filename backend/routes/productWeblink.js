@@ -1572,10 +1572,17 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       totalRowsNeeded += skuGroups[parentSku].length; // 子SKU行
     });
 
-    // 确保数据数组有足够的行数
+    // 确保数据数组有足够的行数，并且每行都是正确的数组
     const startRow = 3; // 从第4行开始（索引3）
     while (data.length < startRow + 1 + totalRowsNeeded) {
-      data.push([]);
+      data.push([]); // 添加空数组行
+    }
+
+    // 确保所有现有行都是数组
+    for (let i = 0; i < data.length; i++) {
+      if (!Array.isArray(data[i])) {
+        data[i] = [];
+      }
     }
 
     // 填写数据
@@ -1583,7 +1590,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     
     Object.keys(skuGroups).forEach(parentSku => {
       // 填写母SKU行
-      if (!data[currentRowIndex]) {
+      if (!Array.isArray(data[currentRowIndex])) {
         data[currentRowIndex] = [];
       }
       
@@ -1602,7 +1609,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       
       // 填写子SKU行
       skuGroups[parentSku].forEach(childSku => {
-        if (!data[currentRowIndex]) {
+        if (!Array.isArray(data[currentRowIndex])) {
           data[currentRowIndex] = [];
         }
         
@@ -1624,17 +1631,40 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     // 步骤6: 重新创建工作表（保持格式）
     console.log('🔄 重新生成工作表...');
-    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
-    // 尝试保持原有格式（复制列宽等）
-    if (worksheet['!cols']) {
-      newWorksheet['!cols'] = worksheet['!cols'];
+    // 确保数据完全是二维数组格式
+    const cleanData = data.map(row => {
+      if (!Array.isArray(row)) {
+        return [];
+      }
+      return row.map(cell => cell === null || cell === undefined ? '' : cell);
+    });
+    
+    const newWorksheet = xlsx.utils.aoa_to_sheet(cleanData);
+    
+    // 安全地复制原有格式（添加错误处理）
+    try {
+      if (worksheet['!cols'] && Array.isArray(worksheet['!cols'])) {
+        newWorksheet['!cols'] = JSON.parse(JSON.stringify(worksheet['!cols']));
+      }
+    } catch (e) {
+      console.warn('⚠️ 复制列宽信息失败:', e.message);
     }
-    if (worksheet['!rows']) {
-      newWorksheet['!rows'] = worksheet['!rows'];
+    
+    try {
+      if (worksheet['!rows'] && Array.isArray(worksheet['!rows'])) {
+        newWorksheet['!rows'] = JSON.parse(JSON.stringify(worksheet['!rows']));
+      }
+    } catch (e) {
+      console.warn('⚠️ 复制行高信息失败:', e.message);
     }
-    if (worksheet['!merges']) {
-      newWorksheet['!merges'] = worksheet['!merges'];
+    
+    try {
+      if (worksheet['!merges'] && Array.isArray(worksheet['!merges'])) {
+        newWorksheet['!merges'] = JSON.parse(JSON.stringify(worksheet['!merges']));
+      }
+    } catch (e) {
+      console.warn('⚠️ 复制合并单元格信息失败:', e.message);
     }
     
     workbook.Sheets['Template'] = newWorksheet;
