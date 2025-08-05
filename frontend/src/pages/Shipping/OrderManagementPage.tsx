@@ -807,6 +807,16 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       )
     },
     {
+      title: '现有库存',
+      dataIndex: 'total_available',
+      key: 'total_available',
+      width: 90,
+      align: 'center',
+      render: (value: number) => (
+        <Text strong style={{ color: value > 0 ? '#52c41a' : '#ff4d4f' }}>{value}</Text>
+      )
+    },
+    {
       title: '整箱库存',
       key: 'whole_box_info',
       width: 100,
