@@ -1629,7 +1629,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Parent';
         if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = ''; // 母SKU留空
         if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = ''; // 母SKU留空
-        if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = ''; // 母SKU留空
+        if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = 'SizeName-ColorName'; // 母SKU也填写SizeName-ColorName
         if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = 'China';
         if (areBatteriesIncludedCol !== -1) data[currentRowIndex][areBatteriesIncludedCol] = 'No';
         if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = 'New';
