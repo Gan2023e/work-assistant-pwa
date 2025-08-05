@@ -67,8 +67,8 @@ interface OrderItem {
   record_num: number;
   need_num: string;
   sku: string;
-  local_sku: string;
   amz_sku: string;
+  local_sku: string; // 添加本地SKU字段
   ori_quantity: number;
   country: string;
   marketplace: string;
@@ -772,7 +772,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'local_sku',
       key: 'local_sku',
       width: 120,
-      render: (text: string) => <Text>{text}</Text>
+      render: (text: string) => <Text>{text || '-'}</Text>
     },
     {
       title: 'Amazon SKU',
@@ -813,8 +813,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       key: 'total_available',
       width: 90,
       align: 'center',
-      render: (value: number) => (
-        <Text strong style={{ color: value > 0 ? '#52c41a' : '#ff4d4f' }}>{value}</Text>
+      render: (value: number, record) => (
+        <Text 
+          type={value >= record.remaining_quantity ? 'success' : 'danger'}
+          strong
+        >
+          {value}
+        </Text>
       )
     },
     {

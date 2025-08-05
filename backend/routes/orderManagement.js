@@ -192,9 +192,9 @@ router.get('/orders', async (req, res) => {
   }
 });
 
-// 获取需求单详情（包含SKU明细）
+// 获取需求单详情（包含SKU明细）- 前端调用的端点
 router.get('/orders/:needNum/details', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 获取需求单详情:', req.params.needNum);
+  console.log('\x1b[32m%s\x1b[0m', '🔍 获取需求单详情请求:', req.params);
   
   try {
     const { needNum } = req.params;
@@ -215,39 +215,45 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 查询SKU映射
+        // 修正查询逻辑：根据Amazon SKU和国家查询local_sku
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            local_sku: item.sku,
+            amz_sku: item.sku, // item.sku实际存储的是Amazon SKU
             country: item.country
           }
         });
 
-        // 查询库存
-        const inventory = await LocalBox.findAll({
-          where: {
-            sku: mapping ? mapping.local_sku : item.sku,
-            country: item.country
-          },
-          attributes: ['mix_box_num', 'total_quantity', 'total_boxes', 'shipped_quantity'],
-          raw: true
-        });
+        const localSku = mapping?.local_sku || null;
+        
+        // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
+        let inventory = [];
+        if (localSku) {
+          inventory = await LocalBox.findAll({
+            where: {
+              sku: localSku,
+              country: item.country
+            },
+            attributes: ['mix_box_num', 'total_quantity', 'total_boxes'],
+            raw: true
+          });
+        }
 
-        // 计算库存统计（剩余可用库存）
+        // 计算库存统计
         let wholeBoxQuantity = 0, wholeBoxCount = 0, mixedBoxQuantity = 0;
         inventory.forEach(inv => {
-          const totalQuantity = parseInt(inv.total_quantity) || 0;
-          const shippedQuantity = parseInt(inv.shipped_quantity) || 0;
-          const remainingQuantity = totalQuantity - shippedQuantity; // 剩余可用数量
+          const quantity = parseInt(inv.total_quantity) || 0;
           const boxes = parseInt(inv.total_boxes) || 0;
           
           if (!inv.mix_box_num || inv.mix_box_num.trim() === '') {
-            wholeBoxQuantity += remainingQuantity;
+            wholeBoxQuantity += quantity;
             wholeBoxCount += boxes;
           } else {
-            mixedBoxQuantity += remainingQuantity;
+            mixedBoxQuantity += quantity;
           }
         });
+
+        // 总库存 = 整箱库存 + 混合箱库存
+        const totalInventory = wholeBoxQuantity + mixedBoxQuantity;
 
         // 查询已发货数量
         const shipped = await ShipmentItem.sum('shipped_quantity', {
@@ -266,15 +272,15 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         return {
           ...item.toJSON(),
-          local_sku: mapping?.local_sku || item.sku,  // 明确返回本地SKU
-          amz_sku: mapping?.amz_sku || item.sku,
+          amz_sku: item.sku, // 原sku字段存储的是Amazon SKU
+          local_sku: localSku, // 真正的本地SKU
           whole_box_quantity: wholeBoxQuantity,
           whole_box_count: wholeBoxCount,
           mixed_box_quantity: mixedBoxQuantity,
-          total_available: wholeBoxQuantity + mixedBoxQuantity,
+          total_available: totalInventory, // 现有库存总数
           shipped_quantity: shipped,
           remaining_quantity: item.ori_quantity - shipped,
-          shortage: Math.max(0, item.ori_quantity - shipped - (wholeBoxQuantity + mixedBoxQuantity)),
+          shortage: Math.max(0, item.ori_quantity - shipped - totalInventory),
           status: skuStatus  // 使用动态计算的状态，而不是数据库中的status字段
         };
       })
