@@ -1592,7 +1592,6 @@ const Purchase: React.FC = () => {
       const link = document.createElement('a');
       link.href = url;
       // 使用新的命名格式：UK_母SKU1_母SKU2
-      const parentSkus = Array.from(selectedRowKeys) as string[];
       const skuList = parentSkus.join('_');
       link.download = `UK_${skuList}.xlsx`;
       document.body.appendChild(link);
