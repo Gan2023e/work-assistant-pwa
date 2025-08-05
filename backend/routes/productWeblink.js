@@ -1504,6 +1504,19 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let itemSkuCol = -1;
       let colorNameCol = -1;
       let sizeNameCol = -1;
+      let brandNameCol = -1;
+      let manufacturerCol = -1;
+      let externalProductIdTypeCol = -1;
+      let modelCol = -1;
+      let quantityCol = -1;
+      let ageRangeDescriptionCol = -1;
+      let parentChildCol = -1;
+      let parentSkuCol = -1;
+      let relationshipTypeCol = -1;
+      let variationThemeCol = -1;
+      let countryOfOriginCol = -1;
+      let areBatteriesIncludedCol = -1;
+      let conditionTypeCol = -1;
       
       if (data.length >= 3 && data[2]) { // 第3行，索引为2
         data[2].forEach((header, colIndex) => {
@@ -1515,6 +1528,32 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
               colorNameCol = colIndex;
             } else if (cellValue === 'size_name') {
               sizeNameCol = colIndex;
+            } else if (cellValue === 'brand_name') {
+              brandNameCol = colIndex;
+            } else if (cellValue === 'manufacturer') {
+              manufacturerCol = colIndex;
+            } else if (cellValue === 'external_product_id_type') {
+              externalProductIdTypeCol = colIndex;
+            } else if (cellValue === 'model') {
+              modelCol = colIndex;
+            } else if (cellValue === 'quantity') {
+              quantityCol = colIndex;
+            } else if (cellValue === 'age_range_description') {
+              ageRangeDescriptionCol = colIndex;
+            } else if (cellValue === 'parent_child') {
+              parentChildCol = colIndex;
+            } else if (cellValue === 'parent_sku') {
+              parentSkuCol = colIndex;
+            } else if (cellValue === 'relationship_type') {
+              relationshipTypeCol = colIndex;
+            } else if (cellValue === 'variation_theme') {
+              variationThemeCol = colIndex;
+            } else if (cellValue === 'country_of_origin') {
+              countryOfOriginCol = colIndex;
+            } else if (cellValue === 'are_batteries_included') {
+              areBatteriesIncludedCol = colIndex;
+            } else if (cellValue === 'condition_type') {
+              conditionTypeCol = colIndex;
             }
           }
         });
@@ -1526,7 +1565,11 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         });
       }
 
-      console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+      console.log(`📍 找到基础列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+      console.log(`📍 找到扩展列位置 - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
+      console.log(`📍 找到其他列位置 - model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
+      console.log(`📍 找到关系列位置 - parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
+      console.log(`📍 找到属性列位置 - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}`);
 
       // 步骤5: 准备填写数据
       console.log('✍️ 准备填写数据到Excel...');
@@ -1554,11 +1597,20 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let currentRowIndex = 3; // 第4行开始，索引为3
       
       Object.keys(skuGroups).forEach(parentSku => {
+        // 计算需要的最大列数
+        const allColumns = [
+          itemSkuCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
+          externalProductIdTypeCol, modelCol, quantityCol, ageRangeDescriptionCol,
+          parentChildCol, parentSkuCol, relationshipTypeCol, variationThemeCol,
+          countryOfOriginCol, areBatteriesIncludedCol, conditionTypeCol
+        ].filter(col => col !== -1);
+        const maxCol = Math.max(...allColumns);
+        
         // 确保当前行有足够的列
         if (!data[currentRowIndex]) {
           data[currentRowIndex] = [];
         }
-        while (data[currentRowIndex].length <= Math.max(itemSkuCol, colorNameCol, sizeNameCol)) {
+        while (data[currentRowIndex].length <= maxCol) {
           data[currentRowIndex].push('');
         }
         
@@ -1567,6 +1619,21 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         data[currentRowIndex][colorNameCol] = '';
         data[currentRowIndex][sizeNameCol] = '';
         
+        // 填写母SKU的新增字段
+        if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
+        if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
+        if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // 母SKU留空
+        if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
+        if (quantityCol !== -1) data[currentRowIndex][quantityCol] = ''; // 母SKU留空
+        if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = '5+ Years';
+        if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Parent';
+        if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = ''; // 母SKU留空
+        if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = ''; // 母SKU留空
+        if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = ''; // 母SKU留空
+        if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = 'China';
+        if (areBatteriesIncludedCol !== -1) data[currentRowIndex][areBatteriesIncludedCol] = 'No';
+        if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = 'New';
+        
         currentRowIndex++;
         
         // 填写子SKU行
@@ -1574,13 +1641,28 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           if (!data[currentRowIndex]) {
             data[currentRowIndex] = [];
           }
-          while (data[currentRowIndex].length <= Math.max(itemSkuCol, colorNameCol, sizeNameCol)) {
+          while (data[currentRowIndex].length <= maxCol) {
             data[currentRowIndex].push('');
           }
           
           data[currentRowIndex][itemSkuCol] = `UK${childSku.child_sku}`;
           data[currentRowIndex][colorNameCol] = childSku.sellercolorname || '';
           data[currentRowIndex][sizeNameCol] = childSku.sellersizename || '';
+          
+          // 填写子SKU的新增字段
+          if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
+          if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
+          if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = 'GCID';
+          if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
+          if (quantityCol !== -1) data[currentRowIndex][quantityCol] = '15';
+          if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = '5+ Years';
+          if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Child';
+          if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = `UK${parentSku}`;
+          if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = 'Variation';
+          if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = 'SizeName-ColorName';
+          if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = 'China';
+          if (areBatteriesIncludedCol !== -1) data[currentRowIndex][areBatteriesIncludedCol] = 'No';
+          if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = 'New';
           
           currentRowIndex++;
         });
@@ -1616,8 +1698,9 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       const processingTime = Date.now() - startTime;
       console.log(`✅ 英国资料表生成完成，耗时: ${processingTime}ms`);
 
-      // 设置响应头
-      const fileName = `UK_资料表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      // 设置响应头 - 使用新的命名格式：UK_母SKU1_母SKU2
+      const skuList = parentSkus.join('_');
+      const fileName = `UK_${skuList}.xlsx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.setHeader('Content-Length', excelBuffer.length);

@@ -1591,7 +1591,10 @@ const Purchase: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `UK_资料表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      // 使用新的命名格式：UK_母SKU1_母SKU2
+      const parentSkus = Array.from(selectedRowKeys) as string[];
+      const skuList = parentSkus.join('_');
+      link.download = `UK_${skuList}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
