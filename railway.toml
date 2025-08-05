@@ -1,5 +1,6 @@
 [build]
 builder = "nixpacks"
+buildCommand = "cd backend && npm install"
 
 [deploy]
 startCommand = "cd backend && npm start"
@@ -7,5 +8,6 @@ healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 
+# 确保自动部署配置
 [environments.production]
 variables = { NODE_ENV = "production" } 
