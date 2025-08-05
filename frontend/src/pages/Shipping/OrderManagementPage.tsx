@@ -37,6 +37,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -612,25 +613,37 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         '运输方式': orderDetails.order_summary.shipping_method
       }));
 
-      // 转换为CSV格式
-      const headers = Object.keys(exportData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...exportData.map(row => 
-          headers.map(header => `"${row[header as keyof typeof row] || ''}"`).join(',')
-        )
-      ].join('\n');
+      // 创建工作簿和工作表
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
 
-      // 创建下载链接
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `需求单_${orderDetails.order_summary.need_num}_${new Date().toISOString().slice(0, 10)}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // 设置列宽
+      const colWidths = [
+        { wch: 15 }, // 需求单号
+        { wch: 12 }, // 本地SKU
+        { wch: 15 }, // Amazon SKU
+        { wch: 10 }, // 需求数量
+        { wch: 8 },  // 已发货
+        { wch: 8 },  // 剩余
+        { wch: 10 }, // 现有库存
+        { wch: 10 }, // 整箱库存
+        { wch: 12 }, // 混合箱库存
+        { wch: 8 },  // 缺货
+        { wch: 10 }, // 状态
+        { wch: 8 },  // 国家
+        { wch: 10 }, // 平台
+        { wch: 12 }  // 运输方式
+      ];
+      worksheet['!cols'] = colWidths;
+
+      // 添加工作表到工作簿
+      XLSX.utils.book_append_sheet(workbook, worksheet, '需求单明细');
+
+      // 生成文件名
+      const fileName = `需求单_${orderDetails.order_summary.need_num}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+      // 下载文件
+      XLSX.writeFile(workbook, fileName);
       
       message.success('需求单数据导出成功！');
     } catch (error) {
