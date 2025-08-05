@@ -1158,13 +1158,11 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
 
     // 验证文件类型
     const validTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'application/vnd.ms-excel.sheet.macroEnabled.12'
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ];
     
-    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx|xls|xlsm)$/i)) {
-      return res.status(400).json({ message: '请上传有效的Excel文件（.xlsx、.xls或.xlsm格式）' });
+    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx)$/i)) {
+      return res.status(400).json({ message: '请上传有效的Excel文件（仅支持.xlsx格式）' });
     }
 
     // 使用OSS上传模板功能

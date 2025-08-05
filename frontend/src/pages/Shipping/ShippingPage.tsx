@@ -2944,7 +2944,7 @@ const ShippingPage: React.FC = () => {
                     }}
                   >
                     <Upload
-                      accept=".xlsx,.xls"
+                      accept=".xlsx"
                       beforeUpload={() => false}
                       maxCount={1}
                       onChange={() => {

@@ -2387,7 +2387,7 @@ const Purchase: React.FC = () => {
                <input
                  ref={templateFileInputRef}
                  type="file"
-                 accept=".xlsx,.xls,.xlsm"
+                 accept=".xlsx"
                  onChange={handleTemplateUpload}
                  style={{ display: 'none' }}
                />
@@ -2399,7 +2399,7 @@ const Purchase: React.FC = () => {
                  选择Excel文件上传
                </Button>
                <Text type="secondary" style={{ marginLeft: '8px' }}>
-                 支持 .xlsx、.xls、.xlsm 格式
+                 仅支持 .xlsx 格式
                </Text>
              </div>
            </div>

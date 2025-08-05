@@ -2283,6 +2283,18 @@ router.post('/amazon-template/upload', (req, res, next) => {
       });
     }
 
+    // 验证文件类型 - 只支持xlsx格式
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx)$/i)) {
+      return res.status(400).json({
+        success: false,
+        message: '请上传有效的Excel文件（仅支持.xlsx格式）'
+      });
+    }
+
     const { sheetName, merchantSkuColumn, quantityColumn, startRow, country, countryName } = req.body;
 
     if (!sheetName || !merchantSkuColumn || !quantityColumn || !startRow || !country) {
