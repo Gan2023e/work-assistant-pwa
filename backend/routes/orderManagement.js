@@ -225,6 +225,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         const localSku = mapping?.local_sku || null;
         
+        console.log(`🔍 SKU映射调试: ${item.sku} (${item.country}) -> ${localSku || '未找到映射'}`);
+        
         // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
         let inventory = [];
         if (localSku) {
@@ -270,7 +272,7 @@ router.get('/orders/:needNum/details', async (req, res) => {
           }
         }
 
-        return {
+        const result = {
           ...item.toJSON(),
           amz_sku: item.sku, // 原sku字段存储的是Amazon SKU
           local_sku: localSku, // 真正的本地SKU
@@ -283,6 +285,10 @@ router.get('/orders/:needNum/details', async (req, res) => {
           shortage: Math.max(0, item.ori_quantity - shipped - totalInventory),
           status: skuStatus  // 使用动态计算的状态，而不是数据库中的status字段
         };
+        
+        console.log(`📤 返回数据: amz_sku=${result.amz_sku}, local_sku=${result.local_sku}, total_available=${result.total_available}`);
+        
+        return result;
       })
     );
 
