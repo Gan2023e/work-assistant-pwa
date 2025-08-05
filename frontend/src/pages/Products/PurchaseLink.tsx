@@ -24,6 +24,7 @@ import {
   Tag,
   Progress
 } from 'antd';
+import { useTaskContext } from '../../contexts/TaskContext';
 import { 
   UploadOutlined, 
   DeleteOutlined, 
@@ -154,12 +155,8 @@ const Purchase: React.FC = () => {
     supplierStats: [] as { value: string; count: number }[]
   });
 
-  // 英国资料表生成相关状态
-  const [ukGenerateModalVisible, setUkGenerateModalVisible] = useState(false);
-  const [ukGenerateLoading, setUkGenerateLoading] = useState(false);
-  const [ukGenerateProgress, setUkGenerateProgress] = useState(0);
-  const [ukGenerateCurrentStep, setUkGenerateCurrentStep] = useState('');
-  const [allButtonsDisabled, setAllButtonsDisabled] = useState(false);
+  // 使用全局任务上下文
+  const { tasks: backgroundTasks, addTask, updateTask, removeTask, hasRunningTasks } = useTaskContext();
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -196,6 +193,8 @@ const Purchase: React.FC = () => {
   React.useEffect(() => {
     fetchAllDataStatistics();
   }, []);
+
+
 
   // 搜索功能
   const handleSearch = async () => {
@@ -1519,6 +1518,8 @@ const Purchase: React.FC = () => {
     fetchTemplateFiles(country);
   };
 
+
+
   // 生成英国资料表处理函数
   const handleGenerateUkDataSheet = () => {
     if (selectedRowKeys.length === 0) {
@@ -1526,22 +1527,29 @@ const Purchase: React.FC = () => {
       return;
     }
 
-    // 检查是否有英国模板
-    setUkGenerateModalVisible(true);
-    generateUkDataSheet();
+    // 创建后台任务
+    const taskId = addTask({
+      title: `生成英国资料表 (${selectedRowKeys.length}个SKU)`,
+      progress: 0,
+      currentStep: '正在准备生成英国资料表...',
+      status: 'running'
+    });
+
+    // 开始后台执行生成任务
+    generateUkDataSheetInBackground(taskId);
+    
+    // 提示用户任务已开始
+    message.info('英国资料表生成任务已在后台开始，您可以继续进行其他操作');
   };
 
-  // 执行生成英国资料表
-  const generateUkDataSheet = async () => {
+  // 后台执行生成英国资料表
+  const generateUkDataSheetInBackground = async (taskId: string) => {
     try {
-      setUkGenerateLoading(true);
-      setAllButtonsDisabled(true);
-      setUkGenerateProgress(0);
-      setUkGenerateCurrentStep('正在准备生成英国资料表...');
-
       // 步骤1: 验证英国模板存在
-      setUkGenerateProgress(10);
-      setUkGenerateCurrentStep('检查英国模板文件...');
+      updateTask(taskId, {
+        progress: 10,
+        currentStep: '检查英国模板文件...'
+      });
       
       const templateCheckRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=UK`);
       const templateCheckResult = await templateCheckRes.json();
@@ -1551,8 +1559,10 @@ const Purchase: React.FC = () => {
       }
 
       // 步骤2: 获取选中的记录信息
-      setUkGenerateProgress(20);
-      setUkGenerateCurrentStep('获取选中记录的母SKU信息...');
+      updateTask(taskId, {
+        progress: 20,
+        currentStep: '获取选中记录的母SKU信息...'
+      });
       
       const selectedRecords = data.filter(record => 
         selectedRowKeys.some(key => Number(key) === record.id)
@@ -1560,8 +1570,10 @@ const Purchase: React.FC = () => {
       const parentSkus = selectedRecords.map(record => record.parent_sku);
 
       // 步骤3: 调用后端API生成资料表
-      setUkGenerateProgress(30);
-      setUkGenerateCurrentStep('查询子SKU信息...');
+      updateTask(taskId, {
+        progress: 30,
+        currentStep: '查询子SKU信息...'
+      });
 
       const generateRes = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
@@ -1574,18 +1586,24 @@ const Purchase: React.FC = () => {
       }
 
       // 步骤4: 处理进度更新
-      setUkGenerateProgress(60);
-      setUkGenerateCurrentStep('复制模板文件并填写数据...');
+      updateTask(taskId, {
+        progress: 60,
+        currentStep: '复制模板文件并填写数据...'
+      });
 
       // 等待一段时间模拟处理
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      setUkGenerateProgress(80);
-      setUkGenerateCurrentStep('准备下载文件...');
+      updateTask(taskId, {
+        progress: 80,
+        currentStep: '准备下载文件...'
+      });
 
       // 步骤5: 下载文件
-      setUkGenerateProgress(90);
-      setUkGenerateCurrentStep('正在下载生成的资料表...');
+      updateTask(taskId, {
+        progress: 90,
+        currentStep: '正在下载生成的资料表...'
+      });
 
       const blob = await generateRes.blob();
       const url = window.URL.createObjectURL(blob);
@@ -1596,39 +1614,53 @@ const Purchase: React.FC = () => {
       const contentDisposition = generateRes.headers.get('Content-Disposition');
       console.log('🔍 后端Content-Disposition:', contentDisposition);
       
+      let fileName = `UK_${parentSkus.join('_')}.xlsx`;
+      
       // 如果后端没有设置文件名，则使用前端设置
       if (!contentDisposition || !contentDisposition.includes('filename')) {
-        const skuList = parentSkus.join('_');
-        link.download = `UK_${skuList}.xlsx`;
-        console.log('📁 使用前端设置的文件名:', `UK_${skuList}.xlsx`);
+        link.download = fileName;
+        console.log('📁 使用前端设置的文件名:', fileName);
       } else {
         console.log('📁 使用后端设置的文件名');
+        // 尝试从Content-Disposition中提取文件名
+        const matches = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (matches && matches[1]) {
+          fileName = matches[1].replace(/['"]/g, '');
+          link.download = fileName;
+        }
       }
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
 
       // 完成
-      setUkGenerateProgress(100);
-      setUkGenerateCurrentStep('生成完成！文件已下载到本地');
+      updateTask(taskId, {
+        progress: 100,
+        currentStep: '生成完成！文件已下载到本地',
+        status: 'completed',
+        resultData: {
+          downloadUrl: url,
+          fileName: fileName
+        }
+      });
       
       message.success(`成功生成英国资料表，包含 ${parentSkus.length} 个母SKU 的产品信息`);
       
+      // 延迟清理URL对象
       setTimeout(() => {
-        setUkGenerateModalVisible(false);
-        setUkGenerateProgress(0);
-        setUkGenerateCurrentStep('');
-      }, 2000);
+        window.URL.revokeObjectURL(url);
+      }, 5000);
 
     } catch (error: any) {
       console.error('生成英国资料表失败:', error);
+      updateTask(taskId, {
+        progress: 0,
+        currentStep: '生成失败',
+        status: 'error',
+        errorMessage: error.message
+      });
       message.error('生成失败: ' + error.message);
-      setUkGenerateModalVisible(false);
-    } finally {
-      setUkGenerateLoading(false);
-      setAllButtonsDisabled(false);
     }
   };
 
@@ -1776,7 +1808,6 @@ const Purchase: React.FC = () => {
               
               <Button 
                 icon={<ReloadOutlined />} 
-                disabled={allButtonsDisabled}
                 onClick={() => {
                   setInput('');
                   setData([]);
@@ -1909,7 +1940,7 @@ const Purchase: React.FC = () => {
                 placeholder="批量修改状态"
                 style={{ width: 140 }}
                 onSelect={(value) => handleBatchUpdateStatus(value)}
-                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+                disabled={selectedRowKeys.length === 0}
               >
                 {getUniqueStatuses().map(statusItem => (
                   <Option key={statusItem.value} value={statusItem.value}>
@@ -1922,7 +1953,7 @@ const Purchase: React.FC = () => {
               <Button 
                 icon={<LinkOutlined />}
                 onClick={handleBatchOpenLinks}
-                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+                disabled={selectedRowKeys.length === 0}
               >
                 批量打开链接
               </Button>
@@ -1931,7 +1962,7 @@ const Purchase: React.FC = () => {
               <Button 
                 type="primary"
                 onClick={handleBatchSendCpcTest}
-                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+                disabled={selectedRowKeys.length === 0}
               >
                 发送CPC测试申请
               </Button>
@@ -1941,7 +1972,7 @@ const Purchase: React.FC = () => {
                 type="primary"
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
                 onClick={handleBatchMarkCpcSampleSent}
-                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+                disabled={selectedRowKeys.length === 0}
               >
                 标记CPC样品已发
               </Button>
@@ -1951,7 +1982,6 @@ const Purchase: React.FC = () => {
                 icon={<UploadOutlined />}
                 onClick={() => setUploadModalVisible(true)}
                 loading={loading}
-                disabled={allButtonsDisabled}
               >
                 批量上传新品
               </Button>
@@ -1961,7 +1991,6 @@ const Purchase: React.FC = () => {
                 icon={<FileExcelOutlined />}
                 onClick={handleOpenTemplateModal}
                 loading={templateLoading}
-                disabled={allButtonsDisabled}
               >
                 管理亚马逊资料模板
               </Button>
@@ -1971,8 +2000,7 @@ const Purchase: React.FC = () => {
                 type="primary"
                 icon={<FileExcelOutlined />}
                 onClick={handleGenerateUkDataSheet}
-                loading={ukGenerateLoading}
-                disabled={allButtonsDisabled || selectedRowKeys.length === 0}
+                disabled={selectedRowKeys.length === 0}
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
               >
                 生成英国资料表
@@ -1994,12 +2022,12 @@ const Purchase: React.FC = () => {
               onConfirm={handleBatchDelete}
               okText="确定"
               cancelText="取消"
-              disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+              disabled={selectedRowKeys.length === 0}
             >
               <Button 
                 danger
                 icon={<DeleteOutlined />}
-                disabled={selectedRowKeys.length === 0 || allButtonsDisabled}
+                disabled={selectedRowKeys.length === 0}
               >
                 批量删除
               </Button>
@@ -2455,72 +2483,7 @@ const Purchase: React.FC = () => {
          </Space>
        </Modal>
 
-       {/* 英国资料表生成进度模态框 */}
-       <Modal
-         title="生成英国资料表"
-         open={ukGenerateModalVisible}
-         onCancel={() => {
-           if (!ukGenerateLoading) {
-             setUkGenerateModalVisible(false);
-             setUkGenerateProgress(0);
-             setUkGenerateCurrentStep('');
-           }
-         }}
-         footer={ukGenerateProgress === 100 ? [
-           <Button key="close" type="primary" onClick={() => {
-             setUkGenerateModalVisible(false);
-             setUkGenerateProgress(0);
-             setUkGenerateCurrentStep('');
-           }}>
-             关闭
-           </Button>
-         ] : null}
-         closable={!ukGenerateLoading}
-         maskClosable={false}
-         width={600}
-       >
-         <Space direction="vertical" style={{ width: '100%' }}>
-           <div style={{ marginBottom: '16px' }}>
-             <Text strong>当前步骤：</Text>
-             <Text style={{ color: '#1890ff' }}>{ukGenerateCurrentStep}</Text>
-           </div>
-           
-           <div style={{ marginBottom: '16px' }}>
-             <Text strong>执行进度：</Text>
-             <Progress 
-               percent={ukGenerateProgress} 
-               status={ukGenerateLoading ? 'active' : (ukGenerateProgress === 100 ? 'success' : 'normal')}
-               strokeColor={{
-                 '0%': '#108ee9',
-                 '100%': '#87d068',
-               }}
-             />
-           </div>
 
-           {selectedRowKeys.length > 0 && (
-             <div style={{ marginBottom: '16px' }}>
-               <Text type="secondary">
-                 本次将为 <Text strong style={{ color: '#1890ff' }}>{selectedRowKeys.length}</Text> 个母SKU生成英国资料表
-               </Text>
-             </div>
-           )}
-
-           {ukGenerateProgress === 100 && (
-             <div style={{ 
-               padding: '12px', 
-               backgroundColor: '#f6ffed', 
-               border: '1px solid #b7eb8f', 
-               borderRadius: '6px',
-               textAlign: 'center'
-             }}>
-               <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px', marginRight: '8px' }} />
-               <Text style={{ color: '#52c41a', fontWeight: 'bold' }}>
-                 英国资料表生成完成！文件已自动下载到本地
-               </Text>
-             </div>
-           )}
-         </Space>
-       </Modal>
 
     </div>
   );

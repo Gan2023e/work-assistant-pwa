@@ -1,0 +1,185 @@
+/* 浮动图标样式 */
+.background-task-float-icon {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.background-task-float-icon:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* 展开面板样式 */
+.background-task-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  background: white;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow: hidden;
+}
+
+.background-task-panel .ant-card {
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.background-task-panel .ant-card-head {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+
+.background-task-panel .ant-card-head-title {
+  color: white;
+  font-weight: 600;
+}
+
+.background-task-panel .ant-card-extra .ant-btn-link {
+  color: rgba(255, 255, 255, 0.85);
+  border: none;
+  box-shadow: none;
+}
+
+.background-task-panel .ant-card-extra .ant-btn-link:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.background-task-panel .ant-card-body {
+  padding: 16px;
+  max-height: calc(70vh - 60px);
+  overflow-y: auto;
+}
+
+/* 列表项动画 */
+.background-task-panel .ant-list-item {
+  transition: all 0.3s ease;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  padding: 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+}
+
+.background-task-panel .ant-list-item:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* 进度条样式优化 */
+.background-task-panel .ant-progress-line {
+  margin-bottom: 4px;
+}
+
+.background-task-panel .ant-progress-text {
+  font-size: 11px !important;
+  font-weight: 600;
+}
+
+/* 标签样式 */
+.background-task-panel .ant-tag {
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* 图标旋转动画优化 */
+@keyframes smooth-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.background-task-float-icon .anticon-loading {
+  animation: smooth-spin 1.5s linear infinite;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .background-task-float-icon {
+    top: 60px;
+    right: 15px;
+  }
+  
+  .background-task-panel {
+    top: 60px;
+    right: 15px;
+    left: 15px;
+    width: auto;
+  }
+  
+  .background-task-panel .ant-card {
+    width: 100%;
+  }
+}
+
+/* 滚动条美化 */
+.background-task-panel .ant-card-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.background-task-panel .ant-card-body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.background-task-panel .ant-card-body::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.background-task-panel .ant-card-body::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 徽章数字优化 */
+.background-task-float-icon .ant-badge-count {
+  background: #ff4d4f;
+  box-shadow: 0 0 0 1px #fff;
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 14px;
+}
+
+/* 任务状态指示器 */
+.task-status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.task-status-running {
+  background: #1890ff;
+  animation: pulse 1.5s infinite;
+}
+
+.task-status-completed {
+  background: #52c41a;
+}
+
+.task-status-error {
+  background: #ff4d4f;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+} 

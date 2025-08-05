@@ -6,6 +6,8 @@ import { DownOutlined, RightOutlined, UserOutlined, LogoutOutlined, SettingOutli
 import 'antd/dist/reset.css';
 import zhCN from 'antd/es/locale/zh_CN';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TaskProvider, useTaskContext } from './contexts/TaskContext';
+import BackgroundTaskManager from './components/BackgroundTaskManager';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/Auth/LoginPage';
 import HomePage from './pages/Home/HomePage';
@@ -38,6 +40,18 @@ const getMenuLabel = (label: string, open: boolean) => (
     {open ? <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} /> : <RightOutlined style={{ marginLeft: 4, fontSize: 10 }} />}
   </span>
 );
+
+// 全局任务管理器组件
+const GlobalTaskManager: React.FC = () => {
+  const { tasks, removeTask } = useTaskContext();
+  
+  return (
+    <BackgroundTaskManager
+      tasks={tasks}
+      onRemoveTask={removeTask}
+    />
+  );
+};
 
 
 
@@ -291,6 +305,9 @@ const AppContent: React.FC = () => {
       
       {/* PWA 管理组件 */}
       <PWAManager />
+      
+      {/* 全局后台任务管理器 */}
+      <GlobalTaskManager />
     </Layout>
   );
 };
@@ -298,9 +315,11 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => (
   <ConfigProvider locale={zhCN}>
     <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
+      <TaskProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </TaskProvider>
     </AuthProvider>
   </ConfigProvider>
 );
