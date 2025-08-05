@@ -1591,9 +1591,20 @@ const Purchase: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      // 使用新的命名格式：UK_母SKU1_母SKU2
-      const skuList = parentSkus.join('_');
-      link.download = `UK_${skuList}.xlsx`;
+      
+      // 检查后端是否设置了文件名
+      const contentDisposition = generateRes.headers.get('Content-Disposition');
+      console.log('🔍 后端Content-Disposition:', contentDisposition);
+      
+      // 如果后端没有设置文件名，则使用前端设置
+      if (!contentDisposition || !contentDisposition.includes('filename')) {
+        const skuList = parentSkus.join('_');
+        link.download = `UK_${skuList}.xlsx`;
+        console.log('📁 使用前端设置的文件名:', `UK_${skuList}.xlsx`);
+      } else {
+        console.log('📁 使用后端设置的文件名');
+      }
+      
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

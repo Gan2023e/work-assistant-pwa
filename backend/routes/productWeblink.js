@@ -1701,9 +1701,15 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       // 设置响应头 - 使用新的命名格式：UK_母SKU1_母SKU2
       const skuList = parentSkus.join('_');
       const fileName = `UK_${skuList}.xlsx`;
+      
+      console.log(`📁 生成的文件名: ${fileName}`);
+      console.log(`📋 母SKU列表: ${JSON.stringify(parentSkus)}`);
+      
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.setHeader('Content-Length', excelBuffer.length);
+      
+      console.log(`🌐 设置的Content-Disposition: attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       
       res.send(excelBuffer);
 
