@@ -772,7 +772,10 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'local_sku',
       key: 'local_sku',
       width: 120,
-      render: (text: string) => <Text>{text || '-'}</Text>
+      render: (text: string, record: any) => {
+        console.log(`🔍 前端渲染本地SKU: ${text}, 完整记录:`, record);
+        return <Text>{text || '-'}</Text>;
+      }
     },
     {
       title: 'Amazon SKU',
