@@ -225,8 +225,6 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         const localSku = mapping?.local_sku || null;
         
-        console.log(`🔍 SKU映射调试: ${item.sku} (${item.country}) -> ${localSku || '未找到映射'}`);
-        
         // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
         let inventory = [];
         if (localSku) {
@@ -272,7 +270,7 @@ router.get('/orders/:needNum/details', async (req, res) => {
           }
         }
 
-        const result = {
+        return {
           ...item.toJSON(),
           amz_sku: item.sku, // 原sku字段存储的是Amazon SKU
           local_sku: localSku, // 真正的本地SKU
@@ -285,10 +283,6 @@ router.get('/orders/:needNum/details', async (req, res) => {
           shortage: Math.max(0, item.ori_quantity - shipped - totalInventory),
           status: skuStatus  // 使用动态计算的状态，而不是数据库中的status字段
         };
-        
-        console.log(`📤 返回数据: amz_sku=${result.amz_sku}, local_sku=${result.local_sku}, total_available=${result.total_available}`);
-        
-        return result;
       })
     );
 
@@ -303,11 +297,15 @@ router.get('/orders/:needNum/details', async (req, res) => {
       order: [['created_at', 'DESC']]
     });
 
+    // 计算总现有库存
+    const totalAvailableInventory = itemsWithInventory.reduce((sum, item) => sum + item.total_available, 0);
+    
     const orderSummary = {
       need_num: needNum,
       total_items: orderItems.length,
       total_quantity: orderItems.reduce((sum, item) => sum + item.ori_quantity, 0),
       total_shipped: itemsWithInventory.reduce((sum, item) => sum + item.shipped_quantity, 0),
+      total_available_inventory: totalAvailableInventory, // 新增：总现有库存
       created_at: orderItems[0].create_date,
       country: orderItems[0].country,
       marketplace: orderItems[0].marketplace,
@@ -315,7 +313,9 @@ router.get('/orders/:needNum/details', async (req, res) => {
     };
 
     orderSummary.remaining_quantity = orderSummary.total_quantity - orderSummary.total_shipped;
-    orderSummary.completion_rate = Math.round((orderSummary.total_shipped / orderSummary.total_quantity) * 100);
+    // 修改完成进度计算：现有库存之和与需求数量之和的比值
+    orderSummary.completion_rate = orderSummary.total_quantity > 0 ? 
+      Math.round((totalAvailableInventory / orderSummary.total_quantity) * 100) : 0;
 
     res.json({
       code: 0,

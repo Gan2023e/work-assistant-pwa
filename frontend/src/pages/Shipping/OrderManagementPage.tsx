@@ -32,7 +32,8 @@ import {
   BarChartOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -588,6 +589,56 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
+  // 导出需求单详情
+  const exportOrderDetails = () => {
+    if (!orderDetails) return;
+    
+    try {
+      // 准备导出数据
+      const exportData = orderDetails.order_items.map(item => ({
+        '需求单号': orderDetails.order_summary.need_num,
+        '本地SKU': item.local_sku || '-',
+        'Amazon SKU': item.amz_sku,
+        '需求数量': item.ori_quantity,
+        '已发货': item.shipped_quantity,
+        '剩余': item.remaining_quantity,
+        '现有库存': item.total_available,
+        '整箱库存': item.whole_box_quantity,
+        '混合箱库存': item.mixed_box_quantity,
+        '缺货': item.shortage,
+        '状态': item.status,
+        '国家': orderDetails.order_summary.country,
+        '平台': orderDetails.order_summary.marketplace,
+        '运输方式': orderDetails.order_summary.shipping_method
+      }));
+
+      // 转换为CSV格式
+      const headers = Object.keys(exportData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...exportData.map(row => 
+          headers.map(header => `"${row[header as keyof typeof row] || ''}"`).join(',')
+        )
+      ].join('\n');
+
+      // 创建下载链接
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `需求单_${orderDetails.order_summary.need_num}_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      message.success('需求单数据导出成功！');
+    } catch (error) {
+      console.error('导出失败:', error);
+      message.error('导出失败，请重试');
+    }
+  };
+
   // 删除需求单
   const handleDeleteOrder = async (needNum: string) => {
     try {
@@ -772,10 +823,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'local_sku',
       key: 'local_sku',
       width: 120,
-      render: (text: string, record: any) => {
-        console.log(`🔍 前端渲染本地SKU: ${text}, 完整记录:`, record);
-        return <Text>{text || '-'}</Text>;
-      }
+      render: (text: string) => <Text>{text || '-'}</Text>
     },
     {
       title: 'Amazon SKU',
@@ -1002,12 +1050,16 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                         {orderDetails.order_summary.order_status}
                       </Tag>
                     </Descriptions.Item>
-                    <Descriptions.Item label="完成进度">
+                    <Descriptions.Item label="库存完成度">
                       <Progress 
                         percent={orderDetails.order_summary.completion_rate} 
                         size="small"
-                        status={orderDetails.order_summary.completion_rate === 100 ? 'success' : 'active'}
+                        status={orderDetails.order_summary.completion_rate >= 100 ? 'success' : 'active'}
+                        format={percent => `${percent}%`}
                       />
+                      <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                        现有库存/需求数量
+                      </Text>
                     </Descriptions.Item>
                     <Descriptions.Item label="国家/平台">
                       {orderDetails.order_summary.country} / {orderDetails.order_summary.marketplace}
@@ -1028,13 +1080,22 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   <Divider />
 
                   {/* SKU明细 */}
-                  <Title level={5}>SKU明细</Title>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <Title level={5} style={{ margin: 0 }}>SKU明细</Title>
+                    <Button 
+                      type="primary" 
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      onClick={() => exportOrderDetails()}
+                    >
+                      导出需求表
+                    </Button>
+                  </div>
                   <Table
                     columns={itemColumns}
                     dataSource={orderDetails.order_items}
                     rowKey="record_num"
                     size="small"
-                    scroll={{ y: 300 }}
                     pagination={false}
                   />
 
