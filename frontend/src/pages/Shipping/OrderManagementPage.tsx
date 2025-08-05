@@ -67,6 +67,7 @@ interface OrderItem {
   record_num: number;
   need_num: string;
   sku: string;
+  local_sku: string;
   amz_sku: string;
   ori_quantity: number;
   country: string;
@@ -768,8 +769,8 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   const itemColumns: ColumnsType<OrderItem> = [
     {
       title: '本地SKU',
-      dataIndex: 'sku',
-      key: 'sku',
+      dataIndex: 'local_sku',
+      key: 'local_sku',
       width: 120,
       render: (text: string) => <Text>{text}</Text>
     },

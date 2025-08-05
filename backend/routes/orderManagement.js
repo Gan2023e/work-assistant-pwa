@@ -229,21 +229,23 @@ router.get('/orders/:needNum/details', async (req, res) => {
             sku: mapping ? mapping.local_sku : item.sku,
             country: item.country
           },
-          attributes: ['mix_box_num', 'total_quantity', 'total_boxes'],
+          attributes: ['mix_box_num', 'total_quantity', 'total_boxes', 'shipped_quantity'],
           raw: true
         });
 
-        // 计算库存统计
+        // 计算库存统计（剩余可用库存）
         let wholeBoxQuantity = 0, wholeBoxCount = 0, mixedBoxQuantity = 0;
         inventory.forEach(inv => {
-          const quantity = parseInt(inv.total_quantity) || 0;
+          const totalQuantity = parseInt(inv.total_quantity) || 0;
+          const shippedQuantity = parseInt(inv.shipped_quantity) || 0;
+          const remainingQuantity = totalQuantity - shippedQuantity; // 剩余可用数量
           const boxes = parseInt(inv.total_boxes) || 0;
           
           if (!inv.mix_box_num || inv.mix_box_num.trim() === '') {
-            wholeBoxQuantity += quantity;
+            wholeBoxQuantity += remainingQuantity;
             wholeBoxCount += boxes;
           } else {
-            mixedBoxQuantity += quantity;
+            mixedBoxQuantity += remainingQuantity;
           }
         });
 
@@ -264,6 +266,7 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         return {
           ...item.toJSON(),
+          local_sku: mapping?.local_sku || item.sku,  // 明确返回本地SKU
           amz_sku: mapping?.amz_sku || item.sku,
           whole_box_quantity: wholeBoxQuantity,
           whole_box_count: wholeBoxCount,
