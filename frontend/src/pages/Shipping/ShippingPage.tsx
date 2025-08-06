@@ -1487,12 +1487,15 @@ const ShippingPage: React.FC = () => {
         item.box_num === currentBoxNum
       );
       
+      // 使用局部变量跟踪更新后的状态，避免React状态异步更新导致的重复问题
+      let updatedConfirmedMixedBoxes = confirmedMixedBoxes;
+      let updatedShippingData = shippingData;
+      
       if (isAlreadyConfirmed) {
         // 如果已经确认过，先移除之前的确认数据
-        const updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => 
+        updatedConfirmedMixedBoxes = confirmedMixedBoxes.filter(item => 
           item.box_num !== currentBoxNum
         );
-        setConfirmedMixedBoxes(updatedConfirmedMixedBoxes);
         
         // 移除对应的发货数据
         const correspondingShippingData = shippingData.filter((item: any) => {
@@ -1502,8 +1505,7 @@ const ShippingPage: React.FC = () => {
         
         if (correspondingShippingData.length > 0) {
           const boxNumToRemove = correspondingShippingData[0].box_num;
-          const updatedShippingData = shippingData.filter((item: any) => item.box_num !== boxNumToRemove);
-          setShippingData(updatedShippingData);
+          updatedShippingData = shippingData.filter((item: any) => item.box_num !== boxNumToRemove);
         }
       }
       
@@ -1519,15 +1521,18 @@ const ShippingPage: React.FC = () => {
         quantity: item.quantity
       }));
       
-      setShippingData([...shippingData, ...newShippingData]);
+      // 更新发货数据，使用局部变量避免重复
+      updatedShippingData = [...updatedShippingData, ...newShippingData];
+      setShippingData(updatedShippingData);
       
       // 如果不是重新确认，才递增箱号
       if (!isAlreadyConfirmed) {
         setNextBoxNumber(nextBoxNumber + 1);
       }
       
-      // 保存混合箱数据用于最终出库记录
-      setConfirmedMixedBoxes([...confirmedMixedBoxes, ...boxData]);
+      // 保存混合箱数据用于最终出库记录，使用局部变量避免重复
+      updatedConfirmedMixedBoxes = [...updatedConfirmedMixedBoxes, ...boxData];
+      setConfirmedMixedBoxes(updatedConfirmedMixedBoxes);
       
       if (currentMixedBoxIndex < uniqueMixedBoxNums.length - 1) {
         setCurrentMixedBoxIndex(currentMixedBoxIndex + 1);
