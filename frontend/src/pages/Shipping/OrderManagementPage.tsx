@@ -670,7 +670,8 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           total_quantity: orderDetails.order_summary.total_quantity,
           create_time: orderDetails.order_summary.created_at,
           country: orderDetails.order_summary.country,
-          status: orderDetails.order_summary.order_status
+          status: orderDetails.order_summary.order_status,
+          completion_rate: orderDetails.order_summary.completion_rate
         },
         order_items: orderDetails.order_items.map(item => ({
           record_num: item.record_num.toString(),
@@ -1146,11 +1147,20 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     <Title level={5} style={{ margin: 0 }}>SKU明细</Title>
                     <Space>
                       <Button 
-                        size="small"
+                        type="primary"
+                        ghost
+                        size="middle"
                         icon={<PrinterOutlined />}
                         onClick={() => printOrderDetails()}
+                        style={{ 
+                          borderColor: '#52c41a',
+                          color: '#52c41a',
+                          fontWeight: 'bold',
+                          padding: '0 20px',
+                          height: '36px'
+                        }}
                       >
-                        打印
+                        🖨️ 打印详情
                       </Button>
                       <Button 
                         type="primary" 

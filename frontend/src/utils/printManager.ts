@@ -31,6 +31,7 @@ export interface OrderDetailsData {
         create_time: string;
         country?: string;
         status?: string;
+        completion_rate?: number;
     };
     order_items: Array<{
         record_num: string;
@@ -473,8 +474,10 @@ export class PrintManager {
         const totalRemaining = order_items.reduce((sum, item) => sum + (item.remaining_quantity || 0), 0);
         const totalAvailable = order_items.reduce((sum, item) => sum + (item.total_available || 0), 0);
         const totalShortage = order_items.reduce((sum, item) => sum + (item.shortage || 0), 0);
-        const completionRate = order_summary.total_quantity > 0 ? 
-            Math.round((totalShipped / order_summary.total_quantity) * 100) : 0;
+        // 使用后端传来的库存完成度，保持一致性
+        const completionRate = order_summary.completion_rate !== undefined ? 
+            order_summary.completion_rate : 
+            (order_summary.total_quantity > 0 ? Math.round((totalShipped / order_summary.total_quantity) * 100) : 0);
         
         const itemRows = order_items.map(item => `
             <tr>
@@ -485,7 +488,7 @@ export class PrintManager {
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.shipped_quantity || 0}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.remaining_quantity || 0}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.total_available || 0}</td>
-                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.shortage || 0}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 14px; font-weight: bold; color: ${(item.shortage || 0) > 0 ? '#ff4d4f' : '#333'};">${item.shortage || 0}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.country}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${new Date(item.create_time).toLocaleDateString('zh-CN')}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
@@ -590,6 +593,13 @@ export class PrintManager {
             font-size: 11px;
         }
         
+        th.shortage-header {
+            background: #fff2f0;
+            color: #ff4d4f;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
         td {
             padding: 4px;
             border: 1px solid #ddd;
@@ -689,7 +699,7 @@ export class PrintManager {
                     <th>已发货</th>
                     <th>剩余</th>
                     <th>现有库存</th>
-                    <th>缺货</th>
+                    <th class="shortage-header">缺货</th>
                     <th>目的地</th>
                     <th>创建时间</th>
                     <th>状态</th>
