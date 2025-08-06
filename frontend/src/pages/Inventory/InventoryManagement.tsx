@@ -361,39 +361,70 @@ const InventoryManagement: React.FC = () => {
       if (filters.country) params.append('country', filters.country);
       if (filters.box_type) params.append('box_type', filters.box_type);
       
-      // 处理状态筛选：如果用户明确设置了状态，使用用户设置的状态
-      // 如果用户没有设置状态，但是启用了排除已出库选项，则不设置status参数（在前端过滤）
+      // 处理状态筛选：
+      // 1. 如果用户明确设置了状态，使用用户设置的状态
+      // 2. 如果用户没有设置状态但启用了排除已出库，则后端筛选为待出库和部分出库
+      // 3. 如果用户禁用了排除已出库且没有设置状态，则不设置状态筛选（显示所有）
       if (filters.status) {
         params.append('status', filters.status);
+      } else if (filters.exclude_shipped) {
+        // 默认情况：排除已出库记录
+        // 为了保持与库存汇总的一致性，在此情况下我们手动筛选待出库和部分出库
+        console.log('使用默认筛选：排除已出库记录');
       }
       
       params.append('page', pagination.current.toString());
       params.append('limit', pagination.pageSize.toString());
       
+      console.log('库存记录API参数:', params.toString());
+      console.log('当前筛选条件:', { 
+        filters,
+        excludeShipped: filters.exclude_shipped,
+        hasStatus: !!filters.status 
+      });
+      
       const response = await fetch(`/api/inventory/records?${params.toString()}`);
       const data = await response.json();
+      
+      console.log('API返回数据:', { 
+        code: data.code, 
+        recordCount: data.data?.records?.length || 0,
+        total: data.data?.total || 0 
+      });
       
       if (data.code === 0) {
         let records = data.data.records;
         
         // 如果启用了排除已出库且用户没有明确设置状态筛选，则在前端过滤掉已出库记录
         if (filters.exclude_shipped && !filters.status) {
+          const originalCount = records.length;
           records = records.filter((record: InventoryRecord) => record.status !== '已出库');
+          console.log(`前端筛选：原始${originalCount}条，筛选后${records.length}条`);
+          
+          // 输出被过滤掉的记录状态统计
+          const statusCounts = data.data.records.reduce((acc: any, record: InventoryRecord) => {
+            acc[record.status] = (acc[record.status] || 0) + 1;
+            return acc;
+          }, {});
+          console.log('原始记录状态统计:', statusCounts);
         }
         
         // 对记录进行排序，确保同一混合箱的记录连续显示
         const sortedRecords = sortRecordsByMixedBox(records);
         setRecordsData(sortedRecords);
+        
+        // 使用原始总数，而不是筛选后的数量，避免分页问题
         setPagination(prev => ({
           ...prev,
-          total: records.length
+          total: filters.exclude_shipped && !filters.status ? records.length : data.data.total
         }));
       } else {
         message.error(data.message);
+        console.error('API返回错误:', data);
       }
     } catch (error) {
       message.error('加载库存记录失败');
-      console.error(error);
+      console.error('加载库存记录失败:', error);
     } finally {
       setLoading(false);
     }
