@@ -1393,7 +1393,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
                 {/* 筛选条件行 */}
                 <Row gutter={[16, 8]} align="middle">
-                  <Col flex="200px">
+                  <Col flex="280px">
                     <Input
                       placeholder="输入需求单号"
                       allowClear
@@ -1403,10 +1403,10 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     />
                   </Col>
                   
-                  <Col flex="150px">
+                  <Col flex="180px">
                     <Input.Group compact>
                       <Input
-                        style={{ width: '25%', textAlign: 'center', backgroundColor: '#fafafa' }}
+                        style={{ width: '35%', textAlign: 'center', backgroundColor: '#fafafa' }}
                         placeholder="状态"
                         disabled
                         value="状态"
@@ -1416,7 +1416,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                         allowClear
                         value={filters.status}
                         onChange={(value) => handleFilterChange({ ...filters, status: value || '' })}
-                        style={{ width: '75%' }}
+                        style={{ width: '65%' }}
                         options={[
                           { label: '待发货', value: '待发货' },
                           { label: '部分发货', value: '部分发货' }, 
@@ -1427,10 +1427,10 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     </Input.Group>
                   </Col>
                   
-                  <Col flex="150px">
+                  <Col flex="180px">
                     <Input.Group compact>
                       <Input
-                        style={{ width: '25%', textAlign: 'center', backgroundColor: '#fafafa' }}
+                        style={{ width: '35%', textAlign: 'center', backgroundColor: '#fafafa' }}
                         placeholder="国家"
                         disabled
                         value="国家"
@@ -1440,11 +1440,18 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                         allowClear
                         value={filters.country}
                         onChange={(value) => handleFilterChange({ ...filters, country: value || '' })}
-                        style={{ width: '75%' }}
-                        options={countryStats.map(stat => ({
-                          label: `${stat.country || '未分类'} (${stat.count})`,
-                          value: stat.country
-                        }))}
+                        style={{ width: '65%' }}
+                        options={[
+                          { label: '美国', value: '美国' },
+                          { label: '英国', value: '英国' },
+                          { label: '加拿大', value: '加拿大' },
+                          { label: '阿联酋', value: '阿联酋' },
+                          { label: '澳大利亚', value: '澳大利亚' },
+                          ...countryStats.map(stat => ({
+                            label: `${stat.country || '未分类'} (${stat.count})`,
+                            value: stat.country
+                          }))
+                        ]}
                       />
                     </Input.Group>
                   </Col>
