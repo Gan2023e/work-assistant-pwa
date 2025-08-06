@@ -481,9 +481,9 @@ export class PrintManager {
         
         const itemRows = order_items.map(item => `
             <tr>
-                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.record_num}</td>
-                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.local_sku || '-'}</td>
-                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.sku}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.record_num}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.local_sku || '-'}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.sku}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.quantity}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.shipped_quantity || 0}</td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.remaining_quantity || 0}</td>

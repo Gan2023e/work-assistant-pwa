@@ -160,6 +160,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     total: 0
   });
 
+  // 搜索状态
+  const [searchText, setSearchText] = useState('');
+
   // 根据props.needNum或selectedOrder决定加载详情还是列表
   useEffect(() => {
     if (needNum) {
@@ -168,16 +171,22 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     } else if (selectedOrder) {
       fetchOrderDetails(selectedOrder);
     } else {
-      fetchOrders();
+      fetchOrders(1, 20, searchText);
     }
     // eslint-disable-next-line
   }, [needNum, selectedOrder]);
 
   // 获取需求单列表
-  const fetchOrders = async (page = 1, pageSize = 20) => {
+  const fetchOrders = async (page = 1, pageSize = 20, search = '') => {
     setOrdersLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/order-management/orders?page=${page}&limit=${pageSize}`, {
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        ...(search && { search })
+      });
+      
+      const response = await fetch(`${API_BASE_URL}/api/order-management/orders?${queryParams}`, {
         headers: {
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
         },
@@ -202,6 +211,20 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     } finally {
       setOrdersLoading(false);
     }
+  };
+
+  // 搜索处理函数
+  const handleSearch = (value: string) => {
+    setSearchText(value);
+    setPagination(prev => ({ ...prev, current: 1 }));
+    fetchOrders(1, pagination.pageSize, value);
+  };
+
+  // 清除搜索
+  const handleClearSearch = () => {
+    setSearchText('');
+    setPagination(prev => ({ ...prev, current: 1 }));
+    fetchOrders(1, pagination.pageSize, '');
   };
 
   // 获取需求单详情
@@ -283,7 +306,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           await fetchOrderDetails(selectedOrder);
         }
         // 刷新需求单列表
-        await fetchOrders(pagination.current, pagination.pageSize);
+        await fetchOrders(pagination.current, pagination.pageSize, searchText);
       } else {
         message.error(result.message || '修改需求数量失败');
       }
@@ -470,7 +493,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       message.success('需求单处理完成');
       
       // 刷新页面数据
-      await fetchOrders(pagination.current, pagination.pageSize);
+      await fetchOrders(pagination.current, pagination.pageSize, searchText);
       
       // 清理状态
       setAddOrderModalVisible(false);
@@ -717,7 +740,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       if (result.code === 0) {
         message.success('需求单删除成功');
         // 刷新需求单列表
-        await fetchOrders(pagination.current, pagination.pageSize);
+        await fetchOrders(pagination.current, pagination.pageSize, searchText);
         // 如果当前选中的需求单被删除，清空详情页面
         if (selectedOrder === needNum) {
           setSelectedOrder('');
@@ -882,10 +905,19 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   // SKU明细表格列定义
   const itemColumns: ColumnsType<OrderItem> = [
     {
+      title: '记录号',
+      dataIndex: 'record_num',
+      key: 'record_num',
+      width: 80,
+      align: 'center',
+      render: (text: number) => <Text>{text}</Text>
+    },
+    {
       title: '本地SKU',
       dataIndex: 'local_sku',
       key: 'local_sku',
       width: 120,
+      align: 'center',
       render: (text: string) => <Text>{text || '-'}</Text>
     },
     {
@@ -893,6 +925,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       dataIndex: 'amz_sku',
       key: 'amz_sku',
       width: 120,
+      align: 'center',
       render: (text: string) => <Text>{text}</Text>
     },
     {
@@ -1019,13 +1052,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                        body: JSON.stringify({ quantity: record.shipped_quantity }),
                      }
                    );
-                   const result = await response.json();
-                   if (result.code === 0) {
-                     message.success(`已删除未发货数量，当前需求数量调整为 ${record.shipped_quantity} 件`);
-                     if (selectedOrder) {
-                       await fetchOrderDetails(selectedOrder);
-                     }
-                     await fetchOrders(pagination.current, pagination.pageSize);
+                                     const result = await response.json();
+                  if (result.code === 0) {
+                    message.success(`已删除未发货数量，当前需求数量调整为 ${record.shipped_quantity} 件`);
+                    if (selectedOrder) {
+                      await fetchOrderDetails(selectedOrder);
+                    }
+                    await fetchOrders(pagination.current, pagination.pageSize, searchText);
                    } else {
                      message.error(result.message || '修改数量失败');
                    }
@@ -1042,12 +1075,12 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                      }
                    );
                    const result = await response.json();
-                   if (result.code === 0) {
-                     message.success('SKU删除成功');
-                     if (selectedOrder) {
-                       await fetchOrderDetails(selectedOrder);
-                     }
-                     await fetchOrders(pagination.current, pagination.pageSize);
+                                     if (result.code === 0) {
+                    message.success('SKU删除成功');
+                    if (selectedOrder) {
+                      await fetchOrderDetails(selectedOrder);
+                    }
+                    await fetchOrders(pagination.current, pagination.pageSize, searchText);
                    } else {
                      message.error(result.message || 'SKU删除失败');
                    }
@@ -1237,7 +1270,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   <Button 
                     type="default" 
                     size="small"
-                    onClick={() => fetchOrders(pagination.current, pagination.pageSize)}
+                    onClick={() => fetchOrders(pagination.current, pagination.pageSize, searchText)}
                   >
                     刷新
                   </Button>
@@ -1245,6 +1278,21 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               }
               size="small"
             >
+              {/* 搜索筛选栏 */}
+              <div style={{ marginBottom: 16 }}>
+                <Input.Search
+                  placeholder="搜索需求单号、SKU、国家等..."
+                  allowClear
+                  enterButton="搜索"
+                  size="middle"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  onSearch={handleSearch}
+                  onClear={handleClearSearch}
+                  style={{ maxWidth: 400 }}
+                />
+              </div>
+              
               <Table
                 columns={orderColumns}
                 dataSource={orders}
@@ -1259,7 +1307,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
                   onChange: (page, pageSize) => {
                     setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
-                    fetchOrders(page, pageSize);
+                    fetchOrders(page, pageSize, searchText);
                   }
                 }}
                 rowClassName={(record) => {
