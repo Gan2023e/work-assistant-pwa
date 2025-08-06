@@ -21,7 +21,8 @@ import {
   Popconfirm,
   Input,
   Select,
-  DatePicker
+  DatePicker,
+  Badge
 } from 'antd';
 import { 
   EyeOutlined,
@@ -124,6 +125,21 @@ interface OrderManagementPageProps {
   needNum?: string;
 }
 
+// 筛选参数接口
+interface FilterParams {
+  needNum?: string;
+  status?: string;
+  country?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+// 国家统计接口
+interface CountryStat {
+  country: string;
+  count: number;
+}
+
 // 修改组件定义，支持props
 const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) => {
   const { user } = useAuth();
@@ -160,8 +176,18 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     total: 0
   });
 
-  // 搜索状态
-  const [searchText, setSearchText] = useState('');
+  // 筛选状态
+  const [filters, setFilters] = useState<FilterParams>({
+    needNum: '',           // 需求单号
+    status: '',            // 状态筛选
+    country: '',           // 国家筛选
+    startDate: null,       // 开始时间
+    endDate: null         // 结束时间
+  });
+  
+  // 国家统计数据
+  const [countryStats, setCountryStats] = useState<CountryStat[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // 根据props.needNum或selectedOrder决定加载详情还是列表
   useEffect(() => {
@@ -171,20 +197,34 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     } else if (selectedOrder) {
       fetchOrderDetails(selectedOrder);
     } else {
-      fetchOrders(1, 20, searchText);
+      fetchOrders(1, 20, filters);
     }
     // eslint-disable-next-line
   }, [needNum, selectedOrder]);
 
+  // 初始化时获取国家统计
+  useEffect(() => {
+    if (!needNum && !selectedOrder) {
+      fetchCountryStats();
+    }
+    // eslint-disable-next-line
+  }, []);
+
   // 获取需求单列表
-  const fetchOrders = async (page = 1, pageSize = 20, search = '') => {
+  const fetchOrders = async (page = 1, pageSize = 20, filterParams: FilterParams = {}) => {
     setOrdersLoading(true);
     try {
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: pageSize.toString(),
-        ...(search && { search })
       });
+      
+      // 添加筛选参数
+      if (filterParams?.needNum) queryParams.append('needNum', filterParams.needNum);
+      if (filterParams?.status) queryParams.append('status', filterParams.status);
+      if (filterParams?.country) queryParams.append('country', filterParams.country);
+      if (filterParams?.startDate) queryParams.append('startDate', filterParams.startDate);
+      if (filterParams?.endDate) queryParams.append('endDate', filterParams.endDate);
       
       const response = await fetch(`${API_BASE_URL}/api/order-management/orders?${queryParams}`, {
         headers: {
@@ -213,18 +253,52 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
-  // 搜索处理函数
-  const handleSearch = (value: string) => {
-    setSearchText(value);
-    setPagination(prev => ({ ...prev, current: 1 }));
-    fetchOrders(1, pagination.pageSize, value);
+  // 获取国家统计数据
+  const fetchCountryStats = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/order-management/country-stats`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
+      
+      const result = await response.json();
+      if (result.code === 0) {
+        setCountryStats(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取国家统计失败:', error);
+    } finally {
+      setStatsLoading(false);
+    }
   };
 
-  // 清除搜索
-  const handleClearSearch = () => {
-    setSearchText('');
+  // 筛选处理函数
+  const handleFilterChange = (newFilters: FilterParams) => {
+    setFilters(newFilters);
     setPagination(prev => ({ ...prev, current: 1 }));
-    fetchOrders(1, pagination.pageSize, '');
+    fetchOrders(1, pagination.pageSize, newFilters);
+  };
+
+  // 清除筛选
+  const handleClearFilters = () => {
+    const emptyFilters: FilterParams = {
+      needNum: '',
+      status: '',
+      country: '',
+      startDate: null,
+      endDate: null
+    };
+    setFilters(emptyFilters);
+    setPagination(prev => ({ ...prev, current: 1 }));
+    fetchOrders(1, pagination.pageSize, emptyFilters);
+  };
+
+  // 国家卡片点击处理
+  const handleCountryClick = (country: string) => {
+    const newFilters: FilterParams = { ...filters, country, status: '待发货' };
+    handleFilterChange(newFilters);
   };
 
   // 获取需求单详情
@@ -306,7 +380,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           await fetchOrderDetails(selectedOrder);
         }
         // 刷新需求单列表
-        await fetchOrders(pagination.current, pagination.pageSize, searchText);
+        await fetchOrders(pagination.current, pagination.pageSize, filters);
       } else {
         message.error(result.message || '修改需求数量失败');
       }
@@ -493,7 +567,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       message.success('需求单处理完成');
       
       // 刷新页面数据
-      await fetchOrders(pagination.current, pagination.pageSize, searchText);
+      await fetchOrders(pagination.current, pagination.pageSize, filters);
       
       // 清理状态
       setAddOrderModalVisible(false);
@@ -740,7 +814,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       if (result.code === 0) {
         message.success('需求单删除成功');
         // 刷新需求单列表
-        await fetchOrders(pagination.current, pagination.pageSize, searchText);
+        await fetchOrders(pagination.current, pagination.pageSize, filters);
         // 如果当前选中的需求单被删除，清空详情页面
         if (selectedOrder === needNum) {
           setSelectedOrder('');
@@ -1058,7 +1132,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     if (selectedOrder) {
                       await fetchOrderDetails(selectedOrder);
                     }
-                    await fetchOrders(pagination.current, pagination.pageSize, searchText);
+                    await fetchOrders(pagination.current, pagination.pageSize, filters);
                    } else {
                      message.error(result.message || '修改数量失败');
                    }
@@ -1080,7 +1154,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     if (selectedOrder) {
                       await fetchOrderDetails(selectedOrder);
                     }
-                    await fetchOrders(pagination.current, pagination.pageSize, searchText);
+                    await fetchOrders(pagination.current, pagination.pageSize, filters);
                    } else {
                      message.error(result.message || 'SKU删除失败');
                    }
@@ -1270,7 +1344,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   <Button 
                     type="default" 
                     size="small"
-                    onClick={() => fetchOrders(pagination.current, pagination.pageSize, searchText)}
+                    onClick={() => fetchOrders(pagination.current, pagination.pageSize, filters)}
                   >
                     刷新
                   </Button>
@@ -1278,19 +1352,115 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
               }
               size="small"
             >
-              {/* 搜索筛选栏 */}
+              {/* 筛选条件区域 */}
               <div style={{ marginBottom: 16 }}>
-                <Input.Search
-                  placeholder="搜索需求单号、SKU、国家等..."
-                  allowClear
-                  enterButton="搜索"
-                  size="middle"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  onSearch={handleSearch}
-                  onClear={handleClearSearch}
-                  style={{ maxWidth: 400 }}
-                />
+                {/* 国家统计卡片 */}
+                <div style={{ marginBottom: 16 }}>
+                  <Text strong style={{ marginBottom: 8, display: 'block' }}>
+                    📊 待发货需求单统计（点击查看对应国家）
+                  </Text>
+                  <Row gutter={[8, 8]}>
+                    {statsLoading ? (
+                      <Col>
+                        <Card size="small" loading style={{ width: 120, height: 60 }} />
+                      </Col>
+                    ) : (
+                      countryStats.map((stat) => (
+                        <Col key={stat.country}>
+                          <Card 
+                            size="small" 
+                            hoverable
+                            onClick={() => handleCountryClick(stat.country)}
+                            style={{ 
+                              width: 120, 
+                              textAlign: 'center',
+                              backgroundColor: filters.country === stat.country ? '#e6f7ff' : undefined,
+                              borderColor: filters.country === stat.country ? '#1890ff' : undefined
+                            }}
+                          >
+                            <div>
+                              <Badge count={stat.count} color="#ff4d4f" />
+                              <div style={{ marginTop: 4, fontSize: '12px' }}>
+                                {stat.country || '未分类'}
+                              </div>
+                            </div>
+                          </Card>
+                        </Col>
+                      ))
+                    )}
+                  </Row>
+                </div>
+
+                {/* 筛选条件行 */}
+                <Row gutter={[16, 8]} align="middle">
+                  <Col flex="200px">
+                    <Input
+                      placeholder="输入需求单号"
+                      allowClear
+                      value={filters.needNum}
+                      onChange={(e) => handleFilterChange({ ...filters, needNum: e.target.value })}
+                      addonBefore="需求单号"
+                    />
+                  </Col>
+                  
+                  <Col flex="150px">
+                    <Select
+                      placeholder="选择状态"
+                      allowClear
+                      value={filters.status}
+                      onChange={(value) => handleFilterChange({ ...filters, status: value || '' })}
+                      style={{ width: '100%' }}
+                      options={[
+                        { label: '待发货', value: '待发货' },
+                        { label: '部分发货', value: '部分发货' }, 
+                        { label: '已发货', value: '已发货' },
+                        { label: '已完成', value: '已完成' }
+                      ]}
+                    />
+                  </Col>
+                  
+                  <Col flex="150px">
+                    <Select
+                      placeholder="选择国家"
+                      allowClear
+                      value={filters.country}
+                      onChange={(value) => handleFilterChange({ ...filters, country: value || '' })}
+                      style={{ width: '100%' }}
+                      options={countryStats.map(stat => ({
+                        label: `${stat.country || '未分类'} (${stat.count})`,
+                        value: stat.country
+                      }))}
+                    />
+                  </Col>
+                  
+                  <Col flex="300px">
+                    <DatePicker.RangePicker
+                      placeholder={['开始时间', '结束时间']}
+                      onChange={(dates) => {
+                        handleFilterChange({
+                          ...filters,
+                          startDate: dates?.[0]?.format('YYYY-MM-DD') || null,
+                          endDate: dates?.[1]?.format('YYYY-MM-DD') || null
+                        });
+                      }}
+                      style={{ width: '100%' }}
+                    />
+                  </Col>
+                  
+                  <Col>
+                    <Space>
+                      <Button 
+                        type="primary" 
+                        onClick={() => handleFilterChange(filters)}
+                      >
+                        🔍 筛选
+                      </Button>
+                      <Button onClick={handleClearFilters}>
+                        🗑️ 清除
+                      </Button>
+                    </Space>
+                  </Col>
+                </Row>
               </div>
               
               <Table
@@ -1307,7 +1477,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
                   onChange: (page, pageSize) => {
                     setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 }));
-                    fetchOrders(page, pageSize, searchText);
+                    fetchOrders(page, pageSize, filters);
                   }
                 }}
                 rowClassName={(record) => {
