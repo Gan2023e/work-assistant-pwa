@@ -212,6 +212,27 @@ router.get('/orders/:needNum/details', async (req, res) => {
       });
     }
 
+    // 批量查询已发货数量 - 性能优化
+    const orderRecordNums = orderItems.map(item => item.record_num);
+    let shippedQuantityMap = {};
+    
+    if (orderRecordNums.length > 0) {
+      const shippedQuantities = await ShipmentItem.findAll({
+        where: { order_item_id: { [Op.in]: orderRecordNums } },
+        attributes: [
+          'order_item_id',
+          [sequelize.fn('SUM', sequelize.col('shipped_quantity')), 'total_shipped']
+        ],
+        group: ['order_item_id'],
+        raw: true
+      });
+
+      shippedQuantityMap = shippedQuantities.reduce((map, item) => {
+        map[item.order_item_id] = parseInt(item.total_shipped) || 0;
+        return map;
+      }, {});
+    }
+
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
@@ -255,10 +276,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
         // 总库存 = 整箱库存 + 混合箱库存
         const totalInventory = wholeBoxQuantity + mixedBoxQuantity;
 
-        // 查询已发货数量
-        const shipped = await ShipmentItem.sum('shipped_quantity', {
-          where: { order_item_id: item.record_num }
-        }) || 0;
+        // 从批量查询结果中获取已发货数量
+        const shipped = shippedQuantityMap[item.record_num] || 0;
 
         // 动态计算SKU状态
         let skuStatus = '待发货';
@@ -491,12 +510,33 @@ router.post('/check-conflicts', async (req, res) => {
       attributes: ['record_num', 'need_num', 'sku', 'ori_quantity', 'status']
     });
 
-    // 查询每个SKU的已发货数量
+    // 批量查询所有已发货数量 - 性能优化
     const conflicts = [];
+    const recordNums = existingNeeds.map(need => need.record_num);
+    
+    let shippedMap = {};
+    if (recordNums.length > 0) {
+      // 批量查询所有相关记录的已发货数量
+      const shippedQuantities = await ShipmentItem.findAll({
+        where: { order_item_id: { [Op.in]: recordNums } },
+        attributes: [
+          'order_item_id',
+          [sequelize.fn('SUM', sequelize.col('shipped_quantity')), 'total_shipped']
+        ],
+        group: ['order_item_id'],
+        raw: true
+      });
+
+      // 构建映射关系，避免循环查询
+      shippedMap = shippedQuantities.reduce((map, item) => {
+        map[item.order_item_id] = parseInt(item.total_shipped) || 0;
+        return map;
+      }, {});
+    }
+
+    // 处理冲突逻辑
     for (const need of existingNeeds) {
-      const shippedQuantity = await ShipmentItem.sum('shipped_quantity', {
-        where: { order_item_id: need.record_num }
-      }) || 0;
+      const shippedQuantity = shippedMap[need.record_num] || 0;
 
       // 只有剩余数量大于0的才算冲突
       const remainingQuantity = need.ori_quantity - shippedQuantity;
