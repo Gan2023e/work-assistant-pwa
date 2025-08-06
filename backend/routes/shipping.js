@@ -1171,34 +1171,34 @@ router.get('/merged-data', async (req, res) => {
         });
         
         console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
-      } else {
-        // 第二步有，第一步没有 = 缺货
-        needInfo.records.forEach(need => {
-          allRecords.push({
-            record_num: need.record_num,
-            need_num: need.need_num || '',
-            amz_sku: need.sku,
-            amazon_sku: need.sku,
-            local_sku: '',
-            site: '',
-            fulfillment_channel: '',
-            quantity: need.ori_quantity || 0,
-            shipping_method: need.shipping_method || '',
-            marketplace: need.marketplace || '',
-            country: need.country,
-            status: '缺货',
-            created_at: need.create_date || new Date().toISOString(),
-            // 库存信息（全为0）
-            whole_box_quantity: 0,
-            whole_box_count: 0,
-            mixed_box_quantity: 0,
-            total_available: 0,
-            shortage: need.ori_quantity || 0,
-            data_source: 'need_no_inventory',
-            inventory_source: 'none',
-            mapping_method: 'fba_focused_mapping'
+              } else {
+          // 第二步有，第一步没有 = 缺货，但尝试查找本地SKU映射显示
+          needInfo.records.forEach(need => {
+            allRecords.push({
+              record_num: need.record_num,
+              need_num: need.need_num || '',
+              amz_sku: need.sku,
+              amazon_sku: need.sku,
+              local_sku: '', // 暂时设为空，后续批量查询补充
+              site: '',
+              fulfillment_channel: '',
+              quantity: need.ori_quantity || 0,
+              shipping_method: need.shipping_method || '',
+              marketplace: need.marketplace || '',
+              country: need.country,
+              status: '缺货',
+              created_at: need.create_date || new Date().toISOString(),
+              // 库存信息（全为0）
+              whole_box_quantity: 0,
+              whole_box_count: 0,
+              mixed_box_quantity: 0,
+              total_available: 0,
+              shortage: need.ori_quantity || 0,
+              data_source: 'need_no_inventory',
+              inventory_source: 'none',
+              mapping_method: 'fba_focused_mapping'
+            });
           });
-        });
         
         console.log(`❌ ${key}: 需求${needQuantity}, 无库存 - 缺货`);
       }
@@ -1296,6 +1296,70 @@ router.get('/merged-data', async (req, res) => {
       console.log(`🔍 未映射库存: ${inv.local_sku}_${inv.country} - 可用数量: ${inv.total_available}`);
     });
 
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤7: 批量补充缺失的本地SKU映射信息');
+    
+    // 8. 批量查询并补充缺失的本地SKU信息
+    const recordsNeedingSku = allRecords.filter(record => 
+      !record.local_sku && record.amz_sku && record.data_source === 'need_no_inventory'
+    );
+    
+    if (recordsNeedingSku.length > 0) {
+      console.log(`📋 需要补充本地SKU的记录: ${recordsNeedingSku.length} 条`);
+      
+      // 提取需要查询的Amazon SKU和国家组合
+      const skuCountryPairs = recordsNeedingSku.map(record => ({
+        amz_sku: record.amz_sku,
+        country: record.country
+      }));
+      
+      // 批量查询映射关系
+      const mappingBatchQuery = `
+        SELECT amz_sku, local_sku, country, site 
+        FROM pbi_amzsku_sku 
+        WHERE (amz_sku, country) IN (${skuCountryPairs.map(pair => `('${pair.amz_sku}', '${pair.country}')`).join(',')})
+      `;
+      
+      try {
+        const [mappingResults] = await sequelize.query(mappingBatchQuery, {
+          type: sequelize.QueryTypes.SELECT,
+          raw: true
+        });
+        
+        console.log(`📋 找到 ${mappingResults.length} 条映射关系`);
+        
+        // 创建映射Map便于快速查找
+        const mappingMap = new Map();
+        mappingResults.forEach(mapping => {
+          const key = `${mapping.amz_sku}_${mapping.country}`;
+          mappingMap.set(key, {
+            local_sku: mapping.local_sku,
+            site: mapping.site
+          });
+        });
+        
+        // 更新记录中的本地SKU信息
+        let updatedCount = 0;
+        recordsNeedingSku.forEach(record => {
+          const key = `${record.amz_sku}_${record.country}`;
+          const mapping = mappingMap.get(key);
+          
+          if (mapping) {
+            record.local_sku = mapping.local_sku;
+            record.site = mapping.site;
+            record.status = '库存未映射'; // 有映射但没有库存，更新状态为"库存未映射"
+            record.mapping_method = 'fallback_mapping';
+            updatedCount++;
+            console.log(`✅ 补充映射: ${record.amz_sku} -> ${mapping.local_sku} (${record.country})`);
+          }
+        });
+        
+        console.log(`📋 成功补充 ${updatedCount} 条记录的本地SKU信息`);
+        
+      } catch (error) {
+        console.error('❌ 批量查询映射关系失败:', error);
+      }
+    }
+    
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤9: 应用分页和排序');
     
     // 9. 应用分页和排序
