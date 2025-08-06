@@ -22,6 +22,33 @@ export interface PrintOptions {
     autoClose?: boolean;
 }
 
+// 需求单详情打印数据接口
+export interface OrderDetailsData {
+    order_summary: {
+        need_num: string;
+        total_items: number;
+        total_quantity: number;
+        create_time: string;
+        country?: string;
+        status?: string;
+    };
+    order_items: Array<{
+        record_num: string;
+        sku: string;
+        quantity: number;
+        shipped_quantity?: number;
+        country: string;
+        create_time: string;
+        status?: string;
+    }>;
+    shipment_history?: Array<{
+        shipment_date: string;
+        shipped_quantity: number;
+        logistics_provider?: string;
+        tracking_number?: string;
+    }>;
+}
+
 export class PrintManager {
     constructor() {
         // 简化构造函数，只支持浏览器打印
@@ -48,7 +75,7 @@ export class PrintManager {
     }
 
     /**
-     * 通过浏览器打印
+     * 通过浏览器打印标签
      */
     private async printViaBrowser(labelData: LabelData, options: PrintOptions = {}): Promise<boolean> {
         try {
@@ -63,7 +90,7 @@ export class PrintManager {
 
             printWindow.document.write(htmlContent);
             printWindow.document.close();
-
+            
             // 等待内容加载后打印
             printWindow.onload = () => {
                 setTimeout(() => {
@@ -79,13 +106,52 @@ export class PrintManager {
                     }
                 }, 500);
             };
-
+            
             console.log('✅ 浏览器打印窗口已打开');
             return true;
         } catch (error) {
             console.error('浏览器打印失败:', error);
             return false;
         }
+    }
+
+    /**
+     * 打印需求单详情
+     */
+    async printOrderDetails(orderData: OrderDetailsData, options: PrintOptions = {}): Promise<boolean> {
+        try {
+            console.log('🖨️ 开始打印需求单详情');
+            return this.printOrderDetailsViaBrowser(orderData, options);
+        } catch (error) {
+            console.error('打印需求单详情失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 通过浏览器打印需求单详情
+     */
+    private printOrderDetailsViaBrowser(orderData: OrderDetailsData, options: PrintOptions = {}): boolean {
+        const html = this.generateOrderDetailsHTML(orderData);
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        if (printWindow) {
+            printWindow.document.write(html);
+            printWindow.document.close();
+            
+            printWindow.onload = () => {
+                setTimeout(() => {
+                    printWindow.print();
+                    if (options.autoClose !== false) {
+                        printWindow.close();
+                    }
+                }, 100);
+            };
+            
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -396,6 +462,264 @@ export class PrintManager {
             ⚠️ 请确保打印机设置为60×40mm热敏纸规格
         </div>
     </div>${labelPages}<script class="no-print">console.log('🖨️ 热敏纸直接打印：共 ${labelDataList.length} 张 60×40mm 标签');console.log('📄 每张热敏纸打印一个外箱单标签');window.onload=function(){console.log('📄 热敏标签页面已加载 - 60×40mm 直接打印模式');}</script></body></html>`.trim();
+    }
+
+    /**
+     * 生成需求单详情的HTML
+     */
+    private generateOrderDetailsHTML(orderData: OrderDetailsData): string {
+        const { order_summary, order_items, shipment_history = [] } = orderData;
+        
+        // 计算统计信息
+        const totalShipped = order_items.reduce((sum, item) => sum + (item.shipped_quantity || 0), 0);
+        const completionRate = order_summary.total_quantity > 0 ? 
+            Math.round((totalShipped / order_summary.total_quantity) * 100) : 0;
+        
+        const itemRows = order_items.map(item => `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.record_num}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.sku}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.shipped_quantity || 0}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.country}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${new Date(item.create_time).toLocaleDateString()}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                    ${item.status === 'completed' ? '✅ 已完成' : 
+                      item.status === 'partial' ? '🔄 部分发货' : 
+                      '⏳ 待发货'}
+                </td>
+            </tr>
+        `).join('');
+
+        const historyRows = shipment_history.length > 0 ? shipment_history.map(history => `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">${new Date(history.shipment_date).toLocaleDateString()}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${history.shipped_quantity}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${history.logistics_provider || '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${history.tracking_number || '-'}</td>
+            </tr>
+        `).join('') : '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #666;">暂无发货历史</td></tr>';
+
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>需求单详情 - ${order_summary.need_num}</title>
+    <style>
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none !important; }
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            color: #333;
+            line-height: 1.4;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1890ff;
+            margin: 0 0 10px 0;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+            margin: 0;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        
+        .summary-item {
+            text-align: center;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .summary-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            border-left: 4px solid #1890ff;
+            padding-left: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th {
+            background: #f0f0f0;
+            padding: 12px 8px;
+            border: 1px solid #ddd;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .btn {
+            padding: 10px 16px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #1890ff;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .btn:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls no-print">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ 打印</button>
+        <button class="btn btn-secondary" onclick="window.close()">❌ 关闭</button>
+    </div>
+
+    <div class="header">
+        <h1 class="title">需求单详情</h1>
+        <p class="subtitle">需求单号：${order_summary.need_num}</p>
+    </div>
+
+    <div class="summary">
+        <div class="summary-item">
+            <div class="summary-label">总SKU数</div>
+            <div class="summary-value">${order_summary.total_items}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">总需求数量</div>
+            <div class="summary-value">${order_summary.total_quantity}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">已发货数量</div>
+            <div class="summary-value">${totalShipped}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">完成进度</div>
+            <div class="summary-value">${completionRate}%</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">创建时间</div>
+            <div class="summary-value">${new Date(order_summary.create_time).toLocaleDateString()}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">SKU明细</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>记录号</th>
+                    <th>SKU</th>
+                    <th>需求数量</th>
+                    <th>已发货数量</th>
+                    <th>目的地</th>
+                    <th>创建时间</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemRows}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">发货历史</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>发货日期</th>
+                    <th>发货数量</th>
+                    <th>物流商</th>
+                    <th>运单号</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${historyRows}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <p>打印时间：${new Date().toLocaleString()} | 工作助手PWA系统</p>
+    </div>
+
+    <script class="no-print">
+        console.log('🖨️ 需求单详情打印页面已加载');
+        window.onload = function() {
+            console.log('📄 需求单详情页面准备完成');
+        };
+    </script>
+</body>
+</html>`.trim();
     }
 
     /**

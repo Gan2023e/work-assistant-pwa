@@ -33,7 +33,8 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
-  DownloadOutlined
+  DownloadOutlined,
+  PrinterOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -41,6 +42,7 @@ import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
+import { printManager, OrderDetailsData } from '../../utils/printManager';
 
 const { Title, Text } = Typography;
 
@@ -652,6 +654,55 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
+  // 打印需求单详情
+  const printOrderDetails = async () => {
+    if (!orderDetails) {
+      message.error('暂无需求单详情数据');
+      return;
+    }
+    
+    try {
+      // 准备打印数据
+      const printData: OrderDetailsData = {
+        order_summary: {
+          need_num: orderDetails.order_summary.need_num,
+          total_items: orderDetails.order_summary.total_items,
+          total_quantity: orderDetails.order_summary.total_quantity,
+          create_time: orderDetails.order_summary.created_at,
+          country: orderDetails.order_summary.country,
+          status: orderDetails.order_summary.order_status
+        },
+        order_items: orderDetails.order_items.map(item => ({
+          record_num: item.record_num.toString(),
+          sku: item.amz_sku || item.local_sku || item.sku,
+          quantity: item.ori_quantity,
+          shipped_quantity: item.shipped_quantity,
+          country: item.country,
+          create_time: item.create_date,
+          status: item.status
+        })),
+        shipment_history: orderDetails.shipment_history.map(history => ({
+          shipment_date: history.created_at,
+          shipped_quantity: history.total_shipped,
+          logistics_provider: '',
+          tracking_number: history.shipment_info?.shipment_number || ''
+        }))
+      };
+
+      // 调用打印功能
+      const success = await printManager.printOrderDetails(printData);
+      
+      if (success) {
+        message.success('打印窗口已打开');
+      } else {
+        message.error('打开打印窗口失败，请检查浏览器弹窗设置');
+      }
+    } catch (error) {
+      console.error('打印失败:', error);
+      message.error('打印失败，请重试');
+    }
+  };
+
   // 删除需求单
   const handleDeleteOrder = async (needNum: string) => {
     try {
@@ -1095,14 +1146,23 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   {/* SKU明细 */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Title level={5} style={{ margin: 0 }}>SKU明细</Title>
-                    <Button 
-                      type="primary" 
-                      size="small"
-                      icon={<DownloadOutlined />}
-                      onClick={() => exportOrderDetails()}
-                    >
-                      导出需求表
-                    </Button>
+                    <Space>
+                      <Button 
+                        size="small"
+                        icon={<PrinterOutlined />}
+                        onClick={() => printOrderDetails()}
+                      >
+                        打印
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        onClick={() => exportOrderDetails()}
+                      >
+                        导出需求表
+                      </Button>
+                    </Space>
                   </div>
                   <Table
                     columns={itemColumns}
