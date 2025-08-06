@@ -1149,15 +1149,12 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                       <Button 
                         type="primary"
                         ghost
-                        size="middle"
-                        icon={<PrinterOutlined />}
+                        size="small"
                         onClick={() => printOrderDetails()}
                         style={{ 
                           borderColor: '#52c41a',
                           color: '#52c41a',
-                          fontWeight: 'bold',
-                          padding: '0 20px',
-                          height: '36px'
+                          fontWeight: 'bold'
                         }}
                       >
                         🖨️ 打印详情

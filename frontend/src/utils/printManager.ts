@@ -596,8 +596,9 @@ export class PrintManager {
         th.shortage-header {
             background: #fff2f0;
             color: #ff4d4f;
-            font-weight: bold;
+            font-weight: bold !important;
             font-size: 12px;
+            text-shadow: 0.5px 0.5px 0 #ff4d4f;
         }
         
         td {
