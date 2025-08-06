@@ -674,18 +674,16 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         },
         order_items: orderDetails.order_items.map(item => ({
           record_num: item.record_num.toString(),
-          sku: item.amz_sku || item.local_sku || item.sku,
+          sku: item.amz_sku || item.sku,
+          local_sku: item.local_sku,
           quantity: item.ori_quantity,
           shipped_quantity: item.shipped_quantity,
+          remaining_quantity: item.remaining_quantity,
+          total_available: item.total_available,
+          shortage: item.shortage,
           country: item.country,
           create_time: item.create_date,
           status: item.status
-        })),
-        shipment_history: orderDetails.shipment_history.map(history => ({
-          shipment_date: history.created_at,
-          shipped_quantity: history.total_shipped,
-          logistics_provider: '',
-          tracking_number: history.shipment_info?.shipment_number || ''
         }))
       };
 

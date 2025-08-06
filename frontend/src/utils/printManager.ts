@@ -35,17 +35,15 @@ export interface OrderDetailsData {
     order_items: Array<{
         record_num: string;
         sku: string;
+        local_sku?: string;
         quantity: number;
         shipped_quantity?: number;
+        remaining_quantity?: number;
+        total_available?: number;
+        shortage?: number;
         country: string;
         create_time: string;
         status?: string;
-    }>;
-    shipment_history?: Array<{
-        shipment_date: string;
-        shipped_quantity: number;
-        logistics_provider?: string;
-        tracking_number?: string;
     }>;
 }
 
@@ -133,7 +131,7 @@ export class PrintManager {
      */
     private printOrderDetailsViaBrowser(orderData: OrderDetailsData, options: PrintOptions = {}): boolean {
         const html = this.generateOrderDetailsHTML(orderData);
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        const printWindow = window.open('', '_blank', 'fullscreen=yes,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no');
         
         if (printWindow) {
             printWindow.document.write(html);
@@ -468,37 +466,35 @@ export class PrintManager {
      * 生成需求单详情的HTML
      */
     private generateOrderDetailsHTML(orderData: OrderDetailsData): string {
-        const { order_summary, order_items, shipment_history = [] } = orderData;
+        const { order_summary, order_items } = orderData;
         
         // 计算统计信息
         const totalShipped = order_items.reduce((sum, item) => sum + (item.shipped_quantity || 0), 0);
+        const totalRemaining = order_items.reduce((sum, item) => sum + (item.remaining_quantity || 0), 0);
+        const totalAvailable = order_items.reduce((sum, item) => sum + (item.total_available || 0), 0);
+        const totalShortage = order_items.reduce((sum, item) => sum + (item.shortage || 0), 0);
         const completionRate = order_summary.total_quantity > 0 ? 
             Math.round((totalShipped / order_summary.total_quantity) * 100) : 0;
         
         const itemRows = order_items.map(item => `
             <tr>
-                <td style="padding: 8px; border: 1px solid #ddd;">${item.record_num}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${item.sku}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.shipped_quantity || 0}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.country}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${new Date(item.create_time).toLocaleDateString()}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                    ${item.status === 'completed' ? '✅ 已完成' : 
-                      item.status === 'partial' ? '🔄 部分发货' : 
-                      '⏳ 待发货'}
+                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.record_num}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.local_sku || '-'}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; font-size: 12px;">${item.sku}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.quantity}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.shipped_quantity || 0}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.remaining_quantity || 0}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.total_available || 0}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.shortage || 0}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${item.country}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${new Date(item.create_time).toLocaleDateString('zh-CN')}</td>
+                <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
+                    ${item.status === 'completed' ? '✅' : 
+                      item.status === 'partial' ? '🔄' : 
+                      '⏳'}
                 </td>
             </tr>
         `).join('');
-
-        const historyRows = shipment_history.length > 0 ? shipment_history.map(history => `
-            <tr>
-                <td style="padding: 8px; border: 1px solid #ddd;">${new Date(history.shipment_date).toLocaleDateString()}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${history.shipped_quantity}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${history.logistics_provider || '-'}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${history.tracking_number || '-'}</td>
-            </tr>
-        `).join('') : '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #666;">暂无发货历史</td></tr>';
 
         return `
 <!DOCTYPE html>
@@ -514,94 +510,96 @@ export class PrintManager {
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 20px;
+            margin: 15px;
             color: #333;
-            line-height: 1.4;
+            line-height: 1.3;
         }
         
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             border-bottom: 2px solid #1890ff;
-            padding-bottom: 20px;
+            padding-bottom: 15px;
         }
         
         .title {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
             color: #1890ff;
-            margin: 0 0 10px 0;
+            margin: 0 0 8px 0;
         }
         
         .subtitle {
-            font-size: 16px;
+            font-size: 14px;
             color: #666;
             margin: 0;
         }
         
         .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-            padding: 20px;
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 12px;
             background: #f5f5f5;
-            border-radius: 8px;
+            border-radius: 6px;
         }
         
         .summary-item {
             text-align: center;
+            flex: 1;
         }
         
         .summary-label {
-            font-size: 14px;
+            font-size: 11px;
             color: #666;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
         
         .summary-value {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             color: #333;
         }
         
         .section {
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         
         .section-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             color: #333;
             border-left: 4px solid #1890ff;
-            padding-left: 12px;
+            padding-left: 10px;
         }
         
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            font-size: 11px;
         }
         
         th {
             background: #f0f0f0;
-            padding: 12px 8px;
+            padding: 8px 4px;
             border: 1px solid #ddd;
             font-weight: bold;
             text-align: center;
+            font-size: 11px;
         }
         
         td {
-            padding: 8px;
+            padding: 4px;
             border: 1px solid #ddd;
         }
         
         .footer {
-            margin-top: 40px;
-            padding-top: 20px;
+            margin-top: 30px;
+            padding-top: 15px;
             border-top: 1px solid #ddd;
-            font-size: 12px;
+            font-size: 11px;
             color: #666;
             text-align: center;
         }
@@ -614,12 +612,12 @@ export class PrintManager {
         }
         
         .btn {
-            padding: 10px 16px;
-            margin-left: 10px;
+            padding: 8px 12px;
+            margin-left: 8px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
         }
         
         .btn-primary {
@@ -645,7 +643,7 @@ export class PrintManager {
 
     <div class="header">
         <h1 class="title">需求单详情</h1>
-        <p class="subtitle">需求单号：${order_summary.need_num}</p>
+        <p class="subtitle">需求单号：${order_summary.need_num} | 创建时间：${new Date(order_summary.create_time).toLocaleDateString('zh-CN')}</p>
     </div>
 
     <div class="summary">
@@ -662,12 +660,20 @@ export class PrintManager {
             <div class="summary-value">${totalShipped}</div>
         </div>
         <div class="summary-item">
-            <div class="summary-label">完成进度</div>
-            <div class="summary-value">${completionRate}%</div>
+            <div class="summary-label">剩余数量</div>
+            <div class="summary-value">${totalRemaining}</div>
         </div>
         <div class="summary-item">
-            <div class="summary-label">创建时间</div>
-            <div class="summary-value">${new Date(order_summary.create_time).toLocaleDateString()}</div>
+            <div class="summary-label">现有库存</div>
+            <div class="summary-value">${totalAvailable}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">缺货数量</div>
+            <div class="summary-value">${totalShortage}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">完成进度</div>
+            <div class="summary-value">${completionRate}%</div>
         </div>
     </div>
 
@@ -677,9 +683,13 @@ export class PrintManager {
             <thead>
                 <tr>
                     <th>记录号</th>
-                    <th>SKU</th>
+                    <th>本地SKU</th>
+                    <th>Amazon SKU</th>
                     <th>需求数量</th>
-                    <th>已发货数量</th>
+                    <th>已发货</th>
+                    <th>剩余</th>
+                    <th>现有库存</th>
+                    <th>缺货</th>
                     <th>目的地</th>
                     <th>创建时间</th>
                     <th>状态</th>
@@ -691,25 +701,8 @@ export class PrintManager {
         </table>
     </div>
 
-    <div class="section">
-        <h2 class="section-title">发货历史</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>发货日期</th>
-                    <th>发货数量</th>
-                    <th>物流商</th>
-                    <th>运单号</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${historyRows}
-            </tbody>
-        </table>
-    </div>
-
     <div class="footer">
-        <p>打印时间：${new Date().toLocaleString()} | 工作助手PWA系统</p>
+        <p>打印时间：${new Date().toLocaleString('zh-CN')} | 工作助手PWA系统</p>
     </div>
 
     <script class="no-print">
