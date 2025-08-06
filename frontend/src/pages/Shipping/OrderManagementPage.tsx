@@ -179,7 +179,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   // 筛选状态
   const [filters, setFilters] = useState<FilterParams>({
     needNum: '',           // 需求单号
-    status: '',            // 状态筛选
+    status: '待发货',       // 状态筛选 - 默认显示待发货
     country: '',           // 国家筛选
     startDate: null,       // 开始时间
     endDate: null         // 结束时间
@@ -285,7 +285,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   const handleClearFilters = () => {
     const emptyFilters: FilterParams = {
       needNum: '',
-      status: '',
+      status: '待发货',  // 清除后默认显示待发货状态
       country: '',
       startDate: null,
       endDate: null
@@ -1404,33 +1404,49 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                   </Col>
                   
                   <Col flex="150px">
-                    <Select
-                      placeholder="选择状态"
-                      allowClear
-                      value={filters.status}
-                      onChange={(value) => handleFilterChange({ ...filters, status: value || '' })}
-                      style={{ width: '100%' }}
-                      options={[
-                        { label: '待发货', value: '待发货' },
-                        { label: '部分发货', value: '部分发货' }, 
-                        { label: '已发货', value: '已发货' },
-                        { label: '已完成', value: '已完成' }
-                      ]}
-                    />
+                    <Input.Group compact>
+                      <Input
+                        style={{ width: '25%', textAlign: 'center', backgroundColor: '#fafafa' }}
+                        placeholder="状态"
+                        disabled
+                        value="状态"
+                      />
+                      <Select
+                        placeholder="选择状态"
+                        allowClear
+                        value={filters.status}
+                        onChange={(value) => handleFilterChange({ ...filters, status: value || '' })}
+                        style={{ width: '75%' }}
+                        options={[
+                          { label: '待发货', value: '待发货' },
+                          { label: '部分发货', value: '部分发货' }, 
+                          { label: '已发货', value: '已发货' },
+                          { label: '已完成', value: '已完成' }
+                        ]}
+                      />
+                    </Input.Group>
                   </Col>
                   
                   <Col flex="150px">
-                    <Select
-                      placeholder="选择国家"
-                      allowClear
-                      value={filters.country}
-                      onChange={(value) => handleFilterChange({ ...filters, country: value || '' })}
-                      style={{ width: '100%' }}
-                      options={countryStats.map(stat => ({
-                        label: `${stat.country || '未分类'} (${stat.count})`,
-                        value: stat.country
-                      }))}
-                    />
+                    <Input.Group compact>
+                      <Input
+                        style={{ width: '25%', textAlign: 'center', backgroundColor: '#fafafa' }}
+                        placeholder="国家"
+                        disabled
+                        value="国家"
+                      />
+                      <Select
+                        placeholder="选择国家"
+                        allowClear
+                        value={filters.country}
+                        onChange={(value) => handleFilterChange({ ...filters, country: value || '' })}
+                        style={{ width: '75%' }}
+                        options={countryStats.map(stat => ({
+                          label: `${stat.country || '未分类'} (${stat.count})`,
+                          value: stat.country
+                        }))}
+                      />
+                    </Input.Group>
                   </Col>
                   
                   <Col flex="300px">
