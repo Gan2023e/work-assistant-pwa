@@ -368,19 +368,14 @@ const InventoryManagement: React.FC = () => {
       const data = await response.json();
       
       if (data.code === 0) {
-        let records = data.data.records;
-        
-        // 如果用户没有明确设置状态筛选，则默认过滤掉已出库记录
-        if (!filters.status) {
-          records = records.filter((record: InventoryRecord) => record.status !== '已出库');
-        }
+        const records = data.data.records;
         
         // 对记录进行排序，确保同一混合箱的记录连续显示
         const sortedRecords = sortRecordsByMixedBox(records);
         setRecordsData(sortedRecords);
         setPagination(prev => ({
           ...prev,
-          total: records.length
+          total: data.data.total
         }));
       } else {
         message.error(data.message);
@@ -1269,7 +1264,7 @@ const InventoryManagement: React.FC = () => {
               }}>
                 {filters.status ? 
                   `当前显示状态：${filters.status}记录` : 
-                  '当前显示状态：待出库、部分出库记录（已排除已出库记录）'
+                  '当前显示状态：待出库、部分出库记录（默认排除已出库记录）'
                 }
                 {filters.sku && ` | SKU筛选：${filters.sku}`}
                 {filters.country && ` | 国家筛选：${filters.country}`}

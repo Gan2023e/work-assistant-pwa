@@ -78,7 +78,14 @@ router.get('/records', async (req, res) => {
                 whereCondition.mix_box_num = { [Op.not]: null };
             }
         }
-        if (status) whereCondition.status = status;
+        
+        // 处理状态筛选：如果用户明确指定了status，使用指定的status；否则默认排除已出库
+        if (status) {
+            whereCondition.status = status;
+        } else {
+            // 默认排除已出库记录
+            whereCondition.status = { [Op.ne]: '已出库' };
+        }
         
         const offset = (page - 1) * limit;
         
