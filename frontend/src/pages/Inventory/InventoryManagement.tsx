@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography } from 'antd';
+import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography, Switch } from 'antd';
 import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
@@ -154,6 +154,7 @@ const InventoryManagement: React.FC = () => {
     country: '',
     box_type: '',
     status: '',
+    exclude_shipped: true, // 新增：默认排除已出库记录
     dateRange: null as [dayjs.Dayjs, dayjs.Dayjs] | null
   });
 
@@ -359,7 +360,12 @@ const InventoryManagement: React.FC = () => {
       if (filters.sku) params.append('sku', filters.sku);
       if (filters.country) params.append('country', filters.country);
       if (filters.box_type) params.append('box_type', filters.box_type);
-      if (filters.status) params.append('status', filters.status);
+      
+      // 处理状态筛选：如果用户明确设置了状态，使用用户设置的状态
+      // 如果用户没有设置状态，但是启用了排除已出库选项，则不设置status参数（在前端过滤）
+      if (filters.status) {
+        params.append('status', filters.status);
+      }
       
       params.append('page', pagination.current.toString());
       params.append('limit', pagination.pageSize.toString());
@@ -368,12 +374,19 @@ const InventoryManagement: React.FC = () => {
       const data = await response.json();
       
       if (data.code === 0) {
+        let records = data.data.records;
+        
+        // 如果启用了排除已出库且用户没有明确设置状态筛选，则在前端过滤掉已出库记录
+        if (filters.exclude_shipped && !filters.status) {
+          records = records.filter((record: InventoryRecord) => record.status !== '已出库');
+        }
+        
         // 对记录进行排序，确保同一混合箱的记录连续显示
-        const sortedRecords = sortRecordsByMixedBox(data.data.records);
+        const sortedRecords = sortRecordsByMixedBox(records);
         setRecordsData(sortedRecords);
         setPagination(prev => ({
           ...prev,
-          total: data.data.total
+          total: records.length
         }));
       } else {
         message.error(data.message);
@@ -1155,20 +1168,35 @@ const InventoryManagement: React.FC = () => {
               <Option value="混合箱">混合箱</Option>
             </Select>
             {currentView === 'records' && (
-              <Select
-                placeholder="状态"
-                value={filters.status}
-                onChange={(value) => {
-                  setFilters(prev => ({ ...prev, status: value }));
-                  setViewingSkuDetails(null); // 清除查看详情状态
-                }}
-                style={{ width: 120 }}
-                allowClear
-              >
-                <Option value="待出库">待出库</Option>
-                <Option value="部分出库">部分出库</Option>
-                <Option value="已出库">已出库</Option>
-              </Select>
+              <>
+                <Select
+                  placeholder="状态"
+                  value={filters.status}
+                  onChange={(value) => {
+                    setFilters(prev => ({ ...prev, status: value }));
+                    setViewingSkuDetails(null); // 清除查看详情状态
+                  }}
+                  style={{ width: 120 }}
+                  allowClear
+                >
+                  <Option value="待出库">待出库</Option>
+                  <Option value="部分出库">部分出库</Option>
+                  <Option value="已出库">已出库</Option>
+                </Select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Switch
+                    checked={filters.exclude_shipped}
+                    onChange={(checked) => {
+                      setFilters(prev => ({ ...prev, exclude_shipped: checked }));
+                      setViewingSkuDetails(null); // 清除查看详情状态
+                    }}
+                    size="small"
+                  />
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    隐藏已出库
+                  </Text>
+                </div>
+              </>
             )}
             <Button
               type="primary"
@@ -1187,7 +1215,7 @@ const InventoryManagement: React.FC = () => {
             <Button
               icon={<ReloadOutlined />}
               onClick={() => {
-                setFilters({ sku: '', country: '', box_type: '', status: '', dateRange: null });
+                setFilters({ sku: '', country: '', box_type: '', status: '', exclude_shipped: true, dateRange: null });
                 setPagination(prev => ({ ...prev, current: 1 }));
                 setViewingSkuDetails(null); // 清除查看详情状态
               }}
@@ -1242,6 +1270,31 @@ const InventoryManagement: React.FC = () => {
               >
                 返回汇总
               </Button>
+            </Space>
+          </Card>
+        )}
+
+        {/* 筛选状态提示 */}
+        {currentView === 'records' && !viewingSkuDetails && (
+          <Card size="small" style={{ 
+            marginBottom: '16px', 
+            backgroundColor: filters.exclude_shipped ? '#e6f7ff' : '#fff2e8', 
+            border: filters.exclude_shipped ? '1px solid #91d5ff' : '1px solid #ffcc02' 
+          }}>
+            <Space>
+              <span style={{ 
+                color: filters.exclude_shipped ? '#1890ff' : '#fa8c16',
+                fontSize: '12px'
+              }}>
+                {filters.exclude_shipped ? 
+                  '当前显示状态：待出库、部分出库记录（已隐藏已出库记录）' : 
+                  '当前显示所有状态记录（包括已出库记录）'
+                }
+                {filters.status && ` | 状态筛选：${filters.status}`}
+                {filters.sku && ` | SKU筛选：${filters.sku}`}
+                {filters.country && ` | 国家筛选：${filters.country}`}
+                {filters.box_type && ` | 箱型筛选：${filters.box_type}`}
+              </span>
             </Space>
           </Card>
         )}
@@ -1466,4 +1519,4 @@ const InventoryManagement: React.FC = () => {
   );
 };
 
-export default InventoryManagement; 
+export default InventoryManagement;

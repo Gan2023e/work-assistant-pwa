@@ -73,32 +73,7 @@ router.get('/orders', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 获取需求单列表请求:', JSON.stringify(req.query, null, 2));
   
   try {
-    const { status, country, needNum, startDate, endDate, page = 1, limit = 20 } = req.query;
-    
-    // 构建WHERE条件
-    let whereConditions = "need_num IS NOT NULL AND need_num != ''";
-    
-    if (status && status !== '全部') {
-      whereConditions += ` AND status = '${status}'`;
-    }
-    
-    if (country && country !== '') {
-      whereConditions += ` AND country = '${country}'`;
-    }
-    
-    if (needNum && needNum !== '') {
-      whereConditions += ` AND need_num LIKE '%${needNum}%'`;
-    }
-    
-    if (startDate && startDate !== '') {
-      whereConditions += ` AND create_date >= '${startDate}'`;
-    }
-    
-    if (endDate && endDate !== '') {
-      whereConditions += ` AND create_date <= '${endDate} 23:59:59'`;
-    }
-    
-    console.log('\x1b[33m%s\x1b[0m', '🔍 筛选条件:', whereConditions);
+    const { status, page = 1, limit = 20 } = req.query;
     
     // 按需求单号分组统计（修复SQL语法）
     const ordersQuery = `
@@ -114,7 +89,8 @@ router.get('/orders', async (req, res) => {
         MAX(status) as status,
         GROUP_CONCAT(DISTINCT status SEPARATOR ',') as status_list
       FROM pbi_warehouse_products_need 
-      WHERE ${whereConditions}
+      WHERE need_num IS NOT NULL AND need_num != ''
+        ${status && status !== '全部' ? `AND status = '${status}'` : ''}
       GROUP BY need_num
       ORDER BY MIN(create_date) DESC
       LIMIT ${parseInt(limit)} OFFSET ${(parseInt(page) - 1) * parseInt(limit)}
@@ -124,7 +100,8 @@ router.get('/orders', async (req, res) => {
     const countQuery = `
       SELECT COUNT(DISTINCT need_num) as total
       FROM pbi_warehouse_products_need 
-      WHERE ${whereConditions}
+      WHERE need_num IS NOT NULL AND need_num != ''
+        ${status && status !== '全部' ? `AND status = '${status}'` : ''}
     `;
 
     const [orders] = await sequelize.query(ordersQuery);
@@ -699,46 +676,6 @@ router.delete('/orders/:needNum', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '删除失败',
-      error: error.message
-    });
-  }
-});
-
-// 获取国家统计数据（待发货需求单）
-router.get('/country-stats', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '📊 获取国家统计数据请求');
-  
-  try {
-    // 查询各国待发货需求单数量
-    const statsQuery = `
-      SELECT 
-        country,
-        COUNT(DISTINCT need_num) as count
-      FROM pbi_warehouse_products_need 
-      WHERE need_num IS NOT NULL 
-        AND need_num != '' 
-        AND status = '待发货'
-        AND country IS NOT NULL 
-        AND country != ''
-      GROUP BY country
-      ORDER BY count DESC, country ASC
-    `;
-
-    const [stats] = await sequelize.query(statsQuery);
-    
-    console.log('\x1b[33m%s\x1b[0m', '📊 国家统计结果:', stats);
-    
-    res.json({
-      code: 0,
-      message: '获取成功',
-      data: stats
-    });
-    
-  } catch (error) {
-    console.error('❌ 获取国家统计失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '获取失败',
       error: error.message
     });
   }

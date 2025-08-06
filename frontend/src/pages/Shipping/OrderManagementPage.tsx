@@ -226,7 +226,6 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       if (filterParams?.startDate) queryParams.append('startDate', filterParams.startDate);
       if (filterParams?.endDate) queryParams.append('endDate', filterParams.endDate);
       
-      
       const response = await fetch(`${API_BASE_URL}/api/order-management/orders?${queryParams}`, {
         headers: {
           ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
@@ -1442,10 +1441,17 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                         value={filters.country}
                         onChange={(value) => handleFilterChange({ ...filters, country: value || '' })}
                         style={{ width: '65%' }}
-                        options={countryStats.map(stat => ({
-                          label: `${stat.country || '未分类'} (${stat.count})`,
-                          value: stat.country
-                        }))}
+                        options={[
+                          { label: '美国', value: '美国' },
+                          { label: '英国', value: '英国' },
+                          { label: '加拿大', value: '加拿大' },
+                          { label: '阿联酋', value: '阿联酋' },
+                          { label: '澳大利亚', value: '澳大利亚' },
+                          ...countryStats.map(stat => ({
+                            label: `${stat.country || '未分类'} (${stat.count})`,
+                            value: stat.country
+                          }))
+                        ]}
                       />
                     </Input.Group>
                   </Col>
