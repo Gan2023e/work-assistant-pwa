@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography, Switch } from 'antd';
+import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography } from 'antd';
 import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
@@ -154,7 +154,6 @@ const InventoryManagement: React.FC = () => {
     country: '',
     box_type: '',
     status: '',
-    exclude_shipped: true, // 新增：默认排除已出库记录
     dateRange: null as [dayjs.Dayjs, dayjs.Dayjs] | null
   });
 
@@ -360,71 +359,35 @@ const InventoryManagement: React.FC = () => {
       if (filters.sku) params.append('sku', filters.sku);
       if (filters.country) params.append('country', filters.country);
       if (filters.box_type) params.append('box_type', filters.box_type);
-      
-      // 处理状态筛选：
-      // 1. 如果用户明确设置了状态，使用用户设置的状态
-      // 2. 如果用户没有设置状态但启用了排除已出库，则后端筛选为待出库和部分出库
-      // 3. 如果用户禁用了排除已出库且没有设置状态，则不设置状态筛选（显示所有）
-      if (filters.status) {
-        params.append('status', filters.status);
-      } else if (filters.exclude_shipped) {
-        // 默认情况：排除已出库记录
-        // 为了保持与库存汇总的一致性，在此情况下我们手动筛选待出库和部分出库
-        console.log('使用默认筛选：排除已出库记录');
-      }
+      if (filters.status) params.append('status', filters.status);
       
       params.append('page', pagination.current.toString());
       params.append('limit', pagination.pageSize.toString());
       
-      console.log('库存记录API参数:', params.toString());
-      console.log('当前筛选条件:', { 
-        filters,
-        excludeShipped: filters.exclude_shipped,
-        hasStatus: !!filters.status 
-      });
-      
       const response = await fetch(`/api/inventory/records?${params.toString()}`);
       const data = await response.json();
-      
-      console.log('API返回数据:', { 
-        code: data.code, 
-        recordCount: data.data?.records?.length || 0,
-        total: data.data?.total || 0 
-      });
       
       if (data.code === 0) {
         let records = data.data.records;
         
-        // 如果启用了排除已出库且用户没有明确设置状态筛选，则在前端过滤掉已出库记录
-        if (filters.exclude_shipped && !filters.status) {
-          const originalCount = records.length;
+        // 如果用户没有明确设置状态筛选，则默认过滤掉已出库记录
+        if (!filters.status) {
           records = records.filter((record: InventoryRecord) => record.status !== '已出库');
-          console.log(`前端筛选：原始${originalCount}条，筛选后${records.length}条`);
-          
-          // 输出被过滤掉的记录状态统计
-          const statusCounts = data.data.records.reduce((acc: any, record: InventoryRecord) => {
-            acc[record.status] = (acc[record.status] || 0) + 1;
-            return acc;
-          }, {});
-          console.log('原始记录状态统计:', statusCounts);
         }
         
         // 对记录进行排序，确保同一混合箱的记录连续显示
         const sortedRecords = sortRecordsByMixedBox(records);
         setRecordsData(sortedRecords);
-        
-        // 使用原始总数，而不是筛选后的数量，避免分页问题
         setPagination(prev => ({
           ...prev,
-          total: filters.exclude_shipped && !filters.status ? records.length : data.data.total
+          total: records.length
         }));
       } else {
         message.error(data.message);
-        console.error('API返回错误:', data);
       }
     } catch (error) {
       message.error('加载库存记录失败');
-      console.error('加载库存记录失败:', error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -1214,19 +1177,6 @@ const InventoryManagement: React.FC = () => {
                   <Option value="部分出库">部分出库</Option>
                   <Option value="已出库">已出库</Option>
                 </Select>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Switch
-                    checked={filters.exclude_shipped}
-                    onChange={(checked) => {
-                      setFilters(prev => ({ ...prev, exclude_shipped: checked }));
-                      setViewingSkuDetails(null); // 清除查看详情状态
-                    }}
-                    size="small"
-                  />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                    隐藏已出库
-                  </Text>
-                </div>
               </>
             )}
             <Button
@@ -1246,7 +1196,7 @@ const InventoryManagement: React.FC = () => {
             <Button
               icon={<ReloadOutlined />}
               onClick={() => {
-                setFilters({ sku: '', country: '', box_type: '', status: '', exclude_shipped: true, dateRange: null });
+                setFilters({ sku: '', country: '', box_type: '', status: '', dateRange: null });
                 setPagination(prev => ({ ...prev, current: 1 }));
                 setViewingSkuDetails(null); // 清除查看详情状态
               }}
@@ -1309,19 +1259,18 @@ const InventoryManagement: React.FC = () => {
         {currentView === 'records' && !viewingSkuDetails && (
           <Card size="small" style={{ 
             marginBottom: '16px', 
-            backgroundColor: filters.exclude_shipped ? '#e6f7ff' : '#fff2e8', 
-            border: filters.exclude_shipped ? '1px solid #91d5ff' : '1px solid #ffcc02' 
+            backgroundColor: '#e6f7ff', 
+            border: '1px solid #91d5ff'
           }}>
             <Space>
               <span style={{ 
-                color: filters.exclude_shipped ? '#1890ff' : '#fa8c16',
+                color: '#1890ff',
                 fontSize: '12px'
               }}>
-                {filters.exclude_shipped ? 
-                  '当前显示状态：待出库、部分出库记录（已隐藏已出库记录）' : 
-                  '当前显示所有状态记录（包括已出库记录）'
+                {filters.status ? 
+                  `当前显示状态：${filters.status}记录` : 
+                  '当前显示状态：待出库、部分出库记录（已排除已出库记录）'
                 }
-                {filters.status && ` | 状态筛选：${filters.status}`}
                 {filters.sku && ` | SKU筛选：${filters.sku}`}
                 {filters.country && ` | 国家筛选：${filters.country}`}
                 {filters.box_type && ` | 箱型筛选：${filters.box_type}`}
