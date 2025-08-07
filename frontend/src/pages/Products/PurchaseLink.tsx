@@ -147,6 +147,18 @@ const Purchase: React.FC = () => {
     cpcPendingListing: 0
   });
   
+  // 生成其他站点资料表相关状态
+  const [otherSiteModalVisible, setOtherSiteModalVisible] = useState(false);
+  const [selectedSiteCountry, setSelectedSiteCountry] = useState<string>('US');
+  const [uploadedExcelFile, setUploadedExcelFile] = useState<File | null>(null);
+  const [otherSiteLoading, setOtherSiteLoading] = useState(false);
+  const [missingColumnsModalVisible, setMissingColumnsModalVisible] = useState(false);
+  const [missingColumnsInfo, setMissingColumnsInfo] = useState<{
+    missingColumns: string[];
+    uploadedColumns: string[];
+    templateColumns: string[];
+  } | null>(null);
+  
   // 全库统计数据
   const [allDataStats, setAllDataStats] = useState({
     statusStats: [] as { value: string; count: number }[],
@@ -1664,6 +1676,138 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 生成其他站点资料表处理函数
+  const handleGenerateOtherSiteDataSheet = () => {
+    setOtherSiteModalVisible(true);
+    setSelectedSiteCountry('US');
+    setUploadedExcelFile(null);
+  };
+
+  // 处理其他站点弹窗确认
+  const handleOtherSiteModalOk = async () => {
+    if (!selectedSiteCountry || !uploadedExcelFile) {
+      message.warning('请选择国家并上传Excel文件');
+      return;
+    }
+
+    setOtherSiteLoading(true);
+    try {
+      // 先检查列差异
+      await checkTemplateColumnDifferences();
+    } catch (error: any) {
+      console.error('检查模板列差异失败:', error);
+      message.error('检查模板失败: ' + error.message);
+      setOtherSiteLoading(false);
+    }
+  };
+
+  // 检查模板列差异
+  const checkTemplateColumnDifferences = async () => {
+    const formData = new FormData();
+    formData.append('file', uploadedExcelFile!);
+    formData.append('country', selectedSiteCountry);
+
+    const response = await fetch(`${API_BASE_URL}/api/product_weblink/check-other-site-template`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorResult = await response.json();
+      throw new Error(errorResult.message || `HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.hasMissingColumns) {
+      // 有缺失列，显示确认对话框
+      setMissingColumnsInfo({
+        missingColumns: result.missingColumns,
+        uploadedColumns: result.uploadedColumns,
+        templateColumns: result.templateColumns
+      });
+      setMissingColumnsModalVisible(true);
+      setOtherSiteLoading(false);
+    } else {
+      // 没有缺失列，直接生成
+      await generateOtherSiteDataSheet();
+    }
+  };
+
+  // 实际生成其他站点资料表
+  const generateOtherSiteDataSheet = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadedExcelFile!);
+      formData.append('country', selectedSiteCountry);
+
+      // 调用后端API处理上传和生成
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-other-site-datasheet`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        // 尝试解析错误信息
+        try {
+          const errorResult = await response.json();
+          throw new Error(errorResult.message || `HTTP error! status: ${response.status}`);
+        } catch {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      }
+
+      // 检查响应是否是文件流
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+        // 直接处理文件下载
+        const blob = await response.blob();
+        const fileName = `${selectedSiteCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // 清理URL对象
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 5000);
+        
+        message.success('成功生成其他站点资料表');
+        setOtherSiteModalVisible(false);
+        setUploadedExcelFile(null);
+      } else {
+        // 如果不是文件流，尝试解析JSON
+        const result = await response.json();
+        throw new Error(result.message || '生成失败');
+      }
+    } catch (error: any) {
+      console.error('生成其他站点资料表失败:', error);
+      message.error('生成失败: ' + error.message);
+    } finally {
+      setOtherSiteLoading(false);
+    }
+  };
+
+  // 确认继续生成（即使有缺失列）
+  const handleConfirmGenerateWithMissingColumns = async () => {
+    setMissingColumnsModalVisible(false);
+    setMissingColumnsInfo(null);
+    setOtherSiteLoading(true);
+    await generateOtherSiteDataSheet();
+  };
+
+  // 处理Excel文件上传
+  const handleExcelFileChange = (file: File) => {
+    setUploadedExcelFile(file);
+    return false; // 阻止自动上传
+  };
+
   return (
     <div style={{ padding: '20px' }}>
             {/* 统计卡片区域 */}
@@ -2004,6 +2148,16 @@ const Purchase: React.FC = () => {
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
               >
                 生成英国资料表
+              </Button>
+
+              {/* 生成其他站点资料表 */}
+              <Button 
+                type="primary"
+                icon={<FileExcelOutlined />}
+                onClick={handleGenerateOtherSiteDataSheet}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+              >
+                生成其他站点资料表
               </Button>
 
 
@@ -2481,11 +2635,112 @@ const Purchase: React.FC = () => {
              )}
            </div>
          </Space>
-       </Modal>
+             </Modal>
 
+      {/* 生成其他站点资料表弹窗 */}
+      <Modal
+        title="生成其他站点资料表"
+        open={otherSiteModalVisible}
+        onOk={handleOtherSiteModalOk}
+        onCancel={() => {
+          setOtherSiteModalVisible(false);
+          setUploadedExcelFile(null);
+        }}
+        confirmLoading={otherSiteLoading}
+        width={500}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <div>
+            <Typography.Text strong>选择国家:</Typography.Text>
+            <Select
+              value={selectedSiteCountry}
+              onChange={setSelectedSiteCountry}
+              style={{ width: '100%', marginTop: 8 }}
+              options={[
+                { label: '美国 (US)', value: 'US' },
+                { label: '加拿大 (CA)', value: 'CA' },
+                { label: '英国 (UK)', value: 'UK' },
+                { label: '阿联酋 (AE)', value: 'AE' },
+                { label: '澳大利亚 (AU)', value: 'AU' },
+              ]}
+            />
+          </div>
+          
+          <div>
+            <Typography.Text strong>上传Excel文件:</Typography.Text>
+            <Upload
+              accept=".xlsx,.xls"
+              beforeUpload={handleExcelFileChange}
+              fileList={uploadedExcelFile ? [{
+                uid: '1',
+                name: uploadedExcelFile.name,
+                status: 'done',
+                size: uploadedExcelFile.size
+              }] : []}
+              onRemove={() => setUploadedExcelFile(null)}
+              style={{ width: '100%', marginTop: 8 }}
+            >
+              <Button icon={<UploadOutlined />} block>
+                选择Excel文件
+              </Button>
+            </Upload>
+          </div>
+          
+          {uploadedExcelFile && (
+            <div style={{ padding: 12, backgroundColor: '#f6f6f6', borderRadius: 6 }}>
+              <Typography.Text type="secondary">
+                已选择文件: {uploadedExcelFile.name} ({(uploadedExcelFile.size / 1024).toFixed(1)} KB)
+              </Typography.Text>
+            </div>
+          )}
+        </Space>
+      </Modal>
 
+      {/* 缺失列提示弹窗 */}
+      <Modal
+        title="列差异提示"
+        open={missingColumnsModalVisible}
+        onOk={handleConfirmGenerateWithMissingColumns}
+        onCancel={() => {
+          setMissingColumnsModalVisible(false);
+          setMissingColumnsInfo(null);
+          setOtherSiteLoading(false);
+        }}
+        okText="确认继续"
+        cancelText="取消"
+        width={600}
+      >
+        {missingColumnsInfo && (
+          <Space direction="vertical" style={{ width: '100%' }} size="large">
+            <div>
+              <Typography.Text strong style={{ color: '#faad14' }}>
+                ⚠️ 检测到以下列在{selectedSiteCountry}模板中不存在：
+              </Typography.Text>
+              <div style={{ marginTop: 8, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6 }}>
+                {missingColumnsInfo.missingColumns.map((col, index) => (
+                  <Tag key={index} color="orange" style={{ margin: '2px 4px' }}>
+                    {col}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <Typography.Text>
+                这些列的数据将不会被填入{selectedSiteCountry}模板中。
+              </Typography.Text>
+            </div>
+            
+            <div>
+              <Typography.Text strong>
+                是否确认继续生成资料表？
+              </Typography.Text>
+            </div>
+          </Space>
+        )}
+      </Modal>
 
-    </div>
+   </div>
   );
 };
 

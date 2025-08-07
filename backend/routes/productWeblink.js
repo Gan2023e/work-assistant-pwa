@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const TemplateLink = require('../models/TemplateLink');
+const ProductInformation = require('../models/ProductInformation');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -1733,6 +1734,529 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     });
   }
 });
+
+// ==================== 生成其他站点资料表接口 ====================
+
+// 检查其他站点模板列差异
+router.post('/check-other-site-template', upload.single('file'), async (req, res) => {
+  try {
+    console.log('🔍 收到检查其他站点模板列差异请求');
+    
+    const { country } = req.body;
+    const uploadedFile = req.file;
+    
+    if (!country || !uploadedFile) {
+      return res.status(400).json({ message: '请提供国家信息和Excel文件' });
+    }
+
+    // 解析上传的Excel文件
+    const xlsx = require('xlsx');
+    const workbook = xlsx.read(uploadedFile.buffer);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (jsonData.length < 1) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行' });
+    }
+
+    // 获取上传文件的列
+    const uploadedColumns = jsonData[0] ? jsonData[0].filter(col => col && col.toString().trim()) : [];
+    
+    // 获取目标国家的模板文件
+    const countryTemplate = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        country: country,
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']]
+    });
+    
+    if (!countryTemplate) {
+      return res.status(400).json({ message: `未找到${country}站点的资料模板，请先上传${country}模板文件` });
+    }
+
+    // 下载并解析模板文件
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
+    
+    if (!downloadResult.success) {
+      return res.status(500).json({ 
+        message: `下载${country}模板失败: ${downloadResult.message}`
+      });
+    }
+
+    // 解析模板文件的列（第3行）
+    const templateWorkbook = xlsx.read(downloadResult.buffer);
+    const templateSheetName = templateWorkbook.SheetNames[0];
+    const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
+    const templateData = xlsx.utils.sheet_to_json(templateWorksheet, { header: 1 });
+    
+    const templateColumns = templateData.length >= 3 && templateData[2] ? 
+      templateData[2].filter(col => col && col.toString().trim()) : [];
+
+    // 检查缺失的列
+    const missingColumns = uploadedColumns.filter(col => 
+      !templateColumns.some(templateCol => 
+        templateCol.toString().toLowerCase() === col.toString().toLowerCase()
+      )
+    );
+
+    return res.json({
+      success: true,
+      uploadedColumns,
+      templateColumns,
+      missingColumns,
+      hasMissingColumns: missingColumns.length > 0
+    });
+
+  } catch (error) {
+    console.error('❌ 检查模板列差异失败:', error);
+    res.status(500).json({ 
+      message: error.message || '检查模板列差异时发生未知错误'
+    });
+  }
+});
+
+// 生成其他站点资料表
+router.post('/generate-other-site-datasheet', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    console.log('📋 收到生成其他站点资料表请求');
+    
+    const { country } = req.body;
+    const uploadedFile = req.file;
+    
+    if (!country || !uploadedFile) {
+      return res.status(400).json({ message: '请提供国家信息和Excel文件' });
+    }
+
+    console.log(`📝 处理国家: ${country}, 文件: ${uploadedFile.originalname}`);
+
+    // 步骤1: 解析上传的Excel文件
+    console.log('📖 解析上传的Excel文件...');
+    const xlsx = require('xlsx');
+    const workbook = xlsx.read(uploadedFile.buffer);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
+    }
+
+    // 步骤2: 处理数据并保存到product_information表
+    console.log('💾 保存数据到product_information表...');
+    const { ProductInformation } = require('../models');
+    
+    // 获取标题行（假设在第一行）
+    const headers = jsonData[0];
+    const dataRows = jsonData.slice(1);
+    
+    const savedRecords = [];
+    
+    for (const row of dataRows) {
+      if (!row || row.length === 0) continue;
+      
+      // 创建数据对象
+      const rowData = {};
+      headers.forEach((header, index) => {
+        if (header && row[index] !== undefined) {
+          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[index];
+        }
+      });
+      
+      // 设置site字段为选择的国家
+      rowData.site = country;
+      
+      // 设置original_parent_sku字段（去掉前两个字符）
+      if (rowData.item_sku && rowData.item_sku.length > 2) {
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+      }
+      
+      try {
+        const savedRecord = await ProductInformation.create(rowData);
+        savedRecords.push(savedRecord);
+      } catch (error) {
+        console.warn(`⚠️ 保存记录失败: ${JSON.stringify(rowData)}, 错误: ${error.message}`);
+      }
+    }
+
+    console.log(`✅ 成功保存 ${savedRecords.length} 条记录到product_information表`);
+
+    // 步骤3: 获取对应国家的模板文件
+    console.log(`🔍 查找${country}站点的模板文件...`);
+    
+    const countryTemplate = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        country: country,
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']]
+    });
+    
+    if (!countryTemplate) {
+      return res.status(400).json({ message: `未找到${country}站点的资料模板，请先上传${country}模板文件` });
+    }
+
+    console.log(`📄 使用${country}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
+
+    // 步骤4: 下载模板文件
+    console.log(`📥 下载${country}模板文件...`);
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
+    
+    if (!downloadResult.success) {
+      console.error(`❌ 下载${country}模板失败:`, downloadResult.message);
+      return res.status(500).json({ 
+        message: `下载${country}模板失败: ${downloadResult.message}`,
+        details: downloadResult.error
+      });
+    }
+
+    console.log(`✅ ${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+
+    // 步骤5: 使用ExcelJS处理模板文件
+    console.log('📊 开始使用ExcelJS处理Excel文件，保留原有格式...');
+    const ExcelJS = require('exceljs');
+    
+    const templateWorkbook = new ExcelJS.Workbook();
+    await templateWorkbook.xlsx.load(downloadResult.buffer);
+    
+    const templateWorksheet = templateWorkbook.getWorksheet(1);
+    if (!templateWorksheet) {
+      return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
+    }
+
+    // 步骤6: 映射数据到模板
+    console.log('🎯 开始映射数据到模板...');
+    await mapDataToTemplate(templateWorksheet, savedRecords, country);
+
+    // 步骤7: 生成并返回文件
+    console.log('📤 生成最终文件...');
+    const outputBuffer = await templateWorkbook.xlsx.writeBuffer();
+    
+    const fileName = `${country}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', outputBuffer.length);
+    
+    const processingTime = Date.now() - startTime;
+    console.log(`✅ 生成${country}资料表成功 (耗时: ${processingTime}ms)`);
+    
+    res.send(outputBuffer);
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    const errorMessage = error.message || '生成其他站点资料表时发生未知错误';
+    console.error(`❌ 生成其他站点资料表失败 (耗时: ${processingTime}ms):`, error);
+    
+    res.status(500).json({ 
+      message: errorMessage,
+      processingTime: processingTime
+    });
+  }
+});
+
+// 映射数据到模板的辅助函数
+async function mapDataToTemplate(worksheet, records, country) {
+  try {
+    console.log(`🎯 开始映射 ${records.length} 条记录到${country}模板...`);
+    
+    // 读取当前数据（使用xlsx来解析现有数据，因为更稳定）
+    const xlsx = require('xlsx');
+    const buffer = await worksheet.workbook.xlsx.writeBuffer();
+    const workbook = xlsx.read(buffer);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_aoa(sheet);
+
+    console.log(`📋 模板有 ${data.length} 行数据`);
+
+    // 查找列位置（在第3行查找标题，索引为2）
+    let itemSkuCol = -1;
+    let itemNameCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+    let brandNameCol = -1;
+    let manufacturerCol = -1;
+    let mainImageUrlCol = -1;
+    let otherImageUrl1Col = -1;
+    let otherImageUrl2Col = -1;
+    let otherImageUrl3Col = -1;
+    let otherImageUrl4Col = -1;
+    let otherImageUrl5Col = -1;
+    let productDescriptionCol = -1;
+    let bulletPoint1Col = -1;
+    let bulletPoint2Col = -1;
+    let bulletPoint3Col = -1;
+    let bulletPoint4Col = -1;
+    let bulletPoint5Col = -1;
+    
+    const missingColumns = [];
+    
+    if (data.length >= 3 && data[2]) {
+      data[2].forEach((header, colIndex) => {
+        if (header) {
+          const cellValue = header.toString().toLowerCase();
+          if (cellValue === 'item_sku') {
+            itemSkuCol = colIndex;
+          } else if (cellValue === 'item_name') {
+            itemNameCol = colIndex;
+          } else if (cellValue === 'color_name') {
+            colorNameCol = colIndex;
+          } else if (cellValue === 'size_name') {
+            sizeNameCol = colIndex;
+          } else if (cellValue === 'brand_name') {
+            brandNameCol = colIndex;
+          } else if (cellValue === 'manufacturer') {
+            manufacturerCol = colIndex;
+          } else if (cellValue === 'main_image_url') {
+            mainImageUrlCol = colIndex;
+          } else if (cellValue === 'other_image_url1') {
+            otherImageUrl1Col = colIndex;
+          } else if (cellValue === 'other_image_url2') {
+            otherImageUrl2Col = colIndex;
+          } else if (cellValue === 'other_image_url3') {
+            otherImageUrl3Col = colIndex;
+          } else if (cellValue === 'other_image_url4') {
+            otherImageUrl4Col = colIndex;
+          } else if (cellValue === 'other_image_url5') {
+            otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'product_description') {
+            productDescriptionCol = colIndex;
+          } else if (cellValue === 'bullet_point1') {
+            bulletPoint1Col = colIndex;
+          } else if (cellValue === 'bullet_point2') {
+            bulletPoint2Col = colIndex;
+          } else if (cellValue === 'bullet_point3') {
+            bulletPoint3Col = colIndex;
+          } else if (cellValue === 'bullet_point4') {
+            bulletPoint4Col = colIndex;
+          } else if (cellValue === 'bullet_point5') {
+            bulletPoint5Col = colIndex;
+          }
+        }
+      });
+    }
+
+    // 检查缺失的列
+    const requiredCols = [
+      { name: 'item_sku', col: itemSkuCol },
+      { name: 'color_name', col: colorNameCol },
+      { name: 'size_name', col: sizeNameCol },
+      { name: 'brand_name', col: brandNameCol },
+    ];
+    
+    requiredCols.forEach(({ name, col }) => {
+      if (col === -1) {
+        missingColumns.push(name);
+      }
+    });
+    
+         if (missingColumns.length > 0) {
+       console.warn(`⚠️ 模板中缺少以下列: ${missingColumns.join(', ')}`);
+       // 如果有缺失列，可以在这里添加更详细的处理逻辑
+       // 但根据需求，我们继续处理，只是记录警告
+     }
+
+    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
+
+    // 判断源文件类型（通过第一条记录的SKU前缀）
+    const sourceCountryType = records.length > 0 && records[0].item_sku ? 
+      (records[0].item_sku.startsWith('US') ? 'US_CA' : 'OTHER') : 'OTHER';
+    
+    console.log(`📍 源文件类型: ${sourceCountryType}, 目标国家: ${country}`);
+
+    // 处理文本内容，根据源文件和目标国家决定品牌替换规则
+    const processTextContent = (text) => {
+      if (!text) return text;
+      
+      // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，SellerFun改成JiaYou
+      if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
+        return text.replace(/SellerFun/g, 'JiaYou');
+      }
+      
+      // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，JiaYou改成SellerFun
+      if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA') {
+        return text.replace(/JiaYou/g, 'SellerFun');
+      }
+      
+      return text;
+    };
+
+    // 处理图片URL，根据源文件和目标国家决定替换规则
+    const processImageUrl = (url) => {
+      if (!url) return url;
+      
+      // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，UK改成US
+      if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
+        return url.replace(/UK/g, 'US').replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+      }
+      
+      // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，US改成UK
+      if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA') {
+        return url.replace(/US/g, 'UK').replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
+      }
+      
+      return url;
+    };
+
+    // 确保数据数组有足够的行
+    const totalRowsNeeded = 4 + records.length;
+    while (data.length < totalRowsNeeded) {
+      data.push([]);
+    }
+
+    // 从第4行开始填写数据（索引为3）
+    let currentRowIndex = 3;
+    
+    records.forEach((record, index) => {
+      const maxColIndex = Math.max(
+        itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
+        mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, 
+        otherImageUrl3Col, otherImageUrl4Col, otherImageUrl5Col,
+        productDescriptionCol, bulletPoint1Col, bulletPoint2Col,
+        bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+      );
+
+      // 确保当前行有足够的列
+      while (data[currentRowIndex].length <= maxColIndex) {
+        data[currentRowIndex].push('');
+      }
+
+      // 填写数据，处理SKU前缀的特殊情况
+      if (itemSkuCol !== -1 && record.item_sku) {
+        let processedSku = record.item_sku;
+        
+        // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，UK改为US
+        if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA') && processedSku.startsWith('UK')) {
+          processedSku = 'US' + processedSku.substring(2);
+        }
+        
+        // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，US改为UK
+        if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA' && processedSku.startsWith('US')) {
+          processedSku = 'UK' + processedSku.substring(2);
+        }
+        
+        data[currentRowIndex][itemSkuCol] = processedSku;
+      }
+      
+      // 处理标题字段，应用文本转换
+      if (itemNameCol !== -1 && record.item_name) {
+        data[currentRowIndex][itemNameCol] = processTextContent(record.item_name);
+      }
+      
+      if (colorNameCol !== -1 && record.color_name) {
+        data[currentRowIndex][colorNameCol] = record.color_name;
+      }
+      
+      if (sizeNameCol !== -1 && record.size_name) {
+        data[currentRowIndex][sizeNameCol] = record.size_name;
+      }
+      
+      // 处理品牌字段，应用文本转换
+      if (brandNameCol !== -1 && record.brand_name) {
+        data[currentRowIndex][brandNameCol] = processTextContent(record.brand_name);
+      }
+
+      // 处理制造商字段，应用文本转换
+      if (manufacturerCol !== -1 && record.manufacturer) {
+        data[currentRowIndex][manufacturerCol] = processTextContent(record.manufacturer);
+      }
+
+      if (mainImageUrlCol !== -1 && record.main_image_url) {
+        data[currentRowIndex][mainImageUrlCol] = processImageUrl(record.main_image_url);
+      }
+      
+      if (otherImageUrl1Col !== -1 && record.other_image_url1) {
+        data[currentRowIndex][otherImageUrl1Col] = processImageUrl(record.other_image_url1);
+      }
+      
+      if (otherImageUrl2Col !== -1 && record.other_image_url2) {
+        data[currentRowIndex][otherImageUrl2Col] = processImageUrl(record.other_image_url2);
+      }
+      
+      if (otherImageUrl3Col !== -1 && record.other_image_url3) {
+        data[currentRowIndex][otherImageUrl3Col] = processImageUrl(record.other_image_url3);
+      }
+      
+      if (otherImageUrl4Col !== -1 && record.other_image_url4) {
+        data[currentRowIndex][otherImageUrl4Col] = processImageUrl(record.other_image_url4);
+      }
+      
+      if (otherImageUrl5Col !== -1 && record.other_image_url5) {
+        data[currentRowIndex][otherImageUrl5Col] = processImageUrl(record.other_image_url5);
+      }
+
+      // 填写其他字段，对可能包含品牌信息的字段也应用文本转换
+      if (productDescriptionCol !== -1 && record.product_description) {
+        data[currentRowIndex][productDescriptionCol] = processTextContent(record.product_description);
+      }
+      
+      if (bulletPoint1Col !== -1 && record.bullet_point1) {
+        data[currentRowIndex][bulletPoint1Col] = processTextContent(record.bullet_point1);
+      }
+      
+      if (bulletPoint2Col !== -1 && record.bullet_point2) {
+        data[currentRowIndex][bulletPoint2Col] = processTextContent(record.bullet_point2);
+      }
+      
+      if (bulletPoint3Col !== -1 && record.bullet_point3) {
+        data[currentRowIndex][bulletPoint3Col] = processTextContent(record.bullet_point3);
+      }
+      
+      if (bulletPoint4Col !== -1 && record.bullet_point4) {
+        data[currentRowIndex][bulletPoint4Col] = processTextContent(record.bullet_point4);
+      }
+      
+      if (bulletPoint5Col !== -1 && record.bullet_point5) {
+        data[currentRowIndex][bulletPoint5Col] = processTextContent(record.bullet_point5);
+      }
+
+      currentRowIndex++;
+    });
+
+    // 将处理后的数据写回工作表
+    console.log('💾 写入处理后的数据到工作表...');
+    
+    // 清空现有数据
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 3) { // 保留前3行（模板头部）
+        row.eachCell((cell) => {
+          cell.value = null;
+        });
+      }
+    });
+
+    // 写入新数据
+    data.forEach((row, rowIndex) => {
+      if (rowIndex >= 3) { // 从第4行开始写入数据
+        const worksheetRow = worksheet.getRow(rowIndex + 1);
+        row.forEach((cellValue, colIndex) => {
+          if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
+            worksheetRow.getCell(colIndex + 1).value = cellValue;
+          }
+        });
+        worksheetRow.commit();
+      }
+    });
+
+    console.log(`✅ 成功映射 ${records.length} 条记录到${country}模板`);
+    
+    if (missingColumns.length > 0) {
+      console.warn(`⚠️ 注意：模板中缺少以下列: ${missingColumns.join(', ')}`);
+    }
+
+  } catch (error) {
+    console.error('❌ 映射数据到模板时发生错误:', error);
+    throw error;
+  }
+}
 
 
 module.exports = router; 
