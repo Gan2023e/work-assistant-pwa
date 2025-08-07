@@ -164,9 +164,21 @@ const Purchase: React.FC = () => {
   
   // 生成其他站点资料表相关状态
   const [otherSiteModalVisible, setOtherSiteModalVisible] = useState(false);
-  const [selectedSiteCountry, setSelectedSiteCountry] = useState<string>('US');
-  const [uploadedExcelFile, setUploadedExcelFile] = useState<File | null>(null);
-  const [otherSiteLoading, setOtherSiteLoading] = useState(false);
+  const [activeSiteTabKey, setActiveSiteTabKey] = useState<string>('US');
+  const [uploadedExcelFiles, setUploadedExcelFiles] = useState<Record<string, File | null>>({
+    US: null,
+    CA: null,
+    UK: null,
+    AE: null,
+    AU: null
+  });
+  const [otherSiteLoading, setOtherSiteLoading] = useState<Record<string, boolean>>({
+    US: false,
+    CA: false,
+    UK: false,
+    AE: false,
+    AU: false
+  });
   const [missingColumnsModalVisible, setMissingColumnsModalVisible] = useState(false);
   const [missingColumnsInfo, setMissingColumnsInfo] = useState<{
     missingColumns: string[];
@@ -1820,33 +1832,34 @@ const Purchase: React.FC = () => {
   // 生成其他站点资料表处理函数
   const handleGenerateOtherSiteDataSheet = () => {
     setOtherSiteModalVisible(true);
-    setSelectedSiteCountry('US');
-    setUploadedExcelFile(null);
+    setActiveSiteTabKey('US');
   };
 
   // 处理其他站点弹窗确认
   const handleOtherSiteModalOk = async () => {
-    if (!selectedSiteCountry || !uploadedExcelFile) {
-      message.warning('请选择国家并上传Excel文件');
+    const currentFile = uploadedExcelFiles[activeSiteTabKey];
+    if (!activeSiteTabKey || !currentFile) {
+      message.warning('请上传Excel文件');
       return;
     }
 
-    setOtherSiteLoading(true);
+    setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: true }));
     try {
       // 先检查列差异
       await checkTemplateColumnDifferences();
     } catch (error: any) {
       console.error('检查模板列差异失败:', error);
       message.error('检查模板失败: ' + error.message);
-      setOtherSiteLoading(false);
+      setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: false }));
     }
   };
 
   // 检查模板列差异
   const checkTemplateColumnDifferences = async () => {
+    const currentFile = uploadedExcelFiles[activeSiteTabKey];
     const formData = new FormData();
-    formData.append('file', uploadedExcelFile!);
-    formData.append('country', selectedSiteCountry);
+    formData.append('file', currentFile!);
+    formData.append('country', activeSiteTabKey);
 
     const response = await fetch(`${API_BASE_URL}/api/product_weblink/check-other-site-template`, {
       method: 'POST',
@@ -1868,7 +1881,7 @@ const Purchase: React.FC = () => {
         templateColumns: result.templateColumns
       });
       setMissingColumnsModalVisible(true);
-      setOtherSiteLoading(false);
+      setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: false }));
     } else {
       // 没有缺失列，直接生成
       await generateOtherSiteDataSheet();
@@ -1877,10 +1890,11 @@ const Purchase: React.FC = () => {
 
   // 实际生成其他站点资料表
   const generateOtherSiteDataSheet = async () => {
+    const currentFile = uploadedExcelFiles[activeSiteTabKey];
     try {
       const formData = new FormData();
-      formData.append('file', uploadedExcelFile!);
-      formData.append('country', selectedSiteCountry);
+      formData.append('file', currentFile!);
+      formData.append('country', activeSiteTabKey);
 
       // 调用后端API处理上传和生成
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-other-site-datasheet`, {
@@ -1903,7 +1917,7 @@ const Purchase: React.FC = () => {
       if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
         // 直接处理文件下载
         const blob = await response.blob();
-        const fileName = `${selectedSiteCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const fileName = `${activeSiteTabKey}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
         
         // 创建下载链接
         const url = window.URL.createObjectURL(blob);
@@ -1921,7 +1935,7 @@ const Purchase: React.FC = () => {
         
         message.success('成功生成其他站点资料表');
         setOtherSiteModalVisible(false);
-        setUploadedExcelFile(null);
+        setUploadedExcelFiles(prev => ({ ...prev, [activeSiteTabKey]: null }));
       } else {
         // 如果不是文件流，尝试解析JSON
         const result = await response.json();
@@ -1931,7 +1945,7 @@ const Purchase: React.FC = () => {
       console.error('生成其他站点资料表失败:', error);
       message.error('生成失败: ' + error.message);
     } finally {
-      setOtherSiteLoading(false);
+      setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: false }));
     }
   };
 
@@ -1939,14 +1953,98 @@ const Purchase: React.FC = () => {
   const handleConfirmGenerateWithMissingColumns = async () => {
     setMissingColumnsModalVisible(false);
     setMissingColumnsInfo(null);
-    setOtherSiteLoading(true);
+    setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: true }));
     await generateOtherSiteDataSheet();
   };
 
   // 处理Excel文件上传
   const handleExcelFileChange = (file: File) => {
-    setUploadedExcelFile(file);
+    setUploadedExcelFiles(prev => ({ ...prev, [activeSiteTabKey]: file }));
     return false; // 阻止自动上传
+  };
+
+  // 站点标签页切换处理
+  const handleSiteTabChange = (key: string) => {
+    setActiveSiteTabKey(key);
+  };
+
+  // 渲染每个站点的标签页内容
+  const renderSiteTabContent = (countryCode: string, countryName: string) => {
+    const currentFile = uploadedExcelFiles[countryCode];
+    const isLoading = otherSiteLoading[countryCode] || false;
+
+    return (
+      <Space direction="vertical" style={{ width: '100%' }} size="large">
+        {/* 文件上传区域 */}
+        <div style={{ marginBottom: '16px', padding: '16px', background: '#f8f9fa', borderRadius: '6px' }}>
+          <Text strong style={{ color: '#1677ff' }}>上传 {countryName} 站点Excel文件：</Text>
+          <div style={{ marginTop: '12px' }}>
+            <Upload
+              accept=".xlsx,.xls"
+              beforeUpload={(file) => {
+                setUploadedExcelFiles(prev => ({ ...prev, [countryCode]: file }));
+                return false; // 阻止自动上传
+              }}
+              fileList={currentFile ? [{
+                uid: '1',
+                name: currentFile.name,
+                status: 'done' as const,
+                size: currentFile.size
+              }] : []}
+              onRemove={() => setUploadedExcelFiles(prev => ({ ...prev, [countryCode]: null }))}
+              style={{ width: '100%' }}
+            >
+              <Button icon={<UploadOutlined />} block size="large">
+                选择Excel文件
+              </Button>
+            </Upload>
+            <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>
+              支持 .xlsx 和 .xls 格式
+            </Text>
+          </div>
+        </div>
+
+        {/* 文件信息显示 */}
+        {currentFile && (
+          <div style={{ padding: '12px', backgroundColor: '#f6f6f6', borderRadius: '6px' }}>
+            <Text strong>已选择文件：</Text>
+            <br />
+            <Text type="secondary">
+              文件名: {currentFile.name}
+            </Text>
+            <br />
+            <Text type="secondary">
+              大小: {(currentFile.size / 1024).toFixed(1)} KB
+            </Text>
+          </div>
+        )}
+
+        {/* 生成按钮 */}
+        <div style={{ textAlign: 'center' }}>
+          <Button
+            type="primary"
+            size="large"
+            loading={isLoading}
+            disabled={!currentFile}
+            onClick={async () => {
+              if (!currentFile) {
+                message.warning('请先上传Excel文件');
+                return;
+              }
+              
+              // 设置当前站点为活动标签页
+              setActiveSiteTabKey(countryCode);
+              
+              // 调用生成函数
+              await handleOtherSiteModalOk();
+            }}
+            style={{ minWidth: '200px' }}
+          >
+            生成 {countryName} 站点资料表
+          </Button>
+        </div>
+      </Space>
+    );
   };
 
   return (
@@ -2720,59 +2818,52 @@ const Purchase: React.FC = () => {
       <Modal
         title="生成其他站点资料表"
         open={otherSiteModalVisible}
-        onOk={handleOtherSiteModalOk}
         onCancel={() => {
           setOtherSiteModalVisible(false);
-          setUploadedExcelFile(null);
+          // 清空所有文件
+          setUploadedExcelFiles({
+            US: null,
+            CA: null,
+            UK: null,
+            AE: null,
+            AU: null
+          });
         }}
-        confirmLoading={otherSiteLoading}
-        width={500}
+        footer={null}
+        width={1000}
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
-          <div>
-            <Typography.Text strong>选择国家:</Typography.Text>
-            <Select
-              value={selectedSiteCountry}
-              onChange={setSelectedSiteCountry}
-              style={{ width: '100%', marginTop: 8 }}
-              options={[
-                { label: '美国 (US)', value: 'US' },
-                { label: '加拿大 (CA)', value: 'CA' },
-                { label: '英国 (UK)', value: 'UK' },
-                { label: '阿联酋 (AE)', value: 'AE' },
-                { label: '澳大利亚 (AU)', value: 'AU' },
-              ]}
-            />
-          </div>
-          
-          <div>
-            <Typography.Text strong>上传Excel文件:</Typography.Text>
-            <Upload
-              accept=".xlsx,.xls"
-              beforeUpload={handleExcelFileChange}
-              fileList={uploadedExcelFile ? [{
-                uid: '1',
-                name: uploadedExcelFile.name,
-                status: 'done',
-                size: uploadedExcelFile.size
-              }] : []}
-              onRemove={() => setUploadedExcelFile(null)}
-              style={{ width: '100%', marginTop: 8 }}
-            >
-              <Button icon={<UploadOutlined />} block>
-                选择Excel文件
-              </Button>
-            </Upload>
-          </div>
-          
-          {uploadedExcelFile && (
-            <div style={{ padding: 12, backgroundColor: '#f6f6f6', borderRadius: 6 }}>
-              <Typography.Text type="secondary">
-                已选择文件: {uploadedExcelFile.name} ({(uploadedExcelFile.size / 1024).toFixed(1)} KB)
-              </Typography.Text>
-            </div>
-          )}
-        </Space>
+        <Tabs
+          activeKey={activeSiteTabKey}
+          onChange={handleSiteTabChange}
+          type="card"
+          items={[
+            {
+              key: 'US',
+              label: '美国 (US)',
+              children: renderSiteTabContent('US', '美国')
+            },
+            {
+              key: 'CA',
+              label: '加拿大 (CA)',
+              children: renderSiteTabContent('CA', '加拿大')
+            },
+            {
+              key: 'UK',
+              label: '英国 (UK)',
+              children: renderSiteTabContent('UK', '英国')
+            },
+            {
+              key: 'AE',
+              label: '阿联酋 (AE)',
+              children: renderSiteTabContent('AE', '阿联酋')
+            },
+            {
+              key: 'AU',
+              label: '澳大利亚 (AU)',
+              children: renderSiteTabContent('AU', '澳大利亚')
+            }
+          ]}
+        />
       </Modal>
 
       {/* 缺失列提示弹窗 */}
@@ -2783,7 +2874,7 @@ const Purchase: React.FC = () => {
         onCancel={() => {
           setMissingColumnsModalVisible(false);
           setMissingColumnsInfo(null);
-          setOtherSiteLoading(false);
+          setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: false }));
         }}
         okText="确认继续"
         cancelText="取消"
@@ -2793,7 +2884,7 @@ const Purchase: React.FC = () => {
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             <div>
               <Typography.Text strong style={{ color: '#faad14' }}>
-                ⚠️ 检测到以下列在{selectedSiteCountry}模板中不存在：
+                ⚠️ 检测到以下列在{activeSiteTabKey}模板中不存在：
               </Typography.Text>
               <div style={{ marginTop: 8, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6 }}>
                 {missingColumnsInfo.missingColumns.map((col, index) => (
@@ -2806,7 +2897,7 @@ const Purchase: React.FC = () => {
             
             <div>
               <Typography.Text>
-                这些列的数据将不会被填入{selectedSiteCountry}模板中。
+                这些列的数据将不会被填入{activeSiteTabKey}模板中。
               </Typography.Text>
             </div>
             
