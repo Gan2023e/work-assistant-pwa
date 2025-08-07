@@ -119,6 +119,7 @@ const Purchase: React.FC = () => {
     AE: false,
     AU: false
   });
+  const [globalTemplateLoading, setGlobalTemplateLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -1407,6 +1408,8 @@ const Purchase: React.FC = () => {
   const fetchTemplateFiles = async (country: string) => {
     try {
       setTemplateLoading(prev => ({ ...prev, [country]: true }));
+      console.log(`📥 获取${country}站点模板列表...`);
+      
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${country}`);
       
       if (!res.ok) {
@@ -1414,13 +1417,18 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
+      console.log(`✅ ${country}站点模板列表获取成功:`, result.data?.length || 0, '个文件');
+      
       setAllTemplateFiles(prev => ({
         ...prev,
         [country]: result.data || []
       }));
     } catch (error) {
-      console.error(`获取${country}站点模板列表失败:`, error);
-      message.error(`获取${country}站点模板列表失败`);
+      console.error(`❌ 获取${country}站点模板列表失败:`, error);
+      // 不显示太多错误消息，避免刷屏
+      if (globalTemplateLoading) {
+        console.warn(`${country}站点数据加载失败，将在模态框中显示空列表`);
+      }
     } finally {
       setTemplateLoading(prev => ({ ...prev, [country]: false }));
     }
@@ -1429,13 +1437,20 @@ const Purchase: React.FC = () => {
   // 批量获取所有站点的模板文件
   const fetchAllTemplateFiles = async () => {
     const countries = ['US', 'CA', 'UK', 'AE', 'AU'];
-    const promises = countries.map(country => fetchTemplateFiles(country));
     
     try {
+      setGlobalTemplateLoading(true);
+      console.log('🚀 开始批量加载所有站点模板数据...');
+      
+      const promises = countries.map(country => fetchTemplateFiles(country));
       await Promise.all(promises);
-      console.log('所有站点模板数据加载完成');
+      
+      console.log('✅ 所有站点模板数据加载完成');
     } catch (error) {
-      console.error('批量加载模板数据时发生错误:', error);
+      console.error('❌ 批量加载模板数据时发生错误:', error);
+      message.error('加载模板数据失败，请重试');
+    } finally {
+      setGlobalTemplateLoading(false);
     }
   };
 
@@ -2260,7 +2275,7 @@ const Purchase: React.FC = () => {
               <Button 
                 icon={<FileExcelOutlined />}
                 onClick={handleOpenTemplateModal}
-                loading={templateLoading}
+                loading={globalTemplateLoading}
               >
                 管理亚马逊资料模板
               </Button>
