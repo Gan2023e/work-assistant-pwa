@@ -2550,16 +2550,13 @@ const Purchase: React.FC = () => {
                onChange={handleCountryChange}
                style={{ width: 200, marginLeft: '8px' }}
                loading={templateLoading}
-             >
-               <Select.Option value="US">美国</Select.Option>
-               <Select.Option value="UK">英国</Select.Option>
-               <Select.Option value="DE">德国</Select.Option>
-               <Select.Option value="FR">法国</Select.Option>
-               <Select.Option value="IT">意大利</Select.Option>
-               <Select.Option value="ES">西班牙</Select.Option>
-               <Select.Option value="CA">加拿大</Select.Option>
-               <Select.Option value="JP">日本</Select.Option>
-             </Select>
+                         >
+              <Select.Option value="US">美国</Select.Option>
+              <Select.Option value="CA">加拿大</Select.Option>
+              <Select.Option value="UK">英国</Select.Option>
+              <Select.Option value="AE">阿联酋</Select.Option>
+              <Select.Option value="AU">澳大利亚</Select.Option>
+            </Select>
            </div>
 
            {/* 文件上传 */}
