@@ -455,7 +455,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           await createNewOrder({
             ...orderInfo,
             sku_data: skuData
-          });
+          }, true);
         }
       } else {
         message.error(result.message || '检查SKU冲突失败');
@@ -588,7 +588,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   };
 
   // 创建新需求单
-  const createNewOrder = async (orderData: any) => {
+  const createNewOrder = async (orderData: any, shouldCloseModal: boolean = false) => {
     try {
       const formattedValues = {
         ...orderData,
@@ -609,6 +609,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       
       if (result.code === 0) {
         message.success('需求单创建成功');
+        if (shouldCloseModal) {
+          // 关闭对话框并重置表单
+          setAddOrderModalVisible(false);
+          addOrderForm.resetFields();
+          // 刷新列表
+          fetchOrders();
+        }
         return result.data;
       } else {
         message.error(result.message || '创建失败');
