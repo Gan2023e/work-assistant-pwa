@@ -189,6 +189,10 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
   const [countryStats, setCountryStats] = useState<CountryStat[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
 
+  // 选择状态管理
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedRows, setSelectedRows] = useState<OrderItem[]>([]);
+
   // 根据props.needNum或selectedOrder决定加载详情还是列表
   useEffect(() => {
     if (needNum) {
@@ -799,6 +803,71 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
     }
   };
 
+  // 选择框处理函数
+  const handleSelectChange = (selectedRowKeys: React.Key[], selectedRows: OrderItem[]) => {
+    setSelectedRowKeys(selectedRowKeys);
+    setSelectedRows(selectedRows);
+  };
+
+  // 全选/取消全选
+  const handleSelectAll = (selected: boolean) => {
+    if (selected && orderDetails?.order_items) {
+      const allKeys = orderDetails.order_items.map(item => item.record_num);
+      setSelectedRowKeys(allKeys);
+      setSelectedRows(orderDetails.order_items);
+    } else {
+      setSelectedRowKeys([]);
+      setSelectedRows([]);
+    }
+  };
+
+  // 导出采购单
+  const exportPurchaseOrder = () => {
+    if (selectedRows.length === 0) {
+      message.warning('请先选择需要导出的记录');
+      return;
+    }
+    
+    try {
+      // 准备导出数据，包含5列
+      const exportData = selectedRows.map(item => ({
+        'SKU(*必填)': item.local_sku || '-',
+        '采购数量(*必填)': item.shortage > 0 ? item.shortage : 0,
+        '供应商': '',
+        '采购单价': '',
+        '采购员': ''
+      }));
+
+      // 创建工作簿和工作表
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // 设置列宽
+      const colWidths = [
+        { wch: 15 }, // SKU(*必填)
+        { wch: 12 }, // 采购数量(*必填)
+        { wch: 15 }, // 供应商
+        { wch: 12 }, // 采购单价
+        { wch: 12 }  // 采购员
+      ];
+      worksheet['!cols'] = colWidths;
+
+      // 添加工作表到工作簿
+      XLSX.utils.book_append_sheet(workbook, worksheet, '采购单');
+
+      // 生成文件名
+      const fileName = `采购单_${orderDetails?.order_summary.need_num}_${new Date().toISOString().slice(0, 10)}.xls`;
+
+      // 下载文件
+      XLSX.writeFile(workbook, fileName);
+      
+      message.success(`采购单导出成功！已导出 ${selectedRows.length} 条记录`);
+    } catch (error) {
+      console.error('导出失败:', error);
+      message.error('导出失败，请重试');
+    }
+  };
+
   // 删除需求单
   const handleDeleteOrder = async (needNum: string) => {
     try {
@@ -1267,6 +1336,15 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                         🖨️ 打印详情
                       </Button>
                       <Button 
+                        type="default" 
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        onClick={() => exportPurchaseOrder()}
+                        disabled={selectedRows.length === 0}
+                      >
+                        导出采购单
+                      </Button>
+                      <Button 
                         type="primary" 
                         size="small"
                         icon={<DownloadOutlined />}
@@ -1282,6 +1360,14 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
                     rowKey="record_num"
                     size="small"
                     pagination={false}
+                    rowSelection={{
+                      selectedRowKeys,
+                      onChange: handleSelectChange,
+                      onSelectAll: handleSelectAll,
+                      getCheckboxProps: (record) => ({
+                        name: record.local_sku || record.amz_sku,
+                      }),
+                    }}
                   />
 
                   {/* 发货历史 */}
