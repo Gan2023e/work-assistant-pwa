@@ -22,7 +22,8 @@ import {
   List,
   Badge,
   Tag,
-  Progress
+  Progress,
+  Tabs
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -102,9 +103,22 @@ const Purchase: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
-  const [templateFiles, setTemplateFiles] = useState<any[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState<string>('US');
-  const [templateLoading, setTemplateLoading] = useState(false);
+  // 多站点模板文件管理
+  const [allTemplateFiles, setAllTemplateFiles] = useState<Record<string, any[]>>({
+    US: [],
+    CA: [],
+    UK: [],
+    AE: [],
+    AU: []
+  });
+  const [activeTabKey, setActiveTabKey] = useState<string>('US');
+  const [templateLoading, setTemplateLoading] = useState<Record<string, boolean>>({
+    US: false,
+    CA: false,
+    UK: false,
+    AE: false,
+    AU: false
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -1390,23 +1404,38 @@ const Purchase: React.FC = () => {
   };
 
   // 亚马逊模板管理相关函数
-  const fetchTemplateFiles = async (country?: string) => {
+  const fetchTemplateFiles = async (country: string) => {
     try {
-      setTemplateLoading(true);
-      const queryParam = country ? `?country=${country}` : '';
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates${queryParam}`);
+      setTemplateLoading(prev => ({ ...prev, [country]: true }));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${country}`);
       
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
       
       const result = await res.json();
-      setTemplateFiles(result.data || []);
+      setAllTemplateFiles(prev => ({
+        ...prev,
+        [country]: result.data || []
+      }));
     } catch (error) {
-      console.error('获取模板列表失败:', error);
-      message.error('获取模板列表失败');
+      console.error(`获取${country}站点模板列表失败:`, error);
+      message.error(`获取${country}站点模板列表失败`);
     } finally {
-      setTemplateLoading(false);
+      setTemplateLoading(prev => ({ ...prev, [country]: false }));
+    }
+  };
+
+  // 批量获取所有站点的模板文件
+  const fetchAllTemplateFiles = async () => {
+    const countries = ['US', 'CA', 'UK', 'AE', 'AU'];
+    const promises = countries.map(country => fetchTemplateFiles(country));
+    
+    try {
+      await Promise.all(promises);
+      console.log('所有站点模板数据加载完成');
+    } catch (error) {
+      console.error('批量加载模板数据时发生错误:', error);
     }
   };
 
@@ -1427,17 +1456,17 @@ const Purchase: React.FC = () => {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('country', selectedCountry);
+    formData.append('country', activeTabKey);
     formData.append('originalFileName', file.name);
 
     try {
-      setTemplateLoading(true);
+      setTemplateLoading(prev => ({ ...prev, [activeTabKey]: true }));
       
       // 添加更详细的上传日志
       console.log('📤 开始上传亚马逊模板:', {
         fileName: file.name,
         fileSize: file.size,
-        country: selectedCountry
+        country: activeTabKey
       });
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/upload`, {
@@ -1456,7 +1485,7 @@ const Purchase: React.FC = () => {
       message.success(result.message);
       
       // 重新获取模板列表
-      await fetchTemplateFiles(selectedCountry);
+      await fetchTemplateFiles(activeTabKey);
       
     } catch (error) {
       console.error('上传模板失败:', error);
@@ -1477,7 +1506,7 @@ const Purchase: React.FC = () => {
       
       message.error(errorMessage);
     } finally {
-      setTemplateLoading(false);
+      setTemplateLoading(prev => ({ ...prev, [activeTabKey]: false }));
       // 清空文件选择
       if (templateFileInputRef.current) {
         templateFileInputRef.current.value = '';
@@ -1487,7 +1516,7 @@ const Purchase: React.FC = () => {
 
   const handleTemplateDelete = async (objectName: string) => {
     try {
-      setTemplateLoading(true);
+      setTemplateLoading(prev => ({ ...prev, [activeTabKey]: true }));
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/${encodeURIComponent(objectName)}`, {
         method: 'DELETE',
       });
@@ -1500,13 +1529,13 @@ const Purchase: React.FC = () => {
       message.success(result.message);
       
       // 重新获取模板列表
-      await fetchTemplateFiles(selectedCountry);
+      await fetchTemplateFiles(activeTabKey);
       
     } catch (error) {
       console.error('删除模板失败:', error);
       message.error('删除模板失败');
     } finally {
-      setTemplateLoading(false);
+      setTemplateLoading(prev => ({ ...prev, [activeTabKey]: false }));
     }
   };
 
@@ -1522,15 +1551,112 @@ const Purchase: React.FC = () => {
 
   const handleOpenTemplateModal = () => {
     setTemplateModalVisible(true);
-    fetchTemplateFiles(selectedCountry);
+    fetchAllTemplateFiles();
   };
 
-  const handleCountryChange = (country: string) => {
-    setSelectedCountry(country);
-    fetchTemplateFiles(country);
+  const handleTabChange = (key: string) => {
+    setActiveTabKey(key);
   };
 
+  // 渲染每个站点的标签页内容
+  const renderTabContent = (countryCode: string, countryName: string) => {
+    const currentFiles = allTemplateFiles[countryCode] || [];
+    const isLoading = templateLoading[countryCode] || false;
 
+    return (
+      <Space direction="vertical" style={{ width: '100%' }}>
+        {/* 文件上传区域 */}
+        <div style={{ marginBottom: '16px', padding: '16px', background: '#f8f9fa', borderRadius: '6px' }}>
+          <Text strong style={{ color: '#1677ff' }}>上传 {countryName} 站点模板：</Text>
+          <div style={{ marginTop: '12px' }}>
+            <input
+              ref={templateFileInputRef}
+              type="file"
+              accept=".xlsx"
+              onChange={handleTemplateUpload}
+              style={{ display: 'none' }}
+            />
+            <Button 
+              icon={<UploadOutlined />}
+              onClick={() => templateFileInputRef.current?.click()}
+              loading={isLoading}
+              type="primary"
+              size="large"
+            >
+              选择Excel文件上传
+            </Button>
+            <Text type="secondary" style={{ marginLeft: '12px' }}>
+              仅支持 .xlsx 格式
+            </Text>
+          </div>
+        </div>
+
+        {/* 模板文件列表 */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <Text strong>{countryName} 站点模板列表：</Text>
+            <Text type="secondary">共 {currentFiles.length} 个文件</Text>
+          </div>
+          
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Text>加载中...</Text>
+            </div>
+          ) : (
+            <List
+              size="small"
+              style={{ maxHeight: '400px', overflow: 'auto' }}
+              dataSource={currentFiles}
+              renderItem={(file: any) => (
+                <List.Item
+                  style={{
+                    padding: '12px 16px',
+                    border: '1px solid #f0f0f0',
+                    borderRadius: '6px',
+                    marginBottom: '8px'
+                  }}
+                  actions={[
+                    <Button
+                      type="link"
+                      icon={<DownloadOutlined />}
+                      onClick={() => handleTemplateDownload(file.name, file.fileName)}
+                      style={{ color: '#1677ff' }}
+                    >
+                      下载
+                    </Button>,
+                    <Popconfirm
+                      title="确定要删除这个模板吗？"
+                      onConfirm={() => handleTemplateDelete(file.name)}
+                      okText="确定"
+                      cancelText="取消"
+                    >
+                      <Button
+                        type="link"
+                        danger
+                        icon={<DeleteOutlined />}
+                      >
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={<Text strong>{file.fileName}</Text>}
+                    description={
+                      <Text type="secondary">
+                        大小: {(file.size / 1024).toFixed(1)} KB | 上传时间: {new Date(file.lastModified).toLocaleString()}
+                      </Text>
+                    }
+                  />
+                </List.Item>
+              )}
+              locale={{ emptyText: `暂无${countryName}站点模板文件` }}
+            />
+          )}
+        </div>
+      </Space>
+    );
+  };
 
   // 生成英国资料表处理函数
   const handleGenerateUkDataSheet = () => {
@@ -2539,99 +2665,40 @@ const Purchase: React.FC = () => {
          open={templateModalVisible}
          onCancel={() => setTemplateModalVisible(false)}
          footer={null}
-         width={900}
+         width={1000}
        >
-         <Space direction="vertical" style={{ width: '100%' }}>
-           {/* 站点选择 */}
-           <div style={{ marginBottom: '16px' }}>
-             <Text strong>选择站点：</Text>
-             <Select
-               value={selectedCountry}
-               onChange={handleCountryChange}
-               style={{ width: 200, marginLeft: '8px' }}
-               loading={templateLoading}
-                         >
-              <Select.Option value="US">美国</Select.Option>
-              <Select.Option value="CA">加拿大</Select.Option>
-              <Select.Option value="UK">英国</Select.Option>
-              <Select.Option value="AE">阿联酋</Select.Option>
-              <Select.Option value="AU">澳大利亚</Select.Option>
-            </Select>
-           </div>
-
-           {/* 文件上传 */}
-           <div style={{ marginBottom: '16px' }}>
-             <Text strong>上传新模板：</Text>
-             <div style={{ marginTop: '8px' }}>
-               <input
-                 ref={templateFileInputRef}
-                 type="file"
-                 accept=".xlsx"
-                 onChange={handleTemplateUpload}
-                 style={{ display: 'none' }}
-               />
-               <Button 
-                 icon={<UploadOutlined />}
-                 onClick={() => templateFileInputRef.current?.click()}
-                 loading={templateLoading}
-               >
-                 选择Excel文件上传
-               </Button>
-               <Text type="secondary" style={{ marginLeft: '8px' }}>
-                 仅支持 .xlsx 格式
-               </Text>
-             </div>
-           </div>
-
-           {/* 模板列表 */}
-           <div>
-             <Text strong>当前模板列表 ({selectedCountry}站点)：</Text>
-             {templateLoading ? (
-               <div style={{ textAlign: 'center', padding: '20px' }}>
-                 <Text>加载中...</Text>
-               </div>
-             ) : (
-               <List
-                 size="small"
-                 style={{ marginTop: '8px', maxHeight: '300px', overflow: 'auto' }}
-                 dataSource={templateFiles}
-                 renderItem={(file: any) => (
-                   <List.Item
-                     actions={[
-                       <Button
-                         type="link"
-                         icon={<DownloadOutlined />}
-                         onClick={() => handleTemplateDownload(file.name, file.fileName)}
-                       >
-                         下载
-                       </Button>,
-                       <Popconfirm
-                         title="确定要删除这个模板吗？"
-                         onConfirm={() => handleTemplateDelete(file.name)}
-                         okText="确定"
-                         cancelText="取消"
-                       >
-                         <Button
-                           type="link"
-                           danger
-                           icon={<DeleteOutlined />}
-                         >
-                           删除
-                         </Button>
-                       </Popconfirm>
-                     ]}
-                   >
-                     <List.Item.Meta
-                       title={file.fileName}
-                       description={`大小: ${(file.size / 1024).toFixed(1)} KB | 上传时间: ${new Date(file.lastModified).toLocaleString()}`}
-                     />
-                   </List.Item>
-                 )}
-                 locale={{ emptyText: '暂无模板文件' }}
-               />
-             )}
-           </div>
-         </Space>
+         <Tabs
+           activeKey={activeTabKey}
+           onChange={handleTabChange}
+           type="card"
+           items={[
+             {
+               key: 'US',
+               label: '美国 (US)',
+               children: renderTabContent('US', '美国')
+             },
+             {
+               key: 'CA',
+               label: '加拿大 (CA)',
+               children: renderTabContent('CA', '加拿大')
+             },
+             {
+               key: 'UK',
+               label: '英国 (UK)',
+               children: renderTabContent('UK', '英国')
+             },
+             {
+               key: 'AE',
+               label: '阿联酋 (AE)',
+               children: renderTabContent('AE', '阿联酋')
+             },
+             {
+               key: 'AU',
+               label: '澳大利亚 (AU)',
+               children: renderTabContent('AU', '澳大利亚')
+             }
+           ]}
+         />
              </Modal>
 
       {/* 生成其他站点资料表弹窗 */}
