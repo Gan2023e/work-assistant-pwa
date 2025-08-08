@@ -1815,7 +1815,6 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     }
 
     // 解析上传的Excel文件
-    const xlsx = require('xlsx');
     const workbook = xlsx.read(uploadedFile.buffer);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
@@ -1901,7 +1900,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
-    const xlsx = require('xlsx');
     const workbook = xlsx.read(uploadedFile.buffer);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
@@ -1986,7 +1984,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤5: 使用xlsx库处理模板文件
     console.log('📊 开始使用xlsx库处理Excel文件...');
-    const xlsx = require('xlsx');
     
     // 解析模板文件
     const templateWorkbook = xlsx.read(downloadResult.content);
@@ -2300,7 +2297,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
-    const xlsx = require('xlsx');
     const workbook = xlsx.read(uploadedFile.buffer);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
@@ -2386,7 +2382,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     // 步骤5: 使用xlsx库处理模板文件
     console.log('📊 开始使用xlsx库处理Excel文件...');
-    const xlsx = require('xlsx');
     
     // 解析模板文件
     const templateWorkbook = xlsx.read(downloadResult.content);
