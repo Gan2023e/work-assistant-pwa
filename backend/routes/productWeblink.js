@@ -21,13 +21,6 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB限制
   },
   fileFilter: (req, file, cb) => {
-    console.log('📁 收到文件:', {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    });
-    
     // 允许Excel文件
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
@@ -37,7 +30,6 @@ const upload = multer({
     if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls)$/i)) {
       cb(null, true);
     } else {
-      console.error('❌ 不支持的文件类型:', file.mimetype, file.originalname);
       cb(new Error(`不支持的文件类型: ${file.mimetype}，请上传Excel文件(.xlsx或.xls)`));
     }
   }
@@ -523,14 +515,9 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 
 // 新的Excel上传（支持SKU, 链接, 备注）
 router.post('/upload-excel-new', (req, res) => {
-  const startTime = Date.now();
-  
   // 使用multer中间件，并处理可能的错误
   upload.single('file')(req, res, async (err) => {
     if (err) {
-      const processingTime = Date.now() - startTime;
-      console.error(`❌ 文件上传中间件错误 (耗时${processingTime}ms):`, err.message);
-      
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ message: '文件太大，请选择小于10MB的文件' });
       } else if (err.message.includes('不支持的文件类型')) {
@@ -541,60 +528,43 @@ router.post('/upload-excel-new', (req, res) => {
     }
     
     try {
-      console.log('📤 开始处理批量上传新品请求');
-      console.log('📋 请求详情:', {
-        hasFile: !!req.file,
-        bodyKeys: Object.keys(req.body),
-        enableDingTalkNotification: req.body.enableDingTalkNotification
-      });
-      
       if (!req.file) {
         return res.status(400).json({ message: '请选择Excel文件' });
       }
 
-    // 获取钉钉推送开关状态
-    const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
-    console.log('🔔 钉钉推送开关状态:', enableDingTalkNotification);
+          // 获取钉钉推送开关状态
+      const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
 
-    let workbook, data;
-    try {
-      console.log('📋 开始读取Excel文件...');
-      workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-      
-      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-        return res.status(400).json({ message: 'Excel文件无有效工作表，请检查文件格式' });
+      let workbook, data;
+      try {
+        workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          return res.status(400).json({ message: 'Excel文件无有效工作表，请检查文件格式' });
+        }
+        
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        if (!worksheet) {
+          return res.status(400).json({ message: 'Excel文件工作表为空，请添加数据后重新上传' });
+        }
+        
+        data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      } catch (excelError) {
+        return res.status(400).json({ message: 'Excel文件格式错误，请确保上传正确的.xlsx或.xls文件' });
       }
-      
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      
-      if (!worksheet) {
-        return res.status(400).json({ message: 'Excel文件工作表为空，请添加数据后重新上传' });
+
+          // 优化空表检查 - 快速失败
+      if (!data || data.length === 0) {
+        return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上传' });
       }
-      
-      data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-      console.log(`📊 Excel文件读取完成，共${data ? data.length : 0}行数据`);
-    } catch (excelError) {
-      console.error('❌ Excel文件读取失败:', excelError);
-      return res.status(400).json({ message: 'Excel文件格式错误，请确保上传正确的.xlsx或.xls文件' });
-    }
 
-    // 优化空表检查 - 快速失败
-    if (!data || data.length === 0) {
-      console.log('⚠️ 检测到空表，快速返回');
-      const errorMsg = 'Excel文件为空，请添加数据后重新上传';
-      console.log('🔔 返回错误信息:', errorMsg);
-      return res.status(400).json({ message: errorMsg });
-    }
-
-    // 检查是否有任何非空行
-    const hasValidData = data.some(row => row && row[0] && row[0].toString().trim());
-    if (!hasValidData) {
-      console.log('⚠️ 检测到无有效数据行，快速返回');
-      return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。' });
-    }
-
-    console.log('✅ 数据验证通过，开始处理数据...');
+      // 检查是否有任何非空行
+      const hasValidData = data.some(row => row && row[0] && row[0].toString().trim());
+      if (!hasValidData) {
+        return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。' });
+      }
     const newRecords = [];
     const errors = [];
     
@@ -638,49 +608,38 @@ router.post('/upload-excel-new', (req, res) => {
       }
     }
 
-    let resultMessage = '';
-    if (newRecords.length > 0) {
-      console.log(`💾 开始保存${newRecords.length}条新记录到数据库...`);
-      await ProductWeblink.bulkCreate(newRecords);
-      resultMessage = `成功上传 ${newRecords.length} 条新记录`;
-      
-      // 根据开关状态决定是否发送钉钉通知
-      if (enableDingTalkNotification) {
-        try {
-          console.log('📤 发送钉钉通知...');
-          await sendDingTalkNotification(newRecords.length);
-          console.log('✅ 钉钉通知发送成功');
-        } catch (notificationError) {
-          console.error('❌ 钉钉通知发送失败，但不影响数据保存:', notificationError.message);
+          let resultMessage = '';
+      if (newRecords.length > 0) {
+        await ProductWeblink.bulkCreate(newRecords);
+        resultMessage = `成功上传 ${newRecords.length} 条新记录`;
+        
+        // 根据开关状态决定是否发送钉钉通知
+        if (enableDingTalkNotification) {
+          try {
+            await sendDingTalkNotification(newRecords.length);
+          } catch (notificationError) {
+            // 钉钉通知发送失败不影响数据保存
+          }
         }
       } else {
-        console.log('🔕 钉钉推送开关关闭，跳过通知发送');
+        // 如果没有找到任何有效数据，返回错误
+        const errorMsg = errors.length > 0 
+          ? `没有找到有效的数据行。所有行都被跳过：\n${errors.join('\n')}`
+          : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。';
+        return res.status(400).json({ message: errorMsg });
       }
-    } else {
-      // 如果没有找到任何有效数据，返回错误
-      const errorMsg = errors.length > 0 
-        ? `没有找到有效的数据行。所有行都被跳过：\n${errors.join('\n')}`
-        : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。';
-      return res.status(400).json({ message: errorMsg });
-    }
 
-    if (errors.length > 0) {
-      resultMessage += `\n跳过的记录：\n${errors.join('\n')}`;
-    }
+      if (errors.length > 0) {
+        resultMessage += `\n跳过的记录：\n${errors.join('\n')}`;
+      }
 
-    const processingTime = Date.now() - startTime;
-    console.log(`⏱️ 批量上传处理完成，耗时 ${processingTime}ms`);
-
-    res.json({ 
-      message: resultMessage,
-      count: newRecords.length,
-      errors: errors,
-      processingTime: processingTime
-    });
+      res.json({ 
+        message: resultMessage,
+        count: newRecords.length,
+        errors: errors
+      });
 
     } catch (err) {
-      const processingTime = Date.now() - startTime;
-      console.error(`❌ 文件上传失败 (耗时${processingTime}ms):`, err);
       res.status(500).json({ message: '文件上传失败: ' + err.message });
     }
   });

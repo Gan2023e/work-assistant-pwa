@@ -199,7 +199,7 @@ const Purchase: React.FC = () => {
   const { tasks: backgroundTasks, addTask, updateTask, removeTask, hasRunningTasks } = useTaskContext();
 
   // 添加钉钉推送开关状态
-  const [enableDingTalkNotification, setEnableDingTalkNotification] = useState(false);
+  const [enableDingTalkNotification, setEnableDingTalkNotification] = useState(true);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1133,13 +1133,7 @@ const Purchase: React.FC = () => {
     formData.append('file', file);
     formData.append('enableDingTalkNotification', enableDingTalkNotification.toString());
 
-    console.log('📤 准备上传文件:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      enableDingTalkNotification: enableDingTalkNotification,
-      apiUrl: `${API_BASE_URL}/api/product_weblink/upload-excel-new`
-    });
+
 
     setLoading(true);
     fetch(`${API_BASE_URL}/api/product_weblink/upload-excel-new`, {
@@ -1147,8 +1141,6 @@ const Purchase: React.FC = () => {
       body: formData,
     })
       .then(async res => {
-        console.log('📤 上传响应状态:', res.status, res.statusText);
-        
         if (!res.ok) {
           // 尝试解析错误响应
           let errorMessage = `服务器错误 (${res.status}): ${res.statusText}`;
@@ -1157,15 +1149,12 @@ const Purchase: React.FC = () => {
             const contentType = res.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
               const errorData = await res.json();
-              console.error('❌ 服务器错误响应:', errorData);
               errorMessage = errorData.message || errorMessage;
             } else {
-              console.error('❌ 服务器返回非JSON响应');
               const textResponse = await res.text();
-              console.error('响应内容:', textResponse);
             }
           } catch (parseError) {
-            console.error('❌ 解析错误响应失败:', parseError);
+            // 解析失败时保持默认错误信息
           }
           
           throw new Error(errorMessage);
@@ -1173,11 +1162,10 @@ const Purchase: React.FC = () => {
         return res.json();
       })
       .then(result => {
-        console.log('✅ 上传成功响应:', result);
         message.success(result.message);
         setUploadModalVisible(false);
-        // 重置钉钉推送开关为关闭状态
-        setEnableDingTalkNotification(false);
+        // 重置钉钉推送开关为默认开启状态
+        setEnableDingTalkNotification(true);
         if (result.count > 0) {
           // 刷新数据和统计信息
           handleSearch();
@@ -1185,8 +1173,6 @@ const Purchase: React.FC = () => {
         }
       })
       .catch(e => {
-        console.error('上传失败:', e);
-        
         // 确保错误信息正确显示
         let errorMessage = '上传失败';
         if (e.message) {
@@ -2572,7 +2558,7 @@ const Purchase: React.FC = () => {
         open={uploadModalVisible}
         onCancel={() => {
           setUploadModalVisible(false);
-          setEnableDingTalkNotification(false);
+          setEnableDingTalkNotification(true);
         }}
         footer={null}
         width={500}
