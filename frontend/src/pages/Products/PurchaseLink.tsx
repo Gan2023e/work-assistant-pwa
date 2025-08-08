@@ -1133,9 +1133,16 @@ const Purchase: React.FC = () => {
       method: 'POST',
       body: formData,
     })
-      .then(res => {
+      .then(async res => {
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          // 尝试解析错误响应
+          try {
+            const errorData = await res.json();
+            throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+          } catch (jsonError) {
+            // 如果无法解析JSON，使用默认错误信息
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
         }
         return res.json();
       })

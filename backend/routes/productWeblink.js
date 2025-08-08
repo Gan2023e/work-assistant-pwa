@@ -10,6 +10,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const path = require('path');
 const pdf = require('pdf-parse');
+const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
 // 配置multer用于文件上传
@@ -506,6 +507,11 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
+    // 检查是否为空表
+    if (!data || data.length === 0) {
+      return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上传' });
+    }
+
     const newRecords = [];
     const errors = [];
     
@@ -561,7 +567,11 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
         console.error('钉钉通知发送失败，但不影响数据保存:', notificationError.message);
       }
     } else {
-      resultMessage = '没有找到有效的数据行';
+      // 如果没有找到任何有效数据，返回错误
+      const errorMsg = errors.length > 0 
+        ? `没有找到有效的数据行。所有行都被跳过：\n${errors.join('\n')}`
+        : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。';
+      return res.status(400).json({ message: errorMsg });
     }
 
     if (errors.length > 0) {
