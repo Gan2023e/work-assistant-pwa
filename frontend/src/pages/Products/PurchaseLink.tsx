@@ -23,7 +23,8 @@ import {
   Badge,
   Tag,
   Progress,
-  Tabs
+  Tabs,
+  Switch
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -196,6 +197,9 @@ const Purchase: React.FC = () => {
 
   // 使用全局任务上下文
   const { tasks: backgroundTasks, addTask, updateTask, removeTask, hasRunningTasks } = useTaskContext();
+
+  // 添加钉钉推送开关状态
+  const [enableDingTalkNotification, setEnableDingTalkNotification] = useState(false);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1127,6 +1131,7 @@ const Purchase: React.FC = () => {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('enableDingTalkNotification', enableDingTalkNotification.toString());
 
     setLoading(true);
     fetch(`${API_BASE_URL}/api/product_weblink/upload-excel-new`, {
@@ -1149,6 +1154,8 @@ const Purchase: React.FC = () => {
       .then(result => {
         message.success(result.message);
         setUploadModalVisible(false);
+        // 重置钉钉推送开关为关闭状态
+        setEnableDingTalkNotification(false);
         if (result.count > 0) {
           // 刷新数据和统计信息
           handleSearch();
@@ -2533,7 +2540,10 @@ const Purchase: React.FC = () => {
       <Modal
         title="批量上传新品"
         open={uploadModalVisible}
-        onCancel={() => setUploadModalVisible(false)}
+        onCancel={() => {
+          setUploadModalVisible(false);
+          setEnableDingTalkNotification(false);
+        }}
         footer={null}
         width={500}
       >
@@ -2546,6 +2556,35 @@ const Purchase: React.FC = () => {
               <li>C列：备注</li>
               <li>从第一行开始，无需表头</li>
             </ul>
+          </div>
+          
+          {/* 钉钉推送开关 */}
+          <div style={{ 
+            marginBottom: '16px', 
+            padding: '12px', 
+            backgroundColor: '#f6f8fa', 
+            borderRadius: '6px',
+            border: '1px solid #e1e4e8'
+          }}>
+            <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <Text strong style={{ color: '#1890ff' }}>
+                  推送钉钉通知
+                </Text>
+                <div style={{ marginTop: '4px' }}>
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    上传新品成功后推送消息到钉钉群
+                  </Text>
+                </div>
+              </div>
+              <Switch
+                checked={enableDingTalkNotification}
+                onChange={setEnableDingTalkNotification}
+                checkedChildren="开"
+                unCheckedChildren="关"
+                style={{ backgroundColor: enableDingTalkNotification ? '#52c41a' : '#d9d9d9' }}
+              />
+            </Space>
           </div>
           
           <div>

@@ -497,21 +497,56 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 
 // 新的Excel上传（支持SKU, 链接, 备注）
 router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
+  
   try {
+    console.log('📤 开始处理批量上传新品请求');
+    
     if (!req.file) {
       return res.status(400).json({ message: '请选择Excel文件' });
     }
 
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+    // 获取钉钉推送开关状态
+    const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
+    console.log('🔔 钉钉推送开关状态:', enableDingTalkNotification);
 
-    // 检查是否为空表
+    let workbook, data;
+    try {
+      console.log('📋 开始读取Excel文件...');
+      workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        return res.status(400).json({ message: 'Excel文件无有效工作表，请检查文件格式' });
+      }
+      
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      
+      if (!worksheet) {
+        return res.status(400).json({ message: 'Excel文件工作表为空，请添加数据后重新上传' });
+      }
+      
+      data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      console.log(`📊 Excel文件读取完成，共${data ? data.length : 0}行数据`);
+    } catch (excelError) {
+      console.error('❌ Excel文件读取失败:', excelError);
+      return res.status(400).json({ message: 'Excel文件格式错误，请确保上传正确的.xlsx或.xls文件' });
+    }
+
+    // 优化空表检查 - 快速失败
     if (!data || data.length === 0) {
+      console.log('⚠️ 检测到空表，快速返回');
       return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上传' });
     }
 
+    // 检查是否有任何非空行
+    const hasValidData = data.some(row => row && row[0] && row[0].toString().trim());
+    if (!hasValidData) {
+      console.log('⚠️ 检测到无有效数据行，快速返回');
+      return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。' });
+    }
+
+    console.log('✅ 数据验证通过，开始处理数据...');
     const newRecords = [];
     const errors = [];
     
@@ -557,14 +592,21 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
 
     let resultMessage = '';
     if (newRecords.length > 0) {
+      console.log(`💾 开始保存${newRecords.length}条新记录到数据库...`);
       await ProductWeblink.bulkCreate(newRecords);
       resultMessage = `成功上传 ${newRecords.length} 条新记录`;
       
-      // 发送钉钉通知
-      try {
-        await sendDingTalkNotification(newRecords.length);
-      } catch (notificationError) {
-        console.error('钉钉通知发送失败，但不影响数据保存:', notificationError.message);
+      // 根据开关状态决定是否发送钉钉通知
+      if (enableDingTalkNotification) {
+        try {
+          console.log('📤 发送钉钉通知...');
+          await sendDingTalkNotification(newRecords.length);
+          console.log('✅ 钉钉通知发送成功');
+        } catch (notificationError) {
+          console.error('❌ 钉钉通知发送失败，但不影响数据保存:', notificationError.message);
+        }
+      } else {
+        console.log('🔕 钉钉推送开关关闭，跳过通知发送');
       }
     } else {
       // 如果没有找到任何有效数据，返回错误
@@ -578,14 +620,19 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
       resultMessage += `\n跳过的记录：\n${errors.join('\n')}`;
     }
 
+    const processingTime = Date.now() - startTime;
+    console.log(`⏱️ 批量上传处理完成，耗时 ${processingTime}ms`);
+
     res.json({ 
       message: resultMessage,
       count: newRecords.length,
-      errors: errors
+      errors: errors,
+      processingTime: processingTime
     });
 
   } catch (err) {
-    console.error(err);
+    const processingTime = Date.now() - startTime;
+    console.error(`❌ 文件上传失败 (耗时${processingTime}ms):`, err);
     res.status(500).json({ message: '文件上传失败: ' + err.message });
   }
 });
