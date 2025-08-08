@@ -579,7 +579,16 @@ const Purchase: React.FC = () => {
 
         message.success(notifications.join('；'));
         await loadCpcFiles(currentRecord.id); // 刷新CPC文件列表
-        handleSearch(); // 刷新表格数据
+        
+        // 只有在有搜索条件或筛选条件时才刷新表格数据
+        const hasSearchInput = input.trim().length > 0;
+        const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+        
+        if (hasSearchInput) {
+          handleSearch();
+        } else if (hasFilters) {
+          applyFilters(filters);
+        }
       } else {
         message.error('所有文件上传失败');
       }
@@ -640,7 +649,15 @@ const Purchase: React.FC = () => {
         // 刷新表格数据
         if (result.data.cpcStatusUpdated || 
             (result.data.extractedData && (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge))) {
-          handleSearch();
+          
+          const hasSearchInput = input.trim().length > 0;
+          const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+          
+          if (hasSearchInput) {
+            handleSearch();
+          } else if (hasFilters) {
+            applyFilters(filters);
+          }
         }
       } else {
         message.error('上传失败');
@@ -720,7 +737,16 @@ const Purchase: React.FC = () => {
         message.success('信息应用成功');
         setExtractedDataVisible(false);
         setPendingExtractedData(null);
-        handleSearch(); // 刷新表格数据
+        
+        // 刷新表格数据
+        const hasSearchInput = input.trim().length > 0;
+        const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+        
+        if (hasSearchInput) {
+          handleSearch();
+        } else if (hasFilters) {
+          applyFilters(filters);
+        }
       } else {
         message.error('信息应用失败');
       }
@@ -798,8 +824,11 @@ const Purchase: React.FC = () => {
         // 有筛选条件，重新筛选
         applyFilters(filters);
       } else {
-        // 无筛选，重新拉取全部数据
-        handleSearch();
+        // 无筛选，只有在有搜索输入时才重新搜索
+        const hasSearchInput = input.trim().length > 0;
+        if (hasSearchInput) {
+          handleSearch();
+        }
       }
     } catch (e) {
       console.error('批量更新失败:', e);
@@ -1167,9 +1196,18 @@ const Purchase: React.FC = () => {
         // 重置钉钉推送开关为默认开启状态
         setEnableDingTalkNotification(true);
         if (result.count > 0) {
-          // 刷新数据和统计信息
-          handleSearch();
+          // 刷新统计信息
           fetchAllDataStatistics();
+          
+          // 只有在有搜索条件或筛选条件时才刷新搜索结果
+          const hasSearchInput = input.trim().length > 0;
+          const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+          
+          if (hasSearchInput) {
+            handleSearch();
+          } else if (hasFilters) {
+            applyFilters(filters);
+          }
         }
       })
       .catch(e => {
