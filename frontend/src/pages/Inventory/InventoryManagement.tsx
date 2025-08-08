@@ -3,6 +3,7 @@ import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, P
 import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
+import type { FormInstance } from 'antd/es/form';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
 import InventoryCreateModal from '../../components/InventoryCreateModal';
@@ -68,19 +69,19 @@ const sortRecordsByMixedBox = (records: InventoryRecord[]): InventoryRecord[] =>
       return a.sku.localeCompare(b.sku);
     }
     
-    // 如果只有一个有混合箱编号，则混合箱记录按时间和编号混合排序
+    // 如果只有一个有混合箱编号，则混合箱记录按时间和编号混合排序（降序）
     if (a.mix_box_num && !b.mix_box_num) {
-      // 比较混合箱的时间和整箱的时间
-      return new Date(a.time).getTime() - new Date(b.time).getTime();
+      // 比较混合箱的时间和整箱的时间（降序）
+      return new Date(b.time).getTime() - new Date(a.time).getTime();
     }
     
     if (!a.mix_box_num && b.mix_box_num) {
-      // 比较整箱的时间和混合箱的时间
-      return new Date(a.time).getTime() - new Date(b.time).getTime();
+      // 比较整箱的时间和混合箱的时间（降序）
+      return new Date(b.time).getTime() - new Date(a.time).getTime();
     }
     
-    // 如果都没有混合箱编号（都是整箱），按时间排序
-    return new Date(a.time).getTime() - new Date(b.time).getTime();
+    // 如果都没有混合箱编号（都是整箱），按时间降序排序
+    return new Date(b.time).getTime() - new Date(a.time).getTime();
   });
 };
 
@@ -167,12 +168,12 @@ const InventoryManagement: React.FC = () => {
   // 编辑模态框
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<InventoryRecord | null>(null);
-  const [editForm] = Form.useForm();
+  const [editForm] = Form.useForm<any>();
 
   // 混合箱批量编辑
   const [mixedBoxEditVisible, setMixedBoxEditVisible] = useState(false);
   const [editingMixedBoxRecords, setEditingMixedBoxRecords] = useState<InventoryRecord[]>([]);
-  const [mixedBoxEditForm] = Form.useForm();
+  const [mixedBoxEditForm] = Form.useForm<any>();
 
   // 混合箱悬停高亮
   const [hoveredMixedBox, setHoveredMixedBox] = useState<string | null>(null);
@@ -391,7 +392,7 @@ const InventoryManagement: React.FC = () => {
   // 编辑记录
   const handleEdit = (record: InventoryRecord) => {
     setEditingRecord(record);
-    editForm.setFieldsValue({
+    (editForm as any).setFieldsValue({
       sku: record.sku,
       total_quantity: record.total_quantity,
       total_boxes: record.total_boxes,
@@ -405,7 +406,7 @@ const InventoryManagement: React.FC = () => {
   // 保存编辑
   const handleSaveEdit = async () => {
     try {
-      const values = await editForm.validateFields();
+      const values = await (editForm as any).validateFields();
       const response = await fetch(`/api/inventory/edit/${editingRecord?.记录号}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -580,7 +581,7 @@ const InventoryManagement: React.FC = () => {
       marketPlace: record.marketPlace
     }));
     
-    mixedBoxEditForm.setFieldsValue({
+    (mixedBoxEditForm as any).setFieldsValue({
       mixBoxNum: mixBoxNum,
       records: formData
     });
@@ -591,7 +592,7 @@ const InventoryManagement: React.FC = () => {
   // 保存混合箱批量编辑
   const handleSaveMixedBoxEdit = async () => {
     try {
-      const values = await mixedBoxEditForm.validateFields();
+      const values = await (mixedBoxEditForm as any).validateFields();
       const { records } = values;
       
       // 批量更新记录
