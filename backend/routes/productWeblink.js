@@ -1984,25 +1984,41 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`✅ ${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
-    // 步骤5: 使用ExcelJS处理模板文件
-    console.log('📊 开始使用ExcelJS处理Excel文件，保留原有格式...');
-    const ExcelJS = require('exceljs');
+    // 步骤5: 使用xlsx库处理模板文件
+    console.log('📊 开始使用xlsx库处理Excel文件...');
+    const xlsx = require('xlsx');
     
-    const templateWorkbook = new ExcelJS.Workbook();
-    await templateWorkbook.xlsx.load(downloadResult.content);
+    // 解析模板文件
+    const templateWorkbook = xlsx.read(downloadResult.content);
+    const templateSheetName = templateWorkbook.SheetNames[0];
+    const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
     
-    const templateWorksheet = templateWorkbook.getWorksheet(1);
     if (!templateWorksheet) {
       return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
     }
 
+    // 将模板转换为数组格式以便处理
+    const templateData = xlsx.utils.sheet_to_aoa(templateWorksheet);
+    console.log(`📋 模板有 ${templateData.length} 行数据`);
+
     // 步骤6: 映射数据到模板
     console.log('🎯 开始映射数据到模板...');
-    await mapDataToTemplate(templateWorksheet, savedRecords, country);
+    const updatedData = mapDataToTemplateXlsx(templateData, savedRecords, country);
 
-    // 步骤7: 生成并返回文件
+    // 步骤7: 创建新的工作簿并写入数据
     console.log('📤 生成最终文件...');
-    const outputBuffer = await templateWorkbook.xlsx.writeBuffer();
+    const newWorkbook = xlsx.utils.book_new();
+    const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+    
+    // 复制原模板的列宽设置
+    if (templateWorksheet['!cols']) {
+      newWorksheet['!cols'] = templateWorksheet['!cols'];
+    }
+    
+    xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, templateSheetName);
+    
+    // 生成Excel文件buffer
+    const outputBuffer = xlsx.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
     
     const fileName = `${country}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
     
@@ -2027,20 +2043,15 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
   }
 });
 
-// 映射数据到模板的辅助函数
-async function mapDataToTemplate(worksheet, records, country) {
+// 映射数据到模板的辅助函数（基于xlsx库）
+function mapDataToTemplateXlsx(templateData, records, country) {
   try {
     console.log(`🎯 开始映射 ${records.length} 条记录到${country}模板...`);
     
-    // 读取当前数据（使用xlsx来解析现有数据，因为更稳定）
-    const xlsx = require('xlsx');
-    const buffer = await worksheet.workbook.xlsx.writeBuffer();
-    const workbook = xlsx.read(buffer);
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_aoa(sheet);
-
-    console.log(`📋 模板有 ${data.length} 行数据`);
+    // 复制模板数据
+    const updatedData = templateData.map(row => [...(row || [])]);
+    
+    console.log(`📋 模板有 ${updatedData.length} 行数据`);
 
     // 查找列位置（在第3行查找标题，索引为2）
     let itemSkuCol = -1;
@@ -2064,8 +2075,8 @@ async function mapDataToTemplate(worksheet, records, country) {
     
     const missingColumns = [];
     
-    if (data.length >= 3 && data[2]) {
-      data[2].forEach((header, colIndex) => {
+    if (updatedData.length >= 3 && updatedData[2]) {
+      updatedData[2].forEach((header, colIndex) => {
         if (header) {
           const cellValue = header.toString().toLowerCase();
           if (cellValue === 'item_sku') {
@@ -2123,11 +2134,9 @@ async function mapDataToTemplate(worksheet, records, country) {
       }
     });
     
-         if (missingColumns.length > 0) {
-       console.warn(`⚠️ 模板中缺少以下列: ${missingColumns.join(', ')}`);
-       // 如果有缺失列，可以在这里添加更详细的处理逻辑
-       // 但根据需求，我们继续处理，只是记录警告
-     }
+    if (missingColumns.length > 0) {
+      console.warn(`⚠️ 模板中缺少以下列: ${missingColumns.join(', ')}`);
+    }
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
 
@@ -2158,167 +2167,110 @@ async function mapDataToTemplate(worksheet, records, country) {
     const processImageUrl = (url) => {
       if (!url) return url;
       
-      // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，UK改成US
+      // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，JiaYou改成SellerFun
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
-        return url.replace(/UK/g, 'US').replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+        return url.replace(/JiaYou/g, 'SellerFun');
       }
       
-      // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，US改成UK
+      // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，SellerFun改成JiaYou
       if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA') {
-        return url.replace(/US/g, 'UK').replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
+        return url.replace(/SellerFun/g, 'JiaYou');
       }
       
       return url;
     };
 
-    // 确保数据数组有足够的行
-    const totalRowsNeeded = 4 + records.length;
-    while (data.length < totalRowsNeeded) {
-      data.push([]);
-    }
+    // 清空现有数据行（保留前3行：标题、说明等）
+    const headerRowCount = 3;
+    updatedData.splice(headerRowCount);
 
-    // 从第4行开始填写数据（索引为3）
-    let currentRowIndex = 3;
-    
+    // 添加新数据
+    let addedCount = 0;
     records.forEach((record, index) => {
-      const maxColIndex = Math.max(
+      const rowIndex = headerRowCount + index;
+      
+      // 确保行存在
+      if (!updatedData[rowIndex]) {
+        updatedData[rowIndex] = [];
+      }
+      
+      // 确保行有足够的列
+      const maxCol = Math.max(
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
-        mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, 
-        otherImageUrl3Col, otherImageUrl4Col, otherImageUrl5Col,
-        productDescriptionCol, bulletPoint1Col, bulletPoint2Col,
-        bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+        mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
+        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
       );
-
-      // 确保当前行有足够的列
-      while (data[currentRowIndex].length <= maxColIndex) {
-        data[currentRowIndex].push('');
-      }
-
-      // 填写数据，处理SKU前缀的特殊情况
-      if (itemSkuCol !== -1 && record.item_sku) {
-        let processedSku = record.item_sku;
-        
-        // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，UK改为US
-        if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA') && processedSku.startsWith('UK')) {
-          processedSku = 'US' + processedSku.substring(2);
-        }
-        
-        // 如果源文件是美国/加拿大，在生成非美国/加拿大资料表时，US改为UK
-        if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA' && processedSku.startsWith('US')) {
-          processedSku = 'UK' + processedSku.substring(2);
-        }
-        
-        data[currentRowIndex][itemSkuCol] = processedSku;
-      }
       
-      // 处理标题字段，应用文本转换
-      if (itemNameCol !== -1 && record.item_name) {
-        data[currentRowIndex][itemNameCol] = processTextContent(record.item_name);
-      }
-      
-      if (colorNameCol !== -1 && record.color_name) {
-        data[currentRowIndex][colorNameCol] = record.color_name;
-      }
-      
-      if (sizeNameCol !== -1 && record.size_name) {
-        data[currentRowIndex][sizeNameCol] = record.size_name;
-      }
-      
-      // 处理品牌字段，应用文本转换
-      if (brandNameCol !== -1 && record.brand_name) {
-        data[currentRowIndex][brandNameCol] = processTextContent(record.brand_name);
+      for (let i = updatedData[rowIndex].length; i <= maxCol; i++) {
+        updatedData[rowIndex][i] = '';
       }
 
-      // 处理制造商字段，应用文本转换
-      if (manufacturerCol !== -1 && record.manufacturer) {
-        data[currentRowIndex][manufacturerCol] = processTextContent(record.manufacturer);
+      // 填充数据
+      if (itemSkuCol !== -1) {
+        updatedData[rowIndex][itemSkuCol] = record.item_sku || '';
+      }
+      if (itemNameCol !== -1) {
+        updatedData[rowIndex][itemNameCol] = processTextContent(record.item_name) || '';
+      }
+      if (colorNameCol !== -1) {
+        updatedData[rowIndex][colorNameCol] = record.color_name || '';
+      }
+      if (sizeNameCol !== -1) {
+        updatedData[rowIndex][sizeNameCol] = record.size_name || '';
+      }
+      if (brandNameCol !== -1) {
+        updatedData[rowIndex][brandNameCol] = processTextContent(record.brand_name) || '';
+      }
+      if (manufacturerCol !== -1) {
+        updatedData[rowIndex][manufacturerCol] = processTextContent(record.manufacturer) || '';
+      }
+      if (mainImageUrlCol !== -1) {
+        updatedData[rowIndex][mainImageUrlCol] = processImageUrl(record.main_image_url) || '';
+      }
+      if (otherImageUrl1Col !== -1) {
+        updatedData[rowIndex][otherImageUrl1Col] = processImageUrl(record.other_image_url1) || '';
+      }
+      if (otherImageUrl2Col !== -1) {
+        updatedData[rowIndex][otherImageUrl2Col] = processImageUrl(record.other_image_url2) || '';
+      }
+      if (otherImageUrl3Col !== -1) {
+        updatedData[rowIndex][otherImageUrl3Col] = processImageUrl(record.other_image_url3) || '';
+      }
+      if (otherImageUrl4Col !== -1) {
+        updatedData[rowIndex][otherImageUrl4Col] = processImageUrl(record.other_image_url4) || '';
+      }
+      if (otherImageUrl5Col !== -1) {
+        updatedData[rowIndex][otherImageUrl5Col] = processImageUrl(record.other_image_url5) || '';
+      }
+      if (productDescriptionCol !== -1) {
+        updatedData[rowIndex][productDescriptionCol] = processTextContent(record.product_description) || '';
+      }
+      if (bulletPoint1Col !== -1) {
+        updatedData[rowIndex][bulletPoint1Col] = processTextContent(record.bullet_point1) || '';
+      }
+      if (bulletPoint2Col !== -1) {
+        updatedData[rowIndex][bulletPoint2Col] = processTextContent(record.bullet_point2) || '';
+      }
+      if (bulletPoint3Col !== -1) {
+        updatedData[rowIndex][bulletPoint3Col] = processTextContent(record.bullet_point3) || '';
+      }
+      if (bulletPoint4Col !== -1) {
+        updatedData[rowIndex][bulletPoint4Col] = processTextContent(record.bullet_point4) || '';
+      }
+      if (bulletPoint5Col !== -1) {
+        updatedData[rowIndex][bulletPoint5Col] = processTextContent(record.bullet_point5) || '';
       }
 
-      if (mainImageUrlCol !== -1 && record.main_image_url) {
-        data[currentRowIndex][mainImageUrlCol] = processImageUrl(record.main_image_url);
-      }
-      
-      if (otherImageUrl1Col !== -1 && record.other_image_url1) {
-        data[currentRowIndex][otherImageUrl1Col] = processImageUrl(record.other_image_url1);
-      }
-      
-      if (otherImageUrl2Col !== -1 && record.other_image_url2) {
-        data[currentRowIndex][otherImageUrl2Col] = processImageUrl(record.other_image_url2);
-      }
-      
-      if (otherImageUrl3Col !== -1 && record.other_image_url3) {
-        data[currentRowIndex][otherImageUrl3Col] = processImageUrl(record.other_image_url3);
-      }
-      
-      if (otherImageUrl4Col !== -1 && record.other_image_url4) {
-        data[currentRowIndex][otherImageUrl4Col] = processImageUrl(record.other_image_url4);
-      }
-      
-      if (otherImageUrl5Col !== -1 && record.other_image_url5) {
-        data[currentRowIndex][otherImageUrl5Col] = processImageUrl(record.other_image_url5);
-      }
-
-      // 填写其他字段，对可能包含品牌信息的字段也应用文本转换
-      if (productDescriptionCol !== -1 && record.product_description) {
-        data[currentRowIndex][productDescriptionCol] = processTextContent(record.product_description);
-      }
-      
-      if (bulletPoint1Col !== -1 && record.bullet_point1) {
-        data[currentRowIndex][bulletPoint1Col] = processTextContent(record.bullet_point1);
-      }
-      
-      if (bulletPoint2Col !== -1 && record.bullet_point2) {
-        data[currentRowIndex][bulletPoint2Col] = processTextContent(record.bullet_point2);
-      }
-      
-      if (bulletPoint3Col !== -1 && record.bullet_point3) {
-        data[currentRowIndex][bulletPoint3Col] = processTextContent(record.bullet_point3);
-      }
-      
-      if (bulletPoint4Col !== -1 && record.bullet_point4) {
-        data[currentRowIndex][bulletPoint4Col] = processTextContent(record.bullet_point4);
-      }
-      
-      if (bulletPoint5Col !== -1 && record.bullet_point5) {
-        data[currentRowIndex][bulletPoint5Col] = processTextContent(record.bullet_point5);
-      }
-
-      currentRowIndex++;
+      addedCount++;
     });
 
-    // 将处理后的数据写回工作表
-    console.log('💾 写入处理后的数据到工作表...');
+    console.log(`✅ 数据映射完成，添加了 ${addedCount} 行数据到${country}模板`);
     
-    // 清空现有数据
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 3) { // 保留前3行（模板头部）
-        row.eachCell((cell) => {
-          cell.value = null;
-        });
-      }
-    });
-
-    // 写入新数据
-    data.forEach((row, rowIndex) => {
-      if (rowIndex >= 3) { // 从第4行开始写入数据
-        const worksheetRow = worksheet.getRow(rowIndex + 1);
-        row.forEach((cellValue, colIndex) => {
-          if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
-            worksheetRow.getCell(colIndex + 1).value = cellValue;
-          }
-        });
-        worksheetRow.commit();
-      }
-    });
-
-    console.log(`✅ 成功映射 ${records.length} 条记录到${country}模板`);
+    return updatedData;
     
-    if (missingColumns.length > 0) {
-      console.warn(`⚠️ 注意：模板中缺少以下列: ${missingColumns.join(', ')}`);
-    }
-
   } catch (error) {
-    console.error('❌ 映射数据到模板时发生错误:', error);
+    console.error('❌ 映射数据到模板失败:', error);
     throw error;
   }
 }
@@ -2432,25 +2384,41 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     console.log(`🔄 转换了 ${transformedRecords.length} 条记录，SKU从${sourceCountry}前缀转换为${targetCountry}前缀`);
 
-    // 步骤5: 使用ExcelJS处理模板文件
-    console.log('📊 开始使用ExcelJS处理Excel文件，保留原有格式...');
-    const ExcelJS = require('exceljs');
+    // 步骤5: 使用xlsx库处理模板文件
+    console.log('📊 开始使用xlsx库处理Excel文件...');
+    const xlsx = require('xlsx');
     
-    const templateWorkbook = new ExcelJS.Workbook();
-    await templateWorkbook.xlsx.load(downloadResult.content);
+    // 解析模板文件
+    const templateWorkbook = xlsx.read(downloadResult.content);
+    const templateSheetName = templateWorkbook.SheetNames[0];
+    const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
     
-    const templateWorksheet = templateWorkbook.getWorksheet(1);
     if (!templateWorksheet) {
       return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
     }
 
+    // 将模板转换为数组格式以便处理
+    const templateData = xlsx.utils.sheet_to_aoa(templateWorksheet);
+    console.log(`📋 模板有 ${templateData.length} 行数据`);
+
     // 步骤6: 映射数据到模板
     console.log('🎯 开始映射转换后的数据到模板...');
-    await mapDataToTemplate(templateWorksheet, transformedRecords, targetCountry);
+    const updatedData = mapDataToTemplateXlsx(templateData, transformedRecords, targetCountry);
 
-    // 步骤7: 生成并返回文件
+    // 步骤7: 创建新的工作簿并写入数据
     console.log('📤 生成最终文件...');
-    const outputBuffer = await templateWorkbook.xlsx.writeBuffer();
+    const newWorkbook = xlsx.utils.book_new();
+    const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+    
+    // 复制原模板的列宽设置
+    if (templateWorksheet['!cols']) {
+      newWorksheet['!cols'] = templateWorksheet['!cols'];
+    }
+    
+    xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, templateSheetName);
+    
+    // 生成Excel文件buffer
+    const outputBuffer = xlsx.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
     
     const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
     

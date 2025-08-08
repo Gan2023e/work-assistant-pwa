@@ -2236,7 +2236,7 @@ const Purchase: React.FC = () => {
             border: '1px solid #91d5ff'
           }}>
             <Text strong style={{ color: '#0958d9' }}>
-              💡 推荐操作：一键生成其他站点资料表
+              一键生成其他站点资料表
             </Text>
             <br />
             <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>
@@ -2354,30 +2354,7 @@ const Purchase: React.FC = () => {
           </div>
         )}
 
-        {/* 单个生成按钮（保留原功能） */}
-        <div style={{ textAlign: 'center' }}>
-          <Button
-            type="default"
-            size="large"
-            loading={isLoading}
-            disabled={!currentFile}
-            onClick={async () => {
-              if (!currentFile) {
-                message.warning('请先上传Excel文件');
-                return;
-              }
-              
-              // 设置当前站点为活动标签页
-              setActiveSiteTabKey(countryCode);
-              
-              // 调用生成函数
-              await handleOtherSiteModalOk();
-            }}
-            style={{ minWidth: '200px' }}
-          >
-            仅生成 {countryName} 站点资料表
-          </Button>
-        </div>
+
       </Space>
     );
   };
