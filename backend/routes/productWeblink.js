@@ -15,7 +15,33 @@ const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB限制
+  },
+  fileFilter: (req, file, cb) => {
+    console.log('📁 收到文件:', {
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
+    // 允许Excel文件
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel' // .xls
+    ];
+    
+    if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls)$/i)) {
+      cb(null, true);
+    } else {
+      console.error('❌ 不支持的文件类型:', file.mimetype, file.originalname);
+      cb(new Error(`不支持的文件类型: ${file.mimetype}，请上传Excel文件(.xlsx或.xls)`));
+    }
+  }
+});
 
 // 配置CPC文件上传中间件
 const cpcStorage = multer.memoryStorage();
@@ -496,15 +522,35 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 });
 
 // 新的Excel上传（支持SKU, 链接, 备注）
-router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
+router.post('/upload-excel-new', (req, res) => {
   const startTime = Date.now();
   
-  try {
-    console.log('📤 开始处理批量上传新品请求');
-    
-    if (!req.file) {
-      return res.status(400).json({ message: '请选择Excel文件' });
+  // 使用multer中间件，并处理可能的错误
+  upload.single('file')(req, res, async (err) => {
+    if (err) {
+      const processingTime = Date.now() - startTime;
+      console.error(`❌ 文件上传中间件错误 (耗时${processingTime}ms):`, err.message);
+      
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: '文件太大，请选择小于10MB的文件' });
+      } else if (err.message.includes('不支持的文件类型')) {
+        return res.status(400).json({ message: err.message });
+      } else {
+        return res.status(400).json({ message: '文件上传失败: ' + err.message });
+      }
     }
+    
+    try {
+      console.log('📤 开始处理批量上传新品请求');
+      console.log('📋 请求详情:', {
+        hasFile: !!req.file,
+        bodyKeys: Object.keys(req.body),
+        enableDingTalkNotification: req.body.enableDingTalkNotification
+      });
+      
+      if (!req.file) {
+        return res.status(400).json({ message: '请选择Excel文件' });
+      }
 
     // 获取钉钉推送开关状态
     const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
@@ -630,11 +676,12 @@ router.post('/upload-excel-new', upload.single('file'), async (req, res) => {
       processingTime: processingTime
     });
 
-  } catch (err) {
-    const processingTime = Date.now() - startTime;
-    console.error(`❌ 文件上传失败 (耗时${processingTime}ms):`, err);
-    res.status(500).json({ message: '文件上传失败: ' + err.message });
-  }
+    } catch (err) {
+      const processingTime = Date.now() - startTime;
+      console.error(`❌ 文件上传失败 (耗时${processingTime}ms):`, err);
+      res.status(500).json({ message: '文件上传失败: ' + err.message });
+    }
+  });
 });
 
 // 筛选数据接口

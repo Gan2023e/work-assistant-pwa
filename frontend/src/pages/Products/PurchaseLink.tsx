@@ -1133,20 +1133,32 @@ const Purchase: React.FC = () => {
     formData.append('file', file);
     formData.append('enableDingTalkNotification', enableDingTalkNotification.toString());
 
+    console.log('📤 准备上传文件:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      enableDingTalkNotification: enableDingTalkNotification,
+      apiUrl: `${API_BASE_URL}/api/product_weblink/upload-excel-new`
+    });
+
     setLoading(true);
     fetch(`${API_BASE_URL}/api/product_weblink/upload-excel-new`, {
       method: 'POST',
       body: formData,
     })
       .then(async res => {
+        console.log('📤 上传响应状态:', res.status, res.statusText);
+        
         if (!res.ok) {
           // 尝试解析错误响应
           try {
             const errorData = await res.json();
-            throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+            console.error('❌ 服务器错误响应:', errorData);
+            throw new Error(errorData.message || `服务器错误 (${res.status}): ${res.statusText}`);
           } catch (jsonError) {
+            console.error('❌ 无法解析错误响应，状态码:', res.status);
             // 如果无法解析JSON，使用默认错误信息
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            throw new Error(`服务器错误 (${res.status}): ${res.statusText}`);
           }
         }
         return res.json();
