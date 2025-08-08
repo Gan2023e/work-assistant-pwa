@@ -1151,19 +1151,29 @@ const Purchase: React.FC = () => {
         
         if (!res.ok) {
           // 尝试解析错误响应
+          let errorMessage = `服务器错误 (${res.status}): ${res.statusText}`;
+          
           try {
-            const errorData = await res.json();
-            console.error('❌ 服务器错误响应:', errorData);
-            throw new Error(errorData.message || `服务器错误 (${res.status}): ${res.statusText}`);
-          } catch (jsonError) {
-            console.error('❌ 无法解析错误响应，状态码:', res.status);
-            // 如果无法解析JSON，使用默认错误信息
-            throw new Error(`服务器错误 (${res.status}): ${res.statusText}`);
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const errorData = await res.json();
+              console.error('❌ 服务器错误响应:', errorData);
+              errorMessage = errorData.message || errorMessage;
+            } else {
+              console.error('❌ 服务器返回非JSON响应');
+              const textResponse = await res.text();
+              console.error('响应内容:', textResponse);
+            }
+          } catch (parseError) {
+            console.error('❌ 解析错误响应失败:', parseError);
           }
+          
+          throw new Error(errorMessage);
         }
         return res.json();
       })
       .then(result => {
+        console.log('✅ 上传成功响应:', result);
         message.success(result.message);
         setUploadModalVisible(false);
         // 重置钉钉推送开关为关闭状态
@@ -1176,7 +1186,15 @@ const Purchase: React.FC = () => {
       })
       .catch(e => {
         console.error('上传失败:', e);
-        message.error('上传失败: ' + e.message);
+        
+        // 确保错误信息正确显示
+        let errorMessage = '上传失败';
+        if (e.message) {
+          // 如果错误信息已经包含"上传失败"，就不重复添加
+          errorMessage = e.message.includes('上传失败') ? e.message : `上传失败: ${e.message}`;
+        }
+        
+        message.error(errorMessage);
       })
       .finally(() => {
         setLoading(false);

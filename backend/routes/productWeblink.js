@@ -582,7 +582,9 @@ router.post('/upload-excel-new', (req, res) => {
     // 优化空表检查 - 快速失败
     if (!data || data.length === 0) {
       console.log('⚠️ 检测到空表，快速返回');
-      return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上传' });
+      const errorMsg = 'Excel文件为空，请添加数据后重新上传';
+      console.log('🔔 返回错误信息:', errorMsg);
+      return res.status(400).json({ message: errorMsg });
     }
 
     // 检查是否有任何非空行
