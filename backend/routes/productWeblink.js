@@ -1853,7 +1853,7 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     }
 
     // 解析模板文件的列（第3行）
-    const templateWorkbook = xlsx.read(downloadResult.buffer);
+    const templateWorkbook = xlsx.read(downloadResult.content);
     const templateSheetName = templateWorkbook.SheetNames[0];
     const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
     const templateData = xlsx.utils.sheet_to_json(templateWorksheet, { header: 1 });
@@ -1989,7 +1989,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const ExcelJS = require('exceljs');
     
     const templateWorkbook = new ExcelJS.Workbook();
-    await templateWorkbook.xlsx.load(downloadResult.buffer);
+    await templateWorkbook.xlsx.load(downloadResult.content);
     
     const templateWorksheet = templateWorkbook.getWorksheet(1);
     if (!templateWorksheet) {
@@ -2437,7 +2437,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     const ExcelJS = require('exceljs');
     
     const templateWorkbook = new ExcelJS.Workbook();
-    await templateWorkbook.xlsx.load(downloadResult.buffer);
+    await templateWorkbook.xlsx.load(downloadResult.content);
     
     const templateWorksheet = templateWorkbook.getWorksheet(1);
     if (!templateWorksheet) {
