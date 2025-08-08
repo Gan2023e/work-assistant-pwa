@@ -9,6 +9,7 @@ import {
   Modal, 
   Popconfirm,
   Form,
+  FormInstance,
   Tooltip,
   Typography,
   Card,
@@ -41,7 +42,10 @@ import {
   PlusOutlined,
   DownloadOutlined,
   CheckCircleOutlined,
-  FileExcelOutlined
+  FileExcelOutlined,
+  ClockCircleOutlined,
+  LoadingOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -100,7 +104,7 @@ const Purchase: React.FC = () => {
   const [data, setData] = useState<ProductRecord[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
-  const [editForm] = Form.useForm();
+  const [editForm] = Form.useForm<any>();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
@@ -179,6 +183,22 @@ const Purchase: React.FC = () => {
     UK: false,
     AE: false,
     AU: false
+  });
+  // 批量生成状态
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [generatedFiles, setGeneratedFiles] = useState<Record<string, { blob: Blob; fileName: string } | null>>({
+    US: null,
+    CA: null,
+    UK: null,
+    AE: null,
+    AU: null
+  });
+  const [batchProgress, setBatchProgress] = useState<Record<string, 'pending' | 'processing' | 'completed' | 'failed'>>({
+    US: 'pending',
+    CA: 'pending',
+    UK: 'pending',
+    AE: 'pending',
+    AU: 'pending'
   });
   const [missingColumnsModalVisible, setMissingColumnsModalVisible] = useState(false);
   const [missingColumnsInfo, setMissingColumnsInfo] = useState<{
@@ -1082,19 +1102,15 @@ const Purchase: React.FC = () => {
     return fieldNameMap[field] || field;
   };
 
-  // 双击编辑单元格
+  // 双击编辑处理
   const handleCellDoubleClick = (record: ProductRecord, field: string) => {
-    if (field === 'id' || field === 'update_time' || field === 'check_time') {
-      return; // 这些字段不允许编辑
-    }
-
     setEditingCell({
       id: record.id,
       field,
-      value: record[field as keyof ProductRecord] as string || ''
+      value: record[field as keyof ProductRecord]?.toString() || ''
     });
     setEditModalVisible(true);
-    editForm.setFieldsValue({ value: record[field as keyof ProductRecord] || '' });
+    (editForm as any).setFieldsValue({ value: record[field as keyof ProductRecord] || '' });
   };
 
   // 保存编辑
@@ -1102,7 +1118,7 @@ const Purchase: React.FC = () => {
     if (!editingCell) return;
 
     try {
-      const values = await editForm.validateFields();
+      const values = await (editForm as any).validateFields();
       const updateData = { [editingCell.field]: values.value };
 
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${editingCell.id}`, {
@@ -1118,7 +1134,7 @@ const Purchase: React.FC = () => {
       message.success('更新成功');
       setEditModalVisible(false);
       setEditingCell(null);
-      editForm.resetFields();
+      (editForm as any).resetFields();
       
       // 更新本地数据
       setData(prevData => 
@@ -2018,11 +2034,134 @@ const Purchase: React.FC = () => {
   };
 
   // 确认继续生成（即使有缺失列）
-  const handleConfirmGenerateWithMissingColumns = async () => {
+  const handleContinueGenerate = async () => {
     setMissingColumnsModalVisible(false);
-    setMissingColumnsInfo(null);
-    setOtherSiteLoading(prev => ({ ...prev, [activeSiteTabKey]: true }));
     await generateOtherSiteDataSheet();
+  };
+
+  // 批量生成其他站点资料表
+  const handleBatchGenerateOtherSites = async () => {
+    const sourceCountry = activeSiteTabKey;
+    const sourceFile = uploadedExcelFiles[sourceCountry];
+    
+    if (!sourceFile) {
+      message.warning('请先上传源站点的Excel文件');
+      return;
+    }
+
+    setBatchGenerating(true);
+    setGeneratedFiles({
+      US: null,
+      CA: null,
+      UK: null,
+      AE: null,
+      AU: null
+    });
+    
+    // 获取其他站点（除了当前选择的站点）
+    const allCountries = ['US', 'CA', 'UK', 'AE', 'AU'];
+    const otherCountries = allCountries.filter(country => country !== sourceCountry);
+    
+    // 重置进度状态
+    const initialProgress: Record<string, 'pending' | 'processing' | 'completed' | 'failed'> = {};
+    allCountries.forEach(country => {
+      initialProgress[country] = country === sourceCountry ? 'completed' : 'pending';
+    });
+    setBatchProgress(initialProgress);
+
+    let successCount = 0;
+    const results: Record<string, { blob: Blob; fileName: string } | null> = {
+      US: null, CA: null, UK: null, AE: null, AU: null
+    };
+
+    try {
+      // 串行生成每个站点的资料表
+      for (const targetCountry of otherCountries) {
+        try {
+          // 更新进度状态
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'processing' }));
+          
+          const formData = new FormData();
+          formData.append('file', sourceFile);
+          formData.append('sourceCountry', sourceCountry);
+          formData.append('targetCountry', targetCountry);
+
+          const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-batch-other-site-datasheet`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            throw new Error(`生成${targetCountry}站点资料表失败: ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+          
+          results[targetCountry] = { blob, fileName };
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'completed' }));
+          successCount++;
+          
+        } catch (error: any) {
+          console.error(`生成${targetCountry}站点资料表失败:`, error);
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'failed' }));
+          message.error(`生成${targetCountry}站点资料表失败: ${error.message}`);
+        }
+      }
+
+      setGeneratedFiles(results);
+      
+      if (successCount > 0) {
+        message.success(`成功生成${successCount}个站点的资料表`);
+      } else {
+        message.error('所有站点资料表生成失败');
+      }
+      
+    } catch (error: any) {
+      console.error('批量生成失败:', error);
+      message.error('批量生成失败: ' + error.message);
+    } finally {
+      setBatchGenerating(false);
+    }
+  };
+
+  // 下载单个生成的文件
+  const downloadGeneratedFile = (country: string) => {
+    const fileData = generatedFiles[country];
+    if (!fileData) {
+      message.warning('该文件尚未生成');
+      return;
+    }
+
+    const url = window.URL.createObjectURL(fileData.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileData.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 5000);
+  };
+
+  // 批量下载所有生成的文件
+  const downloadAllGeneratedFiles = () => {
+    const availableFiles = Object.entries(generatedFiles).filter(([_, fileData]) => fileData !== null);
+    
+    if (availableFiles.length === 0) {
+      message.warning('没有可下载的文件');
+      return;
+    }
+
+    availableFiles.forEach(([country, fileData]) => {
+      if (fileData) {
+        setTimeout(() => downloadGeneratedFile(country), 100); // 稍微错开下载时间
+      }
+    });
+    
+    message.success(`开始下载${availableFiles.length}个文件`);
   };
 
   // 处理Excel文件上传
@@ -2040,6 +2179,7 @@ const Purchase: React.FC = () => {
   const renderSiteTabContent = (countryCode: string, countryName: string) => {
     const currentFile = uploadedExcelFiles[countryCode];
     const isLoading = otherSiteLoading[countryCode] || false;
+    const progress = batchProgress[countryCode];
 
     return (
       <Space direction="vertical" style={{ width: '100%' }} size="large">
@@ -2087,10 +2227,137 @@ const Purchase: React.FC = () => {
           </div>
         )}
 
-        {/* 生成按钮 */}
+        {/* 批量生成提示和按钮 */}
+        {currentFile && (
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: '#e6f7ff', 
+            borderRadius: '6px',
+            border: '1px solid #91d5ff'
+          }}>
+            <Text strong style={{ color: '#0958d9' }}>
+              💡 推荐操作：一键生成其他站点资料表
+            </Text>
+            <br />
+            <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>
+              上传 {countryName} 站点的数据后，可以一键生成其他4个站点的资料表
+            </Text>
+            <div style={{ marginTop: '12px', textAlign: 'center' }}>
+              <Button
+                type="primary"
+                size="large"
+                icon={<CloudUploadOutlined />}
+                loading={batchGenerating}
+                disabled={!currentFile || batchGenerating}
+                onClick={handleBatchGenerateOtherSites}
+                style={{ minWidth: '300px' }}
+              >
+                {batchGenerating ? '正在生成其他站点资料表...' : '一键生成其他4个站点资料表'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 批量生成进度显示 */}
+        {batchGenerating && (
+          <div style={{ padding: '16px', backgroundColor: '#fff2e8', borderRadius: '6px' }}>
+            <Text strong>生成进度：</Text>
+            <div style={{ marginTop: '12px' }}>
+              {['US', 'CA', 'UK', 'AE', 'AU'].map(country => {
+                const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                const status = batchProgress[country];
+                const isSource = country === countryCode;
+                
+                let statusIcon = <ClockCircleOutlined style={{ color: '#d9d9d9' }} />;
+                let statusColor = '#d9d9d9';
+                let statusText = '等待中';
+                
+                if (isSource) {
+                  statusIcon = <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+                  statusColor = '#52c41a';
+                  statusText = '源文件';
+                } else if (status === 'processing') {
+                  statusIcon = <LoadingOutlined style={{ color: '#1890ff' }} />;
+                  statusColor = '#1890ff';
+                  statusText = '生成中...';
+                } else if (status === 'completed') {
+                  statusIcon = <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+                  statusColor = '#52c41a';
+                  statusText = '已完成';
+                } else if (status === 'failed') {
+                  statusIcon = <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+                  statusColor = '#ff4d4f';
+                  statusText = '失败';
+                }
+                
+                return (
+                  <div key={country} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    padding: '8px 0',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>
+                    <Space>
+                      {statusIcon}
+                      <Text>{countryNames[country as keyof typeof countryNames]} ({country})</Text>
+                    </Space>
+                    <Text style={{ color: statusColor }}>{statusText}</Text>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 下载区域 */}
+        {Object.values(generatedFiles).some(file => file !== null) && (
+          <div style={{ padding: '16px', backgroundColor: '#f6ffed', borderRadius: '6px' }}>
+            <Text strong style={{ color: '#389e0d' }}>📥 生成完成，可以下载文件：</Text>
+            <div style={{ marginTop: '12px' }}>
+              {['US', 'CA', 'UK', 'AE', 'AU'].map(country => {
+                const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                const fileData = generatedFiles[country];
+                const isSource = country === countryCode;
+                
+                if (isSource || !fileData) return null;
+                
+                return (
+                  <div key={country} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    padding: '8px 0',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>
+                    <Text>{countryNames[country as keyof typeof countryNames]} ({country}) 资料表</Text>
+                    <Button 
+                      type="link" 
+                      icon={<DownloadOutlined />}
+                      onClick={() => downloadGeneratedFile(country)}
+                    >
+                      下载
+                    </Button>
+                  </div>
+                );
+              })}
+              <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                <Button 
+                  type="primary"
+                  icon={<DownloadOutlined />}
+                  onClick={downloadAllGeneratedFiles}
+                >
+                  批量下载所有文件
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 单个生成按钮（保留原功能） */}
         <div style={{ textAlign: 'center' }}>
           <Button
-            type="primary"
+            type="default"
             size="large"
             loading={isLoading}
             disabled={!currentFile}
@@ -2108,7 +2375,7 @@ const Purchase: React.FC = () => {
             }}
             style={{ minWidth: '200px' }}
           >
-            生成 {countryName} 站点资料表
+            仅生成 {countryName} 站点资料表
           </Button>
         </div>
       </Space>
@@ -2534,7 +2801,7 @@ const Purchase: React.FC = () => {
         onCancel={() => {
           setEditModalVisible(false);
           setEditingCell(null);
-          editForm.resetFields();
+          (editForm as any).resetFields();
         }}
         okText="保存"
         cancelText="取消"
@@ -2928,6 +3195,22 @@ const Purchase: React.FC = () => {
             AE: null,
             AU: null
           });
+          // 重置批量生成状态
+          setBatchGenerating(false);
+          setGeneratedFiles({
+            US: null,
+            CA: null,
+            UK: null,
+            AE: null,
+            AU: null
+          });
+          setBatchProgress({
+            US: 'pending',
+            CA: 'pending',
+            UK: 'pending',
+            AE: 'pending',
+            AU: 'pending'
+          });
         }}
         footer={null}
         width={1000}
@@ -2970,7 +3253,7 @@ const Purchase: React.FC = () => {
       <Modal
         title="列差异提示"
         open={missingColumnsModalVisible}
-        onOk={handleConfirmGenerateWithMissingColumns}
+        onOk={handleContinueGenerate}
         onCancel={() => {
           setMissingColumnsModalVisible(false);
           setMissingColumnsInfo(null);

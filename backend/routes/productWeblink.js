@@ -2323,5 +2323,156 @@ async function mapDataToTemplate(worksheet, records, country) {
   }
 }
 
+// 批量生成其他站点资料表（基于源站点数据）
+router.post('/generate-batch-other-site-datasheet', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    console.log('🔄 收到批量生成其他站点资料表请求');
+    
+    const { sourceCountry, targetCountry } = req.body;
+    const uploadedFile = req.file;
+    
+    if (!sourceCountry || !targetCountry || !uploadedFile) {
+      return res.status(400).json({ 
+        message: '请提供源站点、目标站点信息和Excel文件' 
+      });
+    }
+    
+    if (sourceCountry === targetCountry) {
+      return res.status(400).json({ 
+        message: '源站点和目标站点不能相同' 
+      });
+    }
+
+    console.log(`📝 处理批量生成: ${sourceCountry} -> ${targetCountry}, 文件: ${uploadedFile.originalname}`);
+
+    // 步骤1: 解析上传的Excel文件
+    console.log('📖 解析上传的Excel文件...');
+    const xlsx = require('xlsx');
+    const workbook = xlsx.read(uploadedFile.buffer);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
+    }
+
+    // 步骤2: 获取目标国家的模板文件
+    console.log(`🔍 查找${targetCountry}站点的模板文件...`);
+    
+    const targetTemplate = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        country: targetCountry,
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']]
+    });
+    
+    if (!targetTemplate) {
+      return res.status(400).json({ 
+        message: `未找到${targetCountry}站点的资料模板，请先上传${targetCountry}模板文件` 
+      });
+    }
+
+    console.log(`📄 使用${targetCountry}模板: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
+
+    // 步骤3: 下载目标模板文件
+    console.log(`📥 下载${targetCountry}模板文件...`);
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const downloadResult = await downloadTemplateFromOSS(targetTemplate.oss_object_name);
+    
+    if (!downloadResult.success) {
+      console.error(`❌ 下载${targetCountry}模板失败:`, downloadResult.message);
+      return res.status(500).json({ 
+        message: `下载${targetCountry}模板失败: ${downloadResult.message}`,
+        details: downloadResult.error
+      });
+    }
+
+    console.log(`✅ ${targetCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+
+    // 步骤4: 处理数据转换
+    console.log('🔄 开始数据转换处理...');
+    const { ProductInformation } = require('../models');
+    
+    // 获取标题行（假设在第一行）
+    const headers = jsonData[0];
+    const dataRows = jsonData.slice(1);
+    
+    const transformedRecords = [];
+    
+    for (const row of dataRows) {
+      if (!row || row.length === 0) continue;
+      
+      // 创建数据对象
+      const rowData = {};
+      headers.forEach((header, index) => {
+        if (header && row[index] !== undefined) {
+          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[index];
+        }
+      });
+      
+      // 关键转换：将源站点的SKU转换为目标站点的SKU
+      if (rowData.item_sku && rowData.item_sku.length > 2) {
+        // 保存原始SKU（去掉前两个字符）作为original_parent_sku
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+        
+        // 生成目标站点的SKU：目标站点前缀 + 原始SKU的后部分
+        rowData.item_sku = targetCountry + rowData.item_sku.substring(2);
+      }
+      
+      // 设置site字段为目标国家
+      rowData.site = targetCountry;
+      
+      transformedRecords.push(rowData);
+    }
+
+    console.log(`🔄 转换了 ${transformedRecords.length} 条记录，SKU从${sourceCountry}前缀转换为${targetCountry}前缀`);
+
+    // 步骤5: 使用ExcelJS处理模板文件
+    console.log('📊 开始使用ExcelJS处理Excel文件，保留原有格式...');
+    const ExcelJS = require('exceljs');
+    
+    const templateWorkbook = new ExcelJS.Workbook();
+    await templateWorkbook.xlsx.load(downloadResult.buffer);
+    
+    const templateWorksheet = templateWorkbook.getWorksheet(1);
+    if (!templateWorksheet) {
+      return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
+    }
+
+    // 步骤6: 映射数据到模板
+    console.log('🎯 开始映射转换后的数据到模板...');
+    await mapDataToTemplate(templateWorksheet, transformedRecords, targetCountry);
+
+    // 步骤7: 生成并返回文件
+    console.log('📤 生成最终文件...');
+    const outputBuffer = await templateWorkbook.xlsx.writeBuffer();
+    
+    const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', outputBuffer.length);
+    
+    const processingTime = Date.now() - startTime;
+    console.log(`✅ 批量生成${sourceCountry}到${targetCountry}资料表成功 (耗时: ${processingTime}ms)`);
+    
+    res.send(outputBuffer);
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    const errorMessage = error.message || '批量生成其他站点资料表时发生未知错误';
+    console.error(`❌ 批量生成其他站点资料表失败 (耗时: ${processingTime}ms):`, error);
+    
+    res.status(500).json({ 
+      message: errorMessage,
+      processingTime: processingTime
+    });
+  }
+});
 
 module.exports = router; 
