@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Input, Button, message, Space, InputNumber, Popconfirm, Tag, Statistic, Row, Col } from 'antd';
+import { Table, Card, Input, Button, message, Space, InputNumber, Popconfirm, Tag, Statistic, Row, Col, Modal, Form, Select } from 'antd';
 import { SearchOutlined, SaveOutlined, EditOutlined, UndoOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -36,6 +36,12 @@ const SkuPackagingConfig: React.FC = () => {
     configuredSkus: 0,
     unconfiguredSkus: 0,
   });
+
+  // 批量设置装箱数量
+  const [batchPackagingModalVisible, setBatchPackagingModalVisible] = useState(false);
+  const [batchPackagingForm] = Form.useForm();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedRows, setSelectedRows] = useState<SkuPackagingRecord[]>([]);
 
   // 通用API调用函数
   const apiCall = async (url: string, options: RequestInit = {}) => {
@@ -174,6 +180,54 @@ const SkuPackagingConfig: React.FC = () => {
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
     fetchData();
+  };
+
+  // 批量设置装箱数量
+  const handleBatchSetPackaging = async (values: any) => {
+    const { qty_per_box } = values;
+    
+    if (selectedRows.length === 0) {
+      message.warning('请先选择要设置装箱数量的SKU');
+      return;
+    }
+
+    try {
+      const updates = selectedRows.map(row => ({
+        skuid: row.skuid,
+        qty_per_box: parseInt(qty_per_box)
+      }));
+
+      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
+        method: 'PUT',
+        body: JSON.stringify({ updates }),
+      });
+
+      if (result.code === 0) {
+        message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量`);
+        setBatchPackagingModalVisible(false);
+        (batchPackagingForm as any).resetFields();
+        setSelectedRowKeys([]);
+        setSelectedRows([]);
+        fetchData();
+      } else {
+        message.error(result.message || '批量设置失败');
+      }
+    } catch (error) {
+      console.error('批量设置装箱数量失败:', error);
+      message.error('批量设置失败');
+    }
+  };
+
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[], newSelectedRows: SkuPackagingRecord[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+      setSelectedRows(newSelectedRows);
+    },
+    getCheckboxProps: (record: SkuPackagingRecord) => ({
+      name: record.skuid.toString(),
+    }),
   };
 
   const columns: ColumnsType<SkuPackagingRecord> = [
@@ -339,6 +393,16 @@ const SkuPackagingConfig: React.FC = () => {
             >
               重置
             </Button>
+            {selectedRowKeys.length > 0 && (
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={() => setBatchPackagingModalVisible(true)}
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                批量设置装箱数量 ({selectedRowKeys.length})
+              </Button>
+            )}
             {Object.keys(editing).length > 0 && (
               <>
                 <Button
@@ -364,6 +428,7 @@ const SkuPackagingConfig: React.FC = () => {
           dataSource={data}
           rowKey="skuid"
           loading={loading}
+          rowSelection={rowSelection}
           pagination={{
             ...pagination,
             showSizeChanger: true,
@@ -381,6 +446,49 @@ const SkuPackagingConfig: React.FC = () => {
           size="small"
         />
       </Card>
+
+      {/* 批量设置装箱数量模态框 */}
+      <Modal
+        title={`批量设置装箱数量 - 已选择 ${selectedRowKeys.length} 个SKU`}
+        visible={batchPackagingModalVisible}
+        onCancel={() => {
+          setBatchPackagingModalVisible(false);
+          (batchPackagingForm as any).resetFields();
+        }}
+        onOk={() => (batchPackagingForm as any).submit()}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 8 }}>📋 选中的SKU列表：</div>
+          <div style={{ maxHeight: 100, overflowY: 'auto' }}>
+            {selectedRows.map(row => (
+              <Tag key={row.skuid} style={{ margin: '2px 4px 2px 0' }}>
+                {row.child_sku}
+              </Tag>
+            ))}
+          </div>
+        </div>
+        <Form
+          form={batchPackagingForm}
+          layout="vertical"
+          onFinish={handleBatchSetPackaging}
+        >
+          <Form.Item
+            name="qty_per_box"
+            label="统一装箱数量 (个/箱)"
+            rules={[
+              { required: true, message: '请输入装箱数量' },
+              { type: 'number', min: 1, message: '装箱数量必须大于0' }
+            ]}
+          >
+            <InputNumber
+              min={1}
+              style={{ width: '100%' }}
+              placeholder="输入要设置的统一装箱数量"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

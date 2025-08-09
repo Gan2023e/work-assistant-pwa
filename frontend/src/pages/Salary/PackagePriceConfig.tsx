@@ -39,6 +39,12 @@ const PackagePriceConfig: React.FC = () => {
   const [form] = Form.useForm();
   const [allSkus, setAllSkus] = useState<string[]>([]);
 
+  // 批量设置价格模态框
+  const [batchPriceModalVisible, setBatchPriceModalVisible] = useState(false);
+  const [batchPriceForm] = Form.useForm();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedRows, setSelectedRows] = useState<PackagePriceRecord[]>([]);
+
   // 统计数据
   const [stats, setStats] = useState({
     totalSkus: 0,
@@ -283,6 +289,55 @@ const PackagePriceConfig: React.FC = () => {
     }
   };
 
+  // 批量设置价格
+  const handleBatchSetPrice = async (values: any) => {
+    const { priceType, price } = values;
+    
+    if (selectedRows.length === 0) {
+      message.warning('请先选择要设置价格的SKU');
+      return;
+    }
+
+    try {
+      const updates = selectedRows.map(row => ({
+        sku: row.sku,
+        type: priceType,
+        price: parseFloat(price)
+      }));
+
+      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices/batch`, {
+        method: 'PUT',
+        body: JSON.stringify({ updates }),
+      });
+
+      if (result.code === 0) {
+        message.success(`成功为 ${selectedRows.length} 个SKU设置${priceType}`);
+        setBatchPriceModalVisible(false);
+        (batchPriceForm as any).resetFields();
+        setSelectedRowKeys([]);
+        setSelectedRows([]);
+        fetchData();
+      } else {
+        message.error(result.message || '批量设置失败');
+      }
+    } catch (error) {
+      console.error('批量设置价格失败:', error);
+      message.error('批量设置失败');
+    }
+  };
+
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[], newSelectedRows: PackagePriceRecord[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+      setSelectedRows(newSelectedRows);
+    },
+    getCheckboxProps: (record: PackagePriceRecord) => ({
+      name: record.sku,
+    }),
+  };
+
   const columns: ColumnsType<PackagePriceRecord> = [
     {
       title: 'SKU',
@@ -522,6 +577,16 @@ const PackagePriceConfig: React.FC = () => {
             >
               批量新增价格
             </Button>
+            {selectedRowKeys.length > 0 && (
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={() => setBatchPriceModalVisible(true)}
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                批量设置价格 ({selectedRowKeys.length})
+              </Button>
+            )}
             {Object.keys(editing).length > 0 && (
               <>
                 <Button
@@ -547,6 +612,7 @@ const PackagePriceConfig: React.FC = () => {
           dataSource={data}
           rowKey="sku"
           loading={loading}
+          rowSelection={rowSelection}
           pagination={{
             ...pagination,
             showSizeChanger: true,
@@ -564,6 +630,60 @@ const PackagePriceConfig: React.FC = () => {
           size="small"
         />
       </Card>
+
+      {/* 批量设置价格模态框 */}
+      <Modal
+        title={`批量设置价格 - 已选择 ${selectedRowKeys.length} 个SKU`}
+        visible={batchPriceModalVisible}
+        onCancel={() => {
+          setBatchPriceModalVisible(false);
+          (batchPriceForm as any).resetFields();
+        }}
+        onOk={() => (batchPriceForm as any).submit()}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 8 }}>📋 选中的SKU列表：</div>
+          <div style={{ maxHeight: 100, overflowY: 'auto' }}>
+            {selectedRows.map(row => (
+              <Tag key={row.sku} style={{ margin: '2px 4px 2px 0' }}>
+                {row.sku}
+              </Tag>
+            ))}
+          </div>
+        </div>
+        <Form
+          form={batchPriceForm}
+          layout="vertical"
+          onFinish={handleBatchSetPrice}
+        >
+          <Form.Item
+            name="priceType"
+            label="价格类型"
+            rules={[{ required: true, message: '请选择价格类型' }]}
+          >
+            <Select placeholder="选择要设置的价格类型">
+              <Option value="一般价">一般价</Option>
+              <Option value="特殊价">特殊价</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="price"
+            label="统一单价 (元)"
+            rules={[
+              { required: true, message: '请输入单价' },
+              { type: 'number', min: 0.01, message: '单价必须大于0' }
+            ]}
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="输入要设置的统一单价"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 批量添加价格模态框 */}
       <Modal
