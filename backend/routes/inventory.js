@@ -732,7 +732,7 @@ router.put('/sku-packaging/batch', async (req, res) => {
     console.log('完整请求体:', JSON.stringify(req.body, null, 2));
     
     try {
-        const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
+        const { updates } = req.body;
         console.log('解析的updates:', JSON.stringify(updates, null, 2));
         
         if (!Array.isArray(updates) || updates.length === 0) {
@@ -743,67 +743,24 @@ router.put('/sku-packaging/batch', async (req, res) => {
             });
         }
         
-        // 简化验证数据逻辑，child_sku作为字符串处理
-        for (let i = 0; i < updates.length; i++) {
-            const update = updates[i];
-            console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
-            
-            // child_sku验证（字符串类型）
-            if (!update.child_sku) {
-                console.error(`子SKU 缺失 (项 ${i}):`, update);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的子SKU 不能为空`
-                });
-            }
-            
-            // 将child_sku转换为字符串确保类型正确
-            const childSkuStr = String(update.child_sku);
-            if (!childSkuStr || childSkuStr.trim() === '') {
-                console.error(`子SKU 无效 (项 ${i}):`, update);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的子SKU 无效`
-                });
-            }
-            
-            // qty_per_box验证（数字类型）
-            const qtyValue = Number(update.qty_per_box);
-            if (!update.qty_per_box && update.qty_per_box !== 0) {
-                console.error(`装箱数量缺失 (项 ${i}):`, update);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的装箱数量不能为空`
-                });
-            }
-            
-            if (qtyValue < 1) {
-                console.error(`装箱数量无效 (项 ${i}):`, update, '转换后的值:', qtyValue);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的装箱数量必须大于0，当前值：${update.qty_per_box}`
-                });
-            }
-            
-            // 更新数组中的数据确保类型正确
-            updates[i] = {
-                child_sku: childSkuStr, // 确保是字符串
-                qty_per_box: Math.floor(qtyValue) // 确保是整数
-            };
-        }
-        
         console.log('验证通过，准备执行批量更新');
         
         // 检查数据库连接
         await SellerInventorySku.sequelize.authenticate();
         console.log('✅ 数据库连接正常');
         
-        // 批量更新，使用与单个更新相同的逻辑
+        // 直接执行批量更新，简化验证
         const updatePromises = updates.map(async (update, index) => {
             try {
                 console.log(`执行更新 ${index + 1}:`, { child_sku: update.child_sku, qty_per_box: update.qty_per_box });
+                
+                // 简单验证
+                if (!update.child_sku || !update.qty_per_box || update.qty_per_box < 1) {
+                    throw new Error(`第 ${index + 1} 项数据无效: child_sku=${update.child_sku}, qty_per_box=${update.qty_per_box}`);
+                }
+                
                 const result = await SellerInventorySku.update(
-                    { qty_per_box: parseInt(update.qty_per_box) }, // 使用parseInt，与单个更新一致
+                    { qty_per_box: parseInt(update.qty_per_box) },
                     { where: { child_sku: update.child_sku } }
                 );
                 console.log(`更新结果 ${index + 1}:`, result);
