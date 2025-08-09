@@ -192,23 +192,35 @@ const SkuPackagingConfig: React.FC = () => {
     }
 
     // 验证装箱数量
-    if (!qty_per_box || qty_per_box < 1) {
-      message.error('装箱数量必须大于0');
+    if (!qty_per_box || isNaN(qty_per_box) || qty_per_box < 1) {
+      message.error('请输入有效的装箱数量（必须大于0）');
       return;
     }
 
     try {
-      const updates = selectedRows.map(row => ({
-        skuid: row.skuid,
-        qty_per_box: parseInt(qty_per_box)
-      }));
-
-      console.log('准备批量更新装箱数量:', {
-        selectedRowsCount: selectedRows.length,
-        qty_per_box: qty_per_box,
-        updates: updates,
-        selectedSKUs: selectedRows.map(r => `${r.child_sku}(ID:${r.skuid})`)
+      console.log('准备批量更新装箱数量:', { qty_per_box, selectedRows });
+      
+      const updates = selectedRows.map(row => {
+        // 确保 qty_per_box 是有效的数字
+        let parsedQty = typeof qty_per_box === 'number' ? qty_per_box : parseFloat(qty_per_box?.toString() || '0');
+        
+        const update = {
+          skuid: Number(row.skuid), // 确保 skuid 也是数字
+          qty_per_box: Math.floor(parsedQty) // 确保是整数
+        };
+        console.log('单个更新项:', update, '原始值:', qty_per_box, '行数据:', row);
+        return update;
       });
+
+      // 再次验证更新数据
+      const invalidUpdates = updates.filter(update => !update.skuid || !update.qty_per_box || update.qty_per_box < 1);
+      if (invalidUpdates.length > 0) {
+        console.error('无效的更新数据:', invalidUpdates);
+        message.error('数据验证失败，请检查选中的SKU');
+        return;
+      }
+
+      console.log('发送批量更新请求:', { updates });
 
       const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
         method: 'PUT',
@@ -218,19 +230,18 @@ const SkuPackagingConfig: React.FC = () => {
       console.log('批量更新响应:', result);
 
       if (result.code === 0) {
-        message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量为 ${qty_per_box} 个/箱`);
+        message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量`);
         setBatchPackagingModalVisible(false);
         (batchPackagingForm as any).resetFields();
         setSelectedRowKeys([]);
         setSelectedRows([]);
         fetchData();
       } else {
-        console.error('批量设置失败，服务器响应:', result);
-        message.error(`批量设置失败: ${result.message || '未知错误'}`);
+        message.error(result.message || '批量设置失败');
       }
     } catch (error) {
       console.error('批量设置装箱数量失败:', error);
-      message.error(`批量设置失败: ${error instanceof Error ? error.message : '网络错误'}`);
+      message.error(`批量设置失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
