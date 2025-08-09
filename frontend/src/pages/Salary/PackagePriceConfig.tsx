@@ -355,12 +355,23 @@ const PackagePriceConfig: React.FC = () => {
           price: undefined
         }));
         
+        // 检查第一行是否为空（没有SKU），如果是空的就删除第一行
+        let finalPriceList;
+        if (currentPriceList.length > 0 && !currentPriceList[0].sku) {
+          // 第一行为空，用新的SKU配置替换整个列表（去掉第一行空行）
+          finalPriceList = [...newSkuConfigs];
+        } else {
+          // 第一行不为空，追加到现有列表后面
+          finalPriceList = [...currentPriceList, ...newSkuConfigs];
+        }
+        
         (form as any).setFieldsValue({
-          priceList: [...currentPriceList, ...newSkuConfigs]
+          priceList: finalPriceList
         });
         
         message.success(`成功添加 ${result.data.length} 个子SKU配置`);
         setParentSkuInput('');
+        setSelectedBatchItems([]); // 清空选中项
       } else {
         message.info('未找到该父SKU对应的子SKU');
       }
