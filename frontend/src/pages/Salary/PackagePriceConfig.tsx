@@ -55,6 +55,13 @@ const PackagePriceConfig: React.FC = () => {
     noPriceConfig: 0,
   });
 
+  // 批量新增模态框中选中的SKU配置项
+  const [selectedBatchItems, setSelectedBatchItems] = useState<number[]>([]);
+
+  // 批量设置价格模态框（在批量新增中）
+  const [batchSetModalVisible, setBatchSetModalVisible] = useState(false);
+  const [batchSetForm] = Form.useForm();
+
   // 通用API调用函数
   const apiCall = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('token');
@@ -281,6 +288,8 @@ const PackagePriceConfig: React.FC = () => {
         message.success(`成功添加 ${priceList.length} 个SKU价格配置`);
         setAddModalVisible(false);
         (form as any).resetFields();
+        setSelectedBatchItems([]);
+        setParentSkuInput('');
         fetchData();
       } else {
         message.error(result.message || '批量添加失败');
@@ -360,6 +369,32 @@ const PackagePriceConfig: React.FC = () => {
       message.error('获取子SKU失败');
     } finally {
       setLoadingChildSkus(false);
+    }
+  };
+
+  // 批量设置SKU配置项的价格类型和单价
+  const handleBatchSetSkuConfig = async (values: any) => {
+    try {
+      const currentPriceList = (form as any).getFieldValue('priceList') || [];
+      const updatedList = currentPriceList.map((item: any, index: number) => {
+        if (selectedBatchItems.includes(index)) {
+          return {
+            ...item,
+            ...(values.batchType && { type: values.batchType }),
+            ...(values.batchPrice && { price: values.batchPrice })
+          };
+        }
+        return item;
+      });
+      
+      (form as any).setFieldsValue({ priceList: updatedList });
+      setSelectedBatchItems([]);
+      setBatchSetModalVisible(false);
+      (batchSetForm as any).resetFields();
+      message.success(`成功批量设置 ${selectedBatchItems.length} 个SKU配置`);
+    } catch (error) {
+      console.error('批量设置失败:', error);
+      message.error('批量设置失败');
     }
   };
 
@@ -729,6 +764,8 @@ const PackagePriceConfig: React.FC = () => {
         onCancel={() => {
           setAddModalVisible(false);
           (form as any).resetFields();
+          setSelectedBatchItems([]);
+          setParentSkuInput('');
         }}
         onOk={() => (form as any).submit()}
         destroyOnClose
@@ -781,44 +818,104 @@ const PackagePriceConfig: React.FC = () => {
           <Form.List name="priceList">
             {(fields, { add, remove }) => (
               <>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#666', fontSize: '14px' }}>
                     💡 提示：可以添加多个SKU的价格配置，支持不同的价格类型
                   </span>
+                  <Space>
+                    <Button
+                      type="dashed"
+                      onClick={() => add({ sku: '', type: '一般价', price: undefined })}
+                      icon={<PlusOutlined />}
+                      size="small"
+                    >
+                      添加SKU
+                    </Button>
+                    {fields.length > 1 && (
+                      <Button
+                        type="primary"
+                        ghost
+                        onClick={() => setBatchSetModalVisible(true)}
+                        disabled={selectedBatchItems.length === 0}
+                        size="small"
+                      >
+                        批量设置 ({selectedBatchItems.length})
+                      </Button>
+                    )}
+                  </Space>
                 </div>
-                
-                {fields.map(({ key, name, ...restField }) => (
-                  <Card
-                    key={key}
-                    size="small"
-                    style={{ marginBottom: 16 }}
-                    title={`SKU配置 ${name + 1}`}
-                    extra={
-                      fields.length > 1 ? (
-                        <Button
-                          type="text"
-                          icon={<MinusCircleOutlined />}
-                          onClick={() => remove(name)}
-                          danger
-                          size="small"
-                        >
-                          删除
-                        </Button>
-                      ) : null
-                    }
-                  >
-                    <Row gutter={16}>
-                      <Col span={10}>
+
+                {/* Excel式表格布局 */}
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px' }}>
+                  {/* 表头 */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '40px 1fr 120px 120px 60px',
+                    backgroundColor: '#fafafa',
+                    borderBottom: '1px solid #d9d9d9',
+                    padding: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '13px'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedBatchItems.length === fields.length && fields.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBatchItems(fields.map((_, index) => index));
+                          } else {
+                            setSelectedBatchItems([]);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>SKU</div>
+                    <div>价格类型</div>
+                    <div>单价 (元)</div>
+                    <div>操作</div>
+                  </div>
+
+                  {/* 表格行 */}
+                  {fields.map(({ key, name, ...restField }, index) => (
+                    <div 
+                      key={key}
+                      style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '40px 1fr 120px 120px 60px',
+                        borderBottom: index < fields.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        padding: '8px',
+                        backgroundColor: selectedBatchItems.includes(index) ? '#e6f7ff' : 'transparent'
+                      }}
+                    >
+                      {/* 勾选框 */}
+                      <div style={{ textAlign: 'center', paddingTop: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedBatchItems.includes(index)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedBatchItems([...selectedBatchItems, index]);
+                            } else {
+                              setSelectedBatchItems(selectedBatchItems.filter(i => i !== index));
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* SKU选择 */}
+                      <div style={{ paddingRight: '8px' }}>
                         <Form.Item
                           {...restField}
                           name={[name, 'sku']}
-                          label="SKU"
                           rules={[{ required: true, message: '请选择SKU' }]}
+                          style={{ margin: 0 }}
                         >
                           <Select
                             placeholder="选择或输入SKU"
                             showSearch
                             allowClear
+                            size="small"
                             optionFilterProp="children"
                             filterOption={(input, option) =>
                               option?.value?.toString().toLowerCase().includes(input.toLowerCase()) || false
@@ -829,55 +926,113 @@ const PackagePriceConfig: React.FC = () => {
                             ))}
                           </Select>
                         </Form.Item>
-                      </Col>
-                      <Col span={7}>
+                      </div>
+
+                      {/* 价格类型 */}
+                      <div style={{ paddingRight: '8px' }}>
                         <Form.Item
                           {...restField}
                           name={[name, 'type']}
-                          label="价格类型"
                           rules={[{ required: true, message: '请选择价格类型' }]}
+                          style={{ margin: 0 }}
                         >
-                          <Select placeholder="选择价格类型">
+                          <Select placeholder="价格类型" size="small">
                             <Option value="一般价">一般价</Option>
                             <Option value="特殊价">特殊价</Option>
                           </Select>
                         </Form.Item>
-                      </Col>
-                      <Col span={7}>
+                      </div>
+
+                      {/* 单价 */}
+                      <div style={{ paddingRight: '8px' }}>
                         <Form.Item
                           {...restField}
                           name={[name, 'price']}
-                          label="单价 (元)"
                           rules={[
                             { required: true, message: '请输入单价' },
                             { type: 'number', min: 0.01, message: '单价必须大于0' }
                           ]}
+                          style={{ margin: 0 }}
                         >
                           <InputNumber
                             min={0}
                             precision={2}
+                            size="small"
                             style={{ width: '100%' }}
-                            placeholder="输入单价"
+                            placeholder="单价"
                           />
                         </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-                ))}
-                
-                <Form.Item>
-                  <Button
-                    type="dashed"
-                    onClick={() => add({ sku: '', type: '一般价', price: undefined })}
-                    block
-                    icon={<PlusOutlined />}
-                  >
-                    添加SKU配置
-                  </Button>
-                </Form.Item>
+                      </div>
+
+                      {/* 删除按钮 */}
+                      <div style={{ textAlign: 'center', paddingTop: '2px' }}>
+                        {fields.length > 1 && (
+                          <Button
+                            type="text"
+                            icon={<MinusCircleOutlined />}
+                            onClick={() => {
+                              remove(name);
+                              // 更新选中项索引
+                              setSelectedBatchItems(prev => 
+                                prev.filter(i => i !== index).map(i => i > index ? i - 1 : i)
+                              );
+                            }}
+                            danger
+                            size="small"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
           </Form.List>
+        </Form>
+      </Modal>
+
+      {/* 批量设置SKU配置模态框 */}
+      <Modal
+        title={`批量设置SKU配置 - 已选择 ${selectedBatchItems.length} 项`}
+        visible={batchSetModalVisible}
+        onCancel={() => {
+          setBatchSetModalVisible(false);
+          (batchSetForm as any).resetFields();
+        }}
+        onOk={() => (batchSetForm as any).submit()}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 8 }}>📋 将要修改的SKU配置：</div>
+          <div>共 {selectedBatchItems.length} 项配置将被批量修改</div>
+        </div>
+        <Form
+          form={batchSetForm}
+          layout="vertical"
+          onFinish={handleBatchSetSkuConfig}
+        >
+          <Form.Item
+            name="batchType"
+            label="批量设置价格类型"
+            extra="留空则不修改现有价格类型"
+          >
+            <Select placeholder="选择价格类型（可选）" allowClear>
+              <Option value="一般价">一般价</Option>
+              <Option value="特殊价">特殊价</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="batchPrice"
+            label="批量设置单价 (元)"
+            extra="留空则不修改现有单价"
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="输入统一单价（可选）"
+            />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
