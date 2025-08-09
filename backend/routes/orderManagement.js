@@ -252,7 +252,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
           inventory = await LocalBox.findAll({
             where: {
               sku: localSku,
-              country: item.country
+              country: item.country,
+              status: { [Op.in]: ['待出库', '部分出库'] } // 添加状态过滤，排除已出库记录
             },
             attributes: ['mix_box_num', 'total_quantity', 'total_boxes'],
             raw: true
