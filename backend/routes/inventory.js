@@ -733,7 +733,10 @@ router.put('/sku-packaging/batch', async (req, res) => {
     try {
         const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
         
+        console.log('接收到的批量更新数据:', JSON.stringify(updates, null, 2));
+        
         if (!Array.isArray(updates) || updates.length === 0) {
+            console.log('❌ 更新数据为空或格式错误');
             return res.status(400).json({
                 code: 1,
                 message: '更新数据不能为空'
@@ -742,29 +745,53 @@ router.put('/sku-packaging/batch', async (req, res) => {
         
         // 验证数据
         for (const update of updates) {
+            console.log(`验证更新项:`, update);
             if (!update.skuid || !update.qty_per_box || update.qty_per_box < 1) {
+                console.log(`❌ 数据验证失败:`, {
+                    skuid: update.skuid,
+                    qty_per_box: update.qty_per_box,
+                    hasSkuid: !!update.skuid,
+                    hasQty: !!update.qty_per_box,
+                    isQtyValid: update.qty_per_box >= 1
+                });
                 return res.status(400).json({
                     code: 1,
-                    message: '装箱数量必须大于0'
+                    message: `SKU ID ${update.skuid || '空'} 的装箱数量 ${update.qty_per_box || '空'} 必须大于0`
                 });
             }
         }
         
         // 批量更新
-        const updatePromises = updates.map(update =>
-            SellerInventorySku.update(
+        console.log('开始执行批量更新...');
+        const updateResults = [];
+        
+        for (const update of updates) {
+            console.log(`更新 SKU ID ${update.skuid} 装箱数量为 ${update.qty_per_box}`);
+            const result = await SellerInventorySku.update(
                 { qty_per_box: parseInt(update.qty_per_box) },
                 { where: { skuid: update.skuid } }
-            )
-        );
+            );
+            updateResults.push({
+                skuid: update.skuid,
+                affected: result[0],
+                qty_per_box: update.qty_per_box
+            });
+            console.log(`SKU ID ${update.skuid} 更新结果: 影响行数 ${result[0]}`);
+        }
         
-        await Promise.all(updatePromises);
-        
+        console.log('批量更新完成，结果:', updateResults);
         console.log('\x1b[33m%s\x1b[0m', `📦 批量更新 ${updates.length} 个SKU装箱数量`);
+        
+        const successCount = updateResults.filter(r => r.affected > 0).length;
+        const failedCount = updateResults.filter(r => r.affected === 0).length;
+        
+        if (failedCount > 0) {
+            console.log(`⚠️ ${failedCount} 个SKU更新失败（可能是SKU不存在）`);
+        }
         
         res.json({
             code: 0,
-            message: `成功更新 ${updates.length} 个SKU装箱数量`
+            message: `成功更新 ${successCount} 个SKU装箱数量${failedCount > 0 ? `，${failedCount} 个失败` : ''}`
         });
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);

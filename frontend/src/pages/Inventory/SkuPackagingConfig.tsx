@@ -191,30 +191,46 @@ const SkuPackagingConfig: React.FC = () => {
       return;
     }
 
+    // 验证装箱数量
+    if (!qty_per_box || qty_per_box < 1) {
+      message.error('装箱数量必须大于0');
+      return;
+    }
+
     try {
       const updates = selectedRows.map(row => ({
         skuid: row.skuid,
         qty_per_box: parseInt(qty_per_box)
       }));
 
+      console.log('准备批量更新装箱数量:', {
+        selectedRowsCount: selectedRows.length,
+        qty_per_box: qty_per_box,
+        updates: updates,
+        selectedSKUs: selectedRows.map(r => `${r.child_sku}(ID:${r.skuid})`)
+      });
+
       const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
         method: 'PUT',
         body: JSON.stringify({ updates }),
       });
 
+      console.log('批量更新响应:', result);
+
       if (result.code === 0) {
-        message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量`);
+        message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量为 ${qty_per_box} 个/箱`);
         setBatchPackagingModalVisible(false);
         (batchPackagingForm as any).resetFields();
         setSelectedRowKeys([]);
         setSelectedRows([]);
         fetchData();
       } else {
-        message.error(result.message || '批量设置失败');
+        console.error('批量设置失败，服务器响应:', result);
+        message.error(`批量设置失败: ${result.message || '未知错误'}`);
       }
     } catch (error) {
       console.error('批量设置装箱数量失败:', error);
-      message.error('批量设置失败');
+      message.error(`批量设置失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
   };
 
