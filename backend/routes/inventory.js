@@ -743,13 +743,13 @@ router.put('/sku-packaging/batch', async (req, res) => {
             });
         }
         
-        // 验证数据
+        // 简化验证数据逻辑，与单个更新保持一致
         for (let i = 0; i < updates.length; i++) {
             const update = updates[i];
             console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
-            console.log(`数据类型 - skuid: ${typeof update.skuid}, qty_per_box: ${typeof update.qty_per_box}`);
             
-            if (!update.skuid && update.skuid !== 0) {
+            // 简化skuid验证
+            if (!update.skuid) {
                 console.error(`SKU ID 缺失 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
@@ -757,45 +757,28 @@ router.put('/sku-packaging/batch', async (req, res) => {
                 });
             }
             
-            // 转换数据类型
-            const skuid = Number(update.skuid);
-            let qtyPerBox = Number(update.qty_per_box);
-            
-            if (isNaN(skuid)) {
-                console.error(`SKU ID 无效 (项 ${i}):`, update);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的SKU ID 必须是有效数字，当前值：${update.skuid}`
-                });
-            }
-            
-            if (isNaN(qtyPerBox) || qtyPerBox < 1) {
+            // 简化qty_per_box验证，与单个更新保持一致
+            if (!update.qty_per_box || update.qty_per_box < 1) {
                 console.error(`装箱数量无效 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
-                    message: `第 ${i + 1} 项的装箱数量必须大于0，当前值：${update.qty_per_box} (类型：${typeof update.qty_per_box})`
+                    message: `第 ${i + 1} 项的装箱数量必须大于0`
                 });
             }
-            
-            // 更新数组中的数据确保类型正确
-            updates[i] = {
-                skuid: skuid,
-                qty_per_box: Math.floor(qtyPerBox)
-            };
         }
         
-        console.log('准备执行批量更新，最终数据:', JSON.stringify(updates, null, 2));
+        console.log('验证通过，准备执行批量更新');
         
         // 检查数据库连接
         await SellerInventorySku.sequelize.authenticate();
         console.log('✅ 数据库连接正常');
         
-        // 批量更新
+        // 批量更新，使用与单个更新相同的逻辑
         const updatePromises = updates.map(async (update, index) => {
             try {
                 console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
                 const result = await SellerInventorySku.update(
-                    { qty_per_box: update.qty_per_box },
+                    { qty_per_box: parseInt(update.qty_per_box) }, // 使用parseInt，与单个更新一致
                     { where: { skuid: update.skuid } }
                 );
                 console.log(`更新结果 ${index + 1}:`, result);
