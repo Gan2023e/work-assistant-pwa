@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Input, Select, Modal, Form, message, Tag, Space, Popconfirm, DatePicker, Tooltip, Row, Col, Statistic, Typography, Tabs } from 'antd';
+import { SearchOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, ReloadOutlined, PlusOutlined, HistoryOutlined, GlobalOutlined, EyeOutlined, SettingOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { printManager, LabelData } from '../../utils/printManager';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config/api';
 import InventoryCreateModal from '../../components/InventoryCreateModal';
+import SkuPackagingConfig from './SkuPackagingConfig';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -1035,7 +1036,20 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      <style>{mixedBoxStyles}</style>
+      <Tabs
+        defaultActiveKey="inventory"
+        items={[
+          {
+            key: 'inventory',
+            label: (
+              <span>
+                <AppstoreOutlined />
+                库存管理
+              </span>
+            ),
+            children: (
+              <div>
+                <style>{mixedBoxStyles}</style>
       {/* 国家库存统计卡片 */}
       <Card 
         title={
@@ -1490,6 +1504,21 @@ const InventoryManagement: React.FC = () => {
           }
           message.success('入库成功，数据已刷新');
         }}
+      />
+              </div>
+            ),
+          },
+          {
+            key: 'packaging',
+            label: (
+              <span>
+                <SettingOutlined />
+                装箱设置
+              </span>
+            ),
+            children: <SkuPackagingConfig />,
+          },
+        ]}
       />
     </div>
   );

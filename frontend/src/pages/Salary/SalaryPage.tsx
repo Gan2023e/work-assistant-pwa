@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Card, Row, Col, Button, Radio, DatePicker, Space, message, Select, Input, ConfigProvider } from 'antd';
+import { Table, Card, Row, Col, Button, Radio, DatePicker, Space, message, Select, Input, ConfigProvider, Tabs } from 'antd';
+import { DollarOutlined, CalculatorOutlined, SettingOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { TableRowSelection } from 'antd/es/table/interface';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import zhCN from 'antd/locale/zh_CN';
 import './SalaryPage.css';
+import PackagePriceConfig from './PackagePriceConfig';
 dayjs.locale('zh-cn');
 
 interface SalaryRecord {
@@ -288,6 +290,19 @@ const SalaryPage: React.FC = () => {
   return (
     <ConfigProvider locale={zhCN}>
       <div style={{ padding: 24 }}>
+        <Tabs
+          defaultActiveKey="salary"
+          items={[
+            {
+              key: 'salary',
+              label: (
+                <span>
+                  <CalculatorOutlined />
+                  工资结算
+                </span>
+              ),
+              children: (
+                <div>
         <Card style={{ marginBottom: 16 }}>
           <Space>
             <span>打包员：</span>
@@ -534,6 +549,21 @@ const SalaryPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+                </div>
+              ),
+            },
+            {
+              key: 'pricing',
+              label: (
+                <span>
+                  <SettingOutlined />
+                  单价设置
+                </span>
+              ),
+              children: <PackagePriceConfig />,
+            },
+          ]}
+        />
       </div>
     </ConfigProvider>
   );

@@ -636,4 +636,144 @@ router.post('/update-qty-per-box', async (req, res) => {
     }
 });
 
+// ==================== SKU装箱数量管理接口 ====================
+
+// 获取所有SKU装箱数量配置
+router.get('/sku-packaging', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '🔍 获取SKU装箱数量配置');
+    
+    try {
+        const { page = 1, limit = 50, search } = req.query;
+        
+        const whereClause = {};
+        if (search) {
+            whereClause[Op.or] = [
+                { parent_sku: { [Op.like]: `%${search}%` } },
+                { child_sku: { [Op.like]: `%${search}%` } }
+            ];
+        }
+        
+        const { count, rows } = await SellerInventorySku.findAndCountAll({
+            where: whereClause,
+            offset: (page - 1) * limit,
+            limit: parseInt(limit),
+            order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
+        });
+        
+        console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${count} 个SKU装箱配置`);
+        
+        res.json({
+            code: 0,
+            message: '查询成功',
+            data: {
+                list: rows,
+                total: count,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(count / limit)
+            }
+        });
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 获取SKU装箱配置失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+// 更新单个SKU装箱数量
+router.put('/sku-packaging/:skuid', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '✏️ 更新SKU装箱数量');
+    
+    try {
+        const { skuid } = req.params;
+        const { qty_per_box } = req.body;
+        
+        if (!qty_per_box || qty_per_box < 1) {
+            return res.status(400).json({
+                code: 1,
+                message: '装箱数量必须大于0'
+            });
+        }
+        
+        const result = await SellerInventorySku.update(
+            { qty_per_box: parseInt(qty_per_box) },
+            { where: { skuid } }
+        );
+        
+        if (result[0] === 0) {
+            return res.status(404).json({
+                code: 1,
+                message: 'SKU不存在'
+            });
+        }
+        
+        console.log('\x1b[33m%s\x1b[0m', `📦 SKU ${skuid} 装箱数量更新为 ${qty_per_box}`);
+        
+        res.json({
+            code: 0,
+            message: '更新成功'
+        });
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 更新SKU装箱数量失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '更新失败',
+            error: error.message
+        });
+    }
+});
+
+// 批量更新SKU装箱数量
+router.put('/sku-packaging/batch', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU装箱数量');
+    
+    try {
+        const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
+        
+        if (!Array.isArray(updates) || updates.length === 0) {
+            return res.status(400).json({
+                code: 1,
+                message: '更新数据不能为空'
+            });
+        }
+        
+        // 验证数据
+        for (const update of updates) {
+            if (!update.skuid || !update.qty_per_box || update.qty_per_box < 1) {
+                return res.status(400).json({
+                    code: 1,
+                    message: '装箱数量必须大于0'
+                });
+            }
+        }
+        
+        // 批量更新
+        const updatePromises = updates.map(update =>
+            SellerInventorySku.update(
+                { qty_per_box: parseInt(update.qty_per_box) },
+                { where: { skuid: update.skuid } }
+            )
+        );
+        
+        await Promise.all(updatePromises);
+        
+        console.log('\x1b[33m%s\x1b[0m', `📦 批量更新 ${updates.length} 个SKU装箱数量`);
+        
+        res.json({
+            code: 0,
+            message: `成功更新 ${updates.length} 个SKU装箱数量`
+        });
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '批量更新失败',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router; 

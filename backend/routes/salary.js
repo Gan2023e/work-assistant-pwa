@@ -170,4 +170,257 @@ router.post('/delete_box_record', async (req, res) => {
   }
 });
 
+// ==================== SKU打包单价管理接口 ====================
+
+// 获取所有SKU打包单价配置
+router.get('/package-prices', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 获取SKU打包单价配置');
+  
+  try {
+    const { page = 1, limit = 50, search, type } = req.query;
+    
+    const whereClause = {};
+    if (search) {
+      whereClause.sku = { [Op.like]: `%${search}%` };
+    }
+    if (type) {
+      whereClause.type = type;
+    }
+    
+    const { count, rows } = await PackagePrice.findAndCountAll({
+      where: whereClause,
+      offset: (page - 1) * limit,
+      limit: parseInt(limit),
+      order: [['sku', 'ASC'], ['type', 'ASC']]
+    });
+    
+    // 按SKU分组数据，便于前端展示
+    const groupedData = {};
+    rows.forEach(row => {
+      if (!groupedData[row.sku]) {
+        groupedData[row.sku] = { sku: row.sku };
+      }
+      groupedData[row.sku][row.type] = row.price;
+      groupedData[row.sku][`${row.type}_time`] = row.time;
+    });
+    
+    const list = Object.values(groupedData);
+    
+    console.log('\x1b[33m%s\x1b[0m', `💰 查询到 ${list.length} 个SKU单价配置`);
+    
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: {
+        list,
+        total: list.length,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(list.length / limit)
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取SKU单价配置失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '查询失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新SKU打包单价
+router.put('/package-prices', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '✏️ 更新SKU打包单价');
+  
+  try {
+    const { sku, type, price } = req.body;
+    
+    if (!sku || !type || !price) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU、价格类型和单价都不能为空'
+      });
+    }
+    
+    if (price <= 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '单价必须大于0'
+      });
+    }
+    
+    if (!['一般价', '特殊价'].includes(type)) {
+      return res.status(400).json({
+        code: 1,
+        message: '价格类型必须是"一般价"或"特殊价"'
+      });
+    }
+    
+    // 使用upsert插入或更新
+    const [record, created] = await PackagePrice.upsert({
+      sku,
+      type,
+      price: parseFloat(price),
+      time: new Date()
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `💰 SKU ${sku} ${type} ${created ? '新增' : '更新'}为 ${price}`);
+    
+    res.json({
+      code: 0,
+      message: created ? '新增成功' : '更新成功'
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 更新SKU单价失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量更新SKU打包单价
+router.put('/package-prices/batch', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU打包单价');
+  
+  try {
+    const { updates } = req.body; // [{ sku, type, price }, ...]
+    
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '更新数据不能为空'
+      });
+    }
+    
+    // 验证数据
+    for (const update of updates) {
+      if (!update.sku || !update.type || !update.price) {
+        return res.status(400).json({
+          code: 1,
+          message: 'SKU、价格类型和单价都不能为空'
+        });
+      }
+      
+      if (update.price <= 0) {
+        return res.status(400).json({
+          code: 1,
+          message: '单价必须大于0'
+        });
+      }
+      
+      if (!['一般价', '特殊价'].includes(update.type)) {
+        return res.status(400).json({
+          code: 1,
+          message: '价格类型必须是"一般价"或"特殊价"'
+        });
+      }
+    }
+    
+    // 批量更新
+    const updatePromises = updates.map(update =>
+      PackagePrice.upsert({
+        sku: update.sku,
+        type: update.type,
+        price: parseFloat(update.price),
+        time: new Date()
+      })
+    );
+    
+    await Promise.all(updatePromises);
+    
+    console.log('\x1b[33m%s\x1b[0m', `💰 批量更新 ${updates.length} 个SKU单价`);
+    
+    res.json({
+      code: 0,
+      message: `成功更新 ${updates.length} 个SKU单价`
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU单价失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除SKU打包单价
+router.delete('/package-prices', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 删除SKU打包单价');
+  
+  try {
+    const { sku, type } = req.body;
+    
+    if (!sku || !type) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU和价格类型不能为空'
+      });
+    }
+    
+    const result = await PackagePrice.destroy({
+      where: { sku, type }
+    });
+    
+    if (result === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '未找到对应的单价配置'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', `💰 删除SKU ${sku} ${type}单价配置`);
+    
+    res.json({
+      code: 0,
+      message: '删除成功'
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 删除SKU单价失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取所有唯一SKU列表
+router.get('/skus', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 获取所有SKU列表');
+  
+  try {
+    const [results] = await sequelize.query(`
+      SELECT DISTINCT sku FROM (
+        SELECT DISTINCT sku FROM local_boxes WHERE sku IS NOT NULL
+        UNION
+        SELECT DISTINCT child_sku as sku FROM sellerinventory_sku WHERE child_sku IS NOT NULL
+        UNION
+        SELECT DISTINCT sku FROM pbi_package_price WHERE sku IS NOT NULL
+      ) AS all_skus 
+      ORDER BY sku
+    `);
+    
+    const skus = results.map(row => row.sku);
+    
+    console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${skus.length} 个唯一SKU`);
+    
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: skus
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取SKU列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '查询失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
