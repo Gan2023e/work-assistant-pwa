@@ -743,13 +743,13 @@ router.put('/sku-packaging/batch', async (req, res) => {
             });
         }
         
-        // 简化验证数据逻辑，与单个更新保持一致
+        // 简化验证数据逻辑，skuid作为字符串处理
         for (let i = 0; i < updates.length; i++) {
             const update = updates[i];
             console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
             
-            // 改进skuid验证，处理大数字和字符串
-            if (!update.skuid && update.skuid !== 0) {
+            // skuid验证（字符串类型）
+            if (!update.skuid && update.skuid !== '0') {
                 console.error(`SKU ID 缺失 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
@@ -757,7 +757,17 @@ router.put('/sku-packaging/batch', async (req, res) => {
                 });
             }
             
-            // 改进qty_per_box验证，确保是有效的正数
+            // 将skuid转换为字符串确保类型正确
+            const skuidStr = String(update.skuid);
+            if (!skuidStr || skuidStr.trim() === '') {
+                console.error(`SKU ID 无效 (项 ${i}):`, update);
+                return res.status(400).json({
+                    code: 1,
+                    message: `第 ${i + 1} 项的SKU ID 无效`
+                });
+            }
+            
+            // qty_per_box验证（数字类型）
             const qtyValue = Number(update.qty_per_box);
             if (!update.qty_per_box && update.qty_per_box !== 0) {
                 console.error(`装箱数量缺失 (项 ${i}):`, update);
@@ -774,6 +784,12 @@ router.put('/sku-packaging/batch', async (req, res) => {
                     message: `第 ${i + 1} 项的装箱数量必须大于0，当前值：${update.qty_per_box}`
                 });
             }
+            
+            // 更新数组中的数据确保类型正确
+            updates[i] = {
+                skuid: skuidStr, // 确保是字符串
+                qty_per_box: Math.floor(qtyValue) // 确保是整数
+            };
         }
         
         console.log('验证通过，准备执行批量更新');
