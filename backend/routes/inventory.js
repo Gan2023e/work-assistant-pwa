@@ -786,13 +786,24 @@ router.put('/sku-packaging/batch', async (req, res) => {
         
         console.log('准备执行批量更新，最终数据:', JSON.stringify(updates, null, 2));
         
+        // 检查数据库连接
+        await SellerInventorySku.sequelize.authenticate();
+        console.log('✅ 数据库连接正常');
+        
         // 批量更新
-        const updatePromises = updates.map((update, index) => {
-            console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
-            return SellerInventorySku.update(
-                { qty_per_box: update.qty_per_box },
-                { where: { skuid: update.skuid } }
-            );
+        const updatePromises = updates.map(async (update, index) => {
+            try {
+                console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
+                const result = await SellerInventorySku.update(
+                    { qty_per_box: update.qty_per_box },
+                    { where: { skuid: update.skuid } }
+                );
+                console.log(`更新结果 ${index + 1}:`, result);
+                return result;
+            } catch (error) {
+                console.error(`更新项 ${index + 1} 失败:`, error);
+                throw error;
+            }
         });
         
         const results = await Promise.all(updatePromises);
@@ -802,10 +813,17 @@ router.put('/sku-packaging/batch', async (req, res) => {
         
         res.json({
             code: 0,
-            message: `成功更新 ${updates.length} 个SKU装箱数量`
+            message: `成功更新 ${updates.length} 个SKU装箱数量`,
+            data: results
         });
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);
+        console.error('错误详情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            sql: error.sql
+        });
         res.status(500).json({
             code: 1,
             message: '批量更新失败',

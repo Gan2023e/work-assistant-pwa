@@ -192,25 +192,19 @@ const SkuPackagingConfig: React.FC = () => {
     }
 
     // 验证装箱数量
-    if (!qty_per_box || isNaN(qty_per_box) || qty_per_box < 1) {
-      message.error('请输入有效的装箱数量（必须大于0）');
+    const parsedQty = Number(qty_per_box);
+    if (!qty_per_box || isNaN(parsedQty) || parsedQty < 1) {
+      message.error('请输入有效的装箱数量（必须大于0的整数）');
       return;
     }
 
     try {
-      console.log('准备批量更新装箱数量:', { qty_per_box, selectedRows });
+      console.log('准备批量更新装箱数量:', { qty_per_box: parsedQty, selectedRows });
       
-      const updates = selectedRows.map(row => {
-        // 确保 qty_per_box 是有效的数字
-        let parsedQty = typeof qty_per_box === 'number' ? qty_per_box : parseFloat(qty_per_box?.toString() || '0');
-        
-        const update = {
-          skuid: Number(row.skuid), // 确保 skuid 也是数字
-          qty_per_box: Math.floor(parsedQty) // 确保是整数
-        };
-        console.log('单个更新项:', update, '原始值:', qty_per_box, '行数据:', row);
-        return update;
-      });
+      const updates = selectedRows.map(row => ({
+        skuid: Number(row.skuid), // 确保 skuid 是数字
+        qty_per_box: Math.floor(parsedQty) // 确保是整数
+      }));
 
       // 再次验证更新数据
       const invalidUpdates = updates.filter(update => !update.skuid || !update.qty_per_box || update.qty_per_box < 1);
@@ -505,11 +499,20 @@ const SkuPackagingConfig: React.FC = () => {
             label="统一装箱数量 (个/箱)"
             rules={[
               { required: true, message: '请输入装箱数量' },
-              { type: 'number', min: 1, message: '装箱数量必须大于0' }
+              { 
+                validator: (_: any, value: any) => {
+                  const num = Number(value);
+                  if (isNaN(num) || num < 1) {
+                    return Promise.reject(new Error('装箱数量必须是大于0的整数'));
+                  }
+                  return Promise.resolve();
+                }
+              }
             ]}
           >
             <InputNumber
               min={1}
+              precision={0}
               style={{ width: '100%' }}
               placeholder="输入要设置的统一装箱数量"
             />
