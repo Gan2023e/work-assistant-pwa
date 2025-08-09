@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Card, Input, Button, message, Space, InputNumber, Tag, Statistic, Row, Col, Modal, Form, Select, Popconfirm } from 'antd';
-import { SearchOutlined, SaveOutlined, EditOutlined, UndoOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, DollarOutlined } from '@ant-design/icons';
+import { SearchOutlined, SaveOutlined, EditOutlined, UndoOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, DollarOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
 import { API_BASE_URL } from '../../config/api';
@@ -238,17 +238,44 @@ const PackagePriceConfig: React.FC = () => {
 
   const handleAddPrice = async (values: any) => {
     try {
-      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices`, {
+      const { priceList } = values;
+      
+      if (!priceList || priceList.length === 0) {
+        message.warning('请至少添加一个SKU价格配置');
+        return;
+      }
+
+      // 验证数据完整性
+      const invalidItems = priceList.filter((item: any) => !item.sku || !item.type || !item.price || item.price <= 0);
+      if (invalidItems.length > 0) {
+        message.error('请确保所有SKU信息完整且价格大于0');
+        return;
+      }
+
+      // 检查重复SKU+价格类型组合
+      const duplicateCheck = new Set();
+      for (const item of priceList) {
+        const key = `${item.sku}-${item.type}`;
+        if (duplicateCheck.has(key)) {
+          message.error(`SKU "${item.sku}" 的 "${item.type}" 配置重复，请检查`);
+          return;
+        }
+        duplicateCheck.add(key);
+      }
+
+      // 使用批量API提交
+      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices/batch`, {
         method: 'PUT',
-        body: JSON.stringify(values),
+        body: JSON.stringify({ updates: priceList }),
       });
+
       if (result.code === 0) {
-        message.success('添加成功');
+        message.success(`成功添加 ${priceList.length} 个SKU价格配置`);
         setAddModalVisible(false);
         (form as any).resetFields();
         fetchData();
       } else {
-        message.error(result.message || '添加失败');
+        message.error(result.message || '批量添加失败');
       }
     } catch (error) {
       console.error('添加失败:', error);
@@ -493,7 +520,7 @@ const PackagePriceConfig: React.FC = () => {
               icon={<PlusOutlined />}
               onClick={() => setAddModalVisible(true)}
             >
-              新增价格
+              批量新增价格
             </Button>
             {Object.keys(editing).length > 0 && (
               <>
@@ -538,9 +565,9 @@ const PackagePriceConfig: React.FC = () => {
         />
       </Card>
 
-      {/* 添加价格模态框 */}
+      {/* 批量添加价格模态框 */}
       <Modal
-        title="新增SKU打包单价"
+        title="批量新增SKU打包单价"
         visible={addModalVisible}
         onCancel={() => {
           setAddModalVisible(false);
@@ -548,53 +575,117 @@ const PackagePriceConfig: React.FC = () => {
         }}
         onOk={() => (form as any).submit()}
         destroyOnClose
+        width={800}
+        bodyStyle={{ maxHeight: '70vh', overflow: 'auto' }}
       >
         <Form
           form={form}
           layout="vertical"
           onFinish={handleAddPrice}
+          initialValues={{
+            priceList: [{ sku: '', type: '一般价', price: undefined }]
+          }}
         >
-          <Form.Item
-            name="sku"
-            label="SKU"
-            rules={[{ required: true, message: '请选择SKU' }]}
-          >
-            <Select
-              placeholder="选择或输入SKU"
-              showSearch
-              allowClear
-              optionFilterProp="children"
-            >
-              {allSkus.map(sku => (
-                <Option key={sku} value={sku}>{sku}</Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="type"
-            label="价格类型"
-            rules={[{ required: true, message: '请选择价格类型' }]}
-          >
-            <Select placeholder="选择价格类型">
-              <Option value="一般价">一般价</Option>
-              <Option value="特殊价">特殊价</Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="price"
-            label="单价 (元)"
-            rules={[
-              { required: true, message: '请输入单价' },
-              { type: 'number', min: 0.01, message: '单价必须大于0' }
-            ]}
-          >
-            <InputNumber
-              min={0}
-              precision={2}
-              style={{ width: '100%' }}
-              placeholder="输入单价"
-            />
-          </Form.Item>
+          <Form.List name="priceList">
+            {(fields, { add, remove }) => (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <span style={{ color: '#666', fontSize: '14px' }}>
+                    💡 提示：可以添加多个SKU的价格配置，支持不同的价格类型
+                  </span>
+                </div>
+                
+                {fields.map(({ key, name, ...restField }) => (
+                  <Card
+                    key={key}
+                    size="small"
+                    style={{ marginBottom: 16 }}
+                    title={`SKU配置 ${name + 1}`}
+                    extra={
+                      fields.length > 1 ? (
+                        <Button
+                          type="text"
+                          icon={<MinusCircleOutlined />}
+                          onClick={() => remove(name)}
+                          danger
+                          size="small"
+                        >
+                          删除
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    <Row gutter={16}>
+                      <Col span={10}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'sku']}
+                          label="SKU"
+                          rules={[{ required: true, message: '请选择SKU' }]}
+                        >
+                          <Select
+                            placeholder="选择或输入SKU"
+                            showSearch
+                            allowClear
+                            optionFilterProp="children"
+                            filterOption={(input, option) =>
+                              option?.value?.toString().toLowerCase().includes(input.toLowerCase()) || false
+                            }
+                          >
+                            {allSkus.map(sku => (
+                              <Option key={sku} value={sku}>{sku}</Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={7}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'type']}
+                          label="价格类型"
+                          rules={[{ required: true, message: '请选择价格类型' }]}
+                        >
+                          <Select placeholder="选择价格类型">
+                            <Option value="一般价">一般价</Option>
+                            <Option value="特殊价">特殊价</Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={7}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'price']}
+                          label="单价 (元)"
+                          rules={[
+                            { required: true, message: '请输入单价' },
+                            { type: 'number', min: 0.01, message: '单价必须大于0' }
+                          ]}
+                        >
+                          <InputNumber
+                            min={0}
+                            precision={2}
+                            style={{ width: '100%' }}
+                            placeholder="输入单价"
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </Card>
+                ))}
+                
+                <Form.Item>
+                  <Button
+                    type="dashed"
+                    onClick={() => add({ sku: '', type: '一般价', price: undefined })}
+                    block
+                    icon={<PlusOutlined />}
+                  >
+                    添加SKU配置
+                  </Button>
+                </Form.Item>
+              </>
+            )}
+          </Form.List>
         </Form>
       </Modal>
     </div>
