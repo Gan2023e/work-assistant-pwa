@@ -3,6 +3,7 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const LocalBox = require('../models/LocalBox');
 const PackagePrice = require('../models/PackagePrice');
+const SellerInventorySku = require('../models/SellerInventorySku');
 const { sequelize } = require('../models');
 
 // 获取临工工资结算数据
@@ -420,6 +421,37 @@ router.get('/skus', async (req, res) => {
     });
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', '❌ 获取SKU列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '查询失败',
+      error: error.message
+    });
+  }
+});
+
+// 根据父SKU获取子SKU列表
+router.get('/child-skus/:parentSku', async (req, res) => {
+  const { parentSku } = req.params;
+  console.log('\x1b[32m%s\x1b[0m', `🔍 获取父SKU "${parentSku}" 的子SKU列表`);
+  
+  try {
+    const childSkus = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: parentSku
+      },
+      attributes: ['child_sku', 'sellercolorname', 'sellersizename', 'qty_per_box'],
+      raw: true
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `📦 找到 ${childSkus.length} 个子SKU`);
+    
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: childSkus
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取子SKU列表失败:', error);
     res.status(500).json({
       code: 1,
       message: '查询失败',

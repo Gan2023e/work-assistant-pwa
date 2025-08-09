@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Input, Button, message, Space, InputNumber, Tag, Statistic, Row, Col, Modal, Form, Select, Popconfirm } from 'antd';
-import { SearchOutlined, SaveOutlined, EditOutlined, UndoOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, DollarOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { Table, Card, Input, Button, message, Space, InputNumber, Tag, Statistic, Row, Col, Modal, Form, Select, Popconfirm, Divider } from 'antd';
+import { SearchOutlined, SaveOutlined, EditOutlined, UndoOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, DollarOutlined, MinusCircleOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
 import { API_BASE_URL } from '../../config/api';
@@ -38,6 +38,8 @@ const PackagePriceConfig: React.FC = () => {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [allSkus, setAllSkus] = useState<string[]>([]);
+  const [parentSkuInput, setParentSkuInput] = useState('');
+  const [loadingChildSkus, setLoadingChildSkus] = useState(false);
 
   // 批量设置价格模态框
   const [batchPriceModalVisible, setBatchPriceModalVisible] = useState(false);
@@ -323,6 +325,41 @@ const PackagePriceConfig: React.FC = () => {
     } catch (error) {
       console.error('批量设置价格失败:', error);
       message.error('批量设置失败');
+    }
+  };
+
+  // 批量添加子SKU到表单
+  const handleBatchAddChildSkus = async () => {
+    if (!parentSkuInput.trim()) {
+      message.warning('请输入父SKU');
+      return;
+    }
+
+    setLoadingChildSkus(true);
+    try {
+      const result = await apiCall(`${API_BASE_URL}/api/salary/child-skus/${encodeURIComponent(parentSkuInput.trim())}`);
+      if (result.code === 0 && result.data.length > 0) {
+        const currentPriceList = (form as any).getFieldValue('priceList') || [];
+        const newSkuConfigs = result.data.map((childSku: any) => ({
+          sku: childSku.child_sku,
+          type: '一般价',
+          price: undefined
+        }));
+        
+        (form as any).setFieldsValue({
+          priceList: [...currentPriceList, ...newSkuConfigs]
+        });
+        
+        message.success(`成功添加 ${result.data.length} 个子SKU配置`);
+        setParentSkuInput('');
+      } else {
+        message.info('未找到该父SKU对应的子SKU');
+      }
+    } catch (error) {
+      console.error('获取子SKU失败:', error);
+      message.error('获取子SKU失败');
+    } finally {
+      setLoadingChildSkus(false);
     }
   };
 
@@ -706,6 +743,41 @@ const PackagePriceConfig: React.FC = () => {
             priceList: [{ sku: '', type: '一般价', price: undefined }]
           }}
         >
+          {/* 父SKU批量添加区域 */}
+          <Card size="small" style={{ marginBottom: 16, backgroundColor: '#f8f9fa' }}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                🚀 批量添加子SKU
+              </span>
+            </div>
+            <Row gutter={8} align="middle">
+              <Col flex="auto">
+                <Input
+                  placeholder="输入父SKU，例如：BC070A"
+                  value={parentSkuInput}
+                  onChange={(e) => setParentSkuInput(e.target.value)}
+                  onPressEnter={handleBatchAddChildSkus}
+                />
+              </Col>
+              <Col>
+                <Button
+                  type="primary"
+                  icon={<AppstoreAddOutlined />}
+                  onClick={handleBatchAddChildSkus}
+                  loading={loadingChildSkus}
+                  size="middle"
+                >
+                  批量添加子SKU
+                </Button>
+              </Col>
+            </Row>
+            <div style={{ marginTop: 8, color: '#666', fontSize: '12px' }}>
+              💡 输入父SKU后，系统会自动获取所有对应的子SKU并添加到下方配置列表中
+            </div>
+          </Card>
+
+          <Divider orientation="left" style={{ margin: '16px 0' }}>SKU价格配置</Divider>
+
           <Form.List name="priceList">
             {(fields, { add, remove }) => (
               <>
