@@ -743,27 +743,27 @@ router.put('/sku-packaging/batch', async (req, res) => {
             });
         }
         
-        // 简化验证数据逻辑，skuid作为字符串处理
+        // 简化验证数据逻辑，child_sku作为字符串处理
         for (let i = 0; i < updates.length; i++) {
             const update = updates[i];
             console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
             
-            // skuid验证（字符串类型）
-            if (!update.skuid && update.skuid !== '0') {
-                console.error(`SKU ID 缺失 (项 ${i}):`, update);
+            // child_sku验证（字符串类型）
+            if (!update.child_sku) {
+                console.error(`子SKU 缺失 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
-                    message: `第 ${i + 1} 项的SKU ID 不能为空`
+                    message: `第 ${i + 1} 项的子SKU 不能为空`
                 });
             }
             
-            // 将skuid转换为字符串确保类型正确
-            const skuidStr = String(update.skuid);
-            if (!skuidStr || skuidStr.trim() === '') {
-                console.error(`SKU ID 无效 (项 ${i}):`, update);
+            // 将child_sku转换为字符串确保类型正确
+            const childSkuStr = String(update.child_sku);
+            if (!childSkuStr || childSkuStr.trim() === '') {
+                console.error(`子SKU 无效 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
-                    message: `第 ${i + 1} 项的SKU ID 无效`
+                    message: `第 ${i + 1} 项的子SKU 无效`
                 });
             }
             
@@ -787,7 +787,7 @@ router.put('/sku-packaging/batch', async (req, res) => {
             
             // 更新数组中的数据确保类型正确
             updates[i] = {
-                skuid: skuidStr, // 确保是字符串
+                child_sku: childSkuStr, // 确保是字符串
                 qty_per_box: Math.floor(qtyValue) // 确保是整数
             };
         }
@@ -801,10 +801,10 @@ router.put('/sku-packaging/batch', async (req, res) => {
         // 批量更新，使用与单个更新相同的逻辑
         const updatePromises = updates.map(async (update, index) => {
             try {
-                console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
+                console.log(`执行更新 ${index + 1}:`, { child_sku: update.child_sku, qty_per_box: update.qty_per_box });
                 const result = await SellerInventorySku.update(
                     { qty_per_box: parseInt(update.qty_per_box) }, // 使用parseInt，与单个更新一致
-                    { where: { skuid: update.skuid } }
+                    { where: { child_sku: update.child_sku } }
                 );
                 console.log(`更新结果 ${index + 1}:`, result);
                 return result;

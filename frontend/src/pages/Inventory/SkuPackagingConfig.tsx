@@ -202,12 +202,12 @@ const SkuPackagingConfig: React.FC = () => {
       console.log('准备批量更新装箱数量:', { qty_per_box: parsedQty, selectedRows });
       
       const updates = selectedRows.map(row => ({
-        skuid: Number(row.skuid), // 确保 skuid 是数字
+        child_sku: row.child_sku, // 使用child_sku而不是skuid
         qty_per_box: Math.floor(parsedQty) // 确保是整数
       }));
 
       // 再次验证更新数据
-      const invalidUpdates = updates.filter(update => !update.skuid || !update.qty_per_box || update.qty_per_box < 1);
+      const invalidUpdates = updates.filter(update => !update.child_sku || !update.qty_per_box || update.qty_per_box < 1);
       if (invalidUpdates.length > 0) {
         console.error('无效的更新数据:', invalidUpdates);
         message.error('数据验证失败，请检查选中的SKU');
