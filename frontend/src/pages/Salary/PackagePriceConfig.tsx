@@ -47,6 +47,29 @@ const PackagePriceConfig: React.FC = () => {
     noPriceConfig: 0,
   });
 
+  // 通用API调用函数
+  const apiCall = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  };
+
   useEffect(() => {
     fetchData();
     fetchAllSkus();
@@ -61,8 +84,12 @@ const PackagePriceConfig: React.FC = () => {
         ...(searchValue && { search: searchValue }),
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/salary/package-prices?${params}`);
-      const result = await response.json();
+      const url = `${API_BASE_URL}/api/salary/package-prices?${params}`;
+      console.log('请求URL:', url);
+      console.log('搜索参数:', searchValue);
+      
+      const result = await apiCall(url);
+      console.log('API响应:', result);
 
       if (result.code === 0) {
         setData(result.data.list);
@@ -93,8 +120,7 @@ const PackagePriceConfig: React.FC = () => {
 
   const fetchAllSkus = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/salary/skus`);
-      const result = await response.json();
+      const result = await apiCall(`${API_BASE_URL}/api/salary/skus`);
       if (result.code === 0) {
         setAllSkus(result.data);
       }
@@ -138,15 +164,11 @@ const PackagePriceConfig: React.FC = () => {
 
     try {
       for (const update of updates) {
-        const response = await fetch(`${API_BASE_URL}/api/salary/package-prices`, {
+        const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(update),
         });
 
-        const result = await response.json();
         if (result.code !== 0) {
           throw new Error(result.message);
         }
@@ -179,15 +201,10 @@ const PackagePriceConfig: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/salary/package-prices/batch`, {
+      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices/batch`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ updates }),
       });
-
-      const result = await response.json();
       if (result.code === 0) {
         message.success(result.message);
         setEditing({});
@@ -203,15 +220,10 @@ const PackagePriceConfig: React.FC = () => {
 
   const handleDelete = async (sku: string, type: '一般价' | '特殊价') => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/salary/package-prices`, {
+      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ sku, type }),
       });
-
-      const result = await response.json();
       if (result.code === 0) {
         message.success('删除成功');
         fetchData();
@@ -226,15 +238,10 @@ const PackagePriceConfig: React.FC = () => {
 
   const handleAddPrice = async (values: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/salary/package-prices`, {
+      const result = await apiCall(`${API_BASE_URL}/api/salary/package-prices`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(values),
       });
-
-      const result = await response.json();
       if (result.code === 0) {
         message.success('添加成功');
         setAddModalVisible(false);

@@ -187,16 +187,15 @@ router.get('/package-prices', async (req, res) => {
       whereClause.type = type;
     }
     
-    const { count, rows } = await PackagePrice.findAndCountAll({
+    // 先获取所有符合条件的记录（不分页）
+    const allRows = await PackagePrice.findAll({
       where: whereClause,
-      offset: (page - 1) * limit,
-      limit: parseInt(limit),
       order: [['sku', 'ASC'], ['type', 'ASC']]
     });
     
     // 按SKU分组数据，便于前端展示
     const groupedData = {};
-    rows.forEach(row => {
+    allRows.forEach(row => {
       if (!groupedData[row.sku]) {
         groupedData[row.sku] = { sku: row.sku };
       }
@@ -204,19 +203,25 @@ router.get('/package-prices', async (req, res) => {
       groupedData[row.sku][`${row.type}_time`] = row.time;
     });
     
-    const list = Object.values(groupedData);
+    const allGrouped = Object.values(groupedData);
+    const total = allGrouped.length;
     
-    console.log('\x1b[33m%s\x1b[0m', `💰 查询到 ${list.length} 个SKU单价配置`);
+    // 对分组后的数据进行分页
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const list = allGrouped.slice(startIndex, endIndex);
+    
+    console.log('\x1b[33m%s\x1b[0m', `💰 查询到 ${total} 个SKU单价配置，返回第 ${page} 页 ${list.length} 条记录`);
     
     res.json({
       code: 0,
       message: '查询成功',
       data: {
         list,
-        total: list.length,
+        total,
         page: parseInt(page),
         limit: parseInt(limit),
-        totalPages: Math.ceil(list.length / limit)
+        totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {

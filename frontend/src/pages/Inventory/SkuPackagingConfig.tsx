@@ -37,6 +37,29 @@ const SkuPackagingConfig: React.FC = () => {
     unconfiguredSkus: 0,
   });
 
+  // 通用API调用函数
+  const apiCall = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  };
+
   useEffect(() => {
     fetchData();
   }, [pagination.current, pagination.pageSize, searchValue]);
@@ -50,8 +73,7 @@ const SkuPackagingConfig: React.FC = () => {
         ...(searchValue && { search: searchValue }),
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/inventory/sku-packaging?${params}`);
-      const result = await response.json();
+      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging?${params}`);
 
       if (result.code === 0) {
         setData(result.data.list);
@@ -101,17 +123,12 @@ const SkuPackagingConfig: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/inventory/sku-packaging/${record.skuid}`, {
+      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/${record.skuid}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           qty_per_box: editData.qty_per_box,
         }),
       });
-
-      const result = await response.json();
       if (result.code === 0) {
         message.success('保存成功');
         handleCancel(record.skuid);
@@ -137,15 +154,10 @@ const SkuPackagingConfig: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
+      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ updates }),
       });
-
-      const result = await response.json();
       if (result.code === 0) {
         message.success(result.message);
         setEditing({});
