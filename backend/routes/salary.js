@@ -393,6 +393,46 @@ router.delete('/package-prices', async (req, res) => {
   }
 });
 
+// 临时API：查看pbi_package_price表结构
+router.get('/debug/table-structure', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 查看pbi_package_price表结构');
+  
+  try {
+    // 查看表结构
+    const [tableStructure] = await sequelize.query(`DESCRIBE pbi_package_price`);
+    
+    // 查看索引信息
+    const [indexInfo] = await sequelize.query(`SHOW INDEX FROM pbi_package_price`);
+    
+    // 查看建表语句
+    const [createTableInfo] = await sequelize.query(`SHOW CREATE TABLE pbi_package_price`);
+    
+    // 查看一些示例数据
+    const [sampleData] = await sequelize.query(`SELECT * FROM pbi_package_price LIMIT 5`);
+    
+    console.log('\x1b[33m%s\x1b[0m', '📊 表结构查询完成');
+    
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: {
+        tableStructure,
+        indexInfo,
+        createTableStatement: createTableInfo[0],
+        sampleData,
+        totalRecords: await sequelize.query(`SELECT COUNT(*) as count FROM pbi_package_price`).then(([results]) => results[0].count)
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 查看表结构失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '查询失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取所有唯一SKU列表
 router.get('/skus', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 获取所有SKU列表');
