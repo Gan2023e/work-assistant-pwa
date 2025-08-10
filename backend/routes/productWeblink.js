@@ -2442,6 +2442,8 @@ router.get('/debug/database-status', async (req, res) => {
   try {
     console.log('🔍 检查数据库状态...');
     
+    const { sequelize } = require('../models/database');
+    
     const results = {
       timestamp: new Date().toISOString(),
       database: 'connected',
@@ -2452,19 +2454,19 @@ router.get('/debug/database-status', async (req, res) => {
     
     // 检查template_links表
     try {
-      const [templatesResults] = await require('../models/database').sequelize.query(`
+      const [templatesResults] = await sequelize.query(`
         SHOW TABLES LIKE 'template_links'
       `);
       
       if (templatesResults.length > 0) {
         results.tables.template_links = { exists: true };
         
-        const [templateCount] = await require('../models/database').sequelize.query(`
+        const [templateCount] = await sequelize.query(`
           SELECT COUNT(*) as count FROM template_links
         `);
         results.tables.template_links.count = templateCount[0].count;
         
-        const [templates] = await require('../models/database').sequelize.query(`
+        const [templates] = await sequelize.query(`
           SELECT template_type, country, file_name FROM template_links WHERE is_active = 1 LIMIT 5
         `);
         results.tables.template_links.samples = templates;
@@ -2477,14 +2479,14 @@ router.get('/debug/database-status', async (req, res) => {
     
     // 检查product_information表
     try {
-      const [productResults] = await require('../models/database').sequelize.query(`
+      const [productResults] = await sequelize.query(`
         SHOW TABLES LIKE 'product_information'
       `);
       
       if (productResults.length > 0) {
         results.tables.product_information = { exists: true };
         
-        const [productCount] = await require('../models/database').sequelize.query(`
+        const [productCount] = await sequelize.query(`
           SELECT COUNT(*) as count FROM product_information
         `);
         results.tables.product_information.count = productCount[0].count;
@@ -2498,7 +2500,6 @@ router.get('/debug/database-status', async (req, res) => {
     // 检查代码版本信息
     try {
       const fs = require('fs');
-      const path = require('path');
       const routePath = __filename;
       const stats = fs.statSync(routePath);
       results.codeVersion.lastModified = stats.mtime;
