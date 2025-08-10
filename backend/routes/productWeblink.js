@@ -1911,6 +1911,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤2: 处理数据并保存到product_information表
     console.log('💾 保存数据到product_information表...');
+    const { ProductInformation } = require('../models');
     
     // 获取标题行（假设在第一行）
     const headers = jsonData[0];
@@ -2343,6 +2344,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     // 步骤4: 处理数据转换
     console.log('🔄 开始数据转换处理...');
+    const { ProductInformation } = require('../models');
     
     // 获取标题行（假设在第一行）
     const headers = jsonData[0];
@@ -2436,177 +2438,11 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
   }
 });
 
-// ==================== 调试端点 - 检查数据库状态 ====================
-// 用于调试生产环境问题的临时端点
-router.get('/debug/database-status', async (req, res) => {
-  try {
-    console.log('🔍 检查数据库状态...');
-    
-    const { sequelize } = require('../models/database');
-    
-    const results = {
-      timestamp: new Date().toISOString(),
-      database: 'connected',
-      tables: {},
-      codeVersion: {},
-      error: null
-    };
-    
-    // 检查template_links表
-    try {
-      const [templatesResults] = await sequelize.query(`
-        SHOW TABLES LIKE 'template_links'
-      `);
-      
-      if (templatesResults.length > 0) {
-        results.tables.template_links = { exists: true };
-        
-        const [templateCount] = await sequelize.query(`
-          SELECT COUNT(*) as count FROM template_links
-        `);
-        results.tables.template_links.count = templateCount[0].count;
-        
-        const [templates] = await sequelize.query(`
-          SELECT template_type, country, file_name FROM template_links WHERE is_active = 1 LIMIT 5
-        `);
-        results.tables.template_links.samples = templates;
-      } else {
-        results.tables.template_links = { exists: false };
-      }
-    } catch (error) {
-      results.tables.template_links = { exists: false, error: error.message };
-    }
-    
-    // 检查product_information表
-    try {
-      const [productResults] = await sequelize.query(`
-        SHOW TABLES LIKE 'product_information'
-      `);
-      
-      if (productResults.length > 0) {
-        results.tables.product_information = { exists: true };
-        
-        const [productCount] = await sequelize.query(`
-          SELECT COUNT(*) as count FROM product_information
-        `);
-        results.tables.product_information.count = productCount[0].count;
-      } else {
-        results.tables.product_information = { exists: false };
-      }
-    } catch (error) {
-      results.tables.product_information = { exists: false, error: error.message };
-    }
-    
-    // 检查代码版本信息
-    try {
-      const fs = require('fs');
-      const routePath = __filename;
-      const stats = fs.statSync(routePath);
-      results.codeVersion.lastModified = stats.mtime;
-      
-      // 检查是否仍有重复导入
-      const content = fs.readFileSync(routePath, 'utf8');
-      const duplicateImports = content.match(/const \{ ProductInformation \} = require\('\.\.\/models'\);/g);
-      results.codeVersion.hasDuplicateImports = duplicateImports ? duplicateImports.length : 0;
-      results.codeVersion.fixApplied = duplicateImports ? false : true;
-    } catch (error) {
-      results.codeVersion.error = error.message;
-    }
-    
-    res.json(results);
-    
-  } catch (error) {
-    console.error('检查数据库状态失败:', error);
-    res.status(500).json({
-      timestamp: new Date().toISOString(),
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// 在现有的调试端点之后添加一个简单的测试端点
-router.get('/debug/test-generate-endpoint', async (req, res) => {
-  try {
-    console.log('🧪 测试生成其他站点资料表端点的基本功能...');
-    
-    const results = {
-      timestamp: new Date().toISOString(),
-      endpoints: {},
-      dependencies: {},
-      error: null
-    };
-    
-    // 检查必需的依赖
-    try {
-      const xlsx = require('xlsx');
-      results.dependencies.xlsx = '✅ 可用';
-    } catch (error) {
-      results.dependencies.xlsx = '❌ 不可用: ' + error.message;
-    }
-    
-    try {
-      const TemplateLink = require('../models/TemplateLink');
-      const testTemplate = await TemplateLink.findOne({
-        where: { template_type: 'amazon', country: 'US', is_active: true }
-      });
-      results.dependencies.templateModel = testTemplate ? '✅ 可用且有数据' : '⚠️ 可用但无数据';
-    } catch (error) {
-      results.dependencies.templateModel = '❌ 不可用: ' + error.message;
-    }
-    
-    try {
-      const ProductInformation = require('../models/ProductInformation');
-      results.dependencies.productInformationModel = '✅ 可用';
-    } catch (error) {
-      results.dependencies.productInformationModel = '❌ 不可用: ' + error.message;
-    }
-    
-    // 检查OSS工具函数
-    try {
-      const { downloadTemplateFromOSS } = require('../utils/oss');
-      results.dependencies.ossUtils = '✅ 可用';
-    } catch (error) {
-      results.dependencies.ossUtils = '❌ 不可用: ' + error.message;
-    }
-    
-    // 检查端点路由是否存在
-    const router = req.app._router;
-    const routes = router.stack
-      .filter(layer => layer.route)
-      .map(layer => ({
-        method: Object.keys(layer.route.methods)[0].toUpperCase(),
-        path: layer.route.path
-      }));
-    
-    const hasGenerateEndpoint = routes.some(route => 
-      route.path.includes('generate-other-site-datasheet')
-    );
-    const hasBatchEndpoint = routes.some(route => 
-      route.path.includes('generate-batch-other-site-datasheet')
-    );
-    
-    results.endpoints.generateOtherSite = hasGenerateEndpoint ? '✅ 存在' : '❌ 不存在';
-    results.endpoints.generateBatch = hasBatchEndpoint ? '✅ 存在' : '❌ 不存在';
-    
-    res.json(results);
-    
-  } catch (error) {
-    console.error('测试生成端点失败:', error);
-    res.status(500).json({
-      timestamp: new Date().toISOString(),
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
-
 // ==================== 3步流程 - 步骤1：上传源数据到数据库 ====================
 router.post('/upload-source-data', upload.single('file'), async (req, res) => {
   try {
     console.log('🔄 开始上传源数据到数据库...');
     
-    const { sequelize } = require('../models/database');
     const { site } = req.body;
     const file = req.file;
     
@@ -2668,12 +2504,18 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         }
       }
       
+      // 验证必需字段：site和item_sku不能为空（复合主键）
+      if (!record.item_sku || record.item_sku.trim() === '') {
+        console.warn(`⚠️ 跳过第${i + 2}行：缺少item_sku字段`);
+        continue;
+      }
+      
       records.push(record);
     }
     
     console.log(`💾 准备保存 ${records.length} 条记录到product_information表...`);
     
-    // 批量保存到数据库
+    // 批量保存到数据库 - 适配复合主键
     try {
       // 首先删除相同站点的旧数据
       await ProductInformation.destroy({
@@ -2682,89 +2524,37 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       console.log(`🗑️ 已清理站点 ${site} 的旧数据`);
       
-      // 批量插入新数据 - 明确排除id字段，让数据库自动生成
-      const recordsWithoutId = records.map(record => {
-        const { id, ...recordWithoutId } = record;
-        return recordWithoutId;
-      });
+      // 逐条插入数据（因为复合主键的特殊性，使用upsert更安全）
+      let successCount = 0;
+      let errorCount = 0;
       
-      await ProductInformation.bulkCreate(recordsWithoutId, {
-        ignoreDuplicates: false,
-        validate: false, // 跳过验证以避免字段不匹配
-        fields: [
-          'site', 'item_sku', 'original_parent_sku', 'item_name',
-          'external_product_id', 'external_product_id_type', 'brand_name',
-          'product_description', 'bullet_point1', 'bullet_point2', 'bullet_point3',
-          'bullet_point4', 'bullet_point5', 'generic_keywords', 'main_image_url',
-          'swatch_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3',
-          'other_image_url4', 'other_image_url5', 'other_image_url6', 'other_image_url7',
-          'other_image_url8', 'parent_child', 'parent_sku', 'relationship_type',
-          'variation_theme', 'color_name', 'color_map', 'size_name', 'size_map',
-          'created_at', 'updated_at'
-        ]
-      });
+      for (const record of records) {
+        try {
+          await ProductInformation.upsert(record, {
+            returning: false // 提高性能
+          });
+          successCount++;
+        } catch (error) {
+          console.warn(`⚠️ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+          errorCount++;
+        }
+      }
       
-      console.log(`✅ 成功保存 ${recordsWithoutId.length} 条记录到数据库`);
+      console.log(`✅ 成功保存 ${successCount} 条记录到数据库${errorCount > 0 ? `，${errorCount}条失败` : ''}`);
       
       // 返回成功响应
       res.json({
         success: true,
-        message: `成功上传 ${recordsWithoutId.length} 条记录到数据库`,
-        recordCount: recordsWithoutId.length,
+        message: `成功上传 ${successCount} 条记录到数据库${errorCount > 0 ? `，${errorCount}条失败` : ''}`,
+        recordCount: successCount,
+        errorCount: errorCount,
         site: site,
         fileName: file.originalname
       });
       
     } catch (dbError) {
       console.error('❌ 数据库操作失败:', dbError);
-      
-      // 如果仍然失败，尝试使用原始SQL插入
-      try {
-        console.log('🔄 尝试使用原始SQL插入...');
-        
-        // 构建原始SQL插入语句
-        if (records.length > 0) {
-          const sampleRecord = records[0];
-          const fields = Object.keys(sampleRecord).filter(key => key !== 'id');
-          const fieldNames = fields.join(', ');
-          
-          // 为每条记录构建值
-          const values = records.map(record => {
-            const recordValues = fields.map(field => {
-              const value = record[field];
-              if (value === null || value === undefined) {
-                return 'NULL';
-              }
-              if (typeof value === 'string') {
-                return `'${value.replace(/'/g, "''")}'`; // 转义单引号
-              }
-              if (value instanceof Date) {
-                return `'${value.toISOString()}'`;
-              }
-              return `'${value}'`;
-            });
-            return `(${recordValues.join(', ')})`;
-          });
-          
-          const sql = `INSERT INTO product_information (${fieldNames}) VALUES ${values.join(', ')}`;
-          
-          await sequelize.query(sql);
-          
-          console.log(`✅ 使用原始SQL成功保存 ${records.length} 条记录到数据库`);
-          
-          res.json({
-            success: true,
-            message: `成功上传 ${records.length} 条记录到数据库（使用SQL）`,
-            recordCount: records.length,
-            site: site,
-            fileName: file.originalname
-          });
-        }
-        
-      } catch (sqlError) {
-        console.error('❌ 原始SQL插入也失败:', sqlError);
-        throw new Error('数据库保存失败: ' + dbError.message + ' / SQL失败: ' + sqlError.message);
-      }
+      throw new Error('数据库保存失败: ' + dbError.message);
     }
     
   } catch (error) {
@@ -2772,87 +2562,6 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     res.status(500).json({
       message: '上传失败: ' + error.message,
       error: error.toString()
-    });
-  }
-});
-
-// 检查表字段结构的详细调试端点
-router.get('/debug/table-structure', async (req, res) => {
-  try {
-    console.log('🔍 检查表字段结构...');
-    
-    const { sequelize } = require('../models/database');
-    
-    const results = {
-      timestamp: new Date().toISOString(),
-      tables: {},
-      error: null
-    };
-    
-    // 检查product_information表的字段结构
-    try {
-      const [columns] = await sequelize.query(`
-        SHOW COLUMNS FROM product_information
-      `);
-      
-      results.tables.product_information = {
-        exists: true,
-        columns: columns,
-        totalColumns: columns.length
-      };
-      
-      console.log('📋 product_information表字段:', columns.map(col => col.Field).join(', '));
-      
-    } catch (error) {
-      results.tables.product_information = {
-        exists: false,
-        error: error.message
-      };
-    }
-    
-    // 检查template_links表的字段结构
-    try {
-      const [templateColumns] = await sequelize.query(`
-        SHOW COLUMNS FROM template_links
-      `);
-      
-      results.tables.template_links = {
-        exists: true,
-        columns: templateColumns,
-        totalColumns: templateColumns.length
-      };
-      
-    } catch (error) {
-      results.tables.template_links = {
-        exists: false,
-        error: error.message
-      };
-    }
-    
-    // 测试基本的数据库操作
-    try {
-      // 尝试查询一条product_information记录看看字段
-      const [testQuery] = await sequelize.query(`
-        SELECT * FROM product_information LIMIT 1
-      `);
-      
-      if (testQuery.length > 0) {
-        results.tables.product_information.sampleRecord = testQuery[0];
-        results.tables.product_information.availableFields = Object.keys(testQuery[0]);
-      }
-      
-    } catch (error) {
-      results.tables.product_information.queryError = error.message;
-    }
-    
-    res.json(results);
-    
-  } catch (error) {
-    console.error('❌ 检查表结构失败:', error);
-    res.status(500).json({
-      message: '检查表结构失败: ' + error.message,
-      error: error.toString(),
-      timestamp: new Date().toISOString()
     });
   }
 });

@@ -2,19 +2,16 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
 const ProductInformation = sequelize.define('ProductInformation', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
   site: {
     type: DataTypes.STRING(10),
-    allowNull: true,
+    primaryKey: true,
+    allowNull: false,
     comment: '站点/国家信息'
   },
   item_sku: {
     type: DataTypes.STRING(30),
-    allowNull: true,
+    primaryKey: true,
+    allowNull: false,
     comment: '商品SKU'
   },
   original_parent_sku: {
