@@ -1911,7 +1911,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤2: 处理数据并保存到product_information表
     console.log('💾 保存数据到product_information表...');
-    const { ProductInformation } = require('../models');
     
     // 获取标题行（假设在第一行）
     const headers = jsonData[0];
@@ -2344,7 +2343,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     // 步骤4: 处理数据转换
     console.log('🔄 开始数据转换处理...');
-    const { ProductInformation } = require('../models');
     
     // 获取标题行（假设在第一行）
     const headers = jsonData[0];
