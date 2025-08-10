@@ -2525,4 +2525,80 @@ router.get('/debug/database-status', async (req, res) => {
   }
 });
 
+// 在现有的调试端点之后添加一个简单的测试端点
+router.get('/debug/test-generate-endpoint', async (req, res) => {
+  try {
+    console.log('🧪 测试生成其他站点资料表端点的基本功能...');
+    
+    const results = {
+      timestamp: new Date().toISOString(),
+      endpoints: {},
+      dependencies: {},
+      error: null
+    };
+    
+    // 检查必需的依赖
+    try {
+      const xlsx = require('xlsx');
+      results.dependencies.xlsx = '✅ 可用';
+    } catch (error) {
+      results.dependencies.xlsx = '❌ 不可用: ' + error.message;
+    }
+    
+    try {
+      const TemplateLink = require('../models/TemplateLink');
+      const testTemplate = await TemplateLink.findOne({
+        where: { template_type: 'amazon', country: 'US', is_active: true }
+      });
+      results.dependencies.templateModel = testTemplate ? '✅ 可用且有数据' : '⚠️ 可用但无数据';
+    } catch (error) {
+      results.dependencies.templateModel = '❌ 不可用: ' + error.message;
+    }
+    
+    try {
+      const ProductInformation = require('../models/ProductInformation');
+      results.dependencies.productInformationModel = '✅ 可用';
+    } catch (error) {
+      results.dependencies.productInformationModel = '❌ 不可用: ' + error.message;
+    }
+    
+    // 检查OSS工具函数
+    try {
+      const { downloadTemplateFromOSS } = require('../utils/oss');
+      results.dependencies.ossUtils = '✅ 可用';
+    } catch (error) {
+      results.dependencies.ossUtils = '❌ 不可用: ' + error.message;
+    }
+    
+    // 检查端点路由是否存在
+    const router = req.app._router;
+    const routes = router.stack
+      .filter(layer => layer.route)
+      .map(layer => ({
+        method: Object.keys(layer.route.methods)[0].toUpperCase(),
+        path: layer.route.path
+      }));
+    
+    const hasGenerateEndpoint = routes.some(route => 
+      route.path.includes('generate-other-site-datasheet')
+    );
+    const hasBatchEndpoint = routes.some(route => 
+      route.path.includes('generate-batch-other-site-datasheet')
+    );
+    
+    results.endpoints.generateOtherSite = hasGenerateEndpoint ? '✅ 存在' : '❌ 不存在';
+    results.endpoints.generateBatch = hasBatchEndpoint ? '✅ 存在' : '❌ 不存在';
+    
+    res.json(results);
+    
+  } catch (error) {
+    console.error('测试生成端点失败:', error);
+    res.status(500).json({
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 module.exports = router; 
