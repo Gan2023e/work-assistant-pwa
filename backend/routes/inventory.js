@@ -208,6 +208,76 @@ router.post('/create', async (req, res) => {
         
         console.log('\x1b[32m%s\x1b[0m', `✅ 成功创建 ${createdRecords.length} 条库存记录`);
         
+        // 发送钉钉通知
+        try {
+            
+            // 构建SKU及数量信息
+            const skuInfo = createdRecords.map(record => {
+                if (record.box_type === '混合箱') {
+                    return `${record.sku}: ${record.total_quantity}件 (混合箱: ${record.mix_box_num})`;
+                } else {
+                    return `${record.sku}: ${record.total_quantity}件/${record.total_boxes}箱`;
+                }
+            }).join('\n');
+            
+            const message = `📦 库存入库通知
+            
+🆔 批次信息：共创建 ${createdRecords.length} 条库存记录
+📅 入库时间：${new Date().toLocaleString('zh-CN')}
+🌍 目的国：${createdRecords[0]?.country || '未知'}
+👤 操作员：${createdRecords[0]?.操作员 || '未知'}
+📦 打包员：${createdRecords[0]?.打包员 || '未知'}
+
+📋 入库SKU及数量：
+${skuInfo}`;
+
+            // 获取环境变量中的手机号
+            const mobileNumGerry = process.env.MOBILE_NUM_GERRY;
+            const atMobiles = mobileNumGerry ? [mobileNumGerry] : [];
+            
+            // 调用钉钉发送接口
+            const webhookUrl = process.env.DINGTALK_WEBHOOK;
+            const secretKey = process.env.SECRET_KEY;
+            
+            if (webhookUrl) {
+                const axios = require('axios');
+                const crypto = require('crypto');
+                
+                let url = webhookUrl;
+                
+                // 如果有签名密钥，生成签名
+                if (secretKey) {
+                    const timestamp = Date.now();
+                    const stringToSign = `${timestamp}\n${secretKey}`;
+                    const sign = crypto
+                        .createHmac('sha256', secretKey)
+                        .update(stringToSign)
+                        .digest('base64');
+                    
+                    url += `&timestamp=${timestamp}&sign=${encodeURIComponent(sign)}`;
+                }
+
+                const dingTalkData = {
+                    msgtype: 'text',
+                    text: {
+                        content: message
+                    },
+                    at: {
+                        atMobiles: atMobiles,
+                        isAtAll: false
+                    }
+                };
+
+                await axios.post(url, dingTalkData);
+                console.log('\x1b[32m%s\x1b[0m', '✅ 钉钉入库通知发送成功');
+            } else {
+                console.log('\x1b[33m%s\x1b[0m', '⚠️ 钉钉Webhook未配置，跳过入库通知');
+            }
+        } catch (dingTalkError) {
+            console.error('\x1b[31m%s\x1b[0m', '❌ 发送钉钉入库通知失败:', dingTalkError.message);
+            // 不影响主要业务流程，继续返回成功
+        }
+        
         res.json({
             code: 0,
             message: '创建成功',
@@ -683,106 +753,9 @@ router.get('/sku-packaging', async (req, res) => {
     }
 });
 
-// 批量更新SKU装箱数量（必须放在通用路由之前）
-router.put('/sku-packaging/batch', async (req, res) => {
-    console.log('\x1b[32m%s\x1b[0m', '📝 【批量更新】SKU装箱数量 - 路径: /sku-packaging/batch');
-    console.log('完整请求体:', JSON.stringify(req.body, null, 2));
-    
-    try {
-        const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
-        console.log('解析的updates:', JSON.stringify(updates, null, 2));
-        
-        if (!Array.isArray(updates) || updates.length === 0) {
-            console.error('updates验证失败:', { updates, isArray: Array.isArray(updates), length: updates?.length });
-            return res.status(400).json({
-                code: 1,
-                message: '更新数据不能为空'
-            });
-        }
-        
-        // 简化验证数据逻辑，与单个更新保持一致
-        for (let i = 0; i < updates.length; i++) {
-            const update = updates[i];
-            console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
-            
-            // 简化skuid验证
-            if (!update.skuid) {
-                console.error(`SKU ID 缺失 (项 ${i}):`, update);
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的SKU ID 不能为空`
-                });
-            }
-            
-            // 修复qty_per_box验证逻辑
-            const qtyPerBox = Number(update.qty_per_box);
-            if (isNaN(qtyPerBox) || qtyPerBox < 1) {
-                console.error(`装箱数量无效 (项 ${i}):`, { 
-                    原始值: update.qty_per_box, 
-                    转换后: qtyPerBox, 
-                    isNaN: isNaN(qtyPerBox),
-                    小于1: qtyPerBox < 1
-                });
-                return res.status(400).json({
-                    code: 1,
-                    message: `第 ${i + 1} 项的装箱数量必须大于0`
-                });
-            }
-        }
-        
-        console.log('验证通过，准备执行批量更新');
-        
-        // 检查数据库连接
-        await SellerInventorySku.sequelize.authenticate();
-        console.log('✅ 数据库连接正常');
-        
-        // 批量更新，使用与单个更新相同的逻辑
-        const updatePromises = updates.map(async (update, index) => {
-            try {
-                console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
-                const result = await SellerInventorySku.update(
-                    { qty_per_box: Math.floor(Number(update.qty_per_box)) }, // 确保转换为整数
-                    { where: { skuid: update.skuid } }
-                );
-                console.log(`更新结果 ${index + 1}:`, result);
-                return result;
-            } catch (error) {
-                console.error(`更新项 ${index + 1} 失败:`, error);
-                throw error;
-            }
-        });
-        
-        const results = await Promise.all(updatePromises);
-        console.log('批量更新结果:', results);
-        
-        console.log('\x1b[33m%s\x1b[0m', `📦 批量更新 ${updates.length} 个SKU装箱数量`);
-        
-        res.json({
-            code: 0,
-            message: `成功更新 ${updates.length} 个SKU装箱数量`,
-            data: results
-        });
-    } catch (error) {
-        console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);
-        console.error('错误详情:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            sql: error.sql
-        });
-        res.status(500).json({
-            code: 1,
-            message: '批量更新失败',
-            error: error.message
-        });
-    }
-});
-
-// 更新单个SKU装箱数量（放在最后以避免路由冲突）
+// 更新单个SKU装箱数量
 router.put('/sku-packaging/:skuid', async (req, res) => {
-    console.log('\x1b[32m%s\x1b[0m', '✏️ 【单个更新】SKU装箱数量 - 路径: /sku-packaging/:skuid');
-    console.log('SKU ID:', req.params.skuid);
-    console.log('请求体:', JSON.stringify(req.body, null, 2));
+    console.log('\x1b[32m%s\x1b[0m', '✏️ 更新SKU装箱数量');
     
     try {
         const { skuid } = req.params;
@@ -818,6 +791,95 @@ router.put('/sku-packaging/:skuid', async (req, res) => {
         res.status(500).json({
             code: 1,
             message: '更新失败',
+            error: error.message
+        });
+    }
+});
+
+// 批量更新SKU装箱数量
+router.put('/sku-packaging/batch', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU装箱数量');
+    console.log('完整请求体:', JSON.stringify(req.body, null, 2));
+    
+    try {
+        const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
+        console.log('解析的updates:', JSON.stringify(updates, null, 2));
+        
+        if (!Array.isArray(updates) || updates.length === 0) {
+            console.error('updates验证失败:', { updates, isArray: Array.isArray(updates), length: updates?.length });
+            return res.status(400).json({
+                code: 1,
+                message: '更新数据不能为空'
+            });
+        }
+        
+        // 简化验证数据逻辑，与单个更新保持一致
+        for (let i = 0; i < updates.length; i++) {
+            const update = updates[i];
+            console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
+            
+            // 简化skuid验证
+            if (!update.skuid) {
+                console.error(`SKU ID 缺失 (项 ${i}):`, update);
+                return res.status(400).json({
+                    code: 1,
+                    message: `第 ${i + 1} 项的SKU ID 不能为空`
+                });
+            }
+            
+            // 简化qty_per_box验证，与单个更新保持一致
+            if (!update.qty_per_box || update.qty_per_box < 1) {
+                console.error(`装箱数量无效 (项 ${i}):`, update);
+                return res.status(400).json({
+                    code: 1,
+                    message: `第 ${i + 1} 项的装箱数量必须大于0`
+                });
+            }
+        }
+        
+        console.log('验证通过，准备执行批量更新');
+        
+        // 检查数据库连接
+        await SellerInventorySku.sequelize.authenticate();
+        console.log('✅ 数据库连接正常');
+        
+        // 批量更新，使用与单个更新相同的逻辑
+        const updatePromises = updates.map(async (update, index) => {
+            try {
+                console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
+                const result = await SellerInventorySku.update(
+                    { qty_per_box: parseInt(update.qty_per_box) }, // 使用parseInt，与单个更新一致
+                    { where: { skuid: update.skuid } }
+                );
+                console.log(`更新结果 ${index + 1}:`, result);
+                return result;
+            } catch (error) {
+                console.error(`更新项 ${index + 1} 失败:`, error);
+                throw error;
+            }
+        });
+        
+        const results = await Promise.all(updatePromises);
+        console.log('批量更新结果:', results);
+        
+        console.log('\x1b[33m%s\x1b[0m', `📦 批量更新 ${updates.length} 个SKU装箱数量`);
+        
+        res.json({
+            code: 0,
+            message: `成功更新 ${updates.length} 个SKU装箱数量`,
+            data: results
+        });
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);
+        console.error('错误详情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            sql: error.sql
+        });
+        res.status(500).json({
+            code: 1,
+            message: '批量更新失败',
             error: error.message
         });
     }
