@@ -2436,4 +2436,92 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
   }
 });
 
+// ==================== 调试端点 - 检查数据库状态 ====================
+// 用于调试生产环境问题的临时端点
+router.get('/debug/database-status', async (req, res) => {
+  try {
+    console.log('🔍 检查数据库状态...');
+    
+    const results = {
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      tables: {},
+      codeVersion: {},
+      error: null
+    };
+    
+    // 检查template_links表
+    try {
+      const [templatesResults] = await require('../models/database').sequelize.query(`
+        SHOW TABLES LIKE 'template_links'
+      `);
+      
+      if (templatesResults.length > 0) {
+        results.tables.template_links = { exists: true };
+        
+        const [templateCount] = await require('../models/database').sequelize.query(`
+          SELECT COUNT(*) as count FROM template_links
+        `);
+        results.tables.template_links.count = templateCount[0].count;
+        
+        const [templates] = await require('../models/database').sequelize.query(`
+          SELECT template_type, country, file_name FROM template_links WHERE is_active = 1 LIMIT 5
+        `);
+        results.tables.template_links.samples = templates;
+      } else {
+        results.tables.template_links = { exists: false };
+      }
+    } catch (error) {
+      results.tables.template_links = { exists: false, error: error.message };
+    }
+    
+    // 检查product_information表
+    try {
+      const [productResults] = await require('../models/database').sequelize.query(`
+        SHOW TABLES LIKE 'product_information'
+      `);
+      
+      if (productResults.length > 0) {
+        results.tables.product_information = { exists: true };
+        
+        const [productCount] = await require('../models/database').sequelize.query(`
+          SELECT COUNT(*) as count FROM product_information
+        `);
+        results.tables.product_information.count = productCount[0].count;
+      } else {
+        results.tables.product_information = { exists: false };
+      }
+    } catch (error) {
+      results.tables.product_information = { exists: false, error: error.message };
+    }
+    
+    // 检查代码版本信息
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const routePath = __filename;
+      const stats = fs.statSync(routePath);
+      results.codeVersion.lastModified = stats.mtime;
+      
+      // 检查是否仍有重复导入
+      const content = fs.readFileSync(routePath, 'utf8');
+      const duplicateImports = content.match(/const \{ ProductInformation \} = require\('\.\.\/models'\);/g);
+      results.codeVersion.hasDuplicateImports = duplicateImports ? duplicateImports.length : 0;
+      results.codeVersion.fixApplied = duplicateImports ? false : true;
+    } catch (error) {
+      results.codeVersion.error = error.message;
+    }
+    
+    res.json(results);
+    
+  } catch (error) {
+    console.error('检查数据库状态失败:', error);
+    res.status(500).json({
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 module.exports = router; 
