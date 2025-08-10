@@ -2712,4 +2712,83 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
   }
 });
 
+// 检查表字段结构的详细调试端点
+router.get('/debug/table-structure', async (req, res) => {
+  try {
+    console.log('🔍 检查表字段结构...');
+    
+    const results = {
+      timestamp: new Date().toISOString(),
+      tables: {},
+      error: null
+    };
+    
+    // 检查product_information表的字段结构
+    try {
+      const [columns] = await sequelize.query(`
+        SHOW COLUMNS FROM product_information
+      `);
+      
+      results.tables.product_information = {
+        exists: true,
+        columns: columns,
+        totalColumns: columns.length
+      };
+      
+      console.log('📋 product_information表字段:', columns.map(col => col.Field).join(', '));
+      
+    } catch (error) {
+      results.tables.product_information = {
+        exists: false,
+        error: error.message
+      };
+    }
+    
+    // 检查template_links表的字段结构
+    try {
+      const [templateColumns] = await sequelize.query(`
+        SHOW COLUMNS FROM template_links
+      `);
+      
+      results.tables.template_links = {
+        exists: true,
+        columns: templateColumns,
+        totalColumns: templateColumns.length
+      };
+      
+    } catch (error) {
+      results.tables.template_links = {
+        exists: false,
+        error: error.message
+      };
+    }
+    
+    // 测试基本的数据库操作
+    try {
+      // 尝试查询一条product_information记录看看字段
+      const [testQuery] = await sequelize.query(`
+        SELECT * FROM product_information LIMIT 1
+      `);
+      
+      if (testQuery.length > 0) {
+        results.tables.product_information.sampleRecord = testQuery[0];
+        results.tables.product_information.availableFields = Object.keys(testQuery[0]);
+      }
+      
+    } catch (error) {
+      results.tables.product_information.queryError = error.message;
+    }
+    
+    res.json(results);
+    
+  } catch (error) {
+    console.error('❌ 检查表结构失败:', error);
+    res.status(500).json({
+      message: '检查表结构失败: ' + error.message,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 module.exports = router; 
