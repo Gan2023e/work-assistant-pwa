@@ -1820,12 +1820,12 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
-    if (jsonData.length < 1) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行' });
+    if (jsonData.length < 3) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行（第3行为标题行）' });
     }
 
-    // 获取上传文件的列
-    const uploadedColumns = jsonData[0] ? jsonData[0].filter(col => col && col.toString().trim()) : [];
+    // 获取上传文件的列（第3行是标题行，索引为2）
+    const uploadedColumns = jsonData[2] ? jsonData[2].filter(col => col && col.toString().trim()) : [];
     
     // 获取目标国家的模板文件
     const countryTemplate = await TemplateLink.findOne({
@@ -1913,9 +1913,13 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log('💾 保存数据到product_information表...');
     const { ProductInformation } = require('../models');
     
-    // 获取标题行（假设在第一行）
-    const headers = jsonData[0];
-    const dataRows = jsonData.slice(1);
+    // 获取标题行（第3行是标题行，索引为2）
+    if (jsonData.length < 4) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
+    }
+    
+    const headers = jsonData[2]; // 第3行是标题行
+    const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     const savedRecords = [];
     
@@ -2346,9 +2350,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     console.log('🔄 开始数据转换处理...');
     const { ProductInformation } = require('../models');
     
-    // 获取标题行（假设在第一行）
-    const headers = jsonData[0];
-    const dataRows = jsonData.slice(1);
+    // 获取标题行（第3行是标题行，索引为2）
+    if (jsonData.length < 4) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
+    }
+    
+    const headers = jsonData[2]; // 第3行是标题行
+    const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     const transformedRecords = [];
     
@@ -2468,9 +2476,13 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       return res.status(400).json({ message: 'Excel文件必须包含标题行和至少一行数据' });
     }
     
-    // 提取标题行和数据行
-    const headers = jsonData[0];
-    const dataRows = jsonData.slice(1);
+    // 提取标题行和数据行（第3行是标题行，索引为2）
+    if (jsonData.length < 4) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
+    }
+    
+    const headers = jsonData[2]; // 第3行是标题行
+    const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     console.log(`📊 文件包含 ${headers.length} 列，${dataRows.length} 行数据`);
     
@@ -2504,11 +2516,11 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         }
       }
       
-      // 验证必需字段：site和item_sku不能为空（复合主键）
-      if (!record.item_sku || record.item_sku.trim() === '') {
-        console.warn(`⚠️ 跳过第${i + 2}行：缺少item_sku字段`);
-        continue;
-      }
+             // 验证必需字段：site和item_sku不能为空（复合主键）
+       if (!record.item_sku || record.item_sku.trim() === '') {
+         console.warn(`⚠️ 跳过第${i + 4}行：缺少item_sku字段`); // 因为第3行是标题行，所以数据行从第4行开始
+         continue;
+       }
       
       records.push(record);
     }
