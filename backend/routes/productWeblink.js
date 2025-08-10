@@ -2717,6 +2717,8 @@ router.get('/debug/table-structure', async (req, res) => {
   try {
     console.log('🔍 检查表字段结构...');
     
+    const { sequelize } = require('../models/database');
+    
     const results = {
       timestamp: new Date().toISOString(),
       tables: {},
