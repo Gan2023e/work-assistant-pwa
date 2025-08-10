@@ -2601,4 +2601,115 @@ router.get('/debug/test-generate-endpoint', async (req, res) => {
   }
 });
 
+// ==================== 3步流程 - 步骤1：上传源数据到数据库 ====================
+router.post('/upload-source-data', upload.single('file'), async (req, res) => {
+  try {
+    console.log('🔄 开始上传源数据到数据库...');
+    
+    const { site } = req.body;
+    const file = req.file;
+    
+    if (!file) {
+      return res.status(400).json({ message: '未接收到文件' });
+    }
+    
+    if (!site) {
+      return res.status(400).json({ message: '未指定站点' });
+    }
+    
+    console.log(`📄 处理文件: ${file.originalname}, 站点: ${site}`);
+    
+    // 读取Excel文件
+    const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    // 转换为JSON
+    const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    if (jsonData.length < 2) {
+      return res.status(400).json({ message: 'Excel文件必须包含标题行和至少一行数据' });
+    }
+    
+    // 提取标题行和数据行
+    const headers = jsonData[0];
+    const dataRows = jsonData.slice(1);
+    
+    console.log(`📊 文件包含 ${headers.length} 列，${dataRows.length} 行数据`);
+    
+    // 转换数据格式
+    const records = [];
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      const record = {
+        site: site, // 设置站点
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+      
+      // 映射每一列的数据
+      for (let j = 0; j < headers.length; j++) {
+        if (headers[j] && row[j] !== undefined && row[j] !== null && row[j] !== '') {
+          const fieldName = headers[j].toString().toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^\w_]/g, '');
+          
+          // 特殊处理一些字段
+          if (fieldName === 'item_sku' || fieldName === 'sku') {
+            record.item_sku = row[j];
+            // 生成original_parent_sku：去掉前两个字符
+            if (row[j] && row[j].length > 2) {
+              record.original_parent_sku = row[j].substring(2);
+            }
+          } else {
+            record[fieldName] = row[j];
+          }
+        }
+      }
+      
+      records.push(record);
+    }
+    
+    console.log(`💾 准备保存 ${records.length} 条记录到product_information表...`);
+    
+    // 批量保存到数据库
+    try {
+      // 首先删除相同站点的旧数据
+      await ProductInformation.destroy({
+        where: { site: site }
+      });
+      
+      console.log(`🗑️ 已清理站点 ${site} 的旧数据`);
+      
+      // 批量插入新数据
+      await ProductInformation.bulkCreate(records, {
+        ignoreDuplicates: false,
+        validate: true
+      });
+      
+      console.log(`✅ 成功保存 ${records.length} 条记录到数据库`);
+      
+      // 返回成功响应
+      res.json({
+        success: true,
+        message: `成功上传 ${records.length} 条记录到数据库`,
+        recordCount: records.length,
+        site: site,
+        fileName: file.originalname
+      });
+      
+    } catch (dbError) {
+      console.error('❌ 数据库操作失败:', dbError);
+      throw new Error('数据库保存失败: ' + dbError.message);
+    }
+    
+  } catch (error) {
+    console.error('❌ 上传源数据失败:', error);
+    res.status(500).json({
+      message: '上传失败: ' + error.message,
+      error: error.toString()
+    });
+  }
+});
+
 module.exports = router; 

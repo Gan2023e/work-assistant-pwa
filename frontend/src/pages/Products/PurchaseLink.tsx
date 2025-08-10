@@ -25,7 +25,9 @@ import {
   Tag,
   Progress,
   Tabs,
-  Switch
+  Switch,
+  Radio,
+  Steps
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -45,7 +47,9 @@ import {
   FileExcelOutlined,
   ClockCircleOutlined,
   LoadingOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  GlobalOutlined,
+  PlayCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -169,7 +173,6 @@ const Purchase: React.FC = () => {
   
   // 生成其他站点资料表相关状态
   const [otherSiteModalVisible, setOtherSiteModalVisible] = useState(false);
-  const [activeSiteTabKey, setActiveSiteTabKey] = useState<string>('US');
   const [uploadedExcelFiles, setUploadedExcelFiles] = useState<Record<string, File | null>>({
     US: null,
     CA: null,
@@ -177,6 +180,7 @@ const Purchase: React.FC = () => {
     AE: null,
     AU: null
   });
+  const [activeSiteTabKey, setActiveSiteTabKey] = useState<string>('US');
   const [otherSiteLoading, setOtherSiteLoading] = useState<Record<string, boolean>>({
     US: false,
     CA: false,
@@ -184,7 +188,8 @@ const Purchase: React.FC = () => {
     AE: false,
     AU: false
   });
-  // 批量生成状态
+  const [missingColumnsModalVisible, setMissingColumnsModalVisible] = useState(false);
+  const [missingColumnsInfo, setMissingColumnsInfo] = useState<any>(null);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [generatedFiles, setGeneratedFiles] = useState<Record<string, { blob: Blob; fileName: string } | null>>({
     US: null,
@@ -200,13 +205,17 @@ const Purchase: React.FC = () => {
     AE: 'pending',
     AU: 'pending'
   });
-  const [missingColumnsModalVisible, setMissingColumnsModalVisible] = useState(false);
-  const [missingColumnsInfo, setMissingColumnsInfo] = useState<{
-    missingColumns: string[];
-    uploadedColumns: string[];
-    templateColumns: string[];
-  } | null>(null);
-  
+
+  // 新增：3步流程相关状态
+  const [currentStep, setCurrentStep] = useState(0); // 当前步骤：0=上传源数据，1=选择目标站点，2=下载管理
+  const [sourceCountry, setSourceCountry] = useState<string>(''); // 源站点
+  const [sourceFile, setSourceFile] = useState<File | null>(null); // 源文件
+  const [sourceDataUploaded, setSourceDataUploaded] = useState(false); // 源数据是否已上传到数据库
+  const [selectedTargetCountries, setSelectedTargetCountries] = useState<string[]>([]); // 选择的目标站点
+  const [generationInProgress, setGenerationInProgress] = useState(false); // 是否正在生成
+  const [completedCountries, setCompletedCountries] = useState<string[]>([]); // 已完成生成的站点
+  const [downloadHistory, setDownloadHistory] = useState<Record<string, { blob: Blob; fileName: string; generatedAt: string }>>({});
+
   // 全库统计数据
   const [allDataStats, setAllDataStats] = useState({
     statusStats: [] as { value: string; count: number }[],
@@ -2039,6 +2048,199 @@ const Purchase: React.FC = () => {
     await generateOtherSiteDataSheet();
   };
 
+  // 新增：步骤1 - 上传源数据到数据库
+  const handleUploadSourceData = async () => {
+    if (!sourceFile || !sourceCountry) {
+      message.warning('请选择源站点并上传Excel文件');
+      return;
+    }
+
+    try {
+      setOtherSiteLoading(prev => ({ ...prev, [sourceCountry]: true }));
+      
+      const formData = new FormData();
+      formData.append('file', sourceFile);
+      formData.append('site', sourceCountry);
+
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/upload-source-data`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '上传失败');
+      }
+
+      const result = await response.json();
+      
+      setSourceDataUploaded(true);
+      setCurrentStep(1); // 进入步骤2
+      message.success(`成功上传${result.recordCount}条记录到数据库`);
+      
+    } catch (error: any) {
+      console.error('上传源数据失败:', error);
+      message.error('上传失败: ' + error.message);
+    } finally {
+      setOtherSiteLoading(prev => ({ ...prev, [sourceCountry]: false }));
+    }
+  };
+
+  // 新增：步骤2 - 开始生成选定的目标站点资料
+  const handleStartGeneration = async () => {
+    if (selectedTargetCountries.length === 0) {
+      message.warning('请至少选择一个目标站点');
+      return;
+    }
+
+    setGenerationInProgress(true);
+    setCurrentStep(2); // 进入步骤3
+    setCompletedCountries([]);
+    
+    const newDownloadHistory: Record<string, { blob: Blob; fileName: string; generatedAt: string }> = {};
+
+    try {
+      // 逐个生成每个目标站点的资料表
+      for (const targetCountry of selectedTargetCountries) {
+        try {
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'processing' }));
+          
+          const formData = new FormData();
+          formData.append('file', sourceFile!);
+          formData.append('sourceCountry', sourceCountry);
+          formData.append('targetCountry', targetCountry);
+
+          const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-other-site-datasheet`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            throw new Error(`生成${targetCountry}站点资料表失败: ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+          
+          newDownloadHistory[targetCountry] = {
+            blob,
+            fileName,
+            generatedAt: new Date().toISOString()
+          };
+
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'completed' }));
+          setCompletedCountries(prev => [...prev, targetCountry]);
+          
+        } catch (error: any) {
+          console.error(`生成${targetCountry}站点资料表失败:`, error);
+          setBatchProgress(prev => ({ ...prev, [targetCountry]: 'failed' }));
+          message.error(`生成${targetCountry}站点失败: ${error.message}`);
+        }
+      }
+      
+      setDownloadHistory(newDownloadHistory);
+      
+      // 自动下载所有成功生成的文件
+      setTimeout(() => {
+        Object.entries(newDownloadHistory).forEach(([country, fileData], index) => {
+          setTimeout(() => {
+            const url = window.URL.createObjectURL(fileData.blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileData.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setTimeout(() => {
+              window.URL.revokeObjectURL(url);
+            }, 5000);
+          }, index * 200); // 错开下载时间
+        });
+        
+        if (Object.keys(newDownloadHistory).length > 0) {
+          message.success(`已自动下载${Object.keys(newDownloadHistory).length}个文件`);
+        }
+      }, 500);
+      
+    } catch (error: any) {
+      console.error('批量生成失败:', error);
+      message.error('批量生成失败: ' + error.message);
+    } finally {
+      setGenerationInProgress(false);
+    }
+  };
+
+  // 新增：重新下载指定站点的文件
+  const handleRedownload = (country: string) => {
+    const fileData = downloadHistory[country];
+    if (!fileData) {
+      message.warning('文件不存在');
+      return;
+    }
+
+    const url = window.URL.createObjectURL(fileData.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileData.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 5000);
+    
+    message.success(`正在下载${country}站点资料表`);
+  };
+
+  // 新增：批量重新下载所有文件
+  const handleBatchRedownload = () => {
+    const availableFiles = Object.entries(downloadHistory);
+    
+    if (availableFiles.length === 0) {
+      message.warning('没有可下载的文件');
+      return;
+    }
+
+    availableFiles.forEach(([country, fileData], index) => {
+      setTimeout(() => {
+        const url = window.URL.createObjectURL(fileData.blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileData.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 5000);
+      }, index * 200);
+    });
+    
+    message.success(`开始下载${availableFiles.length}个文件`);
+  };
+
+  // 新增：重置3步流程状态
+  const resetThreeStepFlow = () => {
+    setCurrentStep(0);
+    setSourceCountry('');
+    setSourceFile(null);
+    setSourceDataUploaded(false);
+    setSelectedTargetCountries([]);
+    setGenerationInProgress(false);
+    setCompletedCountries([]);
+    setDownloadHistory({});
+    setBatchProgress({
+      US: 'pending',
+      CA: 'pending',
+      UK: 'pending',
+      AE: 'pending',
+      AU: 'pending'
+    });
+  };
+
   // 批量生成其他站点资料表
   const handleBatchGenerateOtherSites = async () => {
     const sourceCountry = activeSiteTabKey;
@@ -3158,72 +3360,358 @@ const Purchase: React.FC = () => {
          />
              </Modal>
 
-      {/* 生成其他站点资料表弹窗 */}
+      {/* 生成其他站点资料表弹窗 - 新3步流程 */}
       <Modal
         title="生成其他站点资料表"
         open={otherSiteModalVisible}
         onCancel={() => {
           setOtherSiteModalVisible(false);
-          // 清空所有文件
-          setUploadedExcelFiles({
-            US: null,
-            CA: null,
-            UK: null,
-            AE: null,
-            AU: null
-          });
-          // 重置批量生成状态
-          setBatchGenerating(false);
-          setGeneratedFiles({
-            US: null,
-            CA: null,
-            UK: null,
-            AE: null,
-            AU: null
-          });
-          setBatchProgress({
-            US: 'pending',
-            CA: 'pending',
-            UK: 'pending',
-            AE: 'pending',
-            AU: 'pending'
-          });
+          resetThreeStepFlow();
         }}
         footer={null}
-        width={1000}
+        width={1200}
+        destroyOnClose={true}
       >
-        <Tabs
-          activeKey={activeSiteTabKey}
-          onChange={handleSiteTabChange}
-          type="card"
-          items={[
-            {
-              key: 'US',
-              label: '美国 (US)',
-              children: renderSiteTabContent('US', '美国')
-            },
-            {
-              key: 'CA',
-              label: '加拿大 (CA)',
-              children: renderSiteTabContent('CA', '加拿大')
-            },
-            {
-              key: 'UK',
-              label: '英国 (UK)',
-              children: renderSiteTabContent('UK', '英国')
-            },
-            {
-              key: 'AE',
-              label: '阿联酋 (AE)',
-              children: renderSiteTabContent('AE', '阿联酋')
-            },
-            {
-              key: 'AU',
-              label: '澳大利亚 (AU)',
-              children: renderSiteTabContent('AU', '澳大利亚')
-            }
-          ]}
-        />
+        <div style={{ padding: '20px 0' }}>
+          {/* 步骤指示器 */}
+          <Steps
+            current={currentStep}
+            style={{ marginBottom: '32px' }}
+            items={[
+              {
+                title: '上传源数据',
+                description: '选择站点并上传Excel文件',
+                icon: currentStep > 0 ? <CheckCircleOutlined /> : <UploadOutlined />
+              },
+              {
+                title: '选择目标站点',
+                description: '选择需要生成的站点',
+                icon: currentStep > 1 ? <CheckCircleOutlined /> : <GlobalOutlined />
+              },
+              {
+                title: '下载管理',
+                description: '下载生成的资料表',
+                icon: currentStep > 2 ? <CheckCircleOutlined /> : <DownloadOutlined />
+              }
+            ]}
+          />
+
+          {/* 步骤1：上传源数据 */}
+          {currentStep === 0 && (
+            <div style={{ minHeight: '400px' }}>
+              <Card title="步骤1：选择源站点并上传资料表" style={{ marginBottom: '20px' }}>
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  {/* 站点选择 */}
+                  <div>
+                    <Text strong style={{ display: 'block', marginBottom: '12px' }}>
+                      选择源站点：
+                    </Text>
+                    <Radio.Group 
+                      value={sourceCountry} 
+                      onChange={(e) => setSourceCountry(e.target.value)}
+                      size="large"
+                    >
+                      <Space direction="horizontal" wrap>
+                        <Radio.Button value="US">🇺🇸 美国 (US)</Radio.Button>
+                        <Radio.Button value="CA">🇨🇦 加拿大 (CA)</Radio.Button>
+                        <Radio.Button value="UK">🇬🇧 英国 (UK)</Radio.Button>
+                        <Radio.Button value="AE">🇦🇪 阿联酋 (AE)</Radio.Button>
+                        <Radio.Button value="AU">🇦🇺 澳大利亚 (AU)</Radio.Button>
+                      </Space>
+                    </Radio.Group>
+                  </div>
+
+                  {/* 文件上传 */}
+                  {sourceCountry && (
+                    <div>
+                      <Text strong style={{ display: 'block', marginBottom: '12px' }}>
+                        上传{sourceCountry === 'US' ? '美国' : sourceCountry === 'CA' ? '加拿大' : sourceCountry === 'UK' ? '英国' : sourceCountry === 'AE' ? '阿联酋' : '澳大利亚'}站点的Excel资料表：
+                      </Text>
+                      <Upload
+                        accept=".xlsx,.xls"
+                        beforeUpload={(file) => {
+                          setSourceFile(file);
+                          return false;
+                        }}
+                        fileList={sourceFile ? [{
+                          uid: '1',
+                          name: sourceFile.name,
+                          status: 'done' as const,
+                          size: sourceFile.size
+                        }] : []}
+                        onRemove={() => setSourceFile(null)}
+                        style={{ width: '100%' }}
+                      >
+                        <Button icon={<UploadOutlined />} size="large" block>
+                          选择Excel文件
+                        </Button>
+                      </Upload>
+                      <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>
+                        支持 .xlsx 和 .xls 格式，文件将被上传到数据库用于生成其他站点资料
+                      </Text>
+                    </div>
+                  )}
+
+                  {/* 文件信息 */}
+                  {sourceFile && (
+                    <div style={{ padding: '16px', backgroundColor: '#f6f6f6', borderRadius: '8px' }}>
+                      <Text strong>已选择文件：</Text>
+                      <br />
+                      <Text type="secondary">文件名: {sourceFile.name}</Text>
+                      <br />
+                      <Text type="secondary">大小: {(sourceFile.size / 1024).toFixed(1)} KB</Text>
+                    </div>
+                  )}
+
+                  {/* 上传按钮 */}
+                  {sourceFile && sourceCountry && (
+                    <div style={{ textAlign: 'center', marginTop: '24px' }}>
+                      <Button
+                        type="primary"
+                        size="large"
+                        icon={<CloudUploadOutlined />}
+                        loading={otherSiteLoading[sourceCountry]}
+                        onClick={handleUploadSourceData}
+                        style={{ minWidth: '200px' }}
+                      >
+                        {otherSiteLoading[sourceCountry] ? '正在上传到数据库...' : '上传数据到数据库'}
+                      </Button>
+                    </div>
+                  )}
+                </Space>
+              </Card>
+            </div>
+          )}
+
+          {/* 步骤2：选择目标站点 */}
+          {currentStep === 1 && (
+            <div style={{ minHeight: '400px' }}>
+              <Card title="步骤2：选择需要生成资料的站点" style={{ marginBottom: '20px' }}>
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  <div>
+                    <Text strong style={{ display: 'block', marginBottom: '16px' }}>
+                      源数据：{sourceCountry} 站点 ({sourceFile?.name})
+                    </Text>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: '24px' }}>
+                      请选择需要生成资料表的目标站点（可多选）：
+                    </Text>
+                  </div>
+
+                  <Checkbox.Group 
+                    value={selectedTargetCountries} 
+                    onChange={setSelectedTargetCountries}
+                    style={{ width: '100%' }}
+                  >
+                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      {['US', 'CA', 'UK', 'AE', 'AU']
+                        .filter(country => country !== sourceCountry)
+                        .map(country => {
+                          const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                          const flags = { US: '🇺🇸', CA: '🇨🇦', UK: '🇬🇧', AE: '🇦🇪', AU: '🇦🇺' };
+                          return (
+                            <Card 
+                              key={country}
+                              size="small"
+                              style={{ 
+                                cursor: 'pointer',
+                                backgroundColor: selectedTargetCountries.includes(country) ? '#e6f7ff' : '#fafafa'
+                              }}
+                              onClick={() => {
+                                if (selectedTargetCountries.includes(country)) {
+                                  setSelectedTargetCountries(prev => prev.filter(c => c !== country));
+                                } else {
+                                  setSelectedTargetCountries(prev => [...prev, country]);
+                                }
+                              }}
+                            >
+                              <Checkbox value={country} style={{ pointerEvents: 'none' }}>
+                                <Text strong>{flags[country as keyof typeof flags]} {countryNames[country as keyof typeof countryNames]} ({country})</Text>
+                              </Checkbox>
+                            </Card>
+                          );
+                        })}
+                    </Space>
+                  </Checkbox.Group>
+
+                  {selectedTargetCountries.length > 0 && (
+                    <div style={{ padding: '16px', backgroundColor: '#f6ffed', borderRadius: '8px' }}>
+                      <Text strong style={{ color: '#389e0d' }}>
+                        已选择 {selectedTargetCountries.length} 个站点：
+                      </Text>
+                      <div style={{ marginTop: '8px' }}>
+                        {selectedTargetCountries.map(country => {
+                          const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                          return (
+                            <Tag key={country} color="green" style={{ margin: '4px' }}>
+                              {countryNames[country as keyof typeof countryNames]} ({country})
+                            </Tag>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ textAlign: 'center', marginTop: '24px' }}>
+                    <Space>
+                      <Button 
+                        size="large"
+                        onClick={() => setCurrentStep(0)}
+                      >
+                        返回上一步
+                      </Button>
+                      <Button
+                        type="primary"
+                        size="large"
+                        icon={<PlayCircleOutlined />}
+                        disabled={selectedTargetCountries.length === 0}
+                        onClick={handleStartGeneration}
+                        style={{ minWidth: '200px' }}
+                      >
+                        开始生成资料表
+                      </Button>
+                    </Space>
+                  </div>
+                </Space>
+              </Card>
+            </div>
+          )}
+
+          {/* 步骤3：下载管理 */}
+          {currentStep === 2 && (
+            <div style={{ minHeight: '400px' }}>
+              <Card title="步骤3：生成进度与下载管理" style={{ marginBottom: '20px' }}>
+                <Space direction="vertical" style={{ width: '100%' }} size="large">
+                  {/* 生成进度 */}
+                  {generationInProgress && (
+                    <div style={{ padding: '16px', backgroundColor: '#fff2e8', borderRadius: '8px' }}>
+                      <Text strong style={{ display: 'block', marginBottom: '16px' }}>
+                        🔄 正在生成站点资料表...
+                      </Text>
+                      {selectedTargetCountries.map(country => {
+                        const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                        const status = batchProgress[country];
+                        
+                        let statusIcon = <ClockCircleOutlined style={{ color: '#d9d9d9' }} />;
+                        let statusColor = '#d9d9d9';
+                        let statusText = '等待中';
+                        
+                        if (status === 'processing') {
+                          statusIcon = <LoadingOutlined style={{ color: '#1890ff' }} />;
+                          statusColor = '#1890ff';
+                          statusText = '生成中...';
+                        } else if (status === 'completed') {
+                          statusIcon = <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+                          statusColor = '#52c41a';
+                          statusText = '已完成';
+                        } else if (status === 'failed') {
+                          statusIcon = <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+                          statusColor = '#ff4d4f';
+                          statusText = '生成失败';
+                        }
+                        
+                        return (
+                          <div key={country} style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            padding: '12px 0',
+                            borderBottom: '1px solid #f0f0f0'
+                          }}>
+                            <Space>
+                              {statusIcon}
+                              <Text>{countryNames[country as keyof typeof countryNames]} ({country})</Text>
+                            </Space>
+                            <Text style={{ color: statusColor }}>{statusText}</Text>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 下载历史 */}
+                  {Object.keys(downloadHistory).length > 0 && (
+                    <div style={{ padding: '16px', backgroundColor: '#f6ffed', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <Text strong style={{ color: '#389e0d' }}>
+                          📥 已生成的资料表文件：
+                        </Text>
+                        <Button 
+                          type="primary"
+                          icon={<DownloadOutlined />}
+                          onClick={handleBatchRedownload}
+                        >
+                          批量下载所有文件
+                        </Button>
+                      </div>
+                      
+                      {Object.entries(downloadHistory).map(([country, fileData]) => {
+                        const countryNames = { US: '美国', CA: '加拿大', UK: '英国', AE: '阿联酋', AU: '澳大利亚' };
+                        const generatedTime = new Date(fileData.generatedAt).toLocaleString('zh-CN');
+                        
+                        return (
+                          <div key={country} style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            backgroundColor: '#fff',
+                            borderRadius: '6px',
+                            marginBottom: '8px',
+                            border: '1px solid #d9d9d9'
+                          }}>
+                            <div>
+                              <Text strong>{countryNames[country as keyof typeof countryNames]} ({country}) 资料表</Text>
+                              <br />
+                              <Text type="secondary" style={{ fontSize: '12px' }}>
+                                生成时间: {generatedTime} | 文件名: {fileData.fileName}
+                              </Text>
+                            </div>
+                            <Button 
+                              type="link" 
+                              icon={<DownloadOutlined />}
+                              onClick={() => handleRedownload(country)}
+                            >
+                              下载
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 操作按钮 */}
+                  <div style={{ textAlign: 'center', marginTop: '24px' }}>
+                    <Space>
+                      {!generationInProgress && (
+                        <Button 
+                          size="large"
+                          onClick={() => setCurrentStep(1)}
+                        >
+                          返回上一步
+                        </Button>
+                      )}
+                      <Button
+                        size="large"
+                        onClick={() => {
+                          resetThreeStepFlow();
+                        }}
+                      >
+                        开始新的生成流程
+                      </Button>
+                      <Button
+                        type="primary"
+                        size="large"
+                        onClick={() => setOtherSiteModalVisible(false)}
+                      >
+                        完成
+                      </Button>
+                    </Space>
+                  </div>
+                </Space>
+              </Card>
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* 缺失列提示弹窗 */}
@@ -3247,7 +3735,7 @@ const Purchase: React.FC = () => {
                 ⚠️ 检测到以下列在{activeSiteTabKey}模板中不存在：
               </Typography.Text>
               <div style={{ marginTop: 8, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6 }}>
-                {missingColumnsInfo.missingColumns.map((col, index) => (
+                {missingColumnsInfo.missingColumns.map((col: string, index: number) => (
                   <Tag key={index} color="orange" style={{ margin: '2px 4px' }}>
                     {col}
                   </Tag>
