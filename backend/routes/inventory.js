@@ -799,11 +799,16 @@ router.put('/sku-packaging/:skuid', async (req, res) => {
 // 批量更新SKU装箱数量
 router.put('/sku-packaging/batch', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU装箱数量');
+    console.log('请求头:', JSON.stringify(req.headers, null, 2));
     console.log('完整请求体:', JSON.stringify(req.body, null, 2));
+    console.log('请求体类型:', typeof req.body);
+    console.log('请求体是否为空:', Object.keys(req.body).length === 0);
     
     try {
         const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
         console.log('解析的updates:', JSON.stringify(updates, null, 2));
+        console.log('updates类型:', typeof updates);
+        console.log('updates是否为数组:', Array.isArray(updates));
         
         if (!Array.isArray(updates) || updates.length === 0) {
             console.error('updates验证失败:', { updates, isArray: Array.isArray(updates), length: updates?.length });

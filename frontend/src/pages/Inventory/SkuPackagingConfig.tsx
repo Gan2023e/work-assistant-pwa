@@ -215,11 +215,40 @@ const SkuPackagingConfig: React.FC = () => {
       }
 
       console.log('发送批量更新请求:', { updates });
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('完整URL:', `${API_BASE_URL}/api/inventory/sku-packaging/batch`);
 
-      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
+      // 添加更详细的请求日志
+      const requestBody = { updates };
+      console.log('请求体JSON:', JSON.stringify(requestBody));
+
+      // 暂时绕过apiCall函数，直接使用fetch
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      console.log('发送请求头:', headers);
+
+      const response = await fetch(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
         method: 'PUT',
-        body: JSON.stringify({ updates }),
+        headers,
+        body: JSON.stringify(requestBody),
       });
+
+      console.log('响应状态:', response.status);
+      console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('错误响应内容:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
 
       console.log('批量更新响应:', result);
 
