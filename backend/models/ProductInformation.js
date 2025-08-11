@@ -135,18 +135,10 @@ const ProductInformation = sequelize.define('ProductInformation', {
   size_map: {
     type: DataTypes.STRING(30),
     allowNull: true
-  },
-  created_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
-  },
-  updated_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
   }
 }, {
   tableName: 'product_information',
-  timestamps: true,
+  timestamps: false, // 禁用自动时间戳管理
   underscored: true
 });
 
