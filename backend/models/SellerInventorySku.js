@@ -3,10 +3,10 @@ const { sequelize } = require('./database');
 
 const SellerInventorySku = sequelize.define('SellerInventorySku', {
   skuid: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     primaryKey: true,
-    autoIncrement: true,
-    comment: '主键ID'
+    autoIncrement: false,
+    comment: '产品SKU ID'
   },
   parent_sku: {
     type: DataTypes.STRING,

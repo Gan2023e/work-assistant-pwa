@@ -823,9 +823,9 @@ router.put('/sku-packaging/batch', async (req, res) => {
             const update = updates[i];
             console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
             
-            // 简化skuid验证
-            if (!update.skuid) {
-                console.error(`SKU ID 缺失 (项 ${i}):`, update);
+            // 验证skuid（字符串类型）
+            if (!update.skuid || typeof update.skuid !== 'string' || update.skuid.trim() === '') {
+                console.error(`SKU ID 无效 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
                     message: `第 ${i + 1} 项的SKU ID 不能为空`
@@ -853,8 +853,8 @@ router.put('/sku-packaging/batch', async (req, res) => {
             try {
                 console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
                 const result = await SellerInventorySku.update(
-                    { qty_per_box: parseInt(update.qty_per_box) }, // 使用parseInt，与单个更新一致
-                    { where: { skuid: update.skuid } }
+                    { qty_per_box: parseInt(update.qty_per_box) }, 
+                    { where: { skuid: String(update.skuid) } } // 确保skuid作为字符串使用
                 );
                 console.log(`更新结果 ${index + 1}:`, result);
                 return result;

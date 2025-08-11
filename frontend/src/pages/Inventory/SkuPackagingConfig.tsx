@@ -202,7 +202,7 @@ const SkuPackagingConfig: React.FC = () => {
       console.log('准备批量更新装箱数量:', { qty_per_box: parsedQty, selectedRows });
       
       const updates = selectedRows.map(row => ({
-        skuid: Number(row.skuid), // 确保 skuid 是数字
+        skuid: String(row.skuid), // 使用字符串格式传输大整数，避免精度丢失
         qty_per_box: Math.floor(parsedQty) // 确保是整数
       }));
 
