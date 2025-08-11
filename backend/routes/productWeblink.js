@@ -1889,14 +1889,17 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
   try {
     console.log('📋 收到生成其他站点资料表请求');
     
-    const { country } = req.body;
+    const { country, targetCountry } = req.body;
     const uploadedFile = req.file;
     
-    if (!country || !uploadedFile) {
+    // 支持两种参数格式：country 或 targetCountry
+    const actualCountry = country || targetCountry;
+    
+    if (!actualCountry || !uploadedFile) {
       return res.status(400).json({ message: '请提供国家信息和Excel文件' });
     }
 
-    console.log(`📝 处理国家: ${country}, 文件: ${uploadedFile.originalname}`);
+    console.log(`📝 处理国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
 
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
@@ -1935,7 +1938,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       });
       
       // 设置site字段为选择的国家
-      rowData.site = country;
+      rowData.site = actualCountry;
       
       // 设置original_parent_sku字段（去掉前两个字符）
       if (rowData.item_sku && rowData.item_sku.length > 2) {
@@ -1953,38 +1956,38 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log(`✅ 成功保存 ${savedRecords.length} 条记录到product_information表`);
 
     // 步骤3: 获取对应国家的模板文件
-    console.log(`🔍 查找${country}站点的模板文件...`);
+    console.log(`🔍 查找${actualCountry}站点的模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
         template_type: 'amazon',
-        country: country,
+        country: actualCountry,
         is_active: true
       },
       order: [['upload_time', 'DESC']]
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `未找到${country}站点的资料模板，请先上传${country}模板文件` });
+      return res.status(400).json({ message: `未找到${actualCountry}站点的资料模板，请先上传${actualCountry}模板文件` });
     }
 
-    console.log(`📄 使用${country}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
+    console.log(`📄 使用${actualCountry}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
 
     // 步骤4: 下载模板文件
-    console.log(`📥 下载${country}模板文件...`);
+    console.log(`📥 下载${actualCountry}模板文件...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`❌ 下载${country}模板失败:`, downloadResult.message);
+      console.error(`❌ 下载${actualCountry}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
-        message: `下载${country}模板失败: ${downloadResult.message}`,
+        message: `下载${actualCountry}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`✅ ${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+    console.log(`✅ ${actualCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤5: 使用xlsx库处理模板文件
     console.log('📊 开始使用xlsx库处理Excel文件...');
@@ -2004,7 +2007,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤6: 映射数据到模板
     console.log('🎯 开始映射数据到模板...');
-    const updatedData = mapDataToTemplateXlsx(templateData, savedRecords, country);
+    const updatedData = mapDataToTemplateXlsx(templateData, savedRecords, actualCountry);
 
     // 步骤7: 创建新的工作簿并写入数据
     console.log('📤 生成最终文件...');
@@ -2021,14 +2024,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     // 生成Excel文件buffer
     const outputBuffer = xlsx.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
     
-    const fileName = `${country}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `${actualCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', outputBuffer.length);
     
     const processingTime = Date.now() - startTime;
-    console.log(`✅ 生成${country}资料表成功 (耗时: ${processingTime}ms)`);
+    console.log(`✅ 生成${actualCountry}资料表成功 (耗时: ${processingTime}ms)`);
     
     res.send(outputBuffer);
 
