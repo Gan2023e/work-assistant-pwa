@@ -2488,6 +2488,24 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     console.log(`📊 文件包含 ${headers.length} 列，${dataRows.length} 行数据`);
+    console.log(`📋 原始标题行:`, headers);
+    
+    // 预处理标题行，生成字段映射
+    const fieldMapping = {};
+    const processedHeaders = headers.map((header, index) => {
+      if (header) {
+        const originalHeader = header.toString();
+        const fieldName = originalHeader.toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace(/[^\w_]/g, '');
+        fieldMapping[index] = { original: originalHeader, processed: fieldName };
+        console.log(`📍 列${index}: "${originalHeader}" -> "${fieldName}"`);
+        return fieldName;
+      }
+      return null;
+    });
+    
+    console.log(`🔍 处理后的标题行:`, processedHeaders);
     
     // 转换数据格式
     const records = [];
@@ -2499,32 +2517,38 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         updated_at: new Date()
       };
       
+      console.log(`🔄 处理第${i + 4}行数据:`, row);
+      
       // 映射每一列的数据
       for (let j = 0; j < headers.length; j++) {
-        if (headers[j] && row[j] !== undefined && row[j] !== null && row[j] !== '') {
-          const fieldName = headers[j].toString().toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^\w_]/g, '');
+        const fieldName = processedHeaders[j]; // 使用预处理的字段名
+        const cellValue = row[j];
+        
+        if (fieldName) {
+          console.log(`📝 列${j}: "${headers[j]}" -> "${fieldName}" = "${cellValue}"`);
           
           // 特殊处理一些字段
           if (fieldName === 'item_sku' || fieldName === 'sku') {
-            record.item_sku = row[j];
+            record.item_sku = cellValue || ''; // 确保即使为空也设置字段
+            console.log(`✅ 找到item_sku字段: "${record.item_sku}"`);
             // 生成original_parent_sku：去掉前两个字符
-            if (row[j] && row[j].length > 2) {
-              record.original_parent_sku = row[j].substring(2);
+            if (cellValue && cellValue.toString().length > 2) {
+              record.original_parent_sku = cellValue.toString().substring(2);
             }
-          } else {
-            record[fieldName] = row[j];
+          } else if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
+            // 其他字段只在有值时设置
+            record[fieldName] = cellValue;
           }
         }
       }
       
-             // 验证必需字段：site和item_sku不能为空（复合主键）
-       if (!record.item_sku || record.item_sku.trim() === '') {
-         console.warn(`⚠️ 跳过第${i + 4}行：缺少item_sku字段`); // 因为第3行是标题行，所以数据行从第4行开始
-         continue;
-       }
+      // 验证必需字段：site和item_sku不能为空（复合主键）
+      if (!record.item_sku || record.item_sku.trim() === '') {
+        console.warn(`⚠️ 跳过第${i + 4}行：缺少item_sku字段, 当前记录:`, record);
+        continue;
+      }
       
+      console.log(`✅ 第${i + 4}行处理成功，item_sku: ${record.item_sku}`);
       records.push(record);
     }
     
