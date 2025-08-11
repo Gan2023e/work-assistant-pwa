@@ -756,104 +756,49 @@ router.get('/sku-packaging', async (req, res) => {
 // 批量更新SKU装箱数量 - 必须在单个SKU路由之前定义
 router.put('/sku-packaging/batch', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU装箱数量');
-    console.log('请求头:', JSON.stringify(req.headers, null, 2));
-    console.log('完整请求体:', JSON.stringify(req.body, null, 2));
-    console.log('请求体类型:', typeof req.body);
-    console.log('请求体是否为空:', Object.keys(req.body).length === 0);
     
     try {
-        const { updates } = req.body; // [{ skuid, qty_per_box }, ...]
-        console.log('解析的updates:', JSON.stringify(updates, null, 2));
-        console.log('updates类型:', typeof updates);
-        console.log('updates是否为数组:', Array.isArray(updates));
+        const { updates } = req.body;
         
         if (!Array.isArray(updates) || updates.length === 0) {
-            console.error('updates验证失败:', { updates, isArray: Array.isArray(updates), length: updates?.length });
             return res.status(400).json({
                 code: 1,
                 message: '更新数据不能为空'
             });
         }
         
-        // 验证数据逻辑
+        // 验证数据
         for (let i = 0; i < updates.length; i++) {
             const update = updates[i];
-            console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
-            console.log(`验证更新项详细信息 ${i}:`, {
-                skuid: update.skuid,
-                skuid_type: typeof update.skuid,
-                qty_per_box: update.qty_per_box,
-                qty_per_box_type: typeof update.qty_per_box,
-                qty_per_box_value: update.qty_per_box,
-                update_keys: Object.keys(update)
-            });
             
             // 验证skuid（字符串类型）
             if (!update.skuid || typeof update.skuid !== 'string' || update.skuid.trim() === '') {
-                console.error(`SKU ID 无效 (项 ${i}):`, update);
                 return res.status(400).json({
                     code: 1,
                     message: `第 ${i + 1} 项的SKU ID 不能为空`
                 });
             }
             
-            // 验证qty_per_box，处理数字和字符串类型
-            console.log(`准备验证装箱数量 (项 ${i}):`, {
-                original_value: update.qty_per_box,
-                original_type: typeof update.qty_per_box,
-                is_undefined: update.qty_per_box === undefined,
-                is_null: update.qty_per_box === null,
-                is_empty_string: update.qty_per_box === '',
-                is_zero: update.qty_per_box === 0
-            });
-            
+            // 验证qty_per_box
             const qtyPerBox = Number(update.qty_per_box);
-            console.log(`装箱数量转换结果 (项 ${i}):`, {
-                converted_value: qtyPerBox,
-                is_nan: isNaN(qtyPerBox),
-                less_than_1: qtyPerBox < 1,
-                validation_result: isNaN(qtyPerBox) || qtyPerBox < 1
-            });
-            
             if (isNaN(qtyPerBox) || qtyPerBox < 1) {
-                console.error(`装箱数量验证失败 (项 ${i}):`, { 
-                    original: update.qty_per_box, 
-                    converted: qtyPerBox, 
-                    isNaN: isNaN(qtyPerBox),
-                    lessThan1: qtyPerBox < 1,
-                    update 
-                });
                 return res.status(400).json({
                     code: 1,
-                    message: `装箱数量必须大于0`  // 简化错误消息，与前端显示一致
+                    message: `装箱数量必须大于0`
                 });
             }
         }
         
-        console.log('验证通过，准备执行批量更新');
-        
-        // 检查数据库连接
-        await SellerInventorySku.sequelize.authenticate();
-        console.log('✅ 数据库连接正常');
-        
-        // 批量更新，使用与单个更新相同的逻辑
-        const updatePromises = updates.map(async (update, index) => {
-            try {
-                console.log(`执行更新 ${index + 1}:`, { skuid: update.skuid, qty_per_box: update.qty_per_box });
-                const result = await SellerInventorySku.update(
-                    { qty_per_box: parseInt(update.qty_per_box) }, 
-                    { where: { skuid: String(update.skuid) } } // 确保skuid作为字符串使用
-                );
-                console.log(`更新结果 ${index + 1}:`, result);
-                return result;
-            } catch (error) {
-                console.error(`更新项 ${index + 1} 失败:`, error);
-                throw error;
-            }
+        // 批量更新
+        const updatePromises = updates.map(async (update) => {
+            const result = await SellerInventorySku.update(
+                { qty_per_box: parseInt(update.qty_per_box) }, 
+                { where: { skuid: String(update.skuid) } }
+            );
+            return result;
         });
         
         const results = await Promise.all(updatePromises);
-        console.log('批量更新结果:', results);
         
         console.log('\x1b[33m%s\x1b[0m', `📦 批量更新 ${updates.length} 个SKU装箱数量`);
         
@@ -864,12 +809,6 @@ router.put('/sku-packaging/batch', async (req, res) => {
         });
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', '❌ 批量更新SKU装箱数量失败:', error);
-        console.error('错误详情:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            sql: error.sql
-        });
         res.status(500).json({
             code: 1,
             message: '批量更新失败',

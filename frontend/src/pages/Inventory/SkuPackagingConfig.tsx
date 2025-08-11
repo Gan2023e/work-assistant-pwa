@@ -199,58 +199,22 @@ const SkuPackagingConfig: React.FC = () => {
     }
 
     try {
-      console.log('准备批量更新装箱数量:', { qty_per_box: parsedQty, selectedRows });
-      
       const updates = selectedRows.map(row => ({
-        skuid: String(row.skuid), // 使用字符串格式传输大整数，避免精度丢失
-        qty_per_box: Math.floor(parsedQty) // 确保是整数
+        skuid: String(row.skuid),
+        qty_per_box: Math.floor(parsedQty)
       }));
 
-      // 再次验证更新数据
+      // 验证更新数据
       const invalidUpdates = updates.filter(update => !update.skuid || !update.qty_per_box || update.qty_per_box < 1);
       if (invalidUpdates.length > 0) {
-        console.error('无效的更新数据:', invalidUpdates);
         message.error('数据验证失败，请检查选中的SKU');
         return;
       }
 
-      console.log('发送批量更新请求:', { updates });
-      console.log('API_BASE_URL:', API_BASE_URL);
-      console.log('完整URL:', `${API_BASE_URL}/api/inventory/sku-packaging/batch`);
-
-      // 添加更详细的请求日志
-      const requestBody = { updates };
-      console.log('请求体JSON:', JSON.stringify(requestBody));
-
-      // 暂时绕过apiCall函数，直接使用fetch
-      const token = localStorage.getItem('token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      console.log('发送请求头:', headers);
-
-      const response = await fetch(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
+      const result = await apiCall(`${API_BASE_URL}/api/inventory/sku-packaging/batch`, {
         method: 'PUT',
-        headers,
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ updates }),
       });
-
-      console.log('响应状态:', response.status);
-      console.log('响应头:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('错误响应内容:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
-      }
-
-      const result = await response.json();
-
-      console.log('批量更新响应:', result);
 
       if (result.code === 0) {
         message.success(`成功为 ${selectedRows.length} 个SKU设置装箱数量`);
