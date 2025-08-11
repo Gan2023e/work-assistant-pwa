@@ -2016,7 +2016,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     }
 
     // 将模板转换为数组格式以便处理
-    const templateData = xlsx.utils.sheet_to_aoa(templateWorksheet);
+    const templateData = xlsx.utils.sheet_to_json(templateWorksheet, {header: 1});
     console.log(`📋 模板有 ${templateData.length} 行数据`);
 
     // 步骤6: 映射数据到模板
@@ -2498,7 +2498,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     }
 
     // 将模板转换为数组格式以便处理
-    const templateData = xlsx.utils.sheet_to_aoa(templateWorksheet);
+    const templateData = xlsx.utils.sheet_to_json(templateWorksheet, {header: 1});
     console.log(`📋 模板有 ${templateData.length} 行数据`);
 
     // 步骤6: 映射数据到模板
