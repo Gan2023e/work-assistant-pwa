@@ -2026,29 +2026,59 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤7: 创建新的工作簿并写入数据
     console.log('📤 生成最终文件...');
-    const newWorkbook = xlsx.utils.book_new();
-    const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
     
-    // 复制原模板的列宽设置
-    if (templateWorksheet['!cols']) {
-      newWorksheet['!cols'] = templateWorksheet['!cols'];
+    try {
+      const newWorkbook = xlsx.utils.book_new();
+      
+      // 验证数据格式
+      if (!Array.isArray(updatedData) || updatedData.length === 0) {
+        throw new Error('映射后的数据为空或格式错误');
+      }
+      
+      console.log(`📊 准备写入 ${updatedData.length} 行数据到Excel文件`);
+      
+      const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+      
+      // 复制原模板的列宽设置
+      if (templateWorksheet['!cols']) {
+        newWorksheet['!cols'] = templateWorksheet['!cols'];
+      }
+      
+      // 验证工作表名称
+      const sheetName = templateSheetName || 'Template';
+      console.log(`📋 使用工作表名称: ${sheetName}`);
+      
+      xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
+      
+      // 生成Excel文件buffer，使用更兼容的设置
+      const outputBuffer = xlsx.write(newWorkbook, { 
+        type: 'buffer', 
+        bookType: 'xlsx',
+        compression: true,
+        Props: {
+          Title: `${actualCountry} Data Sheet`,
+          Subject: `${actualCountry} Product Information`,
+          CreatedDate: new Date()
+        }
+      });
+      
+      console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
+      
+      const fileName = `${actualCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', outputBuffer.length);
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ 生成${actualCountry}资料表成功 (耗时: ${processingTime}ms)`);
+      
+      res.send(outputBuffer);
+      
+    } catch (fileError) {
+      console.error('❌ Excel文件生成失败:', fileError);
+      throw new Error('Excel文件生成失败: ' + fileError.message);
     }
-    
-    xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, templateSheetName);
-    
-    // 生成Excel文件buffer
-    const outputBuffer = xlsx.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
-    
-    const fileName = `${actualCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', outputBuffer.length);
-    
-    const processingTime = Date.now() - startTime;
-    console.log(`✅ 生成${actualCountry}资料表成功 (耗时: ${processingTime}ms)`);
-    
-    res.send(outputBuffer);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
@@ -2066,6 +2096,15 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 function mapDataToTemplateXlsx(templateData, records, country) {
   try {
     console.log(`🎯 开始映射 ${records.length} 条记录到${country}模板...`);
+    
+    // 验证输入数据
+    if (!Array.isArray(templateData) || templateData.length === 0) {
+      throw new Error('模板数据为空或格式错误');
+    }
+    
+    if (!Array.isArray(records)) {
+      throw new Error('记录数据格式错误');
+    }
     
     // 复制模板数据
     const updatedData = templateData.map(row => [...(row || [])]);
@@ -2286,6 +2325,20 @@ function mapDataToTemplateXlsx(templateData, records, country) {
 
     console.log(`✅ 数据映射完成，添加了 ${addedCount} 行数据到${country}模板`);
     
+    // 验证返回的数据格式
+    if (!Array.isArray(updatedData) || updatedData.length === 0) {
+      throw new Error('映射后的数据为空');
+    }
+    
+    // 验证每行数据的完整性
+    for (let i = 0; i < Math.min(updatedData.length, 5); i++) {
+      if (!Array.isArray(updatedData[i])) {
+        throw new Error(`第${i}行数据格式错误`);
+      }
+    }
+    
+    console.log(`📊 返回映射后的数据: ${updatedData.length} 行 x ${updatedData[0] ? updatedData[0].length : 0} 列`);
+    
     return updatedData;
     
   } catch (error) {
@@ -2443,29 +2496,59 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     // 步骤7: 创建新的工作簿并写入数据
     console.log('📤 生成最终文件...');
-    const newWorkbook = xlsx.utils.book_new();
-    const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
     
-    // 复制原模板的列宽设置
-    if (templateWorksheet['!cols']) {
-      newWorksheet['!cols'] = templateWorksheet['!cols'];
+    try {
+      const batchWorkbook = xlsx.utils.book_new();
+      
+      // 验证数据格式
+      if (!Array.isArray(updatedData) || updatedData.length === 0) {
+        throw new Error('映射后的数据为空或格式错误');
+      }
+      
+      console.log(`📊 准备写入 ${updatedData.length} 行数据到Excel文件`);
+      
+      const batchWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+      
+      // 复制原模板的列宽设置
+      if (templateWorksheet['!cols']) {
+        batchWorksheet['!cols'] = templateWorksheet['!cols'];
+      }
+      
+      // 验证工作表名称
+      const sheetName = templateSheetName || 'Template';
+      console.log(`📋 使用工作表名称: ${sheetName}`);
+      
+      xlsx.utils.book_append_sheet(batchWorkbook, batchWorksheet, sheetName);
+      
+      // 生成Excel文件buffer，使用更兼容的设置
+      const outputBuffer = xlsx.write(batchWorkbook, { 
+        type: 'buffer', 
+        bookType: 'xlsx',
+        compression: true,
+        Props: {
+          Title: `${targetCountry} Data Sheet`,
+          Subject: `${targetCountry} Product Information`,
+          CreatedDate: new Date()
+        }
+      });
+      
+      console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
+      
+      const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', outputBuffer.length);
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ 批量生成${sourceCountry}到${targetCountry}资料表成功 (耗时: ${processingTime}ms)`);
+      
+      res.send(outputBuffer);
+      
+    } catch (fileError) {
+      console.error('❌ Excel文件生成失败:', fileError);
+      throw new Error('Excel文件生成失败: ' + fileError.message);
     }
-    
-    xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, templateSheetName);
-    
-    // 生成Excel文件buffer
-    const outputBuffer = xlsx.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
-    
-    const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', outputBuffer.length);
-    
-    const processingTime = Date.now() - startTime;
-    console.log(`✅ 批量生成${sourceCountry}到${targetCountry}资料表成功 (耗时: ${processingTime}ms)`);
-    
-    res.send(outputBuffer);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
