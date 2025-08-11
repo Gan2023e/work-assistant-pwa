@@ -1929,7 +1929,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 步骤2: 处理数据并保存到product_information表
     console.log('💾 保存数据到product_information表...');
-    const { ProductInformation } = require('../models');
     
     // 获取标题行（第3行是标题行，索引为2）
     if (jsonData.length < 4) {
@@ -2083,14 +2082,22 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
   } catch (error) {
     const processingTime = Date.now() - startTime;
     const errorMessage = error.message || '生成其他站点资料表时发生未知错误';
-    console.error(`❌ 生成其他站点资料表失败 (耗时: ${processingTime}ms):`, error);
+    console.error(`❌ 生成其他站点资料表失败 (耗时: ${processingTime}ms):`);
+    console.error(`🔍 错误详情: ${error.message}`);
+    console.error(`📋 错误堆栈:`, error.stack);
+    console.error(`🏷️ 错误类型: ${error.name}`);
     
-    res.status(500).json({ 
-      message: errorMessage,
-      processingTime: processingTime
-    });
-  }
-});
+          // 输出请求参数以便调试
+      console.error(`📋 请求参数: actualCountry=${req.body.country || req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
+      
+      res.status(500).json({ 
+        message: errorMessage,
+        processingTime: processingTime,
+        error: error.name,
+        details: error.stack ? error.stack.split('\n')[0] : 'No stack trace'
+      });
+    }
+  });
 
 // 映射数据到模板的辅助函数（基于xlsx库）
 function mapDataToTemplateXlsx(templateData, records, country) {
@@ -2342,7 +2349,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     return updatedData;
     
   } catch (error) {
-    console.error('❌ 映射数据到模板失败:', error);
+    console.error('❌ 映射数据到模板失败:');
+    console.error(`🔍 错误详情: ${error.message}`);
+    console.error(`📋 错误堆栈:`, error.stack);
+    console.error(`🏷️ 错误类型: ${error.name}`);
+    console.error(`📊 输入参数: country=${country}, records数量=${Array.isArray(records) ? records.length : 'not array'}, templateData行数=${Array.isArray(templateData) ? templateData.length : 'not array'}`);
     throw error;
   }
 }
@@ -2553,11 +2564,19 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
   } catch (error) {
     const processingTime = Date.now() - startTime;
     const errorMessage = error.message || '批量生成其他站点资料表时发生未知错误';
-    console.error(`❌ 批量生成其他站点资料表失败 (耗时: ${processingTime}ms):`, error);
+    console.error(`❌ 批量生成其他站点资料表失败 (耗时: ${processingTime}ms):`);
+    console.error(`🔍 错误详情: ${error.message}`);
+    console.error(`📋 错误堆栈:`, error.stack);
+    console.error(`🏷️ 错误类型: ${error.name}`);
+    
+    // 输出请求参数以便调试
+    console.error(`📋 请求参数: sourceCountry=${req.body.sourceCountry}, targetCountry=${req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
     
     res.status(500).json({ 
       message: errorMessage,
-      processingTime: processingTime
+      processingTime: processingTime,
+      error: error.name,
+      details: error.stack ? error.stack.split('\n')[0] : 'No stack trace'
     });
   }
 });
