@@ -818,10 +818,18 @@ router.put('/sku-packaging/batch', async (req, res) => {
             });
         }
         
-        // 简化验证数据逻辑，与单个更新保持一致
+        // 验证数据逻辑
         for (let i = 0; i < updates.length; i++) {
             const update = updates[i];
             console.log(`验证更新项 ${i}:`, JSON.stringify(update, null, 2));
+            console.log(`验证更新项详细信息 ${i}:`, {
+                skuid: update.skuid,
+                skuid_type: typeof update.skuid,
+                qty_per_box: update.qty_per_box,
+                qty_per_box_type: typeof update.qty_per_box,
+                qty_per_box_value: update.qty_per_box,
+                update_keys: Object.keys(update)
+            });
             
             // 验证skuid（字符串类型）
             if (!update.skuid || typeof update.skuid !== 'string' || update.skuid.trim() === '') {
@@ -832,12 +840,35 @@ router.put('/sku-packaging/batch', async (req, res) => {
                 });
             }
             
-            // 简化qty_per_box验证，与单个更新保持一致
-            if (!update.qty_per_box || update.qty_per_box < 1) {
-                console.error(`装箱数量无效 (项 ${i}):`, update);
+            // 验证qty_per_box，处理数字和字符串类型
+            console.log(`准备验证装箱数量 (项 ${i}):`, {
+                original_value: update.qty_per_box,
+                original_type: typeof update.qty_per_box,
+                is_undefined: update.qty_per_box === undefined,
+                is_null: update.qty_per_box === null,
+                is_empty_string: update.qty_per_box === '',
+                is_zero: update.qty_per_box === 0
+            });
+            
+            const qtyPerBox = Number(update.qty_per_box);
+            console.log(`装箱数量转换结果 (项 ${i}):`, {
+                converted_value: qtyPerBox,
+                is_nan: isNaN(qtyPerBox),
+                less_than_1: qtyPerBox < 1,
+                validation_result: isNaN(qtyPerBox) || qtyPerBox < 1
+            });
+            
+            if (isNaN(qtyPerBox) || qtyPerBox < 1) {
+                console.error(`装箱数量验证失败 (项 ${i}):`, { 
+                    original: update.qty_per_box, 
+                    converted: qtyPerBox, 
+                    isNaN: isNaN(qtyPerBox),
+                    lessThan1: qtyPerBox < 1,
+                    update 
+                });
                 return res.status(400).json({
                     code: 1,
-                    message: `第 ${i + 1} 项的装箱数量必须大于0`
+                    message: `装箱数量必须大于0`  // 简化错误消息，与前端显示一致
                 });
             }
         }
