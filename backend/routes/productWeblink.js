@@ -2555,13 +2555,24 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     const records = [];
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
+      
+      console.log(`🔄 处理第${i + 4}行数据:`, row);
+      
+      // 步骤1: 检查整行是否为空
+      const hasAnyValue = row.some(cell => cell !== undefined && cell !== null && cell !== '');
+      if (!hasAnyValue) {
+        console.log(`⏭️ 跳过第${i + 4}行：整行为空`);
+        continue;
+      }
+      
       const record = {
         site: site // 只设置站点，不添加created_at和updated_at字段
       };
       
-      console.log(`🔄 处理第${i + 4}行数据:`, row);
+      let hasItemSku = false;
+      let hasOtherValues = false;
       
-      // 映射每一列的数据
+      // 步骤2: 映射每一列的数据
       for (let j = 0; j < headers.length; j++) {
         const fieldName = processedHeaders[j]; // 使用预处理的字段名
         const cellValue = row[j];
@@ -2572,6 +2583,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           // 特殊处理一些字段
           if (fieldName === 'item_sku' || fieldName === 'sku') {
             record.item_sku = cellValue.toString(); // 转换为字符串
+            hasItemSku = true;
             console.log(`✅ 找到item_sku字段: "${record.item_sku}"`);
             // 生成original_parent_sku：去掉前两个字符
             if (cellValue && cellValue.toString().length > 2) {
@@ -2580,17 +2592,25 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           } else {
             // 其他字段直接设置（只有当有值时）
             record[fieldName] = cellValue;
+            hasOtherValues = true;
           }
-        } else if (fieldName === 'item_sku' || fieldName === 'sku') {
-          // 即使item_sku为空也要设置（因为是主键字段）
-          record.item_sku = '';
-          console.log(`⚠️ item_sku字段为空`);
         }
       }
       
-      // 验证必需字段：site和item_sku不能为空（复合主键）
-      if (!record.item_sku || record.item_sku.trim() === '') {
-        console.warn(`⚠️ 跳过第${i + 4}行：缺少item_sku字段, 当前记录:`, record);
+      // 步骤3: 验证item_sku字段完整性
+      if (!hasItemSku && hasOtherValues) {
+        const errorMsg = `❌ 第${i + 4}行错误：item_sku字段为空但其他字段有值，item_sku作为主键不能为空`;
+        console.error(errorMsg);
+        console.error(`📋 问题行数据:`, record);
+        return res.status(400).json({ 
+          message: errorMsg,
+          rowNumber: i + 4,
+          rowData: record
+        });
+      }
+      
+      if (!hasItemSku) {
+        console.log(`⏭️ 跳过第${i + 4}行：没有item_sku字段且没有其他有效值`);
         continue;
       }
       
@@ -2659,4 +2679,4 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;
