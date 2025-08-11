@@ -2609,6 +2609,17 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         });
       }
       
+      if (hasItemSku && !hasOtherValues) {
+        const errorMsg = `❌ 第${i + 4}行错误：只有item_sku字段有值，其他字段都为空，记录缺少必要信息`;
+        console.error(errorMsg);
+        console.error(`📋 问题行数据:`, record);
+        return res.status(400).json({ 
+          message: errorMsg,
+          rowNumber: i + 4,
+          rowData: record
+        });
+      }
+      
       if (!hasItemSku) {
         console.log(`⏭️ 跳过第${i + 4}行：没有item_sku字段且没有其他有效值`);
         continue;
