@@ -2532,7 +2532,6 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     console.log(`📊 文件包含 ${headers.length} 列，${dataRows.length} 行数据`);
-    console.log(`📋 原始标题行:`, headers);
     
     // 预处理标题行，生成字段映射
     const fieldMapping = {};
@@ -2543,25 +2542,25 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           .replace(/\s+/g, '_')
           .replace(/[^\w_]/g, '');
         fieldMapping[index] = { original: originalHeader, processed: fieldName };
-        console.log(`📍 列${index}: "${originalHeader}" -> "${fieldName}"`);
         return fieldName;
       }
       return null;
     });
     
-    console.log(`🔍 处理后的标题行:`, processedHeaders);
+    console.log(`🔍 找到 ${processedHeaders.filter(h => h).length} 个有效列标题`);
     
     // 转换数据格式
     const records = [];
+    let processedRows = 0;
+    let skippedRows = 0;
+    
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
-      
-      console.log(`🔄 处理第${i + 4}行数据:`, row);
       
       // 步骤1: 检查整行是否为空
       const hasAnyValue = row.some(cell => cell !== undefined && cell !== null && cell !== '');
       if (!hasAnyValue) {
-        console.log(`⏭️ 跳过第${i + 4}行：整行为空`);
+        skippedRows++;
         continue;
       }
       
@@ -2578,13 +2577,10 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         const cellValue = row[j];
         
         if (fieldName && cellValue !== undefined && cellValue !== null && cellValue !== '') {
-          console.log(`📝 列${j}: "${headers[j]}" -> "${fieldName}" = "${cellValue}"`);
-          
           // 特殊处理一些字段
           if (fieldName === 'item_sku' || fieldName === 'sku') {
             record.item_sku = cellValue.toString(); // 转换为字符串
             hasItemSku = true;
-            console.log(`✅ 找到item_sku字段: "${record.item_sku}"`);
             // 生成original_parent_sku：去掉前两个字符
             if (cellValue && cellValue.toString().length > 2) {
               record.original_parent_sku = cellValue.toString().substring(2);
@@ -2621,13 +2617,15 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       }
       
       if (!hasItemSku) {
-        console.log(`⏭️ 跳过第${i + 4}行：没有item_sku字段且没有其他有效值`);
+        skippedRows++;
         continue;
       }
       
-      console.log(`✅ 第${i + 4}行处理成功，item_sku: ${record.item_sku}`);
       records.push(record);
+      processedRows++;
     }
+    
+    console.log(`📊 数据处理完成: 有效记录 ${processedRows} 条，跳过 ${skippedRows} 条`);
     
     console.log(`💾 准备保存 ${records.length} 条记录到product_information表...`);
     
@@ -2646,20 +2644,13 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       for (const record of records) {
         try {
-          // 记录保存前的状态
-          console.log(`💾 准备保存记录: site=${record.site}, item_sku=${record.item_sku}`);
-          console.log(`📊 记录字段:`, Object.keys(record));
-          
           await ProductInformation.upsert(record, {
             returning: false, // 提高性能
             validate: true // 启用验证
           });
           successCount++;
-          console.log(`✅ 成功保存: site=${record.site}, item_sku=${record.item_sku}`);
         } catch (error) {
-          console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}`);
-          console.error(`🔍 错误详情:`, error.message);
-          console.error(`📋 失败的记录:`, record);
+          console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
           errorCount++;
         }
       }
