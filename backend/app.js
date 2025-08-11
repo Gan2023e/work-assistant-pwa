@@ -63,6 +63,8 @@ app.get('/health', async (req, res) => {
 console.log('🔗 Registering API routes...');
 app.use('/api/auth', authRouter);
 app.use('/api/product_weblink', productWeblinkRouter);
+// 添加连字符版本的路由，解决生产环境路径问题
+app.use('/api/product-weblink', productWeblinkRouter);
 app.use('/api/logistics', logisticsRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api/warehouse', warehouseRouter);
@@ -88,7 +90,8 @@ app.get('/', (req, res) => {
     endpoints: [
       '/health', 
       '/api/auth', 
-      '/api/product_weblink', 
+      '/api/product_weblink',
+      '/api/product-weblink', // 连字符版本，兼容生产环境
       '/api/logistics', 
       '/api/salary',
       '/api/warehouse',
