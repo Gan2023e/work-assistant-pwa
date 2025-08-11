@@ -2556,9 +2556,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
       const record = {
-        site: site, // 设置站点
-        created_at: new Date(),
-        updated_at: new Date()
+        site: site // 只设置站点，不添加created_at和updated_at字段
       };
       
       console.log(`🔄 处理第${i + 4}行数据:`, row);
@@ -2568,21 +2566,25 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         const fieldName = processedHeaders[j]; // 使用预处理的字段名
         const cellValue = row[j];
         
-        if (fieldName) {
+        if (fieldName && cellValue !== undefined && cellValue !== null && cellValue !== '') {
           console.log(`📝 列${j}: "${headers[j]}" -> "${fieldName}" = "${cellValue}"`);
           
           // 特殊处理一些字段
           if (fieldName === 'item_sku' || fieldName === 'sku') {
-            record.item_sku = cellValue || ''; // 确保即使为空也设置字段
+            record.item_sku = cellValue.toString(); // 转换为字符串
             console.log(`✅ 找到item_sku字段: "${record.item_sku}"`);
             // 生成original_parent_sku：去掉前两个字符
             if (cellValue && cellValue.toString().length > 2) {
               record.original_parent_sku = cellValue.toString().substring(2);
             }
-          } else if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
-            // 其他字段只在有值时设置
+          } else {
+            // 其他字段直接设置（只有当有值时）
             record[fieldName] = cellValue;
           }
+        } else if (fieldName === 'item_sku' || fieldName === 'sku') {
+          // 即使item_sku为空也要设置（因为是主键字段）
+          record.item_sku = '';
+          console.log(`⚠️ item_sku字段为空`);
         }
       }
       
@@ -2613,12 +2615,20 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       for (const record of records) {
         try {
+          // 记录保存前的状态
+          console.log(`💾 准备保存记录: site=${record.site}, item_sku=${record.item_sku}`);
+          console.log(`📊 记录字段:`, Object.keys(record));
+          
           await ProductInformation.upsert(record, {
-            returning: false // 提高性能
+            returning: false, // 提高性能
+            validate: true // 启用验证
           });
           successCount++;
+          console.log(`✅ 成功保存: site=${record.site}, item_sku=${record.item_sku}`);
         } catch (error) {
-          console.warn(`⚠️ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+          console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}`);
+          console.error(`🔍 错误详情:`, error.message);
+          console.error(`📋 失败的记录:`, record);
           errorCount++;
         }
       }
