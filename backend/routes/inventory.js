@@ -753,50 +753,7 @@ router.get('/sku-packaging', async (req, res) => {
     }
 });
 
-// 更新单个SKU装箱数量
-router.put('/sku-packaging/:skuid', async (req, res) => {
-    console.log('\x1b[32m%s\x1b[0m', '✏️ 更新SKU装箱数量');
-    
-    try {
-        const { skuid } = req.params;
-        const { qty_per_box } = req.body;
-        
-        if (!qty_per_box || qty_per_box < 1) {
-            return res.status(400).json({
-                code: 1,
-                message: '装箱数量必须大于0'
-            });
-        }
-        
-        const result = await SellerInventorySku.update(
-            { qty_per_box: parseInt(qty_per_box) },
-            { where: { skuid } }
-        );
-        
-        if (result[0] === 0) {
-            return res.status(404).json({
-                code: 1,
-                message: 'SKU不存在'
-            });
-        }
-        
-        console.log('\x1b[33m%s\x1b[0m', `📦 SKU ${skuid} 装箱数量更新为 ${qty_per_box}`);
-        
-        res.json({
-            code: 0,
-            message: '更新成功'
-        });
-    } catch (error) {
-        console.error('\x1b[31m%s\x1b[0m', '❌ 更新SKU装箱数量失败:', error);
-        res.status(500).json({
-            code: 1,
-            message: '更新失败',
-            error: error.message
-        });
-    }
-});
-
-// 批量更新SKU装箱数量
+// 批量更新SKU装箱数量 - 必须在单个SKU路由之前定义
 router.put('/sku-packaging/batch', async (req, res) => {
     console.log('\x1b[32m%s\x1b[0m', '📝 批量更新SKU装箱数量');
     console.log('请求头:', JSON.stringify(req.headers, null, 2));
@@ -920,5 +877,50 @@ router.put('/sku-packaging/batch', async (req, res) => {
         });
     }
 });
+
+// 更新单个SKU装箱数量
+router.put('/sku-packaging/:skuid', async (req, res) => {
+    console.log('\x1b[32m%s\x1b[0m', '✏️ 更新SKU装箱数量');
+    
+    try {
+        const { skuid } = req.params;
+        const { qty_per_box } = req.body;
+        
+        if (!qty_per_box || qty_per_box < 1) {
+            return res.status(400).json({
+                code: 1,
+                message: '装箱数量必须大于0'
+            });
+        }
+        
+        const result = await SellerInventorySku.update(
+            { qty_per_box: parseInt(qty_per_box) },
+            { where: { skuid } }
+        );
+        
+        if (result[0] === 0) {
+            return res.status(404).json({
+                code: 1,
+                message: 'SKU不存在'
+            });
+        }
+        
+        console.log('\x1b[33m%s\x1b[0m', `📦 SKU ${skuid} 装箱数量更新为 ${qty_per_box}`);
+        
+        res.json({
+            code: 0,
+            message: '更新成功'
+        });
+    } catch (error) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 更新SKU装箱数量失败:', error);
+        res.status(500).json({
+            code: 1,
+            message: '更新失败',
+            error: error.message
+        });
+    }
+});
+
+
 
 module.exports = router; 
