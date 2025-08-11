@@ -1904,8 +1904,23 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
     const workbook = xlsx.read(uploadedFile.buffer);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    
+    // 优先寻找Template工作表，如果没有则使用第一个工作表
+    let sheetName;
+    let worksheet;
+    
+    if (workbook.Sheets['Template']) {
+      sheetName = 'Template';
+      worksheet = workbook.Sheets['Template'];
+      console.log('✅ 找到Template工作表，使用Template工作表');
+    } else {
+      sheetName = workbook.SheetNames[0];
+      worksheet = workbook.Sheets[sheetName];
+      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
+    }
+    
+    console.log(`📋 当前使用的工作表: ${sheetName}`);
+    
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 2) {
@@ -2305,8 +2320,23 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
     const workbook = xlsx.read(uploadedFile.buffer);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    
+    // 优先寻找Template工作表，如果没有则使用第一个工作表
+    let sheetName;
+    let worksheet;
+    
+    if (workbook.Sheets['Template']) {
+      sheetName = 'Template';
+      worksheet = workbook.Sheets['Template'];
+      console.log('✅ 找到Template工作表，使用Template工作表');
+    } else {
+      sheetName = workbook.SheetNames[0];
+      worksheet = workbook.Sheets[sheetName];
+      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
+    }
+    
+    console.log(`📋 当前使用的工作表: ${sheetName}`);
+    
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 2) {
@@ -2469,8 +2499,22 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     
     // 读取Excel文件
     const workbook = xlsx.read(file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    
+    // 优先寻找Template工作表，如果没有则使用第一个工作表
+    let sheetName;
+    let worksheet;
+    
+    if (workbook.Sheets['Template']) {
+      sheetName = 'Template';
+      worksheet = workbook.Sheets['Template'];
+      console.log('✅ 找到Template工作表，使用Template工作表');
+    } else {
+      sheetName = workbook.SheetNames[0];
+      worksheet = workbook.Sheets[sheetName];
+      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
+    }
+    
+    console.log(`📋 当前使用的工作表: ${sheetName}`);
     
     // 转换为JSON
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
