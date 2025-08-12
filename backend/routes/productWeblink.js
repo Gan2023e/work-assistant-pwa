@@ -2306,17 +2306,14 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       console.log(`第${i + 1}行:`, updatedData[i]?.slice(0, 5) || '空行');
     }
 
-    // 清空现有数据行（保留前3行：标题、说明等）
+    // 不清空原模板数据，只从第4行开始填写数据
     const headerRowCount = 3;
-    console.log(`📋 保留前${headerRowCount}行，清空第${headerRowCount + 1}行开始的数据`);
-    
     const originalLength = updatedData.length;
-    updatedData.splice(headerRowCount);
-    console.log(`📊 原模板有${originalLength}行，清空后剩余${updatedData.length}行`);
+    console.log(`📋 保留原模板所有内容，从第${headerRowCount + 1}行开始填写${records.length}条记录`);
+    console.log(`📊 原模板有${originalLength}行，将从第4行开始填写数据`);
 
-    // 添加新数据
+    // 填写新数据（从第4行开始）
     let addedCount = 0;
-    console.log(`🔄 开始从第${headerRowCount + 1}行填写${records.length}条记录`);
     records.forEach((record, index) => {
       const rowIndex = headerRowCount + index;
       
