@@ -41,23 +41,23 @@ const ProductInformation = sequelize.define('ProductInformation', {
     allowNull: true
   },
   bullet_point1: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.STRING(500),
     allowNull: true
   },
   bullet_point2: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.STRING(500),
     allowNull: true
   },
   bullet_point3: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.STRING(500),
     allowNull: true
   },
   bullet_point4: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.STRING(500),
     allowNull: true
   },
   bullet_point5: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.STRING(500),
     allowNull: true
   },
   generic_keywords: {

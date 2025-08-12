@@ -13,6 +13,20 @@ const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
+// 国家代码转换为中文名称的映射表
+function convertCountryCodeToChinese(countryCode) {
+  const countryMapping = {
+    'US': '美国',
+    'CA': '加拿大', 
+    'UK': '英国',
+    'DE': '德国',
+    'FR': '法国',
+    'AE': '阿联酋',
+    'AU': '澳大利亚'
+  };
+  return countryMapping[countryCode] || countryCode;
+}
+
 // 过滤和验证ProductInformation数据的工具函数
 function filterValidFields(data) {
   // ProductInformation模型中定义的字段及其长度限制
@@ -26,11 +40,11 @@ function filterValidFields(data) {
     external_product_id_type: { type: 'string', maxLength: 30 },
     brand_name: { type: 'string', maxLength: 30 },
     product_description: { type: 'text', maxLength: null }, // TEXT类型，通常无长度限制
-    bullet_point1: { type: 'string', maxLength: 255 },
-    bullet_point2: { type: 'string', maxLength: 255 },
-    bullet_point3: { type: 'string', maxLength: 255 },
-    bullet_point4: { type: 'string', maxLength: 255 },
-    bullet_point5: { type: 'string', maxLength: 255 },
+    bullet_point1: { type: 'string', maxLength: 500 },
+    bullet_point2: { type: 'string', maxLength: 500 },
+    bullet_point3: { type: 'string', maxLength: 500 },
+    bullet_point4: { type: 'string', maxLength: 500 },
+    bullet_point5: { type: 'string', maxLength: 500 },
     generic_keywords: { type: 'string', maxLength: 255 },
     main_image_url: { type: 'string', maxLength: 255 },
     swatch_image_url: { type: 'string', maxLength: 255 },
@@ -2093,12 +2107,20 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       });
       
-      // 设置site字段为选择的国家
-      rowData.site = actualCountry;
+      // 设置site字段为选择的国家（转换为中文名称）
+      rowData.site = convertCountryCodeToChinese(actualCountry);
       
-      // 设置original_parent_sku字段（去掉前两个字符）
-      if (rowData.item_sku && rowData.item_sku.length > 2) {
+      // 设置original_parent_sku字段（根据parent_child列判断）
+      if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
+        // 当parent_child为"Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         rowData.original_parent_sku = rowData.item_sku.substring(2);
+      } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
+        // 当parent_child为"Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        rowData.original_parent_sku = rowData.parent_sku.substring(2);
+      } else if (rowData.item_sku && rowData.item_sku.length > 2) {
+        // 兼容处理：如果没有parent_child信息，使用原有逻辑
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+        console.warn(`⚠️ 记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       }
       
       // 过滤和验证数据，只保留模型中定义的字段
@@ -2852,17 +2874,27 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         }
       });
       
+      // 设置original_parent_sku字段（根据parent_child列判断）
+      if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
+        // 当parent_child为"Parent"时，item_sku中的信息为母SKU，去掉前两个字符
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+      } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
+        // 当parent_child为"Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        rowData.original_parent_sku = rowData.parent_sku.substring(2);
+      } else if (rowData.item_sku && rowData.item_sku.length > 2) {
+        // 兼容处理：如果没有parent_child信息，使用原有逻辑
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+        console.warn(`⚠️ 批量记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
+      }
+      
       // 关键转换：将源站点的SKU转换为目标站点的SKU
       if (rowData.item_sku && rowData.item_sku.length > 2) {
-        // 保存原始SKU（去掉前两个字符）作为original_parent_sku
-        rowData.original_parent_sku = rowData.item_sku.substring(2);
-        
         // 生成目标站点的SKU：目标站点前缀 + 原始SKU的后部分
         rowData.item_sku = targetCountry + rowData.item_sku.substring(2);
       }
       
-      // 设置site字段为目标国家
-      rowData.site = targetCountry;
+      // 设置site字段为目标国家（转换为中文名称）
+      rowData.site = convertCountryCodeToChinese(targetCountry);
       
       transformedRecords.push(rowData);
     }
@@ -3197,7 +3229,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       }
       
       const record = {
-        site: site // 只设置站点，不添加created_at和updated_at字段
+        site: convertCountryCodeToChinese(site) // 设置站点为中文名称，不添加created_at和updated_at字段
       };
       
       let hasItemSku = false;
@@ -3213,16 +3245,25 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           if (fieldName === 'item_sku' || fieldName === 'sku') {
             record.item_sku = cellValue.toString(); // 转换为字符串
             hasItemSku = true;
-            // 生成original_parent_sku：去掉前两个字符
-            if (cellValue && cellValue.toString().length > 2) {
-              record.original_parent_sku = cellValue.toString().substring(2);
-            }
           } else {
             // 其他字段直接设置（只有当有值时）
             record[fieldName] = cellValue;
             hasOtherValues = true;
           }
         }
+      }
+      
+      // 步骤2.5: 生成original_parent_sku（根据parent_child列判断）
+      if (record.parent_child === 'Parent' && record.item_sku && record.item_sku.length > 2) {
+        // 当parent_child为"Parent"时，item_sku中的信息为母SKU，去掉前两个字符
+        record.original_parent_sku = record.item_sku.substring(2);
+      } else if (record.parent_child === 'Child' && record.parent_sku && record.parent_sku.length > 2) {
+        // 当parent_child为"Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        record.original_parent_sku = record.parent_sku.substring(2);
+      } else if (record.item_sku && record.item_sku.length > 2) {
+        // 兼容处理：如果没有parent_child信息，使用原有逻辑
+        record.original_parent_sku = record.item_sku.substring(2);
+        console.warn(`⚠️ 批量处理记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${record.item_sku} -> ${record.original_parent_sku}`);
       }
       
       // 步骤3: 验证item_sku字段完整性
