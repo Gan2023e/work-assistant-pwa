@@ -702,7 +702,7 @@ export class PrintManager {
         
         .page-info {
             position: absolute;
-            bottom: 1mm;
+            bottom: 3mm;
             left: 50%;
             transform: translateX(-50%);
             font-size: 8px;
@@ -741,7 +741,7 @@ export class PrintManager {
             
             .page-info {
                 position: absolute !important;
-                bottom: 0.5mm !important;
+                bottom: 2mm !important;
                 left: 50% !important;
                 transform: translateX(-50%) !important;
                 font-size: 7px !important;
