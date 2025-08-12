@@ -2023,31 +2023,55 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log('🎯 开始映射数据到模板...');
     const updatedData = mapDataToTemplateXlsx(templateData, savedRecords, actualCountry);
 
-    // 步骤7: 创建新的工作簿并写入数据
+    // 步骤7: 复制完整模板并更新Template工作表数据
     console.log('📤 生成最终文件...');
     
     try {
-      const newWorkbook = xlsx.utils.book_new();
+      // 完整复制原始模板工作簿，保留所有工作表和格式
+      const newWorkbook = {
+        SheetNames: [...templateWorkbook.SheetNames],
+        Sheets: {}
+      };
       
-      // 验证数据格式
-      if (!Array.isArray(updatedData) || updatedData.length === 0) {
-        throw new Error('映射后的数据为空或格式错误');
+      // 复制所有工作表
+      templateWorkbook.SheetNames.forEach(sheetName => {
+        if (sheetName === 'Template' || sheetName === templateSheetName) {
+          // 对于Template工作表，使用更新后的数据
+          console.log(`📊 更新Template工作表，写入 ${updatedData.length} 行数据`);
+          
+          // 验证数据格式
+          if (!Array.isArray(updatedData) || updatedData.length === 0) {
+            throw new Error('映射后的数据为空或格式错误');
+          }
+          
+          const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+          
+          // 复制原模板的列宽和其他属性
+          if (templateWorksheet['!cols']) {
+            newWorksheet['!cols'] = templateWorksheet['!cols'];
+          }
+          if (templateWorksheet['!merges']) {
+            newWorksheet['!merges'] = templateWorksheet['!merges'];
+          }
+          if (templateWorksheet['!ref']) {
+            // 重新计算范围以包含新数据
+            const range = xlsx.utils.decode_range(templateWorksheet['!ref']);
+            range.e.r = Math.max(range.e.r, updatedData.length - 1);
+            newWorksheet['!ref'] = xlsx.utils.encode_range(range);
+          }
+          
+          newWorkbook.Sheets['Template'] = newWorksheet;
+        } else {
+          // 对于其他工作表，直接复制
+          console.log(`📋 复制工作表: ${sheetName}`);
+          newWorkbook.Sheets[sheetName] = { ...templateWorkbook.Sheets[sheetName] };
+        }
+      });
+      
+      // 确保Template工作表在SheetNames中
+      if (!newWorkbook.SheetNames.includes('Template')) {
+        newWorkbook.SheetNames[0] = 'Template';
       }
-      
-      console.log(`📊 准备写入 ${updatedData.length} 行数据到Excel文件`);
-      
-      const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
-      
-      // 复制原模板的列宽设置
-      if (templateWorksheet['!cols']) {
-        newWorksheet['!cols'] = templateWorksheet['!cols'];
-      }
-      
-      // 确保使用Template工作表名称
-      const sheetName = 'Template';
-      console.log(`📋 使用工作表名称: ${sheetName}`);
-      
-      xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
       
       // 生成Excel文件buffer，使用更兼容的设置
       const outputBuffer = xlsx.write(newWorkbook, { 
@@ -2064,13 +2088,37 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
+      console.log('🔍 开始生成文件名...');
+      console.log(`📊 savedRecords数量: ${savedRecords.length}`);
+      
+      // 调试：输出前几条记录的结构
+      if (savedRecords.length > 0) {
+        console.log('📋 第一条记录样例:', {
+          item_sku: savedRecords[0].item_sku,
+          original_parent_sku: savedRecords[0].original_parent_sku,
+          dataValues: savedRecords[0].dataValues ? {
+            item_sku: savedRecords[0].dataValues.item_sku,
+            original_parent_sku: savedRecords[0].dataValues.original_parent_sku
+          } : 'no dataValues'
+        });
+      }
+      
       const parentSkus = [...new Set(savedRecords
-        .map(record => record.original_parent_sku || record.item_sku?.substring(2))
-        .filter(sku => sku)
+        .map(record => {
+          // 尝试从record.dataValues获取数据（Sequelize模型）
+          const data = record.dataValues || record;
+          const parentSku = data.original_parent_sku || (data.item_sku ? data.item_sku.substring(2) : null);
+          console.log(`🔍 提取SKU: ${data.item_sku} -> ${parentSku}`);
+          return parentSku;
+        })
+        .filter(sku => sku && sku.trim())
       )];
+      
+      console.log('📋 提取的母SKU列表:', parentSkus);
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;
+      console.log('📄 生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -2252,14 +2300,36 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return url;
     };
 
+    // 调试：输出模板前几行的内容
+    console.log('🔍 模板前5行内容:');
+    for (let i = 0; i < Math.min(5, updatedData.length); i++) {
+      console.log(`第${i + 1}行:`, updatedData[i]?.slice(0, 5) || '空行');
+    }
+
     // 清空现有数据行（保留前3行：标题、说明等）
     const headerRowCount = 3;
+    console.log(`📋 保留前${headerRowCount}行，清空第${headerRowCount + 1}行开始的数据`);
+    
+    const originalLength = updatedData.length;
     updatedData.splice(headerRowCount);
+    console.log(`📊 原模板有${originalLength}行，清空后剩余${updatedData.length}行`);
 
     // 添加新数据
     let addedCount = 0;
+    console.log(`🔄 开始从第${headerRowCount + 1}行填写${records.length}条记录`);
     records.forEach((record, index) => {
       const rowIndex = headerRowCount + index;
+      
+      // 调试：输出第一条记录的详细信息
+      if (index === 0) {
+        console.log('📋 第一条记录详情:', {
+          item_sku: record.item_sku || record.dataValues?.item_sku,
+          item_name: record.item_name || record.dataValues?.item_name,
+          brand_name: record.brand_name || record.dataValues?.brand_name,
+          dataValues: record.dataValues ? '有dataValues' : '无dataValues'
+        });
+        console.log(`📍 将填写到第${rowIndex + 1}行（索引${rowIndex}）`);
+      }
       
       // 确保行存在
       if (!updatedData[rowIndex]) {
@@ -2278,66 +2348,79 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][i] = '';
       }
 
-      // 填充数据
+      // 填充数据 - 支持Sequelize模型数据访问
+      const data = record.dataValues || record;
+      
       if (itemSkuCol !== -1) {
-        updatedData[rowIndex][itemSkuCol] = record.item_sku || '';
+        updatedData[rowIndex][itemSkuCol] = data.item_sku || '';
       }
       if (itemNameCol !== -1) {
-        updatedData[rowIndex][itemNameCol] = processTextContent(record.item_name) || '';
+        updatedData[rowIndex][itemNameCol] = processTextContent(data.item_name) || '';
       }
       if (colorNameCol !== -1) {
-        updatedData[rowIndex][colorNameCol] = record.color_name || '';
+        updatedData[rowIndex][colorNameCol] = data.color_name || '';
       }
       if (sizeNameCol !== -1) {
-        updatedData[rowIndex][sizeNameCol] = record.size_name || '';
+        updatedData[rowIndex][sizeNameCol] = data.size_name || '';
       }
       if (brandNameCol !== -1) {
-        updatedData[rowIndex][brandNameCol] = processTextContent(record.brand_name) || '';
+        updatedData[rowIndex][brandNameCol] = processTextContent(data.brand_name) || '';
       }
       if (manufacturerCol !== -1) {
-        updatedData[rowIndex][manufacturerCol] = processTextContent(record.manufacturer) || '';
+        updatedData[rowIndex][manufacturerCol] = processTextContent(data.manufacturer) || '';
       }
       if (mainImageUrlCol !== -1) {
-        updatedData[rowIndex][mainImageUrlCol] = processImageUrl(record.main_image_url) || '';
+        updatedData[rowIndex][mainImageUrlCol] = processImageUrl(data.main_image_url) || '';
       }
       if (otherImageUrl1Col !== -1) {
-        updatedData[rowIndex][otherImageUrl1Col] = processImageUrl(record.other_image_url1) || '';
+        updatedData[rowIndex][otherImageUrl1Col] = processImageUrl(data.other_image_url1) || '';
       }
       if (otherImageUrl2Col !== -1) {
-        updatedData[rowIndex][otherImageUrl2Col] = processImageUrl(record.other_image_url2) || '';
+        updatedData[rowIndex][otherImageUrl2Col] = processImageUrl(data.other_image_url2) || '';
       }
       if (otherImageUrl3Col !== -1) {
-        updatedData[rowIndex][otherImageUrl3Col] = processImageUrl(record.other_image_url3) || '';
+        updatedData[rowIndex][otherImageUrl3Col] = processImageUrl(data.other_image_url3) || '';
       }
       if (otherImageUrl4Col !== -1) {
-        updatedData[rowIndex][otherImageUrl4Col] = processImageUrl(record.other_image_url4) || '';
+        updatedData[rowIndex][otherImageUrl4Col] = processImageUrl(data.other_image_url4) || '';
       }
       if (otherImageUrl5Col !== -1) {
-        updatedData[rowIndex][otherImageUrl5Col] = processImageUrl(record.other_image_url5) || '';
+        updatedData[rowIndex][otherImageUrl5Col] = processImageUrl(data.other_image_url5) || '';
       }
       if (productDescriptionCol !== -1) {
-        updatedData[rowIndex][productDescriptionCol] = processTextContent(record.product_description) || '';
+        updatedData[rowIndex][productDescriptionCol] = processTextContent(data.product_description) || '';
       }
       if (bulletPoint1Col !== -1) {
-        updatedData[rowIndex][bulletPoint1Col] = processTextContent(record.bullet_point1) || '';
+        updatedData[rowIndex][bulletPoint1Col] = processTextContent(data.bullet_point1) || '';
       }
       if (bulletPoint2Col !== -1) {
-        updatedData[rowIndex][bulletPoint2Col] = processTextContent(record.bullet_point2) || '';
+        updatedData[rowIndex][bulletPoint2Col] = processTextContent(data.bullet_point2) || '';
       }
       if (bulletPoint3Col !== -1) {
-        updatedData[rowIndex][bulletPoint3Col] = processTextContent(record.bullet_point3) || '';
+        updatedData[rowIndex][bulletPoint3Col] = processTextContent(data.bullet_point3) || '';
       }
       if (bulletPoint4Col !== -1) {
-        updatedData[rowIndex][bulletPoint4Col] = processTextContent(record.bullet_point4) || '';
+        updatedData[rowIndex][bulletPoint4Col] = processTextContent(data.bullet_point4) || '';
       }
       if (bulletPoint5Col !== -1) {
-        updatedData[rowIndex][bulletPoint5Col] = processTextContent(record.bullet_point5) || '';
+        updatedData[rowIndex][bulletPoint5Col] = processTextContent(data.bullet_point5) || '';
       }
 
       addedCount++;
+      
+      // 调试：输出第一条数据填写后的行内容
+      if (index === 0 && updatedData[rowIndex]) {
+        console.log('📋 第一条数据填写后的行前5列:', updatedData[rowIndex].slice(0, 5));
+      }
     });
 
     console.log(`✅ 数据映射完成，添加了 ${addedCount} 行数据到${country}模板`);
+    
+    // 调试：输出最终数据的前几行
+    console.log('🔍 最终数据前5行:');
+    for (let i = 0; i < Math.min(5, updatedData.length); i++) {
+      console.log(`第${i + 1}行:`, updatedData[i]?.slice(0, 3) || '空行');
+    }
     
     // 验证返回的数据格式
     if (!Array.isArray(updatedData) || updatedData.length === 0) {
@@ -2512,31 +2595,55 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     console.log('🎯 开始映射转换后的数据到模板...');
     const updatedData = mapDataToTemplateXlsx(templateData, transformedRecords, targetCountry);
 
-    // 步骤7: 创建新的工作簿并写入数据
+    // 步骤7: 复制完整模板并更新Template工作表数据
     console.log('📤 生成最终文件...');
     
     try {
-      const batchWorkbook = xlsx.utils.book_new();
+      // 完整复制原始模板工作簿，保留所有工作表和格式
+      const batchWorkbook = {
+        SheetNames: [...templateWorkbook.SheetNames],
+        Sheets: {}
+      };
       
-      // 验证数据格式
-      if (!Array.isArray(updatedData) || updatedData.length === 0) {
-        throw new Error('映射后的数据为空或格式错误');
+      // 复制所有工作表
+      templateWorkbook.SheetNames.forEach(sheetName => {
+        if (sheetName === 'Template' || sheetName === templateSheetName) {
+          // 对于Template工作表，使用更新后的数据
+          console.log(`📊 更新Template工作表，写入 ${updatedData.length} 行数据`);
+          
+          // 验证数据格式
+          if (!Array.isArray(updatedData) || updatedData.length === 0) {
+            throw new Error('映射后的数据为空或格式错误');
+          }
+          
+          const batchWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
+          
+          // 复制原模板的列宽和其他属性
+          if (templateWorksheet['!cols']) {
+            batchWorksheet['!cols'] = templateWorksheet['!cols'];
+          }
+          if (templateWorksheet['!merges']) {
+            batchWorksheet['!merges'] = templateWorksheet['!merges'];
+          }
+          if (templateWorksheet['!ref']) {
+            // 重新计算范围以包含新数据
+            const range = xlsx.utils.decode_range(templateWorksheet['!ref']);
+            range.e.r = Math.max(range.e.r, updatedData.length - 1);
+            batchWorksheet['!ref'] = xlsx.utils.encode_range(range);
+          }
+          
+          batchWorkbook.Sheets['Template'] = batchWorksheet;
+        } else {
+          // 对于其他工作表，直接复制
+          console.log(`📋 复制工作表: ${sheetName}`);
+          batchWorkbook.Sheets[sheetName] = { ...templateWorkbook.Sheets[sheetName] };
+        }
+      });
+      
+      // 确保Template工作表在SheetNames中
+      if (!batchWorkbook.SheetNames.includes('Template')) {
+        batchWorkbook.SheetNames[0] = 'Template';
       }
-      
-      console.log(`📊 准备写入 ${updatedData.length} 行数据到Excel文件`);
-      
-      const batchWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
-      
-      // 复制原模板的列宽设置
-      if (templateWorksheet['!cols']) {
-        batchWorksheet['!cols'] = templateWorksheet['!cols'];
-      }
-      
-      // 确保使用Template工作表名称
-      const sheetName = 'Template';
-      console.log(`📋 使用工作表名称: ${sheetName}`);
-      
-      xlsx.utils.book_append_sheet(batchWorkbook, batchWorksheet, sheetName);
       
       // 生成Excel文件buffer，使用更兼容的设置
       const outputBuffer = xlsx.write(batchWorkbook, { 
@@ -2553,13 +2660,31 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
+      console.log('🔍 开始生成批量文件名...');
+      console.log(`📊 transformedRecords数量: ${transformedRecords.length}`);
+      
+      // 调试：输出前几条记录的结构
+      if (transformedRecords.length > 0) {
+        console.log('📋 第一条转换记录样例:', {
+          item_sku: transformedRecords[0].item_sku,
+          original_parent_sku: transformedRecords[0].original_parent_sku
+        });
+      }
+      
       const parentSkus = [...new Set(transformedRecords
-        .map(record => record.original_parent_sku || record.item_sku?.substring(2))
-        .filter(sku => sku)
+        .map(record => {
+          const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
+          console.log(`🔍 批量提取SKU: ${record.item_sku} -> ${parentSku}`);
+          return parentSku;
+        })
+        .filter(sku => sku && sku.trim())
       )];
+      
+      console.log('📋 批量提取的母SKU列表:', parentSkus);
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${targetCountry}_${skuPart}.xlsx`;
+      console.log('📄 批量生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
