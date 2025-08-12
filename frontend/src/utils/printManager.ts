@@ -703,9 +703,11 @@ export class PrintManager {
         .page-info {
             position: absolute;
             bottom: 1mm;
-            right: 1mm;
+            left: 50%;
+            transform: translateX(-50%);
             font-size: 8px;
             color: #666;
+            text-align: center;
         }
         
         /* 打印时的精确控制 */
@@ -740,9 +742,11 @@ export class PrintManager {
             .page-info {
                 position: absolute !important;
                 bottom: 0.5mm !important;
-                right: 1mm !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
                 font-size: 7px !important;
                 color: #666 !important;
+                text-align: center !important;
             }
         }
     </style>
