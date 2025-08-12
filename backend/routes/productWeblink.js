@@ -1968,26 +1968,19 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     }
 
     console.log(`✅ 成功保存 ${savedRecords.length} 条记录到product_information表`);
-
-    // 步骤3: 从数据库重新查询刚保存的数据，确保数据完整
-    console.log('🔍 从数据库重新查询刚保存的数据...');
-    const databaseRecords = await ProductInformation.findAll({
-      where: {
-        site: actualCountry,
-        created_at: {
-          [Op.gte]: new Date(Date.now() - 60000) // 查询最近1分钟内的记录
-        }
-      },
-      order: [['id', 'ASC']]
-    });
     
-    console.log(`📊 从数据库查询到 ${databaseRecords.length} 条记录`);
-    
-    if (databaseRecords.length === 0) {
-      return res.status(500).json({ message: '数据保存后无法从数据库中查询到记录' });
+    // 调试：输出保存的记录详情
+    if (savedRecords.length > 0) {
+      console.log('📋 第一条保存的记录:', {
+        item_sku: savedRecords[0].item_sku || savedRecords[0].dataValues?.item_sku,
+        item_name: savedRecords[0].item_name || savedRecords[0].dataValues?.item_name,
+        original_parent_sku: savedRecords[0].original_parent_sku || savedRecords[0].dataValues?.original_parent_sku
+      });
+    } else {
+      console.log('❌ 没有记录被保存到数据库!');
     }
 
-    // 步骤4: 获取对应国家的模板文件
+    // 步骤3: 获取对应国家的模板文件
     console.log(`🔍 查找${actualCountry}站点的模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
@@ -2117,12 +2110,23 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     }
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    
+    // 调试：检查第3行标题
+    console.log('📋 第3行标题内容:', data[2]);
+    
+    // 检查是否找到了关键列
+    if (itemSkuCol === -1) {
+      console.log('❌ 警告：未找到item_sku列!');
+    }
+    if (itemNameCol === -1) {
+      console.log('❌ 警告：未找到item_name列!');
+    }
 
-    // 步骤7: 准备填写数据（使用数据库查询到的数据）
+    // 步骤7: 准备填写数据
     console.log('✍️ 准备填写数据到Excel...');
     
     // 确保数据数组有足够的行
-    const totalRowsNeeded = 3 + databaseRecords.length; // 前3行保留 + 数据行
+    const totalRowsNeeded = 3 + savedRecords.length; // 前3行保留 + 数据行
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
@@ -2130,8 +2134,20 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     // 从第4行开始填写数据（索引为3）
     let currentRowIndex = 3; // 第4行开始，索引为3
     
-    databaseRecords.forEach((record, index) => {
+    savedRecords.forEach((record, index) => {
       const recordData = record.dataValues || record;
+      
+      // 调试：输出第一条记录的填写过程
+      if (index === 0) {
+        console.log('📋 填写第一条记录:', {
+          item_sku: recordData.item_sku,
+          item_name: recordData.item_name,
+          color_name: recordData.color_name,
+          size_name: recordData.size_name,
+          brand_name: recordData.brand_name
+        });
+        console.log(`📍 填写到第${currentRowIndex + 1}行（索引${currentRowIndex}）`);
+      }
       
       // 计算需要的最大列数
       const allColumns = [
@@ -2170,10 +2186,24 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = recordData.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = recordData.bullet_point5 || '';
       
+      // 调试：输出第一条记录填写后的行内容
+      if (index === 0) {
+        console.log('📋 第一条记录填写后的行内容:', data[currentRowIndex]);
+      }
+      
       currentRowIndex++;
     });
 
-    console.log(`📊 填写完成，共填写了 ${databaseRecords.length} 行数据`);
+    console.log(`📊 填写完成，共填写了 ${savedRecords.length} 行数据`);
+    
+    // 调试：检查是否有数据被填写
+    if (savedRecords.length > 0) {
+      console.log('📋 检查数据填写结果:');
+      console.log(`第4行内容:`, data[3]?.slice(0, 5));
+      console.log(`第5行内容:`, data[4]?.slice(0, 5));
+    } else {
+      console.log('❌ 警告：savedRecords为空，没有数据可填写!');
+    }
 
     // 步骤8: 将数据重新转换为工作表
     console.log('💾 生成Excel文件...');
@@ -2205,23 +2235,30 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 生成文件名：国家代码+母SKU格式
       console.log('🔍 开始生成文件名...');
-      console.log(`📊 databaseRecords数量: ${databaseRecords.length}`);
+      console.log(`📊 savedRecords数量: ${savedRecords.length}`);
       
       // 调试：输出前几条记录的结构
-      if (databaseRecords.length > 0) {
-        console.log('📋 第一条数据库记录样例:', {
-          item_sku: databaseRecords[0].item_sku,
-          original_parent_sku: databaseRecords[0].original_parent_sku,
-          dataValues: databaseRecords[0].dataValues ? {
-            item_sku: databaseRecords[0].dataValues.item_sku,
-            original_parent_sku: databaseRecords[0].dataValues.original_parent_sku
+      if (savedRecords.length > 0) {
+        console.log('📋 第一条记录样例:', {
+          item_sku: savedRecords[0].item_sku,
+          original_parent_sku: savedRecords[0].original_parent_sku,
+          dataValues: savedRecords[0].dataValues ? {
+            item_sku: savedRecords[0].dataValues.item_sku,
+            original_parent_sku: savedRecords[0].dataValues.original_parent_sku
           } : 'no dataValues'
+        });
+        
+        // 调试所有记录的item_sku
+        console.log('📋 所有记录的item_sku:');
+        savedRecords.forEach((record, idx) => {
+          const data = record.dataValues || record;
+          console.log(`  记录${idx + 1}: ${data.item_sku}`);
         });
       }
       
-      const parentSkus = [...new Set(databaseRecords
+      const parentSkus = [...new Set(savedRecords
         .map(record => {
-          // 从Sequelize模型获取数据
+          // 尝试从record.dataValues获取数据（Sequelize模型）
           const data = record.dataValues || record;
           const parentSku = data.original_parent_sku || (data.item_sku ? data.item_sku.substring(2) : null);
           console.log(`🔍 提取SKU: ${data.item_sku} -> ${parentSku}`);
@@ -2785,7 +2822,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
-    // 步骤7: 准备填写数据（直接使用转换后的记录）
+    // 步骤7: 准备填写数据
     console.log('✍️ 准备填写数据到Excel...');
     
     // 确保数据数组有足够的行
