@@ -2003,86 +2003,184 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`✅ ${actualCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
-    // 步骤5: 使用xlsx库处理模板文件
+    // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
     console.log('📊 开始使用xlsx库处理Excel文件...');
     
     // 解析模板文件
-    const templateWorkbook = xlsx.read(downloadResult.content);
-    const templateSheetName = templateWorkbook.SheetNames[0];
-    const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
+    const templateWorkbook = xlsx.read(downloadResult.content, { 
+      type: 'buffer',
+      cellStyles: true, // 保持样式
+      cellNF: true,     // 保持数字格式
+      cellDates: true   // 处理日期
+    });
     
-    if (!templateWorksheet) {
-      return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
+    // 检查是否有Template工作表
+    if (!templateWorkbook.Sheets['Template']) {
+      return res.status(400).json({ message: '模板文件中未找到Template工作表' });
     }
 
-    // 将模板转换为数组格式以便处理
-    const templateData = xlsx.utils.sheet_to_json(templateWorksheet, {header: 1});
-    console.log(`📋 模板有 ${templateData.length} 行数据`);
-
-    // 步骤6: 映射数据到模板
-    console.log('🎯 开始映射数据到模板...');
-    const updatedData = mapDataToTemplateXlsx(templateData, savedRecords, actualCountry);
-
-    // 步骤7: 复制完整模板并更新Template工作表数据
-    console.log('📤 生成最终文件...');
+    console.log('✅ 成功加载Template工作表');
     
-    try {
-      // 完整复制原始模板工作簿，保留所有工作表和格式
-      const newWorkbook = {
-        SheetNames: [...templateWorkbook.SheetNames],
-        Sheets: {}
-      };
-      
-      // 复制所有工作表
-      templateWorkbook.SheetNames.forEach(sheetName => {
-        if (sheetName === 'Template' || sheetName === templateSheetName) {
-          // 对于Template工作表，使用更新后的数据
-          console.log(`📊 更新Template工作表，写入 ${updatedData.length} 行数据`);
-          
-          // 验证数据格式
-          if (!Array.isArray(updatedData) || updatedData.length === 0) {
-            throw new Error('映射后的数据为空或格式错误');
+    const templateWorksheet = templateWorkbook.Sheets['Template'];
+    
+    // 将工作表转换为二维数组，便于操作
+    const data = xlsx.utils.sheet_to_json(templateWorksheet, { 
+      header: 1, // 使用数组形式
+      defval: '', // 空单元格默认值
+      raw: false  // 保持原始数据格式
+    });
+    
+    console.log(`📊 工作表数据行数: ${data.length}`);
+
+    // 步骤6: 查找列位置（在第3行查找标题，索引为2）
+    console.log('🔍 查找列位置...');
+    let itemSkuCol = -1;
+    let itemNameCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+    let brandNameCol = -1;
+    let manufacturerCol = -1;
+    let mainImageUrlCol = -1;
+    let otherImageUrl1Col = -1;
+    let otherImageUrl2Col = -1;
+    let otherImageUrl3Col = -1;
+    let otherImageUrl4Col = -1;
+    let otherImageUrl5Col = -1;
+    let productDescriptionCol = -1;
+    let bulletPoint1Col = -1;
+    let bulletPoint2Col = -1;
+    let bulletPoint3Col = -1;
+    let bulletPoint4Col = -1;
+    let bulletPoint5Col = -1;
+    
+    if (data.length >= 3 && data[2]) { // 第3行，索引为2
+      data[2].forEach((header, colIndex) => {
+        if (header) {
+          const cellValue = header.toString().toLowerCase();
+          if (cellValue === 'item_sku') {
+            itemSkuCol = colIndex;
+          } else if (cellValue === 'item_name') {
+            itemNameCol = colIndex;
+          } else if (cellValue === 'color_name') {
+            colorNameCol = colIndex;
+          } else if (cellValue === 'size_name') {
+            sizeNameCol = colIndex;
+          } else if (cellValue === 'brand_name') {
+            brandNameCol = colIndex;
+          } else if (cellValue === 'manufacturer') {
+            manufacturerCol = colIndex;
+          } else if (cellValue === 'main_image_url') {
+            mainImageUrlCol = colIndex;
+          } else if (cellValue === 'other_image_url1') {
+            otherImageUrl1Col = colIndex;
+          } else if (cellValue === 'other_image_url2') {
+            otherImageUrl2Col = colIndex;
+          } else if (cellValue === 'other_image_url3') {
+            otherImageUrl3Col = colIndex;
+          } else if (cellValue === 'other_image_url4') {
+            otherImageUrl4Col = colIndex;
+          } else if (cellValue === 'other_image_url5') {
+            otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'product_description') {
+            productDescriptionCol = colIndex;
+          } else if (cellValue === 'bullet_point1') {
+            bulletPoint1Col = colIndex;
+          } else if (cellValue === 'bullet_point2') {
+            bulletPoint2Col = colIndex;
+          } else if (cellValue === 'bullet_point3') {
+            bulletPoint3Col = colIndex;
+          } else if (cellValue === 'bullet_point4') {
+            bulletPoint4Col = colIndex;
+          } else if (cellValue === 'bullet_point5') {
+            bulletPoint5Col = colIndex;
           }
-          
-          const newWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
-          
-          // 复制原模板的列宽和其他属性
-          if (templateWorksheet['!cols']) {
-            newWorksheet['!cols'] = templateWorksheet['!cols'];
-          }
-          if (templateWorksheet['!merges']) {
-            newWorksheet['!merges'] = templateWorksheet['!merges'];
-          }
-          if (templateWorksheet['!ref']) {
-            // 重新计算范围以包含新数据
-            const range = xlsx.utils.decode_range(templateWorksheet['!ref']);
-            range.e.r = Math.max(range.e.r, updatedData.length - 1);
-            newWorksheet['!ref'] = xlsx.utils.encode_range(range);
-          }
-          
-          newWorkbook.Sheets['Template'] = newWorksheet;
-        } else {
-          // 对于其他工作表，直接复制
-          console.log(`📋 复制工作表: ${sheetName}`);
-          newWorkbook.Sheets[sheetName] = { ...templateWorkbook.Sheets[sheetName] };
         }
       });
+    }
+
+    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+
+    // 步骤7: 准备填写数据
+    console.log('✍️ 准备填写数据到Excel...');
+    
+    // 确保数据数组有足够的行
+    const totalRowsNeeded = 3 + savedRecords.length; // 前3行保留 + 数据行
+    while (data.length < totalRowsNeeded) {
+      data.push([]);
+    }
+
+    // 从第4行开始填写数据（索引为3）
+    let currentRowIndex = 3; // 第4行开始，索引为3
+    
+    savedRecords.forEach((record, index) => {
+      const recordData = record.dataValues || record;
       
-      // 确保Template工作表在SheetNames中
-      if (!newWorkbook.SheetNames.includes('Template')) {
-        newWorkbook.SheetNames[0] = 'Template';
+      // 计算需要的最大列数
+      const allColumns = [
+        itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
+        mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
+        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+      ].filter(col => col !== -1);
+      const maxCol = Math.max(...allColumns);
+      
+      // 确保当前行有足够的列
+      if (!data[currentRowIndex]) {
+        data[currentRowIndex] = [];
+      }
+      while (data[currentRowIndex].length <= maxCol) {
+        data[currentRowIndex].push('');
       }
       
-      // 生成Excel文件buffer，使用更兼容的设置
-      const outputBuffer = xlsx.write(newWorkbook, { 
+      // 填写数据
+      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = recordData.item_sku || '';
+      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = recordData.item_name || '';
+      if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = recordData.color_name || '';
+      if (sizeNameCol !== -1) data[currentRowIndex][sizeNameCol] = recordData.size_name || '';
+      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = recordData.brand_name || '';
+      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = recordData.manufacturer || '';
+      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = recordData.main_image_url || '';
+      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = recordData.other_image_url1 || '';
+      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = recordData.other_image_url2 || '';
+      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = recordData.other_image_url3 || '';
+      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = recordData.other_image_url4 || '';
+      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = recordData.other_image_url5 || '';
+      if (productDescriptionCol !== -1) data[currentRowIndex][productDescriptionCol] = recordData.product_description || '';
+      if (bulletPoint1Col !== -1) data[currentRowIndex][bulletPoint1Col] = recordData.bullet_point1 || '';
+      if (bulletPoint2Col !== -1) data[currentRowIndex][bulletPoint2Col] = recordData.bullet_point2 || '';
+      if (bulletPoint3Col !== -1) data[currentRowIndex][bulletPoint3Col] = recordData.bullet_point3 || '';
+      if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = recordData.bullet_point4 || '';
+      if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = recordData.bullet_point5 || '';
+      
+      currentRowIndex++;
+    });
+
+    console.log(`📊 填写完成，共填写了 ${savedRecords.length} 行数据`);
+
+    // 步骤8: 将数据重新转换为工作表
+    console.log('💾 生成Excel文件...');
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    
+    // 保持原始工作表的列宽等属性
+    if (templateWorksheet['!cols']) {
+      newWorksheet['!cols'] = templateWorksheet['!cols'];
+    }
+    if (templateWorksheet['!rows']) {
+      newWorksheet['!rows'] = templateWorksheet['!rows'];
+    }
+    if (templateWorksheet['!merges']) {
+      newWorksheet['!merges'] = templateWorksheet['!merges'];
+    }
+    
+    // 更新工作簿
+    templateWorkbook.Sheets['Template'] = newWorksheet;
+    
+    try {
+      // 生成Excel文件buffer
+      const outputBuffer = xlsx.write(templateWorkbook, { 
         type: 'buffer', 
         bookType: 'xlsx',
-        compression: true,
-        Props: {
-          Title: `${actualCountry} Data Sheet`,
-          Subject: `${actualCountry} Product Information`,
-          CreatedDate: new Date()
-        }
+        cellStyles: true
       });
       
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
@@ -2572,86 +2670,183 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     console.log(`🔄 转换了 ${transformedRecords.length} 条记录，SKU从${sourceCountry}前缀转换为${targetCountry}前缀`);
 
-    // 步骤5: 使用xlsx库处理模板文件
+    // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
     console.log('📊 开始使用xlsx库处理Excel文件...');
     
     // 解析模板文件
-    const templateWorkbook = xlsx.read(downloadResult.content);
-    const templateSheetName = templateWorkbook.SheetNames[0];
-    const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
+    const templateWorkbook = xlsx.read(downloadResult.content, { 
+      type: 'buffer',
+      cellStyles: true, // 保持样式
+      cellNF: true,     // 保持数字格式
+      cellDates: true   // 处理日期
+    });
     
-    if (!templateWorksheet) {
-      return res.status(400).json({ message: '模板文件格式错误，未找到工作表' });
+    // 检查是否有Template工作表
+    if (!templateWorkbook.Sheets['Template']) {
+      return res.status(400).json({ message: '模板文件中未找到Template工作表' });
     }
 
-    // 将模板转换为数组格式以便处理
-    const templateData = xlsx.utils.sheet_to_json(templateWorksheet, {header: 1});
-    console.log(`📋 模板有 ${templateData.length} 行数据`);
-
-    // 步骤6: 映射数据到模板
-    console.log('🎯 开始映射转换后的数据到模板...');
-    const updatedData = mapDataToTemplateXlsx(templateData, transformedRecords, targetCountry);
-
-    // 步骤7: 复制完整模板并更新Template工作表数据
-    console.log('📤 生成最终文件...');
+    console.log('✅ 成功加载Template工作表');
     
-    try {
-      // 完整复制原始模板工作簿，保留所有工作表和格式
-      const batchWorkbook = {
-        SheetNames: [...templateWorkbook.SheetNames],
-        Sheets: {}
-      };
-      
-      // 复制所有工作表
-      templateWorkbook.SheetNames.forEach(sheetName => {
-        if (sheetName === 'Template' || sheetName === templateSheetName) {
-          // 对于Template工作表，使用更新后的数据
-          console.log(`📊 更新Template工作表，写入 ${updatedData.length} 行数据`);
-          
-          // 验证数据格式
-          if (!Array.isArray(updatedData) || updatedData.length === 0) {
-            throw new Error('映射后的数据为空或格式错误');
+    const batchTemplateWorksheet = templateWorkbook.Sheets['Template'];
+    
+    // 将工作表转换为二维数组，便于操作
+    const data = xlsx.utils.sheet_to_json(batchTemplateWorksheet, { 
+      header: 1, // 使用数组形式
+      defval: '', // 空单元格默认值
+      raw: false  // 保持原始数据格式
+    });
+    
+    console.log(`📊 工作表数据行数: ${data.length}`);
+
+    // 步骤6: 查找列位置（在第3行查找标题，索引为2）
+    console.log('🔍 查找列位置...');
+    let itemSkuCol = -1;
+    let itemNameCol = -1;
+    let colorNameCol = -1;
+    let sizeNameCol = -1;
+    let brandNameCol = -1;
+    let manufacturerCol = -1;
+    let mainImageUrlCol = -1;
+    let otherImageUrl1Col = -1;
+    let otherImageUrl2Col = -1;
+    let otherImageUrl3Col = -1;
+    let otherImageUrl4Col = -1;
+    let otherImageUrl5Col = -1;
+    let productDescriptionCol = -1;
+    let bulletPoint1Col = -1;
+    let bulletPoint2Col = -1;
+    let bulletPoint3Col = -1;
+    let bulletPoint4Col = -1;
+    let bulletPoint5Col = -1;
+    
+    if (data.length >= 3 && data[2]) { // 第3行，索引为2
+      data[2].forEach((header, colIndex) => {
+        if (header) {
+          const cellValue = header.toString().toLowerCase();
+          if (cellValue === 'item_sku') {
+            itemSkuCol = colIndex;
+          } else if (cellValue === 'item_name') {
+            itemNameCol = colIndex;
+          } else if (cellValue === 'color_name') {
+            colorNameCol = colIndex;
+          } else if (cellValue === 'size_name') {
+            sizeNameCol = colIndex;
+          } else if (cellValue === 'brand_name') {
+            brandNameCol = colIndex;
+          } else if (cellValue === 'manufacturer') {
+            manufacturerCol = colIndex;
+          } else if (cellValue === 'main_image_url') {
+            mainImageUrlCol = colIndex;
+          } else if (cellValue === 'other_image_url1') {
+            otherImageUrl1Col = colIndex;
+          } else if (cellValue === 'other_image_url2') {
+            otherImageUrl2Col = colIndex;
+          } else if (cellValue === 'other_image_url3') {
+            otherImageUrl3Col = colIndex;
+          } else if (cellValue === 'other_image_url4') {
+            otherImageUrl4Col = colIndex;
+          } else if (cellValue === 'other_image_url5') {
+            otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'product_description') {
+            productDescriptionCol = colIndex;
+          } else if (cellValue === 'bullet_point1') {
+            bulletPoint1Col = colIndex;
+          } else if (cellValue === 'bullet_point2') {
+            bulletPoint2Col = colIndex;
+          } else if (cellValue === 'bullet_point3') {
+            bulletPoint3Col = colIndex;
+          } else if (cellValue === 'bullet_point4') {
+            bulletPoint4Col = colIndex;
+          } else if (cellValue === 'bullet_point5') {
+            bulletPoint5Col = colIndex;
           }
-          
-          const batchWorksheet = xlsx.utils.aoa_to_sheet(updatedData);
-          
-          // 复制原模板的列宽和其他属性
-          if (templateWorksheet['!cols']) {
-            batchWorksheet['!cols'] = templateWorksheet['!cols'];
-          }
-          if (templateWorksheet['!merges']) {
-            batchWorksheet['!merges'] = templateWorksheet['!merges'];
-          }
-          if (templateWorksheet['!ref']) {
-            // 重新计算范围以包含新数据
-            const range = xlsx.utils.decode_range(templateWorksheet['!ref']);
-            range.e.r = Math.max(range.e.r, updatedData.length - 1);
-            batchWorksheet['!ref'] = xlsx.utils.encode_range(range);
-          }
-          
-          batchWorkbook.Sheets['Template'] = batchWorksheet;
-        } else {
-          // 对于其他工作表，直接复制
-          console.log(`📋 复制工作表: ${sheetName}`);
-          batchWorkbook.Sheets[sheetName] = { ...templateWorkbook.Sheets[sheetName] };
         }
       });
+    }
+
+    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+
+    // 步骤7: 准备填写数据
+    console.log('✍️ 准备填写数据到Excel...');
+    
+    // 确保数据数组有足够的行
+    const totalRowsNeeded = 3 + transformedRecords.length; // 前3行保留 + 数据行
+    while (data.length < totalRowsNeeded) {
+      data.push([]);
+    }
+
+    // 从第4行开始填写数据（索引为3）
+    let currentRowIndex = 3; // 第4行开始，索引为3
+    
+    transformedRecords.forEach((record, index) => {
+      // 计算需要的最大列数
+      const allColumns = [
+        itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
+        mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
+        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+      ].filter(col => col !== -1);
+      const maxCol = Math.max(...allColumns);
       
-      // 确保Template工作表在SheetNames中
-      if (!batchWorkbook.SheetNames.includes('Template')) {
-        batchWorkbook.SheetNames[0] = 'Template';
+      // 确保当前行有足够的列
+      if (!data[currentRowIndex]) {
+        data[currentRowIndex] = [];
+      }
+      while (data[currentRowIndex].length <= maxCol) {
+        data[currentRowIndex].push('');
       }
       
-      // 生成Excel文件buffer，使用更兼容的设置
-      const outputBuffer = xlsx.write(batchWorkbook, { 
+      // 填写数据
+      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = record.item_sku || '';
+      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = record.item_name || '';
+      if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = record.color_name || '';
+      if (sizeNameCol !== -1) data[currentRowIndex][sizeNameCol] = record.size_name || '';
+      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = record.brand_name || '';
+      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = record.manufacturer || '';
+      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = record.main_image_url || '';
+      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = record.other_image_url1 || '';
+      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = record.other_image_url2 || '';
+      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = record.other_image_url3 || '';
+      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = record.other_image_url4 || '';
+      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = record.other_image_url5 || '';
+      if (productDescriptionCol !== -1) data[currentRowIndex][productDescriptionCol] = record.product_description || '';
+      if (bulletPoint1Col !== -1) data[currentRowIndex][bulletPoint1Col] = record.bullet_point1 || '';
+      if (bulletPoint2Col !== -1) data[currentRowIndex][bulletPoint2Col] = record.bullet_point2 || '';
+      if (bulletPoint3Col !== -1) data[currentRowIndex][bulletPoint3Col] = record.bullet_point3 || '';
+      if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = record.bullet_point4 || '';
+      if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = record.bullet_point5 || '';
+      
+      currentRowIndex++;
+    });
+
+    console.log(`📊 填写完成，共填写了 ${transformedRecords.length} 行数据`);
+
+    // 步骤8: 将数据重新转换为工作表
+    console.log('💾 生成Excel文件...');
+    const newWorksheet = xlsx.utils.aoa_to_sheet(data);
+    
+    // 保持原始工作表的列宽等属性
+    if (batchTemplateWorksheet['!cols']) {
+      newWorksheet['!cols'] = batchTemplateWorksheet['!cols'];
+    }
+    if (batchTemplateWorksheet['!rows']) {
+      newWorksheet['!rows'] = batchTemplateWorksheet['!rows'];
+    }
+    if (batchTemplateWorksheet['!merges']) {
+      newWorksheet['!merges'] = batchTemplateWorksheet['!merges'];
+    }
+    
+    // 更新工作簿
+    templateWorkbook.Sheets['Template'] = newWorksheet;
+    
+    try {
+      
+      // 生成Excel文件buffer
+      const outputBuffer = xlsx.write(templateWorkbook, { 
         type: 'buffer', 
         bookType: 'xlsx',
-        compression: true,
-        Props: {
-          Title: `${targetCountry} Data Sheet`,
-          Subject: `${targetCountry} Product Information`,
-          CreatedDate: new Date()
-        }
+        cellStyles: true
       });
       
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
