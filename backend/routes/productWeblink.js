@@ -1969,7 +1969,25 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`✅ 成功保存 ${savedRecords.length} 条记录到product_information表`);
 
-    // 步骤3: 获取对应国家的模板文件
+    // 步骤3: 从数据库重新查询刚保存的数据，确保数据完整
+    console.log('🔍 从数据库重新查询刚保存的数据...');
+    const databaseRecords = await ProductInformation.findAll({
+      where: {
+        site: actualCountry,
+        created_at: {
+          [Op.gte]: new Date(Date.now() - 60000) // 查询最近1分钟内的记录
+        }
+      },
+      order: [['id', 'ASC']]
+    });
+    
+    console.log(`📊 从数据库查询到 ${databaseRecords.length} 条记录`);
+    
+    if (databaseRecords.length === 0) {
+      return res.status(500).json({ message: '数据保存后无法从数据库中查询到记录' });
+    }
+
+    // 步骤4: 获取对应国家的模板文件
     console.log(`🔍 查找${actualCountry}站点的模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
@@ -2100,80 +2118,20 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
-    // 步骤7: 准备填写数据
+    // 步骤7: 准备填写数据（使用数据库查询到的数据）
     console.log('✍️ 准备填写数据到Excel...');
-    console.log(`📊 savedRecords数量: ${savedRecords.length}`);
-    
-    // 调试：检查savedRecords的内容
-    if (savedRecords.length > 0) {
-      console.log('📋 第一条savedRecord:', {
-        item_sku: savedRecords[0].item_sku,
-        item_name: savedRecords[0].item_name,
-        color_name: savedRecords[0].color_name,
-        dataValues: savedRecords[0].dataValues ? '有dataValues' : '无dataValues'
-      });
-      if (savedRecords[0].dataValues) {
-        console.log('📋 dataValues内容:', {
-          item_sku: savedRecords[0].dataValues.item_sku,
-          item_name: savedRecords[0].dataValues.item_name,
-          color_name: savedRecords[0].dataValues.color_name
-        });
-      }
-    } else {
-      console.warn('⚠️ savedRecords为空，尝试继续使用原始数据');
-      // 如果savedRecords为空，尝试使用原始数据
-      if (dataRows.length === 0) {
-        return res.status(400).json({ message: '没有找到任何数据行' });
-      }
-    }
-    
-    // 如果savedRecords为空，使用原始数据构造记录
-    const recordsToUse = savedRecords.length > 0 ? savedRecords : dataRows.map((row, index) => {
-      const rowData = {};
-      headers.forEach((header, headerIndex) => {
-        if (header && row[headerIndex] !== undefined) {
-          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[headerIndex];
-        }
-      });
-      rowData.site = actualCountry;
-      if (rowData.item_sku && rowData.item_sku.length > 2) {
-        rowData.original_parent_sku = rowData.item_sku.substring(2);
-      }
-      return { dataValues: rowData };
-    });
-    
-    console.log(`📊 最终使用的记录数量: ${recordsToUse.length}`);
-    
-    // 检查列位置是否找到
-    if (itemSkuCol === -1) {
-      console.warn('⚠️ 未找到item_sku列，将尝试继续');
-    }
     
     // 确保数据数组有足够的行
-    const totalRowsNeeded = 3 + recordsToUse.length; // 前3行保留 + 数据行
-    console.log(`📊 需要总行数: ${totalRowsNeeded}, 当前行数: ${data.length}`);
+    const totalRowsNeeded = 3 + databaseRecords.length; // 前3行保留 + 数据行
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
     // 从第4行开始填写数据（索引为3）
     let currentRowIndex = 3; // 第4行开始，索引为3
-    console.log(`🔄 开始填写${recordsToUse.length}条记录，从第${currentRowIndex + 1}行开始`);
     
-    recordsToUse.forEach((record, index) => {
+    databaseRecords.forEach((record, index) => {
       const recordData = record.dataValues || record;
-      
-      // 调试第一条记录
-      if (index === 0) {
-        console.log(`📝 处理第${index + 1}条记录:`, {
-          item_sku: recordData.item_sku,
-          item_name: recordData.item_name,
-          color_name: recordData.color_name,
-          size_name: recordData.size_name,
-          brand_name: recordData.brand_name
-        });
-        console.log(`📍 将填写到第${currentRowIndex + 1}行（索引${currentRowIndex}）`);
-      }
       
       // 计算需要的最大列数
       const allColumns = [
@@ -2193,18 +2151,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       
       // 填写数据
-      if (itemSkuCol !== -1) {
-        data[currentRowIndex][itemSkuCol] = recordData.item_sku || '';
-        if (index === 0) console.log(`  ✅ 填写item_sku到列${itemSkuCol}: ${recordData.item_sku}`);
-      }
-      if (itemNameCol !== -1) {
-        data[currentRowIndex][itemNameCol] = recordData.item_name || '';
-        if (index === 0) console.log(`  ✅ 填写item_name到列${itemNameCol}: ${recordData.item_name}`);
-      }
-      if (colorNameCol !== -1) {
-        data[currentRowIndex][colorNameCol] = recordData.color_name || '';
-        if (index === 0) console.log(`  ✅ 填写color_name到列${colorNameCol}: ${recordData.color_name}`);
-      }
+      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = recordData.item_sku || '';
+      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = recordData.item_name || '';
+      if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = recordData.color_name || '';
       if (sizeNameCol !== -1) data[currentRowIndex][sizeNameCol] = recordData.size_name || '';
       if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = recordData.brand_name || '';
       if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = recordData.manufacturer || '';
@@ -2222,20 +2171,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = recordData.bullet_point5 || '';
       
       currentRowIndex++;
-      
-      // 验证第一条记录的填写结果
-      if (index === 0) {
-        console.log(`📊 第一条记录填写后的行内容:`, data[currentRowIndex - 1].slice(0, 10));
-      }
     });
 
-    console.log(`📊 填写完成，共填写了 ${recordsToUse.length} 行数据`);
-    
-    // 调试：输出最终数据的前几行
-    console.log('🔍 最终数据前5行:');
-    for (let i = 0; i < Math.min(5, data.length); i++) {
-      console.log(`第${i + 1}行:`, data[i]?.slice(0, 5) || '空行');
-    }
+    console.log(`📊 填写完成，共填写了 ${databaseRecords.length} 行数据`);
 
     // 步骤8: 将数据重新转换为工作表
     console.log('💾 生成Excel文件...');
@@ -2267,41 +2205,36 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 生成文件名：国家代码+母SKU格式
       console.log('🔍 开始生成文件名...');
-      console.log(`📊 recordsToUse数量: ${recordsToUse.length}`);
+      console.log(`📊 databaseRecords数量: ${databaseRecords.length}`);
       
       // 调试：输出前几条记录的结构
-      console.log('📋 前3条记录的结构:');
-      for (let i = 0; i < Math.min(3, recordsToUse.length); i++) {
-        const record = recordsToUse[i];
-        const data = record.dataValues || record;
-        console.log(`记录${i + 1}:`, {
-          item_sku: data.item_sku,
-          original_parent_sku: data.original_parent_sku,
-          hasDataValues: !!record.dataValues
+      if (databaseRecords.length > 0) {
+        console.log('📋 第一条数据库记录样例:', {
+          item_sku: databaseRecords[0].item_sku,
+          original_parent_sku: databaseRecords[0].original_parent_sku,
+          dataValues: databaseRecords[0].dataValues ? {
+            item_sku: databaseRecords[0].dataValues.item_sku,
+            original_parent_sku: databaseRecords[0].dataValues.original_parent_sku
+          } : 'no dataValues'
         });
       }
       
-      const parentSkus = [...new Set(recordsToUse
-        .map((record, index) => {
-          // 尝试从record.dataValues获取数据（Sequelize模型）
+      const parentSkus = [...new Set(databaseRecords
+        .map(record => {
+          // 从Sequelize模型获取数据
           const data = record.dataValues || record;
           const parentSku = data.original_parent_sku || (data.item_sku ? data.item_sku.substring(2) : null);
-          console.log(`🔍 记录${index + 1}提取SKU: ${data.item_sku} -> ${parentSku}`);
+          console.log(`🔍 提取SKU: ${data.item_sku} -> ${parentSku}`);
           return parentSku;
         })
         .filter(sku => sku && sku.trim())
       )];
       
       console.log('📋 提取的母SKU列表:', parentSkus);
-      console.log('📋 去重后的母SKU数量:', parentSkus.length);
-      
-      if (parentSkus.length === 0) {
-        console.warn('⚠️ 未提取到任何母SKU，使用默认名称');
-      }
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;
-      console.log('📄 最终生成的文件名:', fileName);
+      console.log('📄 生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -2852,37 +2785,17 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
-    // 步骤7: 准备填写数据
+    // 步骤7: 准备填写数据（直接使用转换后的记录）
     console.log('✍️ 准备填写数据到Excel...');
-    console.log(`📊 transformedRecords数量: ${transformedRecords.length}`);
-    
-    // 调试：检查transformedRecords的内容
-    if (transformedRecords.length > 0) {
-      console.log('📋 第一条transformedRecord:', {
-        item_sku: transformedRecords[0].item_sku,
-        item_name: transformedRecords[0].item_name,
-        color_name: transformedRecords[0].color_name,
-        original_parent_sku: transformedRecords[0].original_parent_sku
-      });
-    } else {
-      console.warn('⚠️ transformedRecords为空，但将尝试继续');
-    }
-    
-    // 检查列位置是否找到
-    if (itemSkuCol === -1) {
-      console.warn('⚠️ 未找到item_sku列，将尝试继续');
-    }
     
     // 确保数据数组有足够的行
     const totalRowsNeeded = 3 + transformedRecords.length; // 前3行保留 + 数据行
-    console.log(`📊 需要总行数: ${totalRowsNeeded}, 当前行数: ${data.length}`);
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
     // 从第4行开始填写数据（索引为3）
     let currentRowIndex = 3; // 第4行开始，索引为3
-    console.log(`🔄 开始填写${transformedRecords.length}条记录，从第${currentRowIndex + 1}行开始`);
     
     transformedRecords.forEach((record, index) => {
       // 计算需要的最大列数
