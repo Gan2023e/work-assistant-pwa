@@ -4,6 +4,7 @@ import { SaveOutlined, UndoOutlined, FileTextOutlined } from '@ant-design/icons'
 import { printManager, LabelData } from '../utils/printManager';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../config/api';
+import type { FormInstance } from 'antd/es/form';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -74,9 +75,9 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
 
   // 重置所有状态
   const resetAllStates = () => {
-    form.resetFields();
-    mixedBoxForm.resetFields();
-    currentMixedBoxForm.resetFields();
+    (form as any).resetFields();
+    (mixedBoxForm as any).resetFields();
+    (currentMixedBoxForm as any).resetFields();
     setStep('select');
     setWholeBoxItems([]);
     setMixedBoxData(null);
@@ -106,8 +107,8 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   // 返回选择页面
   const handleBackToSelect = () => {
     setStep('select');
-    form.resetFields();
-    mixedBoxForm.resetFields();
+    (form as any).resetFields();
+    (mixedBoxForm as any).resetFields();
     setWholeBoxItems([]);
     setMixedBoxData(null);
   };
@@ -272,7 +273,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   const handleWholeBoxSubmit = async () => {
     try {
       setLoading(true);
-      const values = await form.validateFields();
+      const values = await (form as any).validateFields();
       
       const skuItems = parseSkuInput(values.skuInput);
       if (skuItems.length === 0) {
@@ -417,7 +418,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   // 提交混合箱基本信息
   const handleMixedBoxInfoSubmit = async () => {
     try {
-      const values = await mixedBoxForm.validateFields();
+      const values = await (mixedBoxForm as any).validateFields();
       setMixedBoxData(values);
       setCurrentMixedBoxIndex(0);
       setCurrentMixedBoxSkus([]);
@@ -452,7 +453,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
   // 确认当前混合箱内容
   const handleConfirmCurrentMixedBox = async () => {
     try {
-      const values = await currentMixedBoxForm.validateFields();
+      const values = await (currentMixedBoxForm as any).validateFields();
       const skuItems = parseMixedBoxSkuInput(values.skuInput);
       
       if (skuItems.length === 0) {
@@ -472,7 +473,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
         // 还有下一箱
         setCurrentMixedBoxIndex(nextIndex);
         setCurrentMixedBoxSkus([]);
-        currentMixedBoxForm.resetFields();
+        (currentMixedBoxForm as any).resetFields();
         message.success(`第 ${currentMixedBoxIndex + 1} 箱录入完成，请录入第 ${nextIndex + 1} 箱`);
       } else {
         // 所有箱子都录入完成，提交到后端
@@ -577,10 +578,28 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
               allLabels.push(labelData);
             }
             
-            // 一次性打印所有混合箱标签
-            const success = await printManager.printMultipleLabels(allLabels);
+            // 使用分页打印所有混合箱标签（第一张最多5个SKU，后续最多6个SKU）
+            const success = await printManager.printMultipleMixedBoxLabelsWithPagination(allLabels);
             if (success) {
-              message.success(`打印任务已发送，共 ${allLabels.length} 张混合箱外箱单`);
+              // 计算分页数量
+              const totalSkus = allLabels.reduce((total, label) => {
+                if (label.qrData) {
+                  try {
+                    const qrObj = JSON.parse(label.qrData);
+                    return total + (qrObj.skus ? qrObj.skus.length : 1);
+                  } catch (error) {
+                    return total + 1;
+                  }
+                }
+                return total + 1;
+              }, 0);
+              
+              const firstPageSkuCount = Math.min(5, totalSkus);
+              const remainingSkus = Math.max(0, totalSkus - 5);
+              const additionalPages = Math.ceil(remainingSkus / 6);
+              const totalPages = (firstPageSkuCount > 0 ? 1 : 0) + additionalPages;
+              
+              message.success(`打印任务已发送，共 ${totalSkus} 个SKU，分 ${totalPages} 页打印`);
             } else {
               message.warning('打印失败，但入库成功');
             }
@@ -610,7 +629,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
     setCurrentMixedBoxIndex(0);
     setCurrentMixedBoxSkus([]);
     setAllMixedBoxes({});
-    currentMixedBoxForm.resetFields();
+    (currentMixedBoxForm as any).resetFields();
   };
 
   return (
@@ -715,7 +734,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                   style={{ fontFamily: 'monospace' }}
                   onBlur={(e) => {
                     const formattedValue = formatSkuInput(e.target.value);
-                    form.setFieldsValue({ skuInput: formattedValue });
+                    (form as any).setFieldsValue({ skuInput: formattedValue });
                   }}
                 />
                 </Form.Item>
@@ -856,7 +875,7 @@ const InventoryCreateModal: React.FC<InventoryCreateModalProps> = ({ visible, on
                 style={{ fontFamily: 'monospace' }}
                 onBlur={(e) => {
                   const formattedValue = formatSkuInput(e.target.value);
-                  currentMixedBoxForm.setFieldsValue({ skuInput: formattedValue });
+                  (currentMixedBoxForm as any).setFieldsValue({ skuInput: formattedValue });
                 }}
               />
                 </Form.Item>

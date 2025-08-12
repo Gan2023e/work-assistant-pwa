@@ -213,6 +213,48 @@ export class PrintManager {
     }
 
     /**
+     * 混合箱标签分页打印（第一张最多5个SKU，第二张以后最多6个SKU）
+     */
+    async printMultipleMixedBoxLabelsWithPagination(labelDataList: LabelData[], options: PrintOptions = {}): Promise<boolean> {
+        try {
+            const paginatedHTML = this.generatePaginatedMixedBoxHTML(labelDataList);
+            
+            const printWindow = window.open('', '_blank', 'fullscreen=yes,scrollbars=no,resizable=yes,toolbar=no,menubar=no,location=no,status=no');
+            if (!printWindow) {
+                console.error('无法打开打印窗口');
+                return false;
+            }
+
+            printWindow.document.write(paginatedHTML);
+            printWindow.document.close();
+
+            // 等待内容加载完成后打印
+            printWindow.onload = () => {
+                setTimeout(() => {
+                    printWindow.print();
+                    if (options.autoClose !== false) {
+                        setTimeout(() => {
+                            printWindow.close();
+                        }, 500);
+                    }
+                }, 500);
+            };
+
+                         // 计算分页数量
+             const firstPageSkuCount = Math.min(5, labelDataList.length);
+             const remainingSkus = Math.max(0, labelDataList.length - 5);
+             const additionalPages = Math.ceil(remainingSkus / 6);
+             const totalPages = (firstPageSkuCount > 0 ? 1 : 0) + additionalPages;
+
+             console.log(`✅ 已打开混合箱分页打印窗口，共 ${labelDataList.length} 个SKU，分 ${totalPages} 页打印`);
+            return true;
+        } catch (error) {
+            console.error('混合箱分页打印失败:', error);
+            return false;
+        }
+    }
+
+    /**
      * 测试打印
      */
     async testPrint(): Promise<boolean> {
@@ -461,6 +503,271 @@ export class PrintManager {
             ⚠️ 请确保打印机设置为60×40mm热敏纸规格
         </div>
     </div>${labelPages}<script class="no-print">console.log('🖨️ 热敏纸直接打印：共 ${labelDataList.length} 张 60×40mm 标签');console.log('📄 每张热敏纸打印一个外箱单标签');window.onload=function(){console.log('📄 热敏标签页面已加载 - 60×40mm 直接打印模式');}</script></body></html>`.trim();
+    }
+
+    /**
+     * 生成混合箱分页打印HTML（第一张最多5个SKU，后续最多6个SKU）
+     */
+    private generatePaginatedMixedBoxHTML(labelDataList: LabelData[]): string {
+        if (labelDataList.length === 0) {
+            return '';
+        }
+
+        // 获取第一个标签的基本信息
+        const firstLabel = labelDataList[0];
+        
+        // 解析混合箱数据
+        let allSkus: Array<{sku: string, quantity: number}> = [];
+        
+        // 处理多个混合箱的情况
+        for (const labelData of labelDataList) {
+            if (labelData.qrData) {
+                try {
+                    const qrObj = JSON.parse(labelData.qrData);
+                    if (qrObj.skus && Array.isArray(qrObj.skus)) {
+                        allSkus.push(...qrObj.skus);
+                    }
+                } catch (error) {
+                    console.error('解析QR数据失败:', error);
+                    // 备用方案
+                    allSkus.push({
+                        sku: labelData.sku.replace('混合箱-', ''),
+                        quantity: labelData.quantity
+                    });
+                }
+            } else {
+                // 备用方案
+                allSkus.push({
+                    sku: labelData.sku,
+                    quantity: labelData.quantity
+                });
+            }
+        }
+
+                 // 分页逻辑：第一页最多5个SKU，后续页面最多6个SKU
+         const pages: Array<{skus: Array<{sku: string, quantity: number}>, pageNumber: number}> = [];
+         
+         let currentIndex = 0;
+         let pageNumber = 1;
+         
+         while (currentIndex < allSkus.length) {
+             const isFirstPage = pageNumber === 1;
+             const maxSkusForThisPage = isFirstPage ? 5 : 6;
+             const endIndex = Math.min(currentIndex + maxSkusForThisPage, allSkus.length);
+            
+            pages.push({
+                skus: allSkus.slice(currentIndex, endIndex),
+                pageNumber: pageNumber
+            });
+            
+            currentIndex = endIndex;
+            pageNumber++;
+        }
+
+        // 生成每一页的HTML
+        const pageElements = pages.map((page, index) => {
+            const skuContent = page.skus.map(item => 
+                `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+            ).join('');
+
+            const pageClass = index > 0 ? 'thermal-page page-break' : 'thermal-page';
+            
+            return `<div class="${pageClass}">
+                <div class="country">${firstLabel.country}</div>
+                <div class="sku-section">${skuContent}</div>
+                <div class="page-info">第${page.pageNumber}页/共${pages.length}页</div>
+            </div>`;
+        }).join('');
+
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>混合箱分页打印 - ${allSkus.length}个SKU，共${pages.length}页</title>
+    <style>
+        /* 设置页面为60x40mm热敏纸规格 */
+        @page { 
+            size: 60mm 40mm; 
+            margin: 0; 
+        }
+        
+        @media print {
+            * {
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+            }
+            
+            html {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 60mm !important;
+                height: 40mm !important;
+            }
+            
+            body { 
+                font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif !important; 
+                font-size: 8px !important;
+                line-height: 1.1 !important;
+                color: black !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 60mm !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+            
+            .no-print { 
+                display: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                width: 0 !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            .thermal-page {
+                width: 60mm !important;
+                height: 40mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+                position: relative !important;
+                border: none !important;
+                page-break-inside: avoid !important;
+            }
+            
+            .thermal-page:first-child {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            
+            .page-break {
+                page-break-before: always !important;
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+        }
+        
+        /* 屏幕预览样式 */
+        body { 
+            font-family: 'Microsoft YaHei', 'SimHei', Arial, sans-serif; 
+            margin: 0;
+            padding: 20px 10px;
+            line-height: 1.1;
+            background: #f0f0f0;
+        }
+        
+        .thermal-page {
+            width: 60mm;
+            height: 40mm;
+            margin: 10mm auto;
+            padding: 0;
+            box-sizing: border-box;
+            background: white;
+            position: relative;
+            overflow: hidden;
+            display: block;
+            box-shadow: 0 0 0 2px #333, 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .country {
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 1px solid #000;
+            padding-bottom: 1mm;
+            margin: 1mm 1mm 1mm 1mm;
+            line-height: 1.1;
+        }
+        
+        .sku-section {
+            font-size: 11px;
+            text-align: center;
+            font-weight: bold;
+            margin: 1mm 1mm 0 1mm;
+            height: 25mm;
+            overflow: hidden;
+        }
+        
+        .sku-item {
+            margin: 0.3mm 0;
+            line-height: 1.1;
+            word-break: break-all;
+        }
+        
+        .page-info {
+            position: absolute;
+            bottom: 1mm;
+            right: 1mm;
+            font-size: 8px;
+            color: #666;
+        }
+        
+        /* 打印时的精确控制 */
+        @media print {
+            .country {
+                font-size: 16px !important;
+                font-weight: bold !important;
+                text-align: center !important;
+                border-bottom: 1px solid #000 !important;
+                padding: 0.5mm 1mm 0.5mm 1mm !important;
+                margin: 0.5mm 1mm 0.5mm 1mm !important;
+                line-height: 1.0 !important;
+            }
+            
+            .sku-section {
+                font-size: 11px !important;
+                text-align: center !important;
+                font-weight: bold !important;
+                margin: 0.5mm 1mm 0 1mm !important;
+                padding: 0 !important;
+                height: 25mm !important;
+                overflow: hidden !important;
+            }
+            
+            .sku-item {
+                margin: 0.2mm 0 !important;
+                padding: 0 !important;
+                line-height: 1.0 !important;
+                word-break: break-all !important;
+            }
+            
+            .page-info {
+                position: absolute !important;
+                bottom: 0.5mm !important;
+                right: 1mm !important;
+                font-size: 7px !important;
+                color: #666 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; text-align: center; padding: 20px; background: rgba(224, 224, 224, 0.95); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <h3 style="margin: 0 0 10px 0; color: #333;">🏷️ 混合箱分页打印</h3>
+        <p style="margin: 0 0 10px 0; color: #666;">共 ${allSkus.length} 个SKU，分 ${pages.length} 页打印</p>
+                 <p style="margin: 0 0 10px 0; color: #888; font-size: 12px;">第1页最多5个SKU，第2页以后最多6个SKU</p>
+        <button onclick="window.print()" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">🖨️ 开始打印</button>
+        <button onclick="window.close()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">❌ 关闭</button>
+        <div style="margin-top: 10px; font-size: 12px; color: #888;">
+            ⚠️ 请确保打印机设置为60×40mm热敏纸规格
+        </div>
+    </div>
+    ${pageElements}
+    <script class="no-print">
+                 console.log('🖨️ 混合箱分页打印：共 ${allSkus.length} 个SKU，分 ${pages.length} 页');
+         console.log('📄 第1页最多5个SKU，第2页以后最多6个SKU');
+        window.onload = function() {
+            console.log('📄 混合箱分页打印页面已加载');
+        };
+    </script>
+</body>
+</html>`.trim();
     }
 
     /**
