@@ -680,15 +680,12 @@ const InventoryManagement: React.FC = () => {
         })
       };
 
-      // 使用分页打印功能（第一页最多5个SKU，后续页面最多6个SKU）
+      // 使用分页打印功能（每页最多16个SKU：8行×2列）
       const success = await printManager.printMultipleMixedBoxLabelsWithPagination([labelData]);
       if (success) {
-        // 计算分页数量
+        // 计算分页数量（每页最多16个SKU）
         const totalSkus = mixedBoxRecords.length;
-        const firstPageSkuCount = Math.min(5, totalSkus);
-        const remainingSkus = Math.max(0, totalSkus - 5);
-        const additionalPages = Math.ceil(remainingSkus / 6);
-        const totalPages = (firstPageSkuCount > 0 ? 1 : 0) + additionalPages;
+        const totalPages = Math.ceil(totalSkus / 16);
         
         if (totalPages > 1) {
           message.success(`打印任务已发送，共 ${totalSkus} 个SKU，分 ${totalPages} 页打印`);

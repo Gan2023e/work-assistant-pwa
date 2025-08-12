@@ -213,7 +213,7 @@ export class PrintManager {
     }
 
     /**
-     * 混合箱标签分页打印（第一张最多5个SKU，第二张以后最多6个SKU）
+     * 混合箱标签分页打印（每页最多16个SKU：8行×2列，SKU≤8时单列，>8时双列，>16时分页）
      */
     async printMultipleMixedBoxLabelsWithPagination(labelDataList: LabelData[], options: PrintOptions = {}): Promise<boolean> {
         try {
@@ -240,11 +240,8 @@ export class PrintManager {
                 }, 500);
             };
 
-                         // 计算分页数量
-             const firstPageSkuCount = Math.min(5, labelDataList.length);
-             const remainingSkus = Math.max(0, labelDataList.length - 5);
-             const additionalPages = Math.ceil(remainingSkus / 6);
-             const totalPages = (firstPageSkuCount > 0 ? 1 : 0) + additionalPages;
+                         // 计算分页数量（每页最多16个SKU）
+             const totalPages = Math.ceil(labelDataList.length / 16);
 
              console.log(`✅ 已打开混合箱分页打印窗口，共 ${labelDataList.length} 个SKU，分 ${totalPages} 页打印`);
             return true;
@@ -506,7 +503,7 @@ export class PrintManager {
     }
 
     /**
-     * 生成混合箱分页打印HTML（第一张最多5个SKU，后续最多6个SKU）
+     * 生成混合箱分页打印HTML（每页最多16个SKU：8行×2列，SKU≤8时单列，>8时双列，>16时分页）
      */
     private generatePaginatedMixedBoxHTML(labelDataList: LabelData[]): string {
         if (labelDataList.length === 0) {
@@ -544,40 +541,77 @@ export class PrintManager {
             }
         }
 
-                 // 分页逻辑：第一页最多5个SKU，后续页面最多6个SKU
-         const pages: Array<{skus: Array<{sku: string, quantity: number}>, pageNumber: number}> = [];
+                          // 新分页逻辑：每页最多16个SKU（8行×2列），超过16个时分页
+         const pages: Array<{skus: Array<{sku: string, quantity: number}>, pageNumber: number, useDoubleColumn: boolean}> = [];
          
          let currentIndex = 0;
          let pageNumber = 1;
          
          while (currentIndex < allSkus.length) {
-             const isFirstPage = pageNumber === 1;
-             const maxSkusForThisPage = isFirstPage ? 5 : 6;
+             // 每页最多16个SKU
+             const maxSkusForThisPage = 16;
              const endIndex = Math.min(currentIndex + maxSkusForThisPage, allSkus.length);
-            
-            pages.push({
-                skus: allSkus.slice(currentIndex, endIndex),
-                pageNumber: pageNumber
-            });
-            
-            currentIndex = endIndex;
-            pageNumber++;
-        }
+             const pageSkus = allSkus.slice(currentIndex, endIndex);
+             
+             // 判断是否需要使用两列布局（超过8个SKU时使用两列）
+             const useDoubleColumn = pageSkus.length > 8;
+             
+             pages.push({
+                 skus: pageSkus,
+                 pageNumber: pageNumber,
+                 useDoubleColumn: useDoubleColumn
+             });
+             
+             currentIndex = endIndex;
+             pageNumber++;
+         }
 
-        // 生成每一页的HTML
-        const pageElements = pages.map((page, index) => {
-            const skuContent = page.skus.map(item => 
-                `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
-            ).join('');
+                 // 生成每一页的HTML
+         const pageElements = pages.map((page, index) => {
+             let skuContent = '';
+             
+             if (page.useDoubleColumn) {
+                 // 两列布局：将SKU分成两列
+                 const leftColumn: Array<{sku: string, quantity: number}> = [];
+                 const rightColumn: Array<{sku: string, quantity: number}> = [];
+                 
+                 page.skus.forEach((item, idx) => {
+                     if (idx < 8) {
+                         leftColumn.push(item);
+                     } else {
+                         rightColumn.push(item);
+                     }
+                 });
+                 
+                 const leftContent = leftColumn.map(item => 
+                     `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+                 ).join('');
+                 
+                 const rightContent = rightColumn.map(item => 
+                     `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+                 ).join('');
+                 
+                 skuContent = `
+                     <div class="two-column-layout">
+                         <div class="left-column">${leftContent}</div>
+                         <div class="right-column">${rightContent}</div>
+                     </div>
+                 `;
+             } else {
+                 // 单列布局
+                 skuContent = page.skus.map(item => 
+                     `<div class="sku-item">${item.sku}: ${item.quantity}件</div>`
+                 ).join('');
+             }
 
-            const pageClass = index > 0 ? 'thermal-page page-break' : 'thermal-page';
-            
-            return `<div class="${pageClass}">
-                <div class="country">${firstLabel.country}</div>
-                <div class="sku-section">${skuContent}</div>
-                <div class="page-info">第${page.pageNumber}页/共${pages.length}页</div>
-            </div>`;
-        }).join('');
+             const pageClass = index > 0 ? 'thermal-page page-break' : 'thermal-page';
+             
+             return `<div class="${pageClass}">
+                 <div class="country">${firstLabel.country}</div>
+                 <div class="sku-section ${page.useDoubleColumn ? 'double-column' : ''}">${skuContent}</div>
+                 <div class="page-info">第${page.pageNumber}页/共${pages.length}页</div>
+             </div>`;
+         }).join('');
 
         return `
 <!DOCTYPE html>
@@ -700,15 +734,33 @@ export class PrintManager {
             word-break: break-all;
         }
         
-        .page-info {
-            position: absolute;
-            bottom: 5mm;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 8px;
-            color: #666;
-            text-align: center;
-        }
+                 .page-info {
+             position: absolute;
+             bottom: 5mm;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 12px;
+             font-weight: bold;
+             color: #333;
+             text-align: center;
+         }
+         
+         .two-column-layout {
+             display: flex;
+             justify-content: space-between;
+             width: 100%;
+         }
+         
+         .left-column,
+         .right-column {
+             width: 48%;
+             flex-shrink: 0;
+         }
+         
+         .sku-section.double-column {
+             height: 20mm;
+             overflow: hidden;
+         }
         
         /* 打印时的精确控制 */
         @media print {
@@ -739,15 +791,33 @@ export class PrintManager {
                 word-break: break-all !important;
             }
             
-            .page-info {
-                position: absolute !important;
-                bottom: 4mm !important;
-                left: 50% !important;
-                transform: translateX(-50%) !important;
-                font-size: 7px !important;
-                color: #666 !important;
-                text-align: center !important;
-            }
+                         .page-info {
+                 position: absolute !important;
+                 bottom: 4mm !important;
+                 left: 50% !important;
+                 transform: translateX(-50%) !important;
+                 font-size: 10px !important;
+                 font-weight: bold !important;
+                 color: #333 !important;
+                 text-align: center !important;
+             }
+             
+             .two-column-layout {
+                 display: flex !important;
+                 justify-content: space-between !important;
+                 width: 100% !important;
+             }
+             
+             .left-column,
+             .right-column {
+                 width: 48% !important;
+                 flex-shrink: 0 !important;
+             }
+             
+             .sku-section.double-column {
+                 height: 20mm !important;
+                 overflow: hidden !important;
+             }
         }
     </style>
 </head>
@@ -755,7 +825,7 @@ export class PrintManager {
     <div class="no-print" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; text-align: center; padding: 20px; background: rgba(224, 224, 224, 0.95); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
         <h3 style="margin: 0 0 10px 0; color: #333;">🏷️ 混合箱分页打印</h3>
         <p style="margin: 0 0 10px 0; color: #666;">共 ${allSkus.length} 个SKU，分 ${pages.length} 页打印</p>
-                 <p style="margin: 0 0 10px 0; color: #888; font-size: 12px;">第1页最多5个SKU，第2页以后最多6个SKU</p>
+                 <p style="margin: 0 0 10px 0; color: #888; font-size: 12px;">每页最多16个SKU（8行×2列），超过8个SKU自动分两列显示</p>
         <button onclick="window.print()" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">🖨️ 开始打印</button>
         <button onclick="window.close()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">❌ 关闭</button>
         <div style="margin-top: 10px; font-size: 12px; color: #888;">
@@ -765,7 +835,7 @@ export class PrintManager {
     ${pageElements}
     <script class="no-print">
                  console.log('🖨️ 混合箱分页打印：共 ${allSkus.length} 个SKU，分 ${pages.length} 页');
-         console.log('📄 第1页最多5个SKU，第2页以后最多6个SKU');
+         console.log('📄 每页最多16个SKU（8行×2列），超过8个SKU自动分两列显示');
         window.onload = function() {
             console.log('📄 混合箱分页打印页面已加载');
         };
