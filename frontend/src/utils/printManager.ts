@@ -758,7 +758,7 @@ export class PrintManager {
          }
          
          .sku-section.double-column {
-             height: 20mm;
+             height: 26mm;
              overflow: hidden;
          }
         
@@ -815,7 +815,7 @@ export class PrintManager {
              }
              
              .sku-section.double-column {
-                 height: 20mm !important;
+                 height: 26mm !important;
                  overflow: hidden !important;
              }
         }
