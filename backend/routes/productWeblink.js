@@ -2043,8 +2043,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         newWorksheet['!cols'] = templateWorksheet['!cols'];
       }
       
-      // 验证工作表名称
-      const sheetName = templateSheetName || 'Template';
+      // 确保使用Template工作表名称
+      const sheetName = 'Template';
       console.log(`📋 使用工作表名称: ${sheetName}`);
       
       xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
@@ -2063,7 +2063,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
-      const fileName = `${actualCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // 生成文件名：国家代码+母SKU格式
+      const parentSkus = [...new Set(savedRecords
+        .map(record => record.original_parent_sku || record.item_sku?.substring(2))
+        .filter(sku => sku)
+      )];
+      
+      const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
+      const fileName = `${actualCountry}_${skuPart}.xlsx`;
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -2525,8 +2532,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         batchWorksheet['!cols'] = templateWorksheet['!cols'];
       }
       
-      // 验证工作表名称
-      const sheetName = templateSheetName || 'Template';
+      // 确保使用Template工作表名称
+      const sheetName = 'Template';
       console.log(`📋 使用工作表名称: ${sheetName}`);
       
       xlsx.utils.book_append_sheet(batchWorkbook, batchWorksheet, sheetName);
@@ -2545,7 +2552,14 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
-      const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // 生成文件名：国家代码+母SKU格式
+      const parentSkus = [...new Set(transformedRecords
+        .map(record => record.original_parent_sku || record.item_sku?.substring(2))
+        .filter(sku => sku)
+      )];
+      
+      const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
+      const fileName = `${targetCountry}_${skuPart}.xlsx`;
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);

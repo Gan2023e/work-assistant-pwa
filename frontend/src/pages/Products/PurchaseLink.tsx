@@ -2010,7 +2010,16 @@ const Purchase: React.FC = () => {
       if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
         // 直接处理文件下载
         const blob = await response.blob();
-        const fileName = `${activeSiteTabKey}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        // 从响应头获取文件名
+        const contentDisposition = response.headers.get('content-disposition');
+        let fileName = `${activeSiteTabKey}_data_sheet.xlsx`; // 默认文件名
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+          if (filenameMatch) {
+            fileName = filenameMatch[1];
+          }
+        }
         
         // 创建下载链接
         const url = window.URL.createObjectURL(blob);
@@ -2049,8 +2058,9 @@ const Purchase: React.FC = () => {
   };
 
   // 新增：步骤1 - 上传源数据到数据库
-  const handleUploadSourceData = async () => {
-    if (!sourceFile || !sourceCountry) {
+  const handleUploadSourceData = async (file?: File) => {
+    const fileToUpload = file || sourceFile;
+    if (!fileToUpload || !sourceCountry) {
       message.warning('请选择源站点并上传Excel文件');
       return;
     }
@@ -2059,7 +2069,7 @@ const Purchase: React.FC = () => {
       setOtherSiteLoading(prev => ({ ...prev, [sourceCountry]: true }));
       
       const formData = new FormData();
-      formData.append('file', sourceFile);
+      formData.append('file', fileToUpload);
       formData.append('site', sourceCountry);
 
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/upload-source-data`, {
@@ -2120,7 +2130,16 @@ const Purchase: React.FC = () => {
           }
 
           const blob = await response.blob();
-          const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+          
+          // 从响应头获取文件名
+          const contentDisposition = response.headers.get('content-disposition');
+          let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            if (filenameMatch) {
+              fileName = filenameMatch[1];
+            }
+          }
           
           newDownloadHistory[targetCountry] = {
             blob,
@@ -2298,7 +2317,16 @@ const Purchase: React.FC = () => {
           }
 
           const blob = await response.blob();
-          const fileName = `${targetCountry}_data_sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+          
+          // 从响应头获取文件名
+          const contentDisposition = response.headers.get('content-disposition');
+          let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            if (filenameMatch) {
+              fileName = filenameMatch[1];
+            }
+          }
           
           results[targetCountry] = { blob, fileName };
           setBatchProgress(prev => ({ ...prev, [targetCountry]: 'completed' }));
@@ -3431,23 +3459,35 @@ const Purchase: React.FC = () => {
                         accept=".xlsx,.xls"
                         beforeUpload={(file) => {
                           setSourceFile(file);
+                          // 选择文件后直接上传
+                          setTimeout(() => {
+                            handleUploadSourceData(file);
+                          }, 100);
                           return false;
                         }}
                         fileList={sourceFile ? [{
                           uid: '1',
                           name: sourceFile.name,
-                          status: 'done' as const,
+                          status: otherSiteLoading[sourceCountry] ? 'uploading' : 'done',
                           size: sourceFile.size
                         }] : []}
-                        onRemove={() => setSourceFile(null)}
+                        onRemove={() => {
+                          setSourceFile(null);
+                          setSourceDataUploaded(false);
+                        }}
                         style={{ width: '100%' }}
                       >
-                        <Button icon={<UploadOutlined />} size="large" block>
-                          选择Excel文件
+                        <Button 
+                          icon={<UploadOutlined />} 
+                          size="large" 
+                          block
+                          loading={otherSiteLoading[sourceCountry]}
+                        >
+                          {otherSiteLoading[sourceCountry] ? '正在上传...' : '选择Excel文件'}
                         </Button>
                       </Upload>
                       <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>
-                        支持 .xlsx 和 .xls 格式，文件将被上传到数据库用于生成其他站点资料
+                        支持 .xlsx 和 .xls 格式，选择文件后将自动上传到数据库
                       </Text>
                     </div>
                   )}
@@ -3455,27 +3495,19 @@ const Purchase: React.FC = () => {
                   {/* 文件信息 */}
                   {sourceFile && (
                     <div style={{ padding: '16px', backgroundColor: '#f6f6f6', borderRadius: '8px' }}>
-                      <Text strong>已选择文件：</Text>
+                      <Text strong>
+                        {otherSiteLoading[sourceCountry] ? '正在上传文件：' : sourceDataUploaded ? '已成功上传文件：' : '已选择文件：'}
+                      </Text>
                       <br />
                       <Text type="secondary">文件名: {sourceFile.name}</Text>
                       <br />
                       <Text type="secondary">大小: {(sourceFile.size / 1024).toFixed(1)} KB</Text>
-                    </div>
-                  )}
-
-                  {/* 上传按钮 */}
-                  {sourceFile && sourceCountry && (
-                    <div style={{ textAlign: 'center', marginTop: '24px' }}>
-                      <Button
-                        type="primary"
-                        size="large"
-                        icon={<CloudUploadOutlined />}
-                        loading={otherSiteLoading[sourceCountry]}
-                        onClick={handleUploadSourceData}
-                        style={{ minWidth: '200px' }}
-                      >
-                        {otherSiteLoading[sourceCountry] ? '正在上传到数据库...' : '上传数据到数据库'}
-                      </Button>
+                      {sourceDataUploaded && (
+                        <>
+                          <br />
+                          <Text type="success">✓ 数据已成功上传到数据库</Text>
+                        </>
+                      )}
                     </div>
                   )}
                 </Space>
