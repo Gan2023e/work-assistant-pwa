@@ -1927,8 +1927,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
     }
 
-    // 步骤2: 处理数据并保存到product_information表
-    console.log('💾 保存数据到product_information表...');
+    // 步骤2: 处理数据并保存到数据库，同时准备填写到Excel
+    console.log('💾 保存数据到数据库并准备填写到Excel...');
     
     // 获取标题行（第3行是标题行，索引为2）
     if (jsonData.length < 4) {
@@ -1939,6 +1939,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     const savedRecords = [];
+    const processedRecords = []; // 用于Excel填写的干净数据
     
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
@@ -1959,25 +1960,36 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       }
       
+      // 保存到数据库
       try {
         const savedRecord = await ProductInformation.create(rowData);
         savedRecords.push(savedRecord);
       } catch (error) {
         console.warn(`⚠️ 保存记录失败: ${JSON.stringify(rowData)}, 错误: ${error.message}`);
       }
+      
+      // 同时保存一份用于Excel填写
+      processedRecords.push(rowData);
     }
 
-    console.log(`✅ 成功保存 ${savedRecords.length} 条记录到product_information表`);
+    console.log(`✅ 成功保存 ${savedRecords.length} 条记录到数据库`);
+    console.log(`✅ 准备了 ${processedRecords.length} 条记录用于Excel填写`);
     
     // 调试：输出保存的记录详情
-    if (savedRecords.length > 0) {
-      console.log('📋 第一条保存的记录:', {
-        item_sku: savedRecords[0].item_sku || savedRecords[0].dataValues?.item_sku,
-        item_name: savedRecords[0].item_name || savedRecords[0].dataValues?.item_name,
-        original_parent_sku: savedRecords[0].original_parent_sku || savedRecords[0].dataValues?.original_parent_sku
+    if (processedRecords.length > 0) {
+      console.log('📋 第一条记录详情:', {
+        item_sku: processedRecords[0].item_sku,
+        item_name: processedRecords[0].item_name,
+        original_parent_sku: processedRecords[0].original_parent_sku
+      });
+      
+      // 调试所有记录的item_sku
+      console.log('📋 所有记录的item_sku:');
+      processedRecords.forEach((record, idx) => {
+        console.log(`  记录${idx + 1}: ${record.item_sku}`);
       });
     } else {
-      console.log('❌ 没有记录被保存到数据库!');
+      console.log('❌ 没有记录被处理!');
     }
 
     // 步骤3: 获取对应国家的模板文件
@@ -2126,7 +2138,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log('✍️ 准备填写数据到Excel...');
     
     // 确保数据数组有足够的行
-    const totalRowsNeeded = 3 + savedRecords.length; // 前3行保留 + 数据行
+    const totalRowsNeeded = 3 + processedRecords.length; // 前3行保留 + 数据行
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
@@ -2134,8 +2146,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     // 从第4行开始填写数据（索引为3）
     let currentRowIndex = 3; // 第4行开始，索引为3
     
-    savedRecords.forEach((record, index) => {
-      const recordData = record.dataValues || record;
+    processedRecords.forEach((record, index) => {
+      const recordData = record; // processedRecords已经是干净的数据对象
       
       // 调试：输出第一条记录的填写过程
       if (index === 0) {
@@ -2194,15 +2206,15 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       currentRowIndex++;
     });
 
-    console.log(`📊 填写完成，共填写了 ${savedRecords.length} 行数据`);
+    console.log(`📊 填写完成，共填写了 ${processedRecords.length} 行数据`);
     
     // 调试：检查是否有数据被填写
-    if (savedRecords.length > 0) {
+    if (processedRecords.length > 0) {
       console.log('📋 检查数据填写结果:');
       console.log(`第4行内容:`, data[3]?.slice(0, 5));
       console.log(`第5行内容:`, data[4]?.slice(0, 5));
     } else {
-      console.log('❌ 警告：savedRecords为空，没有数据可填写!');
+      console.log('❌ 警告：processedRecords为空，没有数据可填写!');
     }
 
     // 步骤8: 将数据重新转换为工作表
@@ -2235,33 +2247,20 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 生成文件名：国家代码+母SKU格式
       console.log('🔍 开始生成文件名...');
-      console.log(`📊 savedRecords数量: ${savedRecords.length}`);
+      console.log(`📊 processedRecords数量: ${processedRecords.length}`);
       
       // 调试：输出前几条记录的结构
-      if (savedRecords.length > 0) {
+      if (processedRecords.length > 0) {
         console.log('📋 第一条记录样例:', {
-          item_sku: savedRecords[0].item_sku,
-          original_parent_sku: savedRecords[0].original_parent_sku,
-          dataValues: savedRecords[0].dataValues ? {
-            item_sku: savedRecords[0].dataValues.item_sku,
-            original_parent_sku: savedRecords[0].dataValues.original_parent_sku
-          } : 'no dataValues'
-        });
-        
-        // 调试所有记录的item_sku
-        console.log('📋 所有记录的item_sku:');
-        savedRecords.forEach((record, idx) => {
-          const data = record.dataValues || record;
-          console.log(`  记录${idx + 1}: ${data.item_sku}`);
+          item_sku: processedRecords[0].item_sku,
+          original_parent_sku: processedRecords[0].original_parent_sku
         });
       }
       
-      const parentSkus = [...new Set(savedRecords
+      const parentSkus = [...new Set(processedRecords
         .map(record => {
-          // 尝试从record.dataValues获取数据（Sequelize模型）
-          const data = record.dataValues || record;
-          const parentSku = data.original_parent_sku || (data.item_sku ? data.item_sku.substring(2) : null);
-          console.log(`🔍 提取SKU: ${data.item_sku} -> ${parentSku}`);
+          const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
+          console.log(`🔍 提取SKU: ${record.item_sku} -> ${parentSku}`);
           return parentSku;
         })
         .filter(sku => sku && sku.trim())
