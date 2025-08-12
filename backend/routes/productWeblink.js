@@ -2120,18 +2120,37 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         });
       }
     } else {
-      console.warn('⚠️ savedRecords为空，无法填写数据');
-      return res.status(400).json({ message: 'savedRecords为空，无法生成资料表' });
+      console.warn('⚠️ savedRecords为空，尝试继续使用原始数据');
+      // 如果savedRecords为空，尝试使用原始数据
+      if (dataRows.length === 0) {
+        return res.status(400).json({ message: '没有找到任何数据行' });
+      }
     }
+    
+    // 如果savedRecords为空，使用原始数据构造记录
+    const recordsToUse = savedRecords.length > 0 ? savedRecords : dataRows.map((row, index) => {
+      const rowData = {};
+      headers.forEach((header, headerIndex) => {
+        if (header && row[headerIndex] !== undefined) {
+          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[headerIndex];
+        }
+      });
+      rowData.site = actualCountry;
+      if (rowData.item_sku && rowData.item_sku.length > 2) {
+        rowData.original_parent_sku = rowData.item_sku.substring(2);
+      }
+      return { dataValues: rowData };
+    });
+    
+    console.log(`📊 最终使用的记录数量: ${recordsToUse.length}`);
     
     // 检查列位置是否找到
     if (itemSkuCol === -1) {
-      console.error('❌ 未找到item_sku列');
-      return res.status(400).json({ message: '模板中未找到item_sku列' });
+      console.warn('⚠️ 未找到item_sku列，将尝试继续');
     }
     
     // 确保数据数组有足够的行
-    const totalRowsNeeded = 3 + savedRecords.length; // 前3行保留 + 数据行
+    const totalRowsNeeded = 3 + recordsToUse.length; // 前3行保留 + 数据行
     console.log(`📊 需要总行数: ${totalRowsNeeded}, 当前行数: ${data.length}`);
     while (data.length < totalRowsNeeded) {
       data.push([]);
@@ -2139,9 +2158,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     // 从第4行开始填写数据（索引为3）
     let currentRowIndex = 3; // 第4行开始，索引为3
-    console.log(`🔄 开始填写${savedRecords.length}条记录，从第${currentRowIndex + 1}行开始`);
+    console.log(`🔄 开始填写${recordsToUse.length}条记录，从第${currentRowIndex + 1}行开始`);
     
-    savedRecords.forEach((record, index) => {
+    recordsToUse.forEach((record, index) => {
       const recordData = record.dataValues || record;
       
       // 调试第一条记录
@@ -2210,7 +2229,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
     });
 
-    console.log(`📊 填写完成，共填写了 ${savedRecords.length} 行数据`);
+    console.log(`📊 填写完成，共填写了 ${recordsToUse.length} 行数据`);
     
     // 调试：输出最终数据的前几行
     console.log('🔍 最终数据前5行:');
@@ -2248,29 +2267,21 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 生成文件名：国家代码+母SKU格式
       console.log('🔍 开始生成文件名...');
-      console.log(`📊 savedRecords数量: ${savedRecords.length}`);
-      
-      if (savedRecords.length === 0) {
-        console.error('❌ savedRecords为空，无法生成文件名');
-        return res.status(400).json({ message: 'savedRecords为空，无法生成文件名' });
-      }
+      console.log(`📊 recordsToUse数量: ${recordsToUse.length}`);
       
       // 调试：输出前几条记录的结构
       console.log('📋 前3条记录的结构:');
-      for (let i = 0; i < Math.min(3, savedRecords.length); i++) {
-        const record = savedRecords[i];
+      for (let i = 0; i < Math.min(3, recordsToUse.length); i++) {
+        const record = recordsToUse[i];
+        const data = record.dataValues || record;
         console.log(`记录${i + 1}:`, {
-          item_sku: record.item_sku,
-          original_parent_sku: record.original_parent_sku,
-          hasDataValues: !!record.dataValues,
-          dataValues: record.dataValues ? {
-            item_sku: record.dataValues.item_sku,
-            original_parent_sku: record.dataValues.original_parent_sku
-          } : null
+          item_sku: data.item_sku,
+          original_parent_sku: data.original_parent_sku,
+          hasDataValues: !!record.dataValues
         });
       }
       
-      const parentSkus = [...new Set(savedRecords
+      const parentSkus = [...new Set(recordsToUse
         .map((record, index) => {
           // 尝试从record.dataValues获取数据（Sequelize模型）
           const data = record.dataValues || record;
@@ -2854,14 +2865,12 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         original_parent_sku: transformedRecords[0].original_parent_sku
       });
     } else {
-      console.warn('⚠️ transformedRecords为空，无法填写数据');
-      return res.status(400).json({ message: 'transformedRecords为空，无法生成资料表' });
+      console.warn('⚠️ transformedRecords为空，但将尝试继续');
     }
     
     // 检查列位置是否找到
     if (itemSkuCol === -1) {
-      console.error('❌ 未找到item_sku列');
-      return res.status(400).json({ message: '模板中未找到item_sku列' });
+      console.warn('⚠️ 未找到item_sku列，将尝试继续');
     }
     
     // 确保数据数组有足够的行
