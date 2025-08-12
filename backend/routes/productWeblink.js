@@ -13,6 +13,147 @@ const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
+// 过滤和验证ProductInformation数据的工具函数
+function filterValidFields(data) {
+  // ProductInformation模型中定义的字段及其长度限制
+  const validFields = {
+    // 原有字段
+    site: { type: 'string', maxLength: 10 },
+    item_sku: { type: 'string', maxLength: 30 },
+    original_parent_sku: { type: 'string', maxLength: 30 },
+    item_name: { type: 'string', maxLength: 500 },
+    external_product_id: { type: 'string', maxLength: 30 },
+    external_product_id_type: { type: 'string', maxLength: 30 },
+    brand_name: { type: 'string', maxLength: 30 },
+    product_description: { type: 'text', maxLength: null }, // TEXT类型，通常无长度限制
+    bullet_point1: { type: 'string', maxLength: 255 },
+    bullet_point2: { type: 'string', maxLength: 255 },
+    bullet_point3: { type: 'string', maxLength: 255 },
+    bullet_point4: { type: 'string', maxLength: 255 },
+    bullet_point5: { type: 'string', maxLength: 255 },
+    generic_keywords: { type: 'string', maxLength: 255 },
+    main_image_url: { type: 'string', maxLength: 255 },
+    swatch_image_url: { type: 'string', maxLength: 255 },
+    other_image_url1: { type: 'string', maxLength: 255 },
+    other_image_url2: { type: 'string', maxLength: 255 },
+    other_image_url3: { type: 'string', maxLength: 255 },
+    other_image_url4: { type: 'string', maxLength: 255 },
+    other_image_url5: { type: 'string', maxLength: 255 },
+    other_image_url6: { type: 'string', maxLength: 255 },
+    other_image_url7: { type: 'string', maxLength: 255 },
+    other_image_url8: { type: 'string', maxLength: 255 },
+    parent_child: { type: 'string', maxLength: 30 },
+    parent_sku: { type: 'string', maxLength: 30 },
+    relationship_type: { type: 'string', maxLength: 30 },
+    variation_theme: { type: 'string', maxLength: 30 },
+    color_name: { type: 'string', maxLength: 30 },
+    color_map: { type: 'string', maxLength: 30 },
+    size_name: { type: 'string', maxLength: 30 },
+    size_map: { type: 'string', maxLength: 30 },
+    
+    // 新增字段 - 产品基础信息
+    feed_product_type: { type: 'string', maxLength: 50 },
+    item_type: { type: 'string', maxLength: 100 },
+    model: { type: 'string', maxLength: 50 },
+    manufacturer: { type: 'string', maxLength: 100 },
+    standard_price: { type: 'decimal', maxLength: null },
+    quantity: { type: 'integer', maxLength: null },
+    list_price: { type: 'decimal', maxLength: null },
+    
+    // 新增字段 - 产品属性
+    closure_type: { type: 'string', maxLength: 50 },
+    outer_material_type1: { type: 'string', maxLength: 50 },
+    care_instructions: { type: 'string', maxLength: 100 },
+    age_range_description: { type: 'string', maxLength: 50 },
+    target_gender: { type: 'string', maxLength: 20 },
+    department_name: { type: 'string', maxLength: 50 },
+    special_features: { type: 'string', maxLength: 100 },
+    style_name: { type: 'string', maxLength: 100 },
+    water_resistance_level: { type: 'string', maxLength: 50 },
+    recommended_uses_for_product: { type: 'string', maxLength: 100 },
+    
+    // 新增字段 - 季节和生活方式
+    seasons1: { type: 'string', maxLength: 20 },
+    seasons2: { type: 'string', maxLength: 20 },
+    seasons3: { type: 'string', maxLength: 20 },
+    seasons4: { type: 'string', maxLength: 20 },
+    material_type: { type: 'string', maxLength: 50 },
+    lifestyle1: { type: 'string', maxLength: 50 },
+    lining_description: { type: 'string', maxLength: 100 },
+    strap_type: { type: 'string', maxLength: 50 },
+    
+    // 新增字段 - 尺寸和容量
+    storage_volume_unit_of_measure: { type: 'string', maxLength: 20 },
+    storage_volume: { type: 'integer', maxLength: null },
+    depth_front_to_back: { type: 'decimal', maxLength: null },
+    depth_front_to_back_unit_of_measure: { type: 'string', maxLength: 20 },
+    depth_width_side_to_side: { type: 'decimal', maxLength: null },
+    depth_width_side_to_side_unit_of_measure: { type: 'string', maxLength: 20 },
+    depth_height_floor_to_top: { type: 'decimal', maxLength: null },
+    depth_height_floor_to_top_unit_of_measure: { type: 'string', maxLength: 20 },
+    
+    // 新增字段 - 合规信息
+    cpsia_cautionary_statement1: { type: 'string', maxLength: 100 },
+    import_designation: { type: 'string', maxLength: 50 },
+    country_of_origin: { type: 'string', maxLength: 50 }
+  };
+
+  const filteredData = {};
+  
+  for (const [fieldName, fieldConfig] of Object.entries(validFields)) {
+    if (data[fieldName] !== undefined && data[fieldName] !== null && data[fieldName] !== '') {
+      let value = data[fieldName];
+      
+      // 根据字段类型进行处理
+      if (fieldConfig.type === 'string' && fieldConfig.maxLength) {
+        // 字符串类型的长度处理
+        if (typeof value === 'string' && value.length > fieldConfig.maxLength) {
+          // 截断过长的字符串，并添加省略号
+          value = value.substring(0, fieldConfig.maxLength - 3) + '...';
+          console.warn(`⚠️ 字段 ${fieldName} 长度超限，已截断: 原长度${data[fieldName].length} -> 截断后${value.length}`);
+        } else if (typeof value !== 'string') {
+          // 非字符串转换为字符串
+          value = String(value);
+          if (value.length > fieldConfig.maxLength) {
+            value = value.substring(0, fieldConfig.maxLength - 3) + '...';
+            console.warn(`⚠️ 字段 ${fieldName} 转换为字符串后长度超限，已截断: ${value.length}`);
+          }
+        }
+      } else if (fieldConfig.type === 'decimal') {
+        // decimal类型处理
+        if (typeof value === 'string') {
+          const numValue = parseFloat(value);
+          value = isNaN(numValue) ? null : numValue;
+        } else if (typeof value === 'number') {
+          value = value;
+        } else {
+          value = null;
+        }
+      } else if (fieldConfig.type === 'integer') {
+        // integer类型处理
+        if (typeof value === 'string') {
+          const intValue = parseInt(value, 10);
+          value = isNaN(intValue) ? null : intValue;
+        } else if (typeof value === 'number') {
+          value = Math.floor(value);
+        } else {
+          value = null;
+        }
+      } else if (fieldConfig.type === 'text') {
+        // text类型无长度限制，转换为字符串即可
+        value = String(value);
+      }
+      
+      // 只保存非null值
+      if (value !== null) {
+        filteredData[fieldName] = value;
+      }
+    }
+  }
+  
+  return filteredData;
+}
+
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
 const upload = multer({ 
@@ -1960,12 +2101,16 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       }
       
+      // 过滤和验证数据，只保留模型中定义的字段
+      const filteredData = filterValidFields(rowData);
+      
       // 保存到数据库
       try {
-        const savedRecord = await ProductInformation.create(rowData);
+        const savedRecord = await ProductInformation.create(filteredData);
         savedRecords.push(savedRecord);
       } catch (error) {
-        console.warn(`⚠️ 保存记录失败: ${JSON.stringify(rowData)}, 错误: ${error.message}`);
+        console.warn(`⚠️ 保存记录失败: ${JSON.stringify(filteredData)}, 错误: ${error.message}`);
+        console.warn(`原始数据字段数量: ${Object.keys(rowData).length}, 过滤后字段数量: ${Object.keys(filteredData).length}`);
       }
       
       // 同时保存一份用于Excel填写
@@ -3131,13 +3276,17 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       for (const record of records) {
         try {
-          await ProductInformation.upsert(record, {
+          // 过滤和验证数据，只保留模型中定义的字段
+          const filteredRecord = filterValidFields(record);
+          
+          await ProductInformation.upsert(filteredRecord, {
             returning: false, // 提高性能
             validate: true // 启用验证
           });
           successCount++;
         } catch (error) {
           console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+          console.error(`原始数据字段数量: ${Object.keys(record).length}, 过滤后字段数量: ${Object.keys(filterValidFields(record)).length}`);
           errorCount++;
         }
       }
