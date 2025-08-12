@@ -2243,6 +2243,26 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
+    // 新增缺失字段的列变量
+    let feedProductTypeCol = -1;
+    let externalProductIdTypeCol = -1;
+    let quantityCol = -1;
+    let ageRangeDescriptionCol = -1;
+    let swatchImageUrlCol = -1;
+    let relationshipTypeCol = -1;
+    let variationThemeCol = -1;
+    let parentSkuCol = -1;
+    let parentChildCol = -1;
+    let styleNameCol = -1;
+    let colorMapCol = -1;
+    let materialTypeCol = -1;
+    let genericKeywordsCol = -1;
+    let waterResistanceLevelCol = -1;
+    let sizeMapCol = -1;
+    let countryOfOriginCol = -1;
+    let cpsiaCautionaryStatement1Col = -1;
+    let conditionTypeCol = -1;
+    
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
         if (header) {
@@ -2283,6 +2303,42 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             bulletPoint4Col = colIndex;
           } else if (cellValue === 'bullet_point5') {
             bulletPoint5Col = colIndex;
+          } else if (cellValue === 'feed_product_type') {
+            feedProductTypeCol = colIndex;
+          } else if (cellValue === 'external_product_id_type') {
+            externalProductIdTypeCol = colIndex;
+          } else if (cellValue === 'quantity') {
+            quantityCol = colIndex;
+          } else if (cellValue === 'age_range_description') {
+            ageRangeDescriptionCol = colIndex;
+          } else if (cellValue === 'swatch_image_url') {
+            swatchImageUrlCol = colIndex;
+          } else if (cellValue === 'relationship_type') {
+            relationshipTypeCol = colIndex;
+          } else if (cellValue === 'variation_theme') {
+            variationThemeCol = colIndex;
+          } else if (cellValue === 'parent_sku') {
+            parentSkuCol = colIndex;
+          } else if (cellValue === 'parent_child') {
+            parentChildCol = colIndex;
+          } else if (cellValue === 'style_name') {
+            styleNameCol = colIndex;
+          } else if (cellValue === 'color_map') {
+            colorMapCol = colIndex;
+          } else if (cellValue === 'material_type') {
+            materialTypeCol = colIndex;
+          } else if (cellValue === 'generic_keywords') {
+            genericKeywordsCol = colIndex;
+          } else if (cellValue === 'water_resistance_level') {
+            waterResistanceLevelCol = colIndex;
+          } else if (cellValue === 'size_map') {
+            sizeMapCol = colIndex;
+          } else if (cellValue === 'country_of_origin') {
+            countryOfOriginCol = colIndex;
+          } else if (cellValue === 'cpsia_cautionary_statement1' || cellValue === 'cpsia_cautionary_statement') {
+            cpsiaCautionaryStatement1Col = colIndex;
+          } else if (cellValue === 'condition_type') {
+            conditionTypeCol = colIndex;
           }
         }
       });
@@ -2333,7 +2389,11 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
         otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
-        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
+        feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
+        swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
+        styleNameCol, colorMapCol, materialTypeCol, genericKeywordsCol, waterResistanceLevelCol,
+        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
@@ -2364,6 +2424,26 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (bulletPoint3Col !== -1) data[currentRowIndex][bulletPoint3Col] = recordData.bullet_point3 || '';
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = recordData.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = recordData.bullet_point5 || '';
+      
+      // 填写新增字段数据
+      if (feedProductTypeCol !== -1) data[currentRowIndex][feedProductTypeCol] = recordData.feed_product_type || '';
+      if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = recordData.external_product_id_type || '';
+      if (quantityCol !== -1) data[currentRowIndex][quantityCol] = recordData.quantity || '';
+      if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = recordData.age_range_description || '';
+      if (swatchImageUrlCol !== -1) data[currentRowIndex][swatchImageUrlCol] = recordData.swatch_image_url || '';
+      if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = recordData.relationship_type || '';
+      if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = recordData.variation_theme || '';
+      if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = recordData.parent_sku || '';
+      if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = recordData.parent_child || '';
+      if (styleNameCol !== -1) data[currentRowIndex][styleNameCol] = recordData.style_name || '';
+      if (colorMapCol !== -1) data[currentRowIndex][colorMapCol] = recordData.color_map || '';
+      if (materialTypeCol !== -1) data[currentRowIndex][materialTypeCol] = recordData.material_type || '';
+      if (genericKeywordsCol !== -1) data[currentRowIndex][genericKeywordsCol] = recordData.generic_keywords || '';
+      if (waterResistanceLevelCol !== -1) data[currentRowIndex][waterResistanceLevelCol] = recordData.water_resistance_level || '';
+      if (sizeMapCol !== -1) data[currentRowIndex][sizeMapCol] = recordData.size_map || '';
+      if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
+      if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = recordData.cpsia_cautionary_statement1 || '';
+      if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
       
       // 调试：输出第一条记录填写后的行内容
       if (index === 0) {
@@ -2512,6 +2592,26 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
+    // 新增缺失字段的列变量
+    let feedProductTypeCol = -1;
+    let externalProductIdTypeCol = -1;
+    let quantityCol = -1;
+    let ageRangeDescriptionCol = -1;
+    let swatchImageUrlCol = -1;
+    let relationshipTypeCol = -1;
+    let variationThemeCol = -1;
+    let parentSkuCol = -1;
+    let parentChildCol = -1;
+    let styleNameCol = -1;
+    let colorMapCol = -1;
+    let materialTypeCol = -1;
+    let genericKeywordsCol = -1;
+    let waterResistanceLevelCol = -1;
+    let sizeMapCol = -1;
+    let countryOfOriginCol = -1;
+    let cpsiaCautionaryStatement1Col = -1;
+    let conditionTypeCol = -1;
+    
     const missingColumns = [];
     
     if (updatedData.length >= 3 && updatedData[2]) {
@@ -2554,6 +2654,42 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             bulletPoint4Col = colIndex;
           } else if (cellValue === 'bullet_point5') {
             bulletPoint5Col = colIndex;
+          } else if (cellValue === 'feed_product_type') {
+            feedProductTypeCol = colIndex;
+          } else if (cellValue === 'external_product_id_type') {
+            externalProductIdTypeCol = colIndex;
+          } else if (cellValue === 'quantity') {
+            quantityCol = colIndex;
+          } else if (cellValue === 'age_range_description') {
+            ageRangeDescriptionCol = colIndex;
+          } else if (cellValue === 'swatch_image_url') {
+            swatchImageUrlCol = colIndex;
+          } else if (cellValue === 'relationship_type') {
+            relationshipTypeCol = colIndex;
+          } else if (cellValue === 'variation_theme') {
+            variationThemeCol = colIndex;
+          } else if (cellValue === 'parent_sku') {
+            parentSkuCol = colIndex;
+          } else if (cellValue === 'parent_child') {
+            parentChildCol = colIndex;
+          } else if (cellValue === 'style_name') {
+            styleNameCol = colIndex;
+          } else if (cellValue === 'color_map') {
+            colorMapCol = colIndex;
+          } else if (cellValue === 'material_type') {
+            materialTypeCol = colIndex;
+          } else if (cellValue === 'generic_keywords') {
+            genericKeywordsCol = colIndex;
+          } else if (cellValue === 'water_resistance_level') {
+            waterResistanceLevelCol = colIndex;
+          } else if (cellValue === 'size_map') {
+            sizeMapCol = colIndex;
+          } else if (cellValue === 'country_of_origin') {
+            countryOfOriginCol = colIndex;
+          } else if (cellValue === 'cpsia_cautionary_statement1' || cellValue === 'cpsia_cautionary_statement') {
+            cpsiaCautionaryStatement1Col = colIndex;
+          } else if (cellValue === 'condition_type') {
+            conditionTypeCol = colIndex;
           }
         }
       });
@@ -2657,7 +2793,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
         otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
-        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col
+        bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
+        feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
+        swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
+        styleNameCol, colorMapCol, materialTypeCol, genericKeywordsCol, waterResistanceLevelCol,
+        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol
       );
       
       for (let i = updatedData[rowIndex].length; i <= maxCol; i++) {
@@ -2720,6 +2860,62 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (bulletPoint5Col !== -1) {
         updatedData[rowIndex][bulletPoint5Col] = processTextContent(data.bullet_point5) || '';
+      }
+      
+      // 填写新增字段数据
+      if (feedProductTypeCol !== -1) {
+        updatedData[rowIndex][feedProductTypeCol] = data.feed_product_type || '';
+      }
+      if (externalProductIdTypeCol !== -1) {
+        updatedData[rowIndex][externalProductIdTypeCol] = data.external_product_id_type || '';
+      }
+      if (quantityCol !== -1) {
+        updatedData[rowIndex][quantityCol] = data.quantity || '';
+      }
+      if (ageRangeDescriptionCol !== -1) {
+        updatedData[rowIndex][ageRangeDescriptionCol] = data.age_range_description || '';
+      }
+      if (swatchImageUrlCol !== -1) {
+        updatedData[rowIndex][swatchImageUrlCol] = processImageUrl(data.swatch_image_url) || '';
+      }
+      if (relationshipTypeCol !== -1) {
+        updatedData[rowIndex][relationshipTypeCol] = data.relationship_type || '';
+      }
+      if (variationThemeCol !== -1) {
+        updatedData[rowIndex][variationThemeCol] = data.variation_theme || '';
+      }
+      if (parentSkuCol !== -1) {
+        updatedData[rowIndex][parentSkuCol] = data.parent_sku || '';
+      }
+      if (parentChildCol !== -1) {
+        updatedData[rowIndex][parentChildCol] = data.parent_child || '';
+      }
+      if (styleNameCol !== -1) {
+        updatedData[rowIndex][styleNameCol] = processTextContent(data.style_name) || '';
+      }
+      if (colorMapCol !== -1) {
+        updatedData[rowIndex][colorMapCol] = data.color_map || '';
+      }
+      if (materialTypeCol !== -1) {
+        updatedData[rowIndex][materialTypeCol] = data.material_type || '';
+      }
+      if (genericKeywordsCol !== -1) {
+        updatedData[rowIndex][genericKeywordsCol] = processTextContent(data.generic_keywords) || '';
+      }
+      if (waterResistanceLevelCol !== -1) {
+        updatedData[rowIndex][waterResistanceLevelCol] = data.water_resistance_level || '';
+      }
+      if (sizeMapCol !== -1) {
+        updatedData[rowIndex][sizeMapCol] = data.size_map || '';
+      }
+      if (countryOfOriginCol !== -1) {
+        updatedData[rowIndex][countryOfOriginCol] = data.country_of_origin || '';
+      }
+      if (cpsiaCautionaryStatement1Col !== -1) {
+        updatedData[rowIndex][cpsiaCautionaryStatement1Col] = data.cpsia_cautionary_statement1 || '';
+      }
+      if (conditionTypeCol !== -1) {
+        updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
       }
 
       addedCount++;
