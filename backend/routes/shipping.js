@@ -626,7 +626,8 @@ router.post('/mixed-boxes', async (req, res) => {
               asm.country,
               ls.\`seller-sku\` as amazon_sku,
               asm.amz_sku as mapping_amz_sku,
-              ls.site
+              ls.site,
+              ls.\`fulfillment-channel\` as fulfillment_channel
             FROM pbi_amzsku_sku asm
             INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
             WHERE (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
@@ -649,7 +650,7 @@ router.post('/mixed-boxes', async (req, res) => {
           listingsResults.forEach(result => {
             const mappingKey = `${result.local_sku}_${result.country}`;
             wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
-            console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
+            console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
           });
           
           console.log('\x1b[36m%s\x1b[0m', `📝 整箱listings映射表大小: ${wholeBoxListingsMap.size}`);
