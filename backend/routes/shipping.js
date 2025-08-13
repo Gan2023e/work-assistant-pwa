@@ -709,7 +709,7 @@ router.post('/mixed-boxes', async (req, res) => {
             console.log('\x1b[36m%s\x1b[0m', `🔍 整箱SKU映射: ${item.sku} -> ${amazonSku} (来源: ${wholeBoxListingsMap.has(mappingKey) ? 'listings_sku' : 'fallback'})`);
             
             wholeBoxData[key] = {
-              amazon_sku: wholeBoxListingsMap.get(mappingKey) || amazonSku, // 只使用amazon_sku，优先listings映射
+              amazon_sku: amazonSku, // 只使用amazon_sku，优先listings映射
               local_sku: item.sku,
               country: item.country,
               total_quantity: 0,
