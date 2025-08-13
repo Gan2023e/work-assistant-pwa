@@ -596,27 +596,70 @@ router.post('/mixed-boxes', async (req, res) => {
     // 第三步：处理整箱数据（仅选中的记录，并过滤已出库的SKU）
     const wholeBoxData = {};
     
-    // 如果没有混合箱数据，需要为整箱数据单独查询映射关系
-    if (allMixedBoxData.length === 0) {
-      console.log('\x1b[33m%s\x1b[0m', '🔍 没有混合箱数据，为整箱数据查询映射关系');
-      
-      // 获取所有整箱SKU的映射条件
-      const wholeBoxSkus = inventoryData.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '')
-        .map(item => ({ local_sku: item.sku, country: item.country }));
-      
-      if (wholeBoxSkus.length > 0) {
-        try {
-          const wholeBoxMappings = await AmzSkuMapping.findAll({
-            where: {
-              [Op.or]: wholeBoxSkus
-            },
-            attributes: ['local_sku', 'country', 'amz_sku'],
+    // 为整箱数据查询listings_sku映射关系（使用与merged-data端点相同的逻辑）
+    const wholeBoxListingsMap = new Map();
+    
+    // 获取所有整箱SKU的映射条件
+    const wholeBoxSkus = inventoryData.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '')
+      .map(item => ({ local_sku: item.sku, country: item.country }));
+    
+    if (wholeBoxSkus.length > 0) {
+      try {
+        console.log('\x1b[33m%s\x1b[0m', '🔍 为整箱数据查询listings_sku映射关系');
+        
+        // 步骤1: 查询SKU映射关系以获取amz_sku
+        const amzSkuMappings = await AmzSkuMapping.findAll({
+          where: {
+            [Op.or]: wholeBoxSkus
+          },
+          attributes: ['local_sku', 'country', 'amz_sku', 'site'],
+          raw: true
+        });
+        
+        console.log('\x1b[33m%s\x1b[0m', '🔍 整箱AMZ映射关系:', amzSkuMappings.length);
+        
+        // 步骤2: 通过amz_sku查询listings_sku表获取seller-sku
+        if (amzSkuMappings.length > 0) {
+          const listingsQuery = `
+            SELECT 
+              asm.local_sku,
+              asm.country,
+              ls.\`seller-sku\` as amazon_sku,
+              asm.amz_sku as mapping_amz_sku,
+              ls.site
+            FROM pbi_amzsku_sku asm
+            INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
+            WHERE (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
+                   OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
+                   OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
+                   OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
+              AND ${amzSkuMappings.map(mapping => 
+                `(asm.local_sku = '${mapping.local_sku.replace(/'/g, "''")}' AND asm.country = '${mapping.country.replace(/'/g, "''")}')`
+              ).join(' OR ')}
+          `;
+          
+          const listingsResults = await sequelize.query(listingsQuery, {
+            type: sequelize.QueryTypes.SELECT,
             raw: true
           });
           
+          console.log('\x1b[33m%s\x1b[0m', '🔍 整箱listings_sku查询结果:', listingsResults.length);
+          
+          // 构建整箱listings映射关系
+          listingsResults.forEach(result => {
+            const mappingKey = `${result.local_sku}_${result.country}`;
+            wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
+            console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku}`);
+          });
+        }
+        
+        // 如果没有listings_sku数据，回退到原有的映射逻辑
+        if (wholeBoxListingsMap.size === 0 || allMixedBoxData.length === 0) {
+          console.log('\x1b[33m%s\x1b[0m', '🔍 没有listings_sku数据，回退到原有映射逻辑');
+          
           // 为整箱数据也应用优先级选择逻辑
           const wholeBoxMappingGroups = new Map();
-          wholeBoxMappings.forEach(mapping => {
+          amzSkuMappings.forEach(mapping => {
             const groupKey = `${mapping.local_sku}_${mapping.country}`;
             if (!wholeBoxMappingGroups.has(groupKey)) {
               wholeBoxMappingGroups.set(groupKey, []);
@@ -639,9 +682,10 @@ router.post('/mixed-boxes', async (req, res) => {
               console.log('\x1b[32m%s\x1b[0m', `✅ 整箱选择映射: ${selectedMapping.amz_sku} for ${groupKey}`);
             }
           });
-        } catch (error) {
-          console.log('\x1b[33m%s\x1b[0m', '⚠️ 整箱映射查询失败:', error.message);
         }
+        
+      } catch (error) {
+        console.log('\x1b[33m%s\x1b[0m', '⚠️ 整箱映射查询失败:', error.message);
       }
     }
     
@@ -655,12 +699,17 @@ router.post('/mixed-boxes', async (req, res) => {
         if (correspondingRecord) {
           const key = `${item.sku}_${item.country}`;
           if (!wholeBoxData[key]) {
-            // 使用映射表获取正确的Amazon SKU，与混合箱保持一致
+            // 优先使用listings_sku映射，如果没有则回退到原有逻辑
             const mappingKey = `${item.sku}_${item.country}`;
-            const amazonSku = mappingMap.get(mappingKey) || correspondingRecord.amz_sku || item.sku;
+            const amazonSku = wholeBoxListingsMap.get(mappingKey) || 
+                            mappingMap.get(mappingKey) || 
+                            correspondingRecord.amz_sku || 
+                            item.sku;
+            
+            console.log('\x1b[36m%s\x1b[0m', `🔍 整箱SKU映射: ${item.sku} -> ${amazonSku} (来源: ${wholeBoxListingsMap.has(mappingKey) ? 'listings_sku' : 'fallback'})`);
             
             wholeBoxData[key] = {
-              amz_sku: amazonSku,
+              amazon_sku: wholeBoxListingsMap.get(mappingKey) || amazonSku, // 只使用amazon_sku，优先listings映射
               local_sku: item.sku,
               country: item.country,
               total_quantity: 0,

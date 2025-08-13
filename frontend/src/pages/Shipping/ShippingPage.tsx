@@ -42,7 +42,7 @@ import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import OrderManagementPage from './OrderManagementPage';
 import WarehouseManagement from '../Logistics/WarehouseManagement';
 import HsCodeManagement from '../Logistics/HsCodeManagement';
@@ -135,9 +135,7 @@ interface ShippingConfirmData {
 }
 
 interface WholeBoxConfirmData {
-  amz_sku: string;
-  local_sku: string; // 添加本地SKU字段
-  country: string; // 添加国家字段
+  amazon_sku: string; // 只使用来自listings_sku的seller-sku
   total_quantity: number;
   total_boxes: number;
   confirm_boxes: number;
@@ -253,7 +251,7 @@ interface LogisticsInvoiceConfig {
 
 const ShippingPage: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [mergedData, setMergedData] = useState<MergedShippingData[]>([]);
   const [mergedLoading, setMergedLoading] = useState(false);
 
@@ -1578,7 +1576,7 @@ const ShippingPage: React.FC = () => {
           if (!existsInShippingData) {
             newShippingData.push({
               box_num: boxNumber,
-              amz_sku: item.amz_sku,
+              amz_sku: item.amazon_sku,
               quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
             });
           }
@@ -2365,7 +2363,6 @@ const ShippingPage: React.FC = () => {
             onConfirm={confirmWholeBox}
             onSkip={() => setCurrentStep(2)}
             loading={shippingLoading}
-            getAmazonSkuPrefix={getAmazonSkuPrefix}
           />
         )}
 
@@ -2549,9 +2546,9 @@ const ShippingPage: React.FC = () => {
                     if (confirmedWholeBoxes.length > 0) {
                       console.log('📦 处理整箱数据:', confirmedWholeBoxes);
                       confirmedWholeBoxes.forEach(wholeItem => {
-                        const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amz_sku);
+                        const selectedRecord = selectedRows.find(row => row.amz_sku === wholeItem.amazon_sku || row.amazon_sku === wholeItem.amazon_sku);
                         updateItems.push({
-                          sku: selectedRecord?.local_sku || wholeItem.amz_sku,
+                          sku: selectedRecord?.local_sku || wholeItem.amazon_sku,
                           quantity: wholeItem.confirm_quantity,
                           total_boxes: wholeItem.confirm_boxes,
                           country: selectedRecord?.country || '美国',
@@ -2559,7 +2556,7 @@ const ShippingPage: React.FC = () => {
                           // 添加需求记录信息
                           record_num: selectedRecord?.record_num,
                           need_num: selectedRecord?.need_num,
-                          amz_sku: selectedRecord?.amz_sku || wholeItem.amz_sku,
+                          amz_sku: selectedRecord?.amz_sku || wholeItem.amazon_sku,
                           marketplace: selectedRecord?.marketplace || '亚马逊'
                         });
                       });
@@ -2944,7 +2941,7 @@ const ShippingPage: React.FC = () => {
                     name="template"
                     label="Excel模板文件"
                     rules={[{ required: true, message: '请选择模板文件' }]}
-                    getValueFromEvent={(e) => {
+                    getValueFromEvent={(e: any) => {
                       if (Array.isArray(e)) {
                         return e;
                       }
@@ -3355,7 +3352,7 @@ const ShippingPage: React.FC = () => {
                     name="template"
                     label="Excel发票模板文件"
                     rules={[{ required: true, message: '请选择模板文件' }]}
-                    getValueFromEvent={(e) => {
+                    getValueFromEvent={(e: any) => {
                       if (Array.isArray(e)) {
                         return e;
                       }
@@ -3486,15 +3483,13 @@ interface WholeBoxConfirmFormProps {
   onConfirm: (data: WholeBoxConfirmData[]) => void;
   onSkip: () => void;
   loading?: boolean;
-  getAmazonSkuPrefix: (country: string) => string;
 }
 
 const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({ 
   data, 
   onConfirm, 
   onSkip, 
-  loading = false,
-  getAmazonSkuPrefix
+  loading = false 
 }: WholeBoxConfirmFormProps) => {
   const [form] = Form.useForm();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
@@ -3550,16 +3545,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
         <Table
           dataSource={confirmData}
           columns={[
-            { 
-              title: 'Amazon SKU', 
-              key: 'amz_sku',
-              render: (_, record) => {
-                // 使用与发货操作页面相同的前缀逻辑
-                const prefix = getAmazonSkuPrefix(record.country);
-                const displaySku = prefix ? `${prefix}${record.local_sku}` : record.amz_sku;
-                return displaySku;
-              }
-            },
+            { title: 'Amazon SKU', dataIndex: 'amazon_sku', key: 'amazon_sku' },
             { title: '总数量', dataIndex: 'total_quantity', key: 'total_quantity' },
             { title: '总箱数', dataIndex: 'total_boxes', key: 'total_boxes' },
             {
