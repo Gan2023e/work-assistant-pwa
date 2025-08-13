@@ -605,7 +605,7 @@ router.post('/mixed-boxes', async (req, res) => {
     
     if (wholeBoxSkus.length > 0) {
       try {
-        console.log('\x1b[33m%s\x1b[0m', '🔍 为整箱数据查询listings_sku映射关系');
+
         
         // 步骤1: 查询SKU映射关系以获取amz_sku
         const amzSkuMappings = await AmzSkuMapping.findAll({
@@ -616,7 +616,7 @@ router.post('/mixed-boxes', async (req, res) => {
           raw: true
         });
         
-        console.log('\x1b[33m%s\x1b[0m', '🔍 整箱AMZ映射关系:', amzSkuMappings.length);
+
         
         // 步骤2: 通过amz_sku查询listings_sku表获取seller-sku
         if (amzSkuMappings.length > 0) {
@@ -644,8 +644,6 @@ router.post('/mixed-boxes', async (req, res) => {
             raw: true
           });
           
-          console.log('\x1b[33m%s\x1b[0m', '🔍 整箱listings_sku查询结果:', listingsResults.length);
-          
           // 构建整箱listings映射关系 - 只保留符合Amazon FBA条件的
           listingsResults.forEach(result => {
             // 双重验证：确保fulfillment-channel包含AMAZON
@@ -657,18 +655,13 @@ router.post('/mixed-boxes', async (req, res) => {
               
               const mappingKey = `${result.local_sku}_${result.country}`;
               wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
-              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
-            } else {
-              console.log('\x1b[31m%s\x1b[0m', `❌ 跳过非Amazon FBA渠道: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
             }
           });
-          
-          console.log('\x1b[36m%s\x1b[0m', `📝 整箱listings映射表大小: ${wholeBoxListingsMap.size}`);
         }
         
         // 如果没有listings_sku数据，回退到原有的映射逻辑
         if (wholeBoxListingsMap.size === 0) {
-          console.log('\x1b[33m%s\x1b[0m', '🔍 没有listings_sku数据，回退到原有映射逻辑');
+
           
           // 为整箱数据也应用优先级选择逻辑
           const wholeBoxMappingGroups = new Map();
@@ -692,13 +685,13 @@ router.post('/mixed-boxes', async (req, res) => {
               const selectedMapping = priorityMappings.length > 0 ? priorityMappings[0] : mappings[0];
               mappingMap.set(groupKey, selectedMapping.amz_sku);
               
-              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱选择映射: ${selectedMapping.amz_sku} for ${groupKey}`);
+
             }
           });
         }
         
       } catch (error) {
-        console.log('\x1b[33m%s\x1b[0m', '⚠️ 整箱映射查询失败:', error.message);
+
       }
     }
     
@@ -719,8 +712,7 @@ router.post('/mixed-boxes', async (req, res) => {
                             correspondingRecord.amz_sku || 
                             item.sku;
             
-            console.log('\x1b[36m%s\x1b[0m', `🔍 整箱SKU映射: ${item.sku} -> ${amazonSku} (来源: ${wholeBoxListingsMap.has(mappingKey) ? 'listings_sku' : 'fallback'})`);
-            console.log('\x1b[36m%s\x1b[0m', `📝 映射键: ${mappingKey}, listings映射: ${wholeBoxListingsMap.get(mappingKey)}, 回退映射: ${mappingMap.get(mappingKey)}`);
+
             
             wholeBoxData[key] = {
               amazon_sku: amazonSku, // 只使用amazon_sku，优先listings映射
@@ -747,16 +739,7 @@ router.post('/mixed-boxes', async (req, res) => {
       }
     });
 
-    console.log('\x1b[32m%s\x1b[0m', '📊 混合箱数据数量:', allMixedBoxData.length);
-    console.log('\x1b[32m%s\x1b[0m', '📊 整箱数据数量:', wholeBoxArray.length);
-    
-    // Debug: 输出整箱数据详情
-    if (wholeBoxArray.length > 0) {
-      console.log('\x1b[35m%s\x1b[0m', '🔍 整箱数据详情:');
-      wholeBoxArray.forEach((item, index) => {
-        console.log('\x1b[35m%s\x1b[0m', `  ${index + 1}. ${item.local_sku} (${item.country}) -> ${item.amazon_sku}`);
-      });
-    }
+
 
     res.json({
       code: 0,
