@@ -646,11 +646,21 @@ router.post('/mixed-boxes', async (req, res) => {
           
           console.log('\x1b[33m%s\x1b[0m', '🔍 整箱listings_sku查询结果:', listingsResults.length);
           
-          // 构建整箱listings映射关系
+          // 构建整箱listings映射关系 - 只保留符合Amazon FBA条件的
           listingsResults.forEach(result => {
-            const mappingKey = `${result.local_sku}_${result.country}`;
-            wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
-            console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
+            // 双重验证：确保fulfillment-channel包含AMAZON
+            if (result.fulfillment_channel && 
+                (result.fulfillment_channel === 'AMAZON_NA' || 
+                 result.fulfillment_channel === 'AMAZON_EU' || 
+                 result.fulfillment_channel === 'AMAZON_FE' || 
+                 result.fulfillment_channel.startsWith('AMAZON_'))) {
+              
+              const mappingKey = `${result.local_sku}_${result.country}`;
+              wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
+              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
+            } else {
+              console.log('\x1b[31m%s\x1b[0m', `❌ 跳过非Amazon FBA渠道: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
+            }
           });
           
           console.log('\x1b[36m%s\x1b[0m', `📝 整箱listings映射表大小: ${wholeBoxListingsMap.size}`);
