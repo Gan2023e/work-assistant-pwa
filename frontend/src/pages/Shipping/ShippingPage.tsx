@@ -136,6 +136,8 @@ interface ShippingConfirmData {
 
 interface WholeBoxConfirmData {
   amz_sku: string;
+  local_sku: string; // 添加本地SKU字段
+  country: string; // 添加国家字段
   total_quantity: number;
   total_boxes: number;
   confirm_boxes: number;
@@ -2363,6 +2365,7 @@ const ShippingPage: React.FC = () => {
             onConfirm={confirmWholeBox}
             onSkip={() => setCurrentStep(2)}
             loading={shippingLoading}
+            getAmazonSkuPrefix={getAmazonSkuPrefix}
           />
         )}
 
@@ -3483,13 +3486,15 @@ interface WholeBoxConfirmFormProps {
   onConfirm: (data: WholeBoxConfirmData[]) => void;
   onSkip: () => void;
   loading?: boolean;
+  getAmazonSkuPrefix: (country: string) => string;
 }
 
 const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({ 
   data, 
   onConfirm, 
   onSkip, 
-  loading = false 
+  loading = false,
+  getAmazonSkuPrefix
 }: WholeBoxConfirmFormProps) => {
   const [form] = Form.useForm();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
@@ -3545,7 +3550,16 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
         <Table
           dataSource={confirmData}
           columns={[
-            { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
+            { 
+              title: 'Amazon SKU', 
+              key: 'amz_sku',
+              render: (_, record) => {
+                // 使用与发货操作页面相同的前缀逻辑
+                const prefix = getAmazonSkuPrefix(record.country);
+                const displaySku = prefix ? `${prefix}${record.local_sku}` : record.amz_sku;
+                return displaySku;
+              }
+            },
             { title: '总数量', dataIndex: 'total_quantity', key: 'total_quantity' },
             { title: '总箱数', dataIndex: 'total_boxes', key: 'total_boxes' },
             {
