@@ -654,7 +654,7 @@ router.post('/mixed-boxes', async (req, res) => {
         }
         
         // 如果没有listings_sku数据，回退到原有的映射逻辑
-        if (wholeBoxListingsMap.size === 0 || allMixedBoxData.length === 0) {
+        if (wholeBoxListingsMap.size === 0) {
           console.log('\x1b[33m%s\x1b[0m', '🔍 没有listings_sku数据，回退到原有映射逻辑');
           
           // 为整箱数据也应用优先级选择逻辑
