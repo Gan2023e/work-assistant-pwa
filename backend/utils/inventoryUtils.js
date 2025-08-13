@@ -2,14 +2,22 @@ const LocalBox = require('../models/LocalBox');
 const { Op } = require('sequelize');
 
 /**
+ * 获取北京时间
+ * @returns {Date} 北京时间的Date对象
+ */
+function getBeijingTime() {
+    const now = new Date();
+    return new Date(now.getTime() + (8 * 60 * 60 * 1000));
+}
+
+/**
  * 生成新的记录号 - 基于北京时间
  * 格式：YYYYMMDDHHMM + 序号
  * 例如：202501031425001, 202501031425002
  */
 async function generateRecordId() {
     // 获取北京时间 (UTC+8)
-    const now = new Date();
-    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const beijingTime = getBeijingTime();
     const timeString = beijingTime.getUTCFullYear().toString() +
                       (beijingTime.getUTCMonth() + 1).toString().padStart(2, '0') +
                       beijingTime.getUTCDate().toString().padStart(2, '0') +
@@ -45,6 +53,7 @@ async function generateRecordId() {
  */
 async function createInventoryRecord(data) {
     const recordId = await generateRecordId();
+    const beijingTime = getBeijingTime();
     
     return await LocalBox.create({
         记录号: recordId,
@@ -59,9 +68,9 @@ async function createInventoryRecord(data) {
         box_type: data.box_type || (data.mix_box_num ? '混合箱' : '整箱'),
         pre_type: data.pre_type || '平时备货',
         status: '待出库',
-        time: new Date(),
-        last_updated_at: new Date(),
-        remark: data.remark || `${new Date().toISOString()} 入库创建`
+        time: beijingTime,
+        last_updated_at: beijingTime,
+        remark: data.remark || `${beijingTime.toISOString()} 入库创建`
     });
 }
 
@@ -96,9 +105,10 @@ async function createMixedBoxRecords(mixedBoxData) {
  * 更新库存记录
  */
 async function updateInventoryRecord(recordId, updateData, changeNote = '') {
+    const beijingTime = getBeijingTime();
     const updateFields = {
         ...updateData,
-        last_updated_at: new Date()
+        last_updated_at: beijingTime
     };
     
     // 添加变更备注
@@ -107,7 +117,7 @@ async function updateInventoryRecord(recordId, updateData, changeNote = '') {
         if (currentRecord) {
             const existingRemark = currentRecord.remark || '';
             updateFields.remark = existingRemark + 
-                `;\n${new Date().toISOString()} 修改: ${changeNote}`;
+                `;\n${beijingTime.toISOString()} 修改: ${changeNote}`;
         }
     }
     
@@ -129,14 +139,15 @@ async function updateInventoryRecord(recordId, updateData, changeNote = '') {
  * 出库操作 - 更新状态而不删除记录
  */
 async function shipInventoryRecords(recordIds, shipmentId, operator = '系统') {
+    const beijingTime = getBeijingTime();
     const result = await LocalBox.update({
         status: '已出库',
-        shipped_at: new Date(),
+        shipped_at: beijingTime,
         shipment_id: shipmentId,
-        last_updated_at: new Date(),
+        last_updated_at: beijingTime,
         remark: LocalBox.sequelize.fn('CONCAT', 
             LocalBox.sequelize.fn('IFNULL', LocalBox.sequelize.col('remark'), ''),
-            `;\n${new Date().toISOString()} 出库: 发货单${shipmentId} 操作员:${operator}`
+            `;\n${beijingTime.toISOString()} 出库: 发货单${shipmentId} 操作员:${operator}`
         )
     }, {
         where: {
@@ -152,14 +163,15 @@ async function shipInventoryRecords(recordIds, shipmentId, operator = '系统') 
  * 取消出库 - 恢复库存状态
  */
 async function cancelShipment(shipmentId, operator = '系统') {
+    const beijingTime = getBeijingTime();
     const result = await LocalBox.update({
         status: '待出库',
         shipped_at: null,
         shipment_id: null,
-        last_updated_at: new Date(),
+        last_updated_at: beijingTime,
         remark: LocalBox.sequelize.fn('CONCAT', 
             LocalBox.sequelize.fn('IFNULL', LocalBox.sequelize.col('remark'), ''),
-            `;\n${new Date().toISOString()} 取消出库: 发货单${shipmentId} 操作员:${operator}`
+            `;\n${beijingTime.toISOString()} 取消出库: 发货单${shipmentId} 操作员:${operator}`
         )
     }, {
         where: {
@@ -266,6 +278,7 @@ function generatePrintLabelData(record) {
 }
 
 module.exports = {
+    getBeijingTime,
     generateRecordId,
     createInventoryRecord,
     createMixedBoxRecords,

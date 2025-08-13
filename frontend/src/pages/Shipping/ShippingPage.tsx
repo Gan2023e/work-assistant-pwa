@@ -3500,6 +3500,17 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
     }))
   );
 
+  // 添加样式定义
+  const customStyles = `
+    .partial-confirm-row td {
+      background-color: #fff2f0 !important;
+      border-color: #ffccc7 !important;
+    }
+    .partial-confirm-row:hover td {
+      background-color: #ffe7e1 !important;
+    }
+  `;
+
   useEffect(() => {
     form.setFieldsValue(
       confirmData.reduce((acc: any, item: WholeBoxConfirmData, index: number) => {
@@ -3523,6 +3534,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
 
   return (
     <div>
+      <style>{customStyles}</style>
       <Alert
         message="整箱发货确认"
         description="请确认各SKU的发货箱数和数量"
@@ -3592,6 +3604,10 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
           pagination={false}
           size="small"
           rowKey="amz_sku"
+          rowClassName={(record) => {
+            // 当确认箱数小于总箱数时，行标记为红色
+            return record.confirm_boxes < record.total_boxes ? 'partial-confirm-row' : '';
+          }}
         />
       </Form>
       <div style={{ marginTop: 16, textAlign: 'right' }}>

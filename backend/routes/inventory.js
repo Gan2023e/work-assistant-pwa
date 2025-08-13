@@ -4,6 +4,7 @@ const LocalBox = require('../models/LocalBox');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const { Op } = require('sequelize');
 const {
+    getBeijingTime,
     createInventoryRecord,
     createMixedBoxRecords,
     updateInventoryRecord,
@@ -220,10 +221,13 @@ router.post('/create', async (req, res) => {
                 }
             }).join('\n');
             
+            // 获取北京时间用于通知显示
+            const beijingTime = getBeijingTime();
+            
             const message = `📦 库存入库通知
             
 🆔 批次信息：共创建 ${createdRecords.length} 条库存记录
-📅 入库时间：${new Date().toLocaleString('zh-CN')}
+📅 入库时间：${beijingTime.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
 🌍 目的国：${createdRecords[0]?.country || '未知'}
 👤 操作员：${createdRecords[0]?.操作员 || '未知'}
 📦 打包员：${createdRecords[0]?.打包员 || '未知'}
