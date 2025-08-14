@@ -1270,7 +1270,7 @@ const ShippingPage: React.FC = () => {
             <Tag color="green">新映射</Tag>
           )}
           {record.status === '映射缺失' && (
-            <Tag color="volcano" size="small">映射缺失</Tag>
+            <Tag color="volcano">映射缺失</Tag>
           )}
         </div>
       ),
