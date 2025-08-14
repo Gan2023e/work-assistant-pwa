@@ -581,8 +581,8 @@ router.post('/mixed-boxes', async (req, res) => {
           const mixBoxNum = parts.slice(2).join('_');
           
           const mappingKey = `${sku}_${country}`;
-          const amazonSku = mixedBoxListingsMap.get(mappingKey) || sku;
-          console.log('\x1b[36m%s\x1b[0m', `🔍 混合箱SKU映射: ${sku} -> ${amazonSku} (来源: ${mixedBoxListingsMap.has(mappingKey) ? 'listings_sku' : 'fallback'})`);
+          const amazonSku = mixedBoxListingsMap.get(mappingKey) || '';
+          console.log('\x1b[36m%s\x1b[0m', `🔍 混合箱SKU映射: ${sku} -> ${amazonSku || '(留空)'} (来源: ${mixedBoxListingsMap.has(mappingKey) ? 'listings_sku' : '无匹配记录'})`);
 
           allMixedBoxData.push({
             box_num: mixBoxNum,
@@ -606,24 +606,24 @@ router.post('/mixed-boxes', async (req, res) => {
     
     // 为整箱数据查询listings_sku映射关系（使用与merged-data端点相同的逻辑）
     const wholeBoxListingsMap = new Map();
-    
-    // 获取所有整箱SKU的映射条件
-    const wholeBoxSkus = inventoryData.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '')
-      .map(item => ({ local_sku: item.sku, country: item.country }));
-    
-    if (wholeBoxSkus.length > 0) {
-      try {
+      
+      // 获取所有整箱SKU的映射条件
+      const wholeBoxSkus = inventoryData.filter(item => !item.mix_box_num || item.mix_box_num.trim() === '')
+        .map(item => ({ local_sku: item.sku, country: item.country }));
+      
+      if (wholeBoxSkus.length > 0) {
+        try {
 
         
         // 步骤1: 查询SKU映射关系以获取amz_sku
         const amzSkuMappings = await AmzSkuMapping.findAll({
-          where: {
-            [Op.or]: wholeBoxSkus
-          },
+            where: {
+              [Op.or]: wholeBoxSkus
+            },
           attributes: ['local_sku', 'country', 'amz_sku', 'site'],
-          raw: true
-        });
-        
+            raw: true
+          });
+          
 
         
         // 步骤2: 通过amz_sku查询listings_sku表获取seller-sku
@@ -669,7 +669,7 @@ router.post('/mixed-boxes', async (req, res) => {
         
 
         
-      } catch (error) {
+        } catch (error) {
 
       }
     }
@@ -686,9 +686,7 @@ router.post('/mixed-boxes', async (req, res) => {
           if (!wholeBoxData[key]) {
             // 优先使用listings_sku映射，如果没有则回退到原有逻辑
             const mappingKey = `${item.sku}_${item.country}`;
-            const amazonSku = wholeBoxListingsMap.get(mappingKey) || 
-                            correspondingRecord.amz_sku || 
-                            item.sku;
+            const amazonSku = wholeBoxListingsMap.get(mappingKey) || '';
             
 
             
