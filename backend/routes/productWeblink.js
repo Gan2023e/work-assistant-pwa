@@ -721,6 +721,7 @@ router.post('/upload-excel-new', (req, res) => {
         return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。' });
       }
     const newRecords = [];
+    const skippedRecords = [];
     const errors = [];
     
     // 从第一行开始处理（无表头）
@@ -737,7 +738,14 @@ router.post('/upload-excel-new', (req, res) => {
         });
         
         if (existing) {
+          const skipReason = 'SKU已存在';
           errors.push(`第${i+1}行：SKU ${parent_sku} 已存在`);
+          skippedRecords.push({
+            row: i + 1,
+            sku: parent_sku,
+            link: weblink,
+            reason: skipReason
+          });
           continue;
         }
 
@@ -748,7 +756,14 @@ router.post('/upload-excel-new', (req, res) => {
           });
           
           if (existingLink) {
+            const skipReason = `链接已存在于SKU ${existingLink.parent_sku}`;
             errors.push(`第${i+1}行：链接已存在于SKU ${existingLink.parent_sku}`);
+            skippedRecords.push({
+              row: i + 1,
+              sku: parent_sku,
+              link: weblink,
+              reason: skipReason
+            });
             continue;
           }
         }
@@ -777,11 +792,21 @@ router.post('/upload-excel-new', (req, res) => {
           }
         }
       } else {
-        // 如果没有找到任何有效数据，返回错误
+        // 如果没有找到任何有效数据，返回统一格式
         const errorMsg = errors.length > 0 
-          ? `没有找到有效的数据行。所有行都被跳过：\n${errors.join('\n')}`
+          ? `没有找到有效的数据行。所有行都被跳过`
           : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。';
-        return res.status(400).json({ message: errorMsg });
+        return res.status(400).json({ 
+          message: errorMsg,
+          success: false,
+          data: {
+            successCount: 0,
+            skippedCount: skippedRecords.length,
+            totalRows: data.length,
+            skippedRecords: skippedRecords,
+            errorMessages: errors
+          }
+        });
       }
 
       if (errors.length > 0) {
@@ -790,8 +815,14 @@ router.post('/upload-excel-new', (req, res) => {
 
       res.json({ 
         message: resultMessage,
-        count: newRecords.length,
-        errors: errors
+        success: true,
+        data: {
+          successCount: newRecords.length,
+          skippedCount: skippedRecords.length,
+          totalRows: data.length,
+          skippedRecords: skippedRecords,
+          errorMessages: errors
+        }
       });
 
     } catch (err) {

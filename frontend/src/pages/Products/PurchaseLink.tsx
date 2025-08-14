@@ -149,6 +149,21 @@ const Purchase: React.FC = () => {
   const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
   const [isFuzzySearch, setIsFuzzySearch] = useState(false);
   
+  // 上传结果对话框状态
+  const [uploadResultVisible, setUploadResultVisible] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    successCount: number;
+    skippedCount: number;
+    totalRows: number;
+    skippedRecords: Array<{
+      row: number;
+      sku: string;
+      link: string;
+      reason: string;
+    }>;
+    errorMessages: string[];
+  } | null>(null);
+  
   // 筛选相关状态
   const [filters, setFilters] = useState({
     status: '',
@@ -1195,43 +1210,64 @@ const Purchase: React.FC = () => {
       body: formData,
     })
       .then(async res => {
+        const contentType = res.headers.get('content-type');
+        let responseData = null;
+        
+        try {
+          if (contentType && contentType.includes('application/json')) {
+            responseData = await res.json();
+          }
+        } catch (parseError) {
+          // 解析失败时设为null
+        }
+        
         if (!res.ok) {
-          // 尝试解析错误响应
-          let errorMessage = `服务器错误 (${res.status}): ${res.statusText}`;
-          
-          try {
-            const contentType = res.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-              const errorData = await res.json();
-              errorMessage = errorData.message || errorMessage;
-            } else {
-              const textResponse = await res.text();
-            }
-          } catch (parseError) {
-            // 解析失败时保持默认错误信息
+          // 如果是错误响应但包含data，显示详细对话框
+          if (responseData && responseData.data) {
+            setUploadModalVisible(false);
+            setEnableDingTalkNotification(true);
+            setUploadResult(responseData.data);
+            setUploadResultVisible(true);
+            return; // 直接返回，不抛出错误
           }
           
+          // 其他错误情况
+          const errorMessage = responseData?.message || `服务器错误 (${res.status}): ${res.statusText}`;
           throw new Error(errorMessage);
         }
-        return res.json();
+        
+        return responseData;
       })
       .then(result => {
-        message.success(result.message);
-        setUploadModalVisible(false);
-        // 重置钉钉推送开关为默认开启状态
-        setEnableDingTalkNotification(true);
-        if (result.count > 0) {
-          // 刷新统计信息
-          fetchAllDataStatistics();
+        // 只有在result存在时才处理
+        if (result) {
+          setUploadModalVisible(false);
+          // 重置钉钉推送开关为默认开启状态
+          setEnableDingTalkNotification(true);
           
-          // 只有在有搜索条件或筛选条件时才刷新搜索结果
-          const hasSearchInput = input.trim().length > 0;
-          const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
-          
-          if (hasSearchInput) {
-            handleSearch();
-          } else if (hasFilters) {
-            applyFilters(filters);
+          // 设置上传结果并显示详细对话框
+          if (result.data) {
+            setUploadResult(result.data);
+            setUploadResultVisible(true);
+            
+            // 如果有成功上传的记录，刷新数据
+            if (result.data.successCount > 0) {
+              // 刷新统计信息
+              fetchAllDataStatistics();
+              
+              // 只有在有搜索条件或筛选条件时才刷新搜索结果
+              const hasSearchInput = input.trim().length > 0;
+              const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+              
+              if (hasSearchInput) {
+                handleSearch();
+              } else if (hasFilters) {
+                applyFilters(filters);
+              }
+            }
+          } else {
+            // 兼容旧格式
+            message.success(result.message);
           }
         }
       })
@@ -3786,6 +3822,124 @@ const Purchase: React.FC = () => {
                 是否确认继续生成资料表？
               </Typography.Text>
             </div>
+          </Space>
+        )}
+      </Modal>
+
+      {/* 批量上传结果详情对话框 */}
+      <Modal
+        title="批量上传结果"
+        open={uploadResultVisible}
+        onOk={() => setUploadResultVisible(false)}
+        onCancel={() => setUploadResultVisible(false)}
+        okText="确定"
+        cancelButtonProps={{ style: { display: 'none' } }}
+        width={800}
+      >
+        {uploadResult && (
+          <Space direction="vertical" style={{ width: '100%' }} size="large">
+            {/* 总体统计 */}
+            <div>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Card size="small">
+                    <Statistic
+                      title="总处理行数"
+                      value={uploadResult.totalRows}
+                      valueStyle={{ color: '#1890ff' }}
+                      prefix={<FileExcelOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card size="small">
+                    <Statistic
+                      title="成功上传"
+                      value={uploadResult.successCount}
+                      valueStyle={{ color: '#52c41a' }}
+                      prefix={<CheckCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card size="small">
+                    <Statistic
+                      title="跳过记录"
+                      value={uploadResult.skippedCount}
+                      valueStyle={{ color: '#faad14' }}
+                      prefix={<ClockCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+            </div>
+
+            {/* 结果说明 */}
+            <div>
+              {uploadResult.successCount > 0 && (
+                <Typography.Text type="success">
+                  ✅ 成功上传 {uploadResult.successCount} 条新记录
+                </Typography.Text>
+              )}
+              {uploadResult.skippedCount > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <Typography.Text type="warning">
+                    ⚠️ 跳过 {uploadResult.skippedCount} 条重复记录
+                  </Typography.Text>
+                </div>
+              )}
+            </div>
+
+            {/* 跳过记录详情 */}
+            {uploadResult.skippedRecords && uploadResult.skippedRecords.length > 0 && (
+              <div>
+                <Typography.Text strong>跳过记录详情：</Typography.Text>
+                <Table
+                  size="small"
+                  dataSource={uploadResult.skippedRecords}
+                  columns={[
+                    {
+                      title: '行号',
+                      dataIndex: 'row',
+                      key: 'row',
+                      width: 80,
+                    },
+                    {
+                      title: 'SKU',
+                      dataIndex: 'sku',
+                      key: 'sku',
+                      width: 150,
+                    },
+                    {
+                      title: '链接',
+                      dataIndex: 'link',
+                      key: 'link',
+                      ellipsis: true,
+                      render: (text: string) => (
+                        <Tooltip title={text}>
+                          {text ? (
+                            <a href={text} target="_blank" rel="noopener noreferrer">
+                              {text.length > 30 ? `${text.substring(0, 30)}...` : text}
+                            </a>
+                          ) : '-'}
+                        </Tooltip>
+                      ),
+                    },
+                    {
+                      title: '跳过原因',
+                      dataIndex: 'reason',
+                      key: 'reason',
+                      render: (text: string) => (
+                        <Tag color="orange">{text}</Tag>
+                      ),
+                    },
+                  ]}
+                  pagination={false}
+                  scroll={{ y: 300 }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
           </Space>
         )}
       </Modal>
