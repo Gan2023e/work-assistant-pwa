@@ -446,8 +446,7 @@ router.post('/mixed-boxes', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', '🔍 查询到的库存数据:', inventoryData.length);
 
-    // 初始化映射表，确保在所有地方都能访问
-    const mappingMap = new Map();
+
 
     // 第一步：找到选中记录对应的混合箱号
     const selectedMixedBoxNums = new Set();
@@ -547,44 +546,7 @@ router.post('/mixed-boxes', async (req, res) => {
         }
       }
       
-      // 创建映射关系的快速查找表（使用优先级选择逻辑）
-      // mappingMap 已在函数开头定义
-      
-      // 按 local_sku + country 分组所有映射
-      const mappingGroups = new Map();
-      allMappings.forEach(mapping => {
-        const groupKey = `${mapping.local_sku}_${mapping.country}`;
-        if (!mappingGroups.has(groupKey)) {
-          mappingGroups.set(groupKey, []);
-        }
-        mappingGroups.get(groupKey).push(mapping);
-      });
-      
-      // 对每个分组应用优先级选择逻辑
-      mappingGroups.forEach((mappings, groupKey) => {
-        let selectedMapping = null;
-        
-        if (mappings.length > 0) {
-          // 优先选择有特定前缀的记录
-          const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU', 'UW'];
-          
-          // 查找有优先前缀的映射
-          const priorityMappings = mappings.filter(mapping => {
-            const amzSku = mapping.amz_sku || '';
-            return priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
-          });
 
-          if (priorityMappings.length > 0) {
-            // 如果有多个优先级映射，选择第一个
-            selectedMapping = priorityMappings[0];
-          } else {
-            // 如果没有优先前缀，选择第一个可用的
-            selectedMapping = mappings[0];
-          }
-          
-          mappingMap.set(groupKey, selectedMapping.amz_sku);
-        }
-      });
 
       // 按SKU+混合箱号分组汇总数量（关键优化：过滤已出库的SKU）
       const skuSummaryMap = new Map();
@@ -614,9 +576,7 @@ router.post('/mixed-boxes', async (req, res) => {
           const mixBoxNum = parts.slice(2).join('_');
           
           const mappingKey = `${sku}_${country}`;
-          const amazonSku = mixedBoxListingsMap.get(mappingKey) || 
-                          mappingMap.get(mappingKey) || 
-                          sku;
+          const amazonSku = mixedBoxListingsMap.get(mappingKey) || sku;
 
           allMixedBoxData.push({
             box_num: mixBoxNum,
@@ -701,36 +661,7 @@ router.post('/mixed-boxes', async (req, res) => {
           });
         }
         
-        // 如果没有listings_sku数据，回退到原有的映射逻辑
-        if (wholeBoxListingsMap.size === 0) {
 
-          
-          // 为整箱数据也应用优先级选择逻辑
-          const wholeBoxMappingGroups = new Map();
-          amzSkuMappings.forEach(mapping => {
-            const groupKey = `${mapping.local_sku}_${mapping.country}`;
-            if (!wholeBoxMappingGroups.has(groupKey)) {
-              wholeBoxMappingGroups.set(groupKey, []);
-            }
-            wholeBoxMappingGroups.get(groupKey).push(mapping);
-          });
-          
-          wholeBoxMappingGroups.forEach((mappings, groupKey) => {
-            if (mappings.length > 0) {
-              const priorityPrefixes = ['SF', 'FBA', 'NA', 'AU', 'UW'];
-              
-              const priorityMappings = mappings.filter(mapping => {
-                const amzSku = mapping.amz_sku || '';
-                return priorityPrefixes.some(prefix => amzSku.startsWith(prefix));
-              });
-
-              const selectedMapping = priorityMappings.length > 0 ? priorityMappings[0] : mappings[0];
-              mappingMap.set(groupKey, selectedMapping.amz_sku);
-              
-
-            }
-          });
-        }
         
       } catch (error) {
 
@@ -750,7 +681,6 @@ router.post('/mixed-boxes', async (req, res) => {
             // 优先使用listings_sku映射，如果没有则回退到原有逻辑
             const mappingKey = `${item.sku}_${item.country}`;
             const amazonSku = wholeBoxListingsMap.get(mappingKey) || 
-                            mappingMap.get(mappingKey) || 
                             correspondingRecord.amz_sku || 
                             item.sku;
             
