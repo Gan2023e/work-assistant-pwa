@@ -538,13 +538,8 @@ router.post('/mixed-boxes', async (req, res) => {
                 const result = listingsResults[0];
                 const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
                 mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
-                console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱listings映射: ${skuInfo.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
-              } else {
-                console.log('\x1b[31m%s\x1b[0m', `❌ 混合箱无Amazon FBA记录: ${skuInfo.local_sku}`);
               }
             }
-            
-            console.log('\x1b[36m%s\x1b[0m', `📝 混合箱listings映射表大小: ${mixedBoxListingsMap.size}`);
           }
         } catch (mappingError) {
 
@@ -663,9 +658,6 @@ router.post('/mixed-boxes', async (req, res) => {
               const result = listingsResults[0];
               const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
               wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
-              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${skuInfo.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
-            } else {
-              console.log('\x1b[31m%s\x1b[0m', `❌ 整箱无Amazon FBA记录: ${skuInfo.local_sku}`);
             }
           }
         }
