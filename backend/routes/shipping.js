@@ -527,19 +527,24 @@ router.post('/mixed-boxes', async (req, res) => {
               raw: true
             });
             
-            // 构建混合箱listings映射关系 - 只保留符合Amazon FBA条件的
-            mixedBoxListingsResults.forEach(result => {
-              // 双重验证：确保fulfillment-channel包含AMAZON
-              if (result.fulfillment_channel && 
-                  (result.fulfillment_channel === 'AMAZON_NA' || 
-                   result.fulfillment_channel === 'AMAZON_EU' || 
-                   result.fulfillment_channel === 'AMAZON_FE' || 
-                   result.fulfillment_channel.startsWith('AMAZON_'))) {
-                
-                const mappingKey = `${result.local_sku}_${result.country}`;
-                mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
-              }
-            });
+                         // 构建混合箱listings映射关系 - 只保留符合Amazon FBA条件的
+             mixedBoxListingsResults.forEach(result => {
+               // 双重验证：确保fulfillment-channel包含AMAZON
+               if (result.fulfillment_channel && 
+                   (result.fulfillment_channel === 'AMAZON_NA' || 
+                    result.fulfillment_channel === 'AMAZON_EU' || 
+                    result.fulfillment_channel === 'AMAZON_FE' || 
+                    result.fulfillment_channel.startsWith('AMAZON_'))) {
+                 
+                 const mappingKey = `${result.local_sku}_${result.country}`;
+                 mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
+                 console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
+               } else {
+                 console.log('\x1b[31m%s\x1b[0m', `❌ 跳过非Amazon FBA渠道: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
+               }
+             });
+             
+             console.log('\x1b[36m%s\x1b[0m', `📝 混合箱listings映射表大小: ${mixedBoxListingsMap.size}`);
           }
         } catch (mappingError) {
 
@@ -577,6 +582,7 @@ router.post('/mixed-boxes', async (req, res) => {
           
           const mappingKey = `${sku}_${country}`;
           const amazonSku = mixedBoxListingsMap.get(mappingKey) || sku;
+          console.log('\x1b[36m%s\x1b[0m', `🔍 混合箱SKU映射: ${sku} -> ${amazonSku} (来源: ${mixedBoxListingsMap.has(mappingKey) ? 'listings_sku' : 'fallback'})`);
 
           allMixedBoxData.push({
             box_num: mixBoxNum,
