@@ -724,6 +724,29 @@ router.post('/upload-excel-new', (req, res) => {
     const skippedRecords = [];
     const errors = [];
     
+    // 产品ID提取函数
+    const extractProductId = (url) => {
+      if (!url || typeof url !== 'string') return null;
+      
+      // 1688.com 链接格式: https://detail.1688.com/offer/959653322543.html
+      const match1688 = url.match(/1688\.com\/offer\/(\d+)/);
+      if (match1688) return match1688[1];
+      
+      // 淘宝链接格式: https://detail.tmall.com/item.htm?id=123456789
+      const matchTaobao = url.match(/[?&]id=(\d+)/);
+      if (matchTaobao) return matchTaobao[1];
+      
+      // Amazon链接格式: https://www.amazon.com/dp/B08N5WRWNW
+      const matchAmazon = url.match(/\/dp\/([A-Z0-9]{10})/);
+      if (matchAmazon) return matchAmazon[1];
+      
+      // 其他可能的产品ID格式
+      const matchGeneral = url.match(/\/(\d{8,})/);
+      if (matchGeneral) return matchGeneral[1];
+      
+      return null;
+    };
+    
     // 从第一行开始处理（无表头）
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -732,7 +755,34 @@ router.post('/upload-excel-new', (req, res) => {
         const weblink = row[1] ? row[1].toString().trim() : '';
         const notice = row[2] ? row[2].toString().trim() : '';
         
-        // 检查SKU是否已存在
+        // 1. 优先检查产品ID重复（从链接中提取产品ID）
+        if (weblink) {
+          const productId = extractProductId(weblink);
+          if (productId) {
+            // 查找数据库中是否已有包含相同产品ID的链接
+            const existingProductId = await ProductWeblink.findOne({
+              where: {
+                weblink: {
+                  [Op.like]: `%${productId}%`
+                }
+              }
+            });
+            
+            if (existingProductId) {
+              const skipReason = '产品链接已经存在';
+              errors.push(`第${i+1}行：产品ID ${productId} 已存在于SKU ${existingProductId.parent_sku}`);
+              skippedRecords.push({
+                row: i + 1,
+                sku: parent_sku,
+                link: weblink,
+                reason: skipReason
+              });
+              continue;
+            }
+          }
+        }
+
+        // 2. 检查SKU是否已存在
         const existing = await ProductWeblink.findOne({
           where: { parent_sku }
         });
@@ -747,25 +797,6 @@ router.post('/upload-excel-new', (req, res) => {
             reason: skipReason
           });
           continue;
-        }
-
-        // 检查链接是否已存在（如果有链接的话）
-        if (weblink) {
-          const existingLink = await ProductWeblink.findOne({
-            where: { weblink }
-          });
-          
-          if (existingLink) {
-            const skipReason = `链接已存在于SKU ${existingLink.parent_sku}`;
-            errors.push(`第${i+1}行：链接已存在于SKU ${existingLink.parent_sku}`);
-            skippedRecords.push({
-              row: i + 1,
-              sku: parent_sku,
-              link: weblink,
-              reason: skipReason
-            });
-            continue;
-          }
         }
 
         newRecords.push({
