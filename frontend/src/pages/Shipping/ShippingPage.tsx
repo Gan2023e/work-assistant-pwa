@@ -103,7 +103,7 @@ interface MergedShippingData {
   shipping_method?: string;
   marketplace: string;
   country: string;
-  status: '待发货' | '已发货' | '已取消' | '有库存无需求' | '库存未映射';
+  status: '待发货' | '已发货' | '已取消' | '有库存无需求' | '库存未映射' | '映射缺失';
   created_at: string;
   mapping_method?: string; // 映射方法标记
   whole_box_quantity: number;
@@ -1074,6 +1074,7 @@ const ShippingPage: React.FC = () => {
       case '已取消': return 'red';
       case '有库存无需求': return 'blue';
       case '库存未映射': return 'purple';
+      case '映射缺失': return 'volcano';
       default: return 'default';
     }
   };
@@ -1207,7 +1208,20 @@ const ShippingPage: React.FC = () => {
       },
       render: (amzSku: string, record: MergedShippingData) => (
         <div>
-          <div>{amzSku}</div>
+          {record.status === '映射缺失' ? (
+            <Button 
+              type="link" 
+              style={{ padding: 0, height: 'auto', fontSize: 'inherit', color: '#fa541c' }}
+              onClick={() => handleMissingMappingClick(record)}
+            >
+              {amzSku} 
+              <Text type="secondary" style={{ fontSize: '10px', marginLeft: 4 }}>
+                [点击添加映射]
+              </Text>
+            </Button>
+          ) : (
+            <div>{amzSku}</div>
+          )}
           {record.amazon_sku && record.amazon_sku !== amzSku && (
             <div style={{ fontSize: '12px', color: '#666' }}>
               新映射: {record.amazon_sku}
@@ -1215,6 +1229,9 @@ const ShippingPage: React.FC = () => {
           )}
           {record.mapping_method === 'new_amazon_listings' && (
             <Tag color="green">新映射</Tag>
+          )}
+          {record.status === '映射缺失' && (
+            <Tag color="volcano" size="small">映射缺失</Tag>
           )}
         </div>
       ),
@@ -1674,6 +1691,55 @@ const ShippingPage: React.FC = () => {
     }, 100);
   };
 
+  // 处理映射缺失的单击事件
+  const handleMissingMappingClick = (record: MergedShippingData) => {
+    setCurrentMissingMapping(record);
+    setAddMappingModalVisible(true);
+    
+    // 预填充表单
+    addMappingForm.setFieldsValue({
+      amazon_sku: record.amz_sku,
+      country: record.country,
+      site: record.site
+    });
+  };
+
+  // 添加缺失映射
+  const handleAddMissingMapping = async (values: any) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shipping/add-missing-mapping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+        body: JSON.stringify({
+          amazon_sku: values.amazon_sku,
+          local_sku: values.local_sku,
+          country: values.country,
+          site: values.site
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success('映射添加成功！');
+        setAddMappingModalVisible(false);
+        addMappingForm.resetFields();
+        setCurrentMissingMapping(null);
+        
+        // 刷新数据
+        fetchMergedData();
+      } else {
+        message.error(result.message || '添加映射失败');
+      }
+    } catch (error) {
+      console.error('添加映射失败:', error);
+      message.error(`添加映射失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   // 创建SKU映射
   const handleCreateMapping = async (values: any) => {
     try {
@@ -1720,6 +1786,11 @@ const ShippingPage: React.FC = () => {
   // 需求单管理弹窗相关state
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [orderModalNeedNum, setOrderModalNeedNum] = useState<string | null>(null);
+
+  // 添加映射弹窗相关state
+  const [addMappingModalVisible, setAddMappingModalVisible] = useState(false);
+  const [addMappingForm] = Form.useForm();
+  const [currentMissingMapping, setCurrentMissingMapping] = useState<MergedShippingData | null>(null);
 
   return (
     <div style={{ padding: '24px' }}>
@@ -1901,7 +1972,7 @@ const ShippingPage: React.FC = () => {
                 : mergedData;
               
               return (
-                <Row gutter={16}>
+                <Row gutter={8}>
                   <Col span={3}>
                     <div 
                       style={{ cursor: 'pointer' }} 
@@ -1984,6 +2055,21 @@ const ShippingPage: React.FC = () => {
                     <div 
                       style={{ cursor: 'pointer' }} 
                       onClick={() => {
+                        const newFilterType = filterType === 'missing-mapping' ? '' : 'missing-mapping';
+                        setFilterType(newFilterType);
+                      }}
+                    >
+                      <Statistic
+                        title="映射缺失"
+                        value={filteredData.filter((item: MergedShippingData) => item.status === '映射缺失').length}
+                        valueStyle={{ color: filterType === 'missing-mapping' ? '#1677ff' : '#fa541c' }}
+                      />
+                    </div>
+                  </Col>
+                  <Col span={3}>
+                    <div 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => {
                         const newFilterType = filterType === 'unmapped-inventory' ? '' : 'unmapped-inventory';
                         setFilterType(newFilterType);
                       }}
@@ -2009,9 +2095,6 @@ const ShippingPage: React.FC = () => {
                       />
                     </div>
                   </Col>
-                  <Col span={3}>
-                    {/* 空列用于保持布局对称 */}
-                  </Col>
                 </Row>
               );
             })()}
@@ -2023,6 +2106,7 @@ const ShippingPage: React.FC = () => {
               <Tag color="blue" style={{ marginLeft: 8 }}>蓝色 - 有库存无需求</Tag>
               <Tag color="red" style={{ marginLeft: 4 }}>红色 - 需求缺货</Tag>
               <Tag color="orange" style={{ marginLeft: 4 }}>橙色 - 需求未映射</Tag>
+              <Tag color="volcano" style={{ marginLeft: 4 }}>橙红色 - 映射缺失</Tag>
               <Tag color="green" style={{ marginLeft: 4 }}>绿色 - 需求库存充足</Tag>
             </Text>
           </Card>
@@ -2051,6 +2135,7 @@ const ShippingPage: React.FC = () => {
                   <Option value="已发货">已发货</Option>
                   <Option value="已取消">已取消</Option>
                   <Option value="有库存无需求">有库存无需求</Option>
+                  <Option value="映射缺失">映射缺失</Option>
                   <Option value="库存未映射">库存未映射</Option>
                 </Select>
               </Col>
@@ -2109,6 +2194,7 @@ const ShippingPage: React.FC = () => {
                         case 'shortage': return item.quantity > 0 && item.shortage > 0;
                         case 'unmapped': return item.quantity > 0 && !item.local_sku;
                         case 'inventory-only': return item.quantity === 0 && item.total_available > 0;
+                        case 'missing-mapping': return item.status === '映射缺失';
                         case 'unmapped-inventory': return item.status === '库存未映射';
                         default: return true;
                       }
@@ -2180,6 +2266,8 @@ const ShippingPage: React.FC = () => {
                   return item.quantity > 0 && !item.local_sku;
                 case 'inventory-only':
                   return item.record_num === null && item.status === '有库存无需求';
+                case 'missing-mapping':
+                  return item.status === '映射缺失';
                 case 'unmapped-inventory':
                   return item.status === '库存未映射';
                 default:
@@ -3431,6 +3519,85 @@ const ShippingPage: React.FC = () => {
       >
         {orderModalNeedNum && (
           <OrderManagementPage needNum={orderModalNeedNum} />
+        )}
+      </Modal>
+
+      {/* 添加映射弹窗 */}
+      <Modal
+        title="添加SKU映射"
+        open={addMappingModalVisible}
+        onCancel={() => {
+          setAddMappingModalVisible(false);
+          addMappingForm.resetFields();
+          setCurrentMissingMapping(null);
+        }}
+        footer={null}
+        width={600}
+        destroyOnClose
+      >
+        {currentMissingMapping && (
+          <div>
+            <Alert
+              message="添加映射关系"
+              description={`Amazon SKU "${currentMissingMapping.amz_sku}" 在 ${currentMissingMapping.country} 的 listings_sku 中存在，但缺少与本地SKU的映射关系。请输入对应的本地SKU以建立映射。`}
+              type="info"
+              style={{ marginBottom: 16 }}
+            />
+            
+            <Form
+              form={addMappingForm}
+              layout="vertical"
+              onFinish={handleAddMissingMapping}
+            >
+              <Form.Item
+                label="Amazon SKU"
+                name="amazon_sku"
+                rules={[{ required: true, message: '请输入Amazon SKU' }]}
+              >
+                <Input disabled />
+              </Form.Item>
+
+              <Form.Item
+                label="本地SKU"
+                name="local_sku"
+                rules={[{ required: true, message: '请输入本地SKU' }]}
+              >
+                <Input placeholder="请输入对应的本地SKU" />
+              </Form.Item>
+
+              <Form.Item
+                label="国家"
+                name="country"
+                rules={[{ required: true, message: '请选择国家' }]}
+              >
+                <Input disabled />
+              </Form.Item>
+
+              <Form.Item
+                label="Amazon站点"
+                name="site"
+              >
+                <Input disabled />
+              </Form.Item>
+
+              <Form.Item>
+                <div style={{ textAlign: 'right' }}>
+                  <Space>
+                    <Button onClick={() => {
+                      setAddMappingModalVisible(false);
+                      addMappingForm.resetFields();
+                      setCurrentMissingMapping(null);
+                    }}>
+                      取消
+                    </Button>
+                    <Button type="primary" htmlType="submit">
+                      添加映射
+                    </Button>
+                  </Space>
+                </div>
+              </Form.Item>
+            </Form>
+          </div>
         )}
       </Modal>
 

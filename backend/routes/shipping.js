@@ -1016,32 +1016,28 @@ router.get('/merged-data', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: Amazon FBA专用三步映射流程');
     
-    // FBA专用映射流程：三步整合成一个SQL语句
-    // 步骤1: 从listings_sku获取包含AMAZON的fulfillment-channel数据（只要FBA渠道）
-    // 步骤2: 通过seller-sku与amz_sku、site字段关联pbi_amzsku_sku表
-    // 步骤3: 通过local_sku与sku、country字段关联local_boxes表，得到Amazon FBA库存
+    // 改进的映射流程：不再强制要求Amazon FBA渠道，包含所有有映射的库存
+    // 步骤1: 从local_boxes表获取所有库存
+    // 步骤2: 通过pbi_amzsku_sku表进行映射关联
+    // 步骤3: 如果存在listings_sku记录则关联，否则仍然显示（允许DEFAULT等渠道）
     const inventoryWithMappingQuery = `
       SELECT 
         lb.sku as local_sku,
         lb.country,
-        ls.\`seller-sku\` as amazon_sku,
+        COALESCE(ls.\`seller-sku\`, asm.amz_sku) as amazon_sku,
         COALESCE(asm.amz_sku, '') as mapping_amz_sku,
-        ls.site,
-        ls.\`fulfillment-channel\` as fulfillment_channel,
+        COALESCE(ls.site, asm.site) as site,
+        COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
         SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
         SUM(lb.total_quantity) as total_available
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
+      LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
       WHERE lb.total_quantity > 0
         AND lb.status = '待出库'
-        AND (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
-             OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
-             OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
-             OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
-      GROUP BY lb.sku, lb.country, ls.\`seller-sku\`, asm.amz_sku, ls.site, ls.\`fulfillment-channel\`
+      GROUP BY lb.sku, lb.country, COALESCE(ls.\`seller-sku\`, asm.amz_sku), asm.amz_sku, COALESCE(ls.site, asm.site), COALESCE(ls.\`fulfillment-channel\`, 'MAPPED')
       HAVING SUM(lb.total_quantity) != 0
     `;
     
@@ -1050,7 +1046,7 @@ router.get('/merged-data', async (req, res) => {
       raw: true
     });
 
-        console.log('\x1b[33m%s\x1b[0m', `📦 Amazon FBA库存数据: ${inventoryWithMapping.length} 条`);
+        console.log('\x1b[33m%s\x1b[0m', `📦 已映射库存数据: ${inventoryWithMapping.length} 条`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤2: 查询待发货需求数据并计算剩余需求');
     
@@ -1126,9 +1122,9 @@ router.get('/merged-data', async (req, res) => {
       });
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 构建Amazon FBA库存映射表');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤3: 构建已映射库存映射表');
     
-    // 3. 构建Amazon FBA库存映射表（以sku+country为键）
+    // 3. 构建已映射库存映射表（以sku+country为键）
     const inventoryMap = new Map();
     
     inventoryWithMapping.forEach(inv => {
@@ -1144,9 +1140,9 @@ router.get('/merged-data', async (req, res) => {
         mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
         total_available: parseInt(inv.total_available) || 0,
         country: inv.country,
-        data_source: 'amazon_fba'
+        data_source: 'mapped_inventory'
       });
-      console.log(`✅ Amazon FBA库存: ${key} - 可用数量: ${inv.total_available}`);
+      console.log(`✅ 已映射库存: ${key} - 可用数量: ${inv.total_available}`);
     });
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 构建需求映射表');
@@ -1223,8 +1219,8 @@ router.get('/merged-data', async (req, res) => {
         total_available: inventoryInfo.total_available,
             shortage: shortageQty,
             data_source: 'need_with_inventory',
-            inventory_source: 'amazon_fba',
-            mapping_method: 'fba_focused_mapping'
+            inventory_source: 'mapped_inventory',
+            mapping_method: 'mapped_inventory_matching'
           });
         });
         
@@ -1256,7 +1252,7 @@ router.get('/merged-data', async (req, res) => {
             shortage: need.ori_quantity || 0,
             data_source: 'need_no_inventory',
             inventory_source: 'none',
-            mapping_method: skuMapping ? 'fba_focused_mapping' : 'no_mapping'
+            mapping_method: skuMapping ? 'mapped_inventory_matching' : 'no_mapping'
           });
         });
         
@@ -1268,7 +1264,7 @@ router.get('/merged-data', async (req, res) => {
     });
 
         
-    // 6. 处理有Amazon FBA库存但无需求的记录（第一步有，第二步没有）
+    // 6. 处理有已映射库存但无需求的记录（第一步有，第二步没有）
     inventoryMap.forEach((inv, key) => {
       if (!processedKeys.has(key) && inv.total_available > 0) {
         allRecords.push({
@@ -1292,8 +1288,8 @@ router.get('/merged-data', async (req, res) => {
         total_available: inv.total_available,
         shortage: 0,
           data_source: 'inventory_no_need',
-          inventory_source: 'amazon_fba',
-          mapping_method: 'fba_focused_mapping'
+          inventory_source: 'mapped_inventory',
+          mapping_method: 'mapped_inventory_matching'
         });
         
         console.log(`📦 ${key}: 库存${inv.total_available}, 无需求 - 有库存无需求`);
@@ -1327,7 +1323,83 @@ router.get('/merged-data', async (req, res) => {
 
     console.log('\x1b[33m%s\x1b[0m', `📦 未映射库存数据: ${unmappedInventory.length} 条`);
 
-    // 8. 添加未映射库存记录
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤7: 查询listings中存在但映射缺失的SKU');
+
+    // 8. 查询在listings_sku中存在但在pbi_amzsku_sku中缺失映射的记录
+    const missingMappingsQuery = `
+      SELECT 
+        ls.\`seller-sku\` as amazon_sku,
+        ls.site,
+        ls.\`fulfillment-channel\` as fulfillment_channel,
+        COUNT(*) as listings_count
+      FROM listings_sku ls
+      LEFT JOIN pbi_amzsku_sku asm ON ls.\`seller-sku\` = asm.amz_sku AND ls.site = asm.site
+      WHERE asm.amz_sku IS NULL
+        AND (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
+             OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
+             OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
+             OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%'
+             OR ls.\`fulfillment-channel\` = 'DEFAULT')
+      GROUP BY ls.\`seller-sku\`, ls.site, ls.\`fulfillment-channel\`
+      ORDER BY ls.\`seller-sku\`
+      LIMIT 50
+    `;
+
+    const missingMappings = await sequelize.query(missingMappingsQuery, {
+      type: sequelize.QueryTypes.SELECT,
+      raw: true
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `🔗 映射缺失的listings记录: ${missingMappings.length} 条`);
+
+    // 9. 添加映射缺失的listings记录
+    missingMappings.forEach(listing => {
+      // 尝试从Amazon SKU推断可能的国家
+      let inferredCountry = '未知';
+      if (listing.site === 'www.amazon.com') inferredCountry = '美国';
+      else if (listing.site === 'www.amazon.co.uk') inferredCountry = '英国';
+      else if (listing.site === 'www.amazon.de') inferredCountry = '德国';
+      else if (listing.site === 'www.amazon.fr') inferredCountry = '法国';
+      else if (listing.site === 'www.amazon.it') inferredCountry = '意大利';
+      else if (listing.site === 'www.amazon.es') inferredCountry = '西班牙';
+      else if (listing.site === 'www.amazon.ca') inferredCountry = '加拿大';
+      else if (listing.site === 'www.amazon.co.jp') inferredCountry = '日本';
+      else if (listing.site === 'www.amazon.com.au') inferredCountry = '澳大利亚';
+      else if (listing.site === 'www.amazon.sg') inferredCountry = '新加坡';
+      else if (listing.site === 'www.amazon.ae') inferredCountry = '阿联酋';
+
+      allRecords.push({
+        record_num: null,
+        need_num: '',
+        amz_sku: listing.amazon_sku,
+        amazon_sku: listing.amazon_sku,
+        local_sku: '', // 需要用户指定
+        site: listing.site,
+        fulfillment_channel: listing.fulfillment_channel,
+        quantity: 0,
+        shipping_method: '',
+        marketplace: 'Amazon',
+        country: inferredCountry,
+        status: '映射缺失',
+        created_at: new Date().toISOString(),
+        // 库存信息（全为0，因为没有本地SKU映射）
+        whole_box_quantity: 0,
+        whole_box_count: 0,
+        mixed_box_quantity: 0,
+        total_available: 0,
+        shortage: 0,
+        data_source: 'missing_mapping',
+        inventory_source: 'listings_only',
+        mapping_method: 'no_mapping',
+        // 新增字段，用于前端识别和操作
+        is_missing_mapping: true,
+        listings_count: listing.listings_count
+      });
+      
+      console.log(`🔗 映射缺失: ${listing.amazon_sku} (${listing.site}) - 渠道: ${listing.fulfillment_channel}`);
+    });
+
+    // 10. 添加未映射库存记录
     unmappedInventory.forEach(inv => {
       allRecords.push({
         record_num: null, // 设置为null表示无需求单的库存
@@ -1357,13 +1429,20 @@ router.get('/merged-data', async (req, res) => {
       console.log(`🔍 未映射库存: ${inv.local_sku}_${inv.country} - 可用数量: ${inv.total_available}`);
     });
 
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤9: 应用分页和排序');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤11: 应用分页和排序');
     
-    // 9. 应用分页和排序
+    // 11. 应用分页和排序
     const sortedRecords = allRecords.sort((a, b) => {
-      // 先按状态排序：库存充足 > 库存不足 > 缺货 > 有库存无需求 > 库存未映射
-      const statusOrder = { '库存充足': 1, '库存不足': 2, '缺货': 3, '有库存无需求': 4, '库存未映射': 5 };
-      const statusDiff = (statusOrder[a.status] || 6) - (statusOrder[b.status] || 6);
+      // 先按状态排序：库存充足 > 库存不足 > 缺货 > 有库存无需求 > 映射缺失 > 库存未映射
+      const statusOrder = { 
+        '库存充足': 1, 
+        '库存不足': 2, 
+        '缺货': 3, 
+        '有库存无需求': 4, 
+        '映射缺失': 5,
+        '库存未映射': 6 
+      };
+      const statusDiff = (statusOrder[a.status] || 7) - (statusOrder[b.status] || 7);
       if (statusDiff !== 0) return statusDiff;
       
       // 相同状态下按创建时间排序
@@ -1375,30 +1454,33 @@ router.get('/merged-data', async (req, res) => {
     const endIndex = parseInt(limit) === 1000 ? sortedRecords.length : startIndex + parseInt(limit);
     const paginatedRecords = sortedRecords.slice(startIndex, endIndex);
     
-    // 10. 统计信息
+    // 12. 统计信息
     const statsMap = {
       库存充足: sortedRecords.filter(r => r.status === '库存充足').length,
       库存不足: sortedRecords.filter(r => r.status === '库存不足').length,
       缺货: sortedRecords.filter(r => r.status === '缺货').length,
       有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求').length,
+      映射缺失: sortedRecords.filter(r => r.status === '映射缺失').length,
       库存未映射: sortedRecords.filter(r => r.status === '库存未映射').length,
       总记录数: sortedRecords.length,
-      Amazon_FBA库存SKU数: inventoryMap.size,
+      已映射库存SKU数: inventoryMap.size,
       待发货需求SKU数: needsMap.size,
+      映射缺失SKU数: missingMappings.length,
       未映射库存SKU数: unmappedInventory.length
     };
 
-    console.log('\x1b[35m%s\x1b[0m', '📊 FBA发货分析完成统计:', statsMap);
-    console.log('\x1b[32m%s\x1b[0m', '✅ FBA发货分析成功:', {
-      Amazon_FBA库存数据: inventoryWithMapping.length,
+    console.log('\x1b[35m%s\x1b[0m', '📊 库存需求分析完成统计:', statsMap);
+    console.log('\x1b[32m%s\x1b[0m', '✅ 库存需求分析成功:', {
+      已映射库存数据: inventoryWithMapping.length,
       待发货需求数据: needsData.length,
+      映射缺失数据: missingMappings.length,
       未映射库存数据: unmappedInventory.length,
-      分析结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 + ${statsMap.库存未映射}未映射 = ${statsMap.总记录数}条`
+      分析结果: `${statsMap.库存充足}充足 + ${statsMap.库存不足}不足 + ${statsMap.缺货}缺货 + ${statsMap.有库存无需求}无需求 + ${statsMap.映射缺失}映射缺失 + ${statsMap.库存未映射}未映射 = ${statsMap.总记录数}条`
     });
 
     res.json({
       code: 0,
-      message: '获取成功 - FBA库存需求分析',
+      message: '获取成功 - 库存需求分析（已优化映射逻辑）',
       data: {
         list: paginatedRecords,
         total: sortedRecords.length,
@@ -1410,17 +1492,18 @@ router.get('/merged-data', async (req, res) => {
           库存不足: sortedRecords.filter(r => r.status === '库存不足'),
           缺货: sortedRecords.filter(r => r.status === '缺货'),
           有库存无需求: sortedRecords.filter(r => r.status === '有库存无需求'),
+          映射缺失: sortedRecords.filter(r => r.status === '映射缺失'),
           库存未映射: sortedRecords.filter(r => r.status === '库存未映射')
         },
         summary: statsMap,
-        mapping_method: 'inventory_need_analysis'
+        mapping_method: 'improved_inventory_mapping'
       }
     });
   } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '❌ FBA库存需求分析失败:', error);
+    console.error('\x1b[31m%s\x1b[0m', '❌ 库存需求分析失败:', error);
     res.status(500).json({
       code: 1,
-      message: '分析失败 - FBA库存需求分析异常',
+      message: '分析失败 - 库存需求分析异常',
       error: error.message
     });
   }
@@ -2109,6 +2192,100 @@ router.post('/create-mapping', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '创建SKU映射失败',
+      error: error.message
+    });
+  }
+});
+
+// 添加单个映射记录（用于映射缺失的listings）
+router.post('/add-missing-mapping', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到添加缺失映射请求:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { amazon_sku, local_sku, country, site } = req.body;
+    
+    if (!amazon_sku || !local_sku || !country) {
+      return res.status(400).json({
+        code: 1,
+        message: 'amazon_sku、local_sku和country字段都是必需的'
+      });
+    }
+
+    // 检查是否已经存在相同的映射
+    const existingMapping = await AmzSkuMapping.findOne({
+      where: {
+        local_sku: local_sku,
+        country: country,
+        amz_sku: amazon_sku
+      }
+    });
+
+    if (existingMapping) {
+      return res.status(400).json({
+        code: 1,
+        message: `映射关系已存在: ${local_sku} -> ${amazon_sku} (${country})`
+      });
+    }
+
+    // 检查local_sku是否在库存中存在
+    const inventoryExists = await LocalBox.findOne({
+      where: {
+        sku: local_sku,
+        country: country,
+        total_quantity: { [Op.gt]: 0 }
+      }
+    });
+
+    if (!inventoryExists) {
+      console.log('\x1b[33m%s\x1b[0m', `⚠️ 警告: 本地SKU ${local_sku} 在 ${country} 没有库存，但仍允许创建映射`);
+    }
+
+    // 推断site如果没有提供
+    let mappingSite = site;
+    if (!mappingSite) {
+      if (country === '美国') mappingSite = 'www.amazon.com';
+      else if (country === '英国') mappingSite = 'www.amazon.co.uk';
+      else if (country === '德国') mappingSite = 'www.amazon.de';
+      else if (country === '法国') mappingSite = 'www.amazon.fr';
+      else if (country === '意大利') mappingSite = 'www.amazon.it';
+      else if (country === '西班牙') mappingSite = 'www.amazon.es';
+      else if (country === '加拿大') mappingSite = 'www.amazon.ca';
+      else if (country === '日本') mappingSite = 'www.amazon.co.jp';
+      else if (country === '澳大利亚') mappingSite = 'www.amazon.com.au';
+      else if (country === '新加坡') mappingSite = 'www.amazon.sg';
+      else if (country === '阿联酋') mappingSite = 'www.amazon.ae';
+      else mappingSite = 'www.amazon.com'; // 默认
+    }
+
+    // 创建映射记录
+    const newMapping = await AmzSkuMapping.create({
+      local_sku: local_sku,
+      amz_sku: amazon_sku,
+      country: country,
+      site: mappingSite,
+      update_time: new Date()
+    });
+    
+    console.log('\x1b[32m%s\x1b[0m', '✅ 缺失映射添加成功:', {
+      local_sku: local_sku,
+      amz_sku: amazon_sku,
+      country: country,
+      site: mappingSite
+    });
+    
+    res.json({
+      code: 0,
+      message: '映射添加成功',
+      data: {
+        mapping: newMapping.toJSON(),
+        has_inventory: !!inventoryExists
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 添加缺失映射失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '添加映射失败',
       error: error.message
     });
   }
