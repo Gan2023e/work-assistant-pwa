@@ -501,50 +501,50 @@ router.post('/mixed-boxes', async (req, res) => {
             raw: true
           });
           
-          // 通过amz_sku查询listings_sku表获取seller-sku（混合箱专用）
+                    // 使用统一的listings_sku查询逻辑（混合箱专用）
           if (allMappings.length > 0) {
-            const mixedBoxListingsQuery = `
-              SELECT 
-                asm.local_sku,
-                asm.country,
-                ls.\`seller-sku\` as amazon_sku,
-                asm.amz_sku as mapping_amz_sku,
-                ls.site,
-                ls.\`fulfillment-channel\` as fulfillment_channel
-              FROM pbi_amzsku_sku asm
-              INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
-              WHERE (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
-                     OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
-                     OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
-                     OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
-                AND ${allMappings.map(mapping => 
-                  `(asm.local_sku = '${mapping.local_sku.replace(/'/g, "''")}' AND asm.country = '${mapping.country.replace(/'/g, "''")}')`
-                ).join(' OR ')}
-            `;
+            // 获取所有需要查询的local_sku
+            const uniqueSkus = [...new Set(allMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
             
-            const mixedBoxListingsResults = await sequelize.query(mixedBoxListingsQuery, {
-              type: sequelize.QueryTypes.SELECT,
-              raw: true
-            });
+            for (const skuInfo of uniqueSkus) {
+              const listingsQuery = `
+                SELECT 
+                  \`seller-sku\` as amazon_sku,
+                  \`fulfillment-channel\` as fulfillment_channel,
+                  site
+                FROM listings_sku 
+                WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
+                  AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
+                       OR \`fulfillment-channel\` = 'AMAZON_EU' 
+                       OR \`fulfillment-channel\` = 'AMAZON_FE'
+                       OR \`fulfillment-channel\` LIKE 'AMAZON_%'))
+                ORDER BY 
+                  CASE 
+                    WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
+                    WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
+                    WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
+                    ELSE 4
+                  END,
+                  \`seller-sku\`
+                LIMIT 1
+              `;
+              
+              const listingsResults = await sequelize.query(listingsQuery, {
+                type: sequelize.QueryTypes.SELECT,
+                raw: true
+              });
+              
+              if (listingsResults.length > 0) {
+                const result = listingsResults[0];
+                const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
+                mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
+                console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱listings映射: ${skuInfo.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
+              } else {
+                console.log('\x1b[31m%s\x1b[0m', `❌ 混合箱无Amazon FBA记录: ${skuInfo.local_sku}`);
+              }
+            }
             
-                         // 构建混合箱listings映射关系 - 只保留符合Amazon FBA条件的
-             mixedBoxListingsResults.forEach(result => {
-               // 双重验证：确保fulfillment-channel包含AMAZON
-               if (result.fulfillment_channel && 
-                   (result.fulfillment_channel === 'AMAZON_NA' || 
-                    result.fulfillment_channel === 'AMAZON_EU' || 
-                    result.fulfillment_channel === 'AMAZON_FE' || 
-                    result.fulfillment_channel.startsWith('AMAZON_'))) {
-                 
-                 const mappingKey = `${result.local_sku}_${result.country}`;
-                 mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
-                 console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱listings映射: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
-               } else {
-                 console.log('\x1b[31m%s\x1b[0m', `❌ 跳过非Amazon FBA渠道: ${result.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel || 'undefined'})`);
-               }
-             });
-             
-             console.log('\x1b[36m%s\x1b[0m', `📝 混合箱listings映射表大小: ${mixedBoxListingsMap.size}`);
+            console.log('\x1b[36m%s\x1b[0m', `📝 混合箱listings映射表大小: ${mixedBoxListingsMap.size}`);
           }
         } catch (mappingError) {
 
@@ -626,45 +626,48 @@ router.post('/mixed-boxes', async (req, res) => {
           
 
         
-        // 步骤2: 通过amz_sku查询listings_sku表获取seller-sku
+        // 使用统一的listings_sku查询逻辑（整箱专用）
         if (amzSkuMappings.length > 0) {
-          const listingsQuery = `
-            SELECT 
-              asm.local_sku,
-              asm.country,
-              ls.\`seller-sku\` as amazon_sku,
-              asm.amz_sku as mapping_amz_sku,
-              ls.site,
-              ls.\`fulfillment-channel\` as fulfillment_channel
-            FROM pbi_amzsku_sku asm
-            INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
-            WHERE (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
-                   OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
-                   OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
-                   OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
-              AND ${amzSkuMappings.map(mapping => 
-                `(asm.local_sku = '${mapping.local_sku.replace(/'/g, "''")}' AND asm.country = '${mapping.country.replace(/'/g, "''")}')`
-              ).join(' OR ')}
-          `;
+          // 获取所有需要查询的local_sku
+          const uniqueSkus = [...new Set(amzSkuMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
           
-          const listingsResults = await sequelize.query(listingsQuery, {
-            type: sequelize.QueryTypes.SELECT,
-            raw: true
-          });
-          
-          // 构建整箱listings映射关系 - 只保留符合Amazon FBA条件的
-          listingsResults.forEach(result => {
-            // 双重验证：确保fulfillment-channel包含AMAZON
-            if (result.fulfillment_channel && 
-                (result.fulfillment_channel === 'AMAZON_NA' || 
-                 result.fulfillment_channel === 'AMAZON_EU' || 
-                 result.fulfillment_channel === 'AMAZON_FE' || 
-                 result.fulfillment_channel.startsWith('AMAZON_'))) {
-              
-              const mappingKey = `${result.local_sku}_${result.country}`;
+          for (const skuInfo of uniqueSkus) {
+            const listingsQuery = `
+              SELECT 
+                \`seller-sku\` as amazon_sku,
+                \`fulfillment-channel\` as fulfillment_channel,
+                site
+              FROM listings_sku 
+              WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
+                AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
+                     OR \`fulfillment-channel\` = 'AMAZON_EU' 
+                     OR \`fulfillment-channel\` = 'AMAZON_FE'
+                     OR \`fulfillment-channel\` LIKE 'AMAZON_%'))
+              ORDER BY 
+                CASE 
+                  WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
+                  WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
+                  WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
+                  ELSE 4
+                END,
+                \`seller-sku\`
+              LIMIT 1
+            `;
+            
+            const listingsResults = await sequelize.query(listingsQuery, {
+              type: sequelize.QueryTypes.SELECT,
+              raw: true
+            });
+            
+            if (listingsResults.length > 0) {
+              const result = listingsResults[0];
+              const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
               wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
+              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱listings映射: ${skuInfo.local_sku} -> ${result.amazon_sku} (fulfillment: ${result.fulfillment_channel})`);
+            } else {
+              console.log('\x1b[31m%s\x1b[0m', `❌ 整箱无Amazon FBA记录: ${skuInfo.local_sku}`);
             }
-          });
+          }
         }
         
 
