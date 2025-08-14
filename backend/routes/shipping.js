@@ -490,18 +490,60 @@ router.post('/mixed-boxes', async (req, res) => {
       }));
       
       let allMappings = [];
+      const mixedBoxListingsMap = new Map(); // 混合箱listings映射表
+      
       if (skuMappingConditions.length > 0) {
         try {
           allMappings = await AmzSkuMapping.findAll({
             where: {
               [Op.or]: skuMappingConditions
             },
-            attributes: ['local_sku', 'country', 'amz_sku'],
+            attributes: ['local_sku', 'country', 'amz_sku', 'site'],
             raw: true
           });
-          console.log('\x1b[33m%s\x1b[0m', '🔍 批量查询到的映射关系:', allMappings.length);
+          
+          // 通过amz_sku查询listings_sku表获取seller-sku（混合箱专用）
+          if (allMappings.length > 0) {
+            const mixedBoxListingsQuery = `
+              SELECT 
+                asm.local_sku,
+                asm.country,
+                ls.\`seller-sku\` as amazon_sku,
+                asm.amz_sku as mapping_amz_sku,
+                ls.site,
+                ls.\`fulfillment-channel\` as fulfillment_channel
+              FROM pbi_amzsku_sku asm
+              INNER JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
+              WHERE (ls.\`fulfillment-channel\` = 'AMAZON_NA' 
+                     OR ls.\`fulfillment-channel\` = 'AMAZON_EU' 
+                     OR ls.\`fulfillment-channel\` = 'AMAZON_FE'
+                     OR ls.\`fulfillment-channel\` LIKE 'AMAZON_%')
+                AND ${allMappings.map(mapping => 
+                  `(asm.local_sku = '${mapping.local_sku.replace(/'/g, "''")}' AND asm.country = '${mapping.country.replace(/'/g, "''")}')`
+                ).join(' OR ')}
+            `;
+            
+            const mixedBoxListingsResults = await sequelize.query(mixedBoxListingsQuery, {
+              type: sequelize.QueryTypes.SELECT,
+              raw: true
+            });
+            
+            // 构建混合箱listings映射关系 - 只保留符合Amazon FBA条件的
+            mixedBoxListingsResults.forEach(result => {
+              // 双重验证：确保fulfillment-channel包含AMAZON
+              if (result.fulfillment_channel && 
+                  (result.fulfillment_channel === 'AMAZON_NA' || 
+                   result.fulfillment_channel === 'AMAZON_EU' || 
+                   result.fulfillment_channel === 'AMAZON_FE' || 
+                   result.fulfillment_channel.startsWith('AMAZON_'))) {
+                
+                const mappingKey = `${result.local_sku}_${result.country}`;
+                mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
+              }
+            });
+          }
         } catch (mappingError) {
-          console.log('\x1b[33m%s\x1b[0m', '⚠️ 批量查找映射失败:', mappingError.message);
+
         }
       }
       
@@ -535,11 +577,9 @@ router.post('/mixed-boxes', async (req, res) => {
           if (priorityMappings.length > 0) {
             // 如果有多个优先级映射，选择第一个
             selectedMapping = priorityMappings[0];
-            console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱选择优先前缀映射: ${selectedMapping.amz_sku} for ${groupKey}`);
           } else {
             // 如果没有优先前缀，选择第一个可用的
             selectedMapping = mappings[0];
-            console.log('\x1b[33m%s\x1b[0m', `⚠️ 混合箱选择普通映射: ${selectedMapping.amz_sku} for ${groupKey}`);
           }
           
           mappingMap.set(groupKey, selectedMapping.amz_sku);
@@ -559,7 +599,7 @@ router.post('/mixed-boxes', async (req, res) => {
         }
       });
 
-      console.log('\x1b[33m%s\x1b[0m', '🔍 SKU汇总后数据:', skuSummaryMap.size);
+
 
       // 只处理汇总后数量大于0的SKU（过滤掉已完全出库的SKU）
       skuSummaryMap.forEach((totalQuantity, summaryKey) => {
@@ -574,7 +614,9 @@ router.post('/mixed-boxes', async (req, res) => {
           const mixBoxNum = parts.slice(2).join('_');
           
           const mappingKey = `${sku}_${country}`;
-          const amazonSku = mappingMap.get(mappingKey) || sku;
+          const amazonSku = mixedBoxListingsMap.get(mappingKey) || 
+                          mappingMap.get(mappingKey) || 
+                          sku;
 
           allMixedBoxData.push({
             box_num: mixBoxNum,
@@ -588,7 +630,7 @@ router.post('/mixed-boxes', async (req, res) => {
           const sku = parts[0];
           const country = parts[1];
           const mixBoxNum = parts.slice(2).join('_');
-          console.log('\x1b[31m%s\x1b[0m', `🚫 已完全出库的SKU: ${sku} (混合箱: ${mixBoxNum}, 汇总数量: ${totalQuantity})`);
+
         }
       });
     }
