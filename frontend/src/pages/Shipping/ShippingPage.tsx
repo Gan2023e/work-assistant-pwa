@@ -937,8 +937,20 @@ const ShippingPage: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorResult = await response.json();
+          if (errorResult.message) {
+            errorMessage = errorResult.message;
+          }
+          if (errorResult.details) {
+            console.log('📋 错误详情:', errorResult.details);
+          }
+        } catch {
+          const errorText = await response.text();
+          errorMessage += `: ${errorText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -1014,7 +1026,35 @@ const ShippingPage: React.FC = () => {
     } catch (error) {
       message.destroy();
       console.error('上传装箱表失败:', error);
-      message.error('上传失败');
+      
+      // 显示详细错误信息
+      const errorMessage = error instanceof Error ? error.message : '上传失败';
+      
+      if (errorMessage.includes('Box packing information')) {
+        // 如果是工作表名称问题，显示详细的Modal
+        Modal.error({
+          title: '装箱表上传失败',
+          content: (
+            <div>
+              <p>{errorMessage}</p>
+              <div style={{ marginTop: 16 }}>
+                <p><strong>💡 常见解决方案：</strong></p>
+                <ol>
+                  <li>打开Excel文件，检查是否有名为"Box packing information"的工作表</li>
+                  <li>如果工作表名称不同，请右键重命名为"Box packing information"</li>
+                  <li>确保工作表名称没有多余的空格</li>
+                  <li>确保使用的是正确的装箱表模板</li>
+                </ol>
+              </div>
+            </div>
+          ),
+          width: 600,
+          okText: '知道了'
+        });
+      } else {
+        // 其他错误显示简单消息
+        message.error(errorMessage.length > 100 ? '上传失败，请检查文件格式' : errorMessage);
+      }
     } finally {
       setPackingListLoading(false);
     }

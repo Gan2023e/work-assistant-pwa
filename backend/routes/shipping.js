@@ -3798,8 +3798,25 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     // 使用ExcelJS读取Excel文件，完美保持格式
     console.log('🔍 使用ExcelJS读取装箱表上传文件...');
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(req.file.path);
+    
+    try {
+      await workbook.xlsx.readFile(req.file.path);
+    } catch (excelError) {
+      console.error('\x1b[31m%s\x1b[0m', '❌ Excel文件读取失败:', excelError.message);
+      
+      // 删除临时文件
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: `Excel文件格式错误或文件损坏，无法读取。请检查：\n1. 文件是否为有效的Excel格式（.xlsx或.xls）\n2. 文件是否损坏\n3. 文件是否被其他程序占用\n\n错误详情：${excelError.message}`
+      });
+    }
+    
     const sheetNames = workbook.worksheets.map(sheet => sheet.name);
+    console.log('\x1b[33m%s\x1b[0m', '📋 Excel文件工作表列表:', sheetNames);
     
 
 
@@ -3828,9 +3845,16 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
           fs.unlinkSync(req.file.path);
         }
         
+        console.log('\x1b[31m%s\x1b[0m', '❌ 未找到Box packing information工作表');
+        console.log('\x1b[33m%s\x1b[0m', '📋 当前文件工作表列表:', sheetNames);
+        
         return res.status(400).json({
           success: false,
-          message: `Excel文件中必须包含名为"Box packing information"的sheet页。\n\n当前文件包含的sheet页：\n${sheetNames.map((name, index) => `${index + 1}. "${name}" (长度: ${name.length}字符)`).join('\n')}\n\n请确保：\n1. Excel文件中有名为"Box packing information"的工作表\n2. 该工作表包含正确的装箱信息格式\n3. 工作表名称完全匹配（区分大小写）\n4. 注意可能的隐藏字符或空格`
+          message: `装箱表上传失败：Excel文件中未找到"Box packing information"工作表。\n\n当前文件包含的工作表：\n${sheetNames.map((name, index) => `${index + 1}. "${name}"`).join('\n')}\n\n解决方案：\n1. 确保Excel文件中有名为"Box packing information"的工作表\n2. 检查工作表名称是否完全匹配（注意空格和大小写）\n3. 如果使用其他名称，请重命名为"Box packing information"\n4. 确保该工作表包含正确的装箱信息格式`,
+          details: {
+            availableSheets: sheetNames,
+            requiredSheet: 'Box packing information'
+          }
         });
       }
     }
