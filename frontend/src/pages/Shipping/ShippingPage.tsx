@@ -20,7 +20,6 @@ import {
   Upload,
   Descriptions
 } from 'antd';
-import type { FormInstance } from 'antd/es/form';
 import { 
   PlusOutlined,
   CheckOutlined,
@@ -280,7 +279,7 @@ const ShippingPage: React.FC = () => {
   // 未映射库存相关状态
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
   const [mappingModalVisible, setMappingModalVisible] = useState(false);
-  const [mappingForm] = Form.useForm<any>();
+  const [mappingForm] = Form.useForm();
   
   // 国家库存相关状态
   const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
@@ -289,7 +288,7 @@ const ShippingPage: React.FC = () => {
   // 亚马逊模板相关状态
   const [amazonTemplateConfig, setAmazonTemplateConfig] = useState<AmazonTemplateConfig>({ hasTemplate: false });
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
-  const [templateForm] = Form.useForm<any>();
+  const [templateForm] = Form.useForm();
   const [uploadLoading, setUploadLoading] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [selectedTemplateCountry, setSelectedTemplateCountry] = useState<string>('');
@@ -297,13 +296,13 @@ const ShippingPage: React.FC = () => {
   // 装箱表相关状态
   const [packingListConfig, setPackingListConfig] = useState<PackingListConfig | null>(null);
   const [packingListModalVisible, setPackingListModalVisible] = useState(false);
-  const [packingListForm] = Form.useForm<any>();
+  const [packingListForm] = Form.useForm();
   const [packingListLoading, setPackingListLoading] = useState(false);
   
   // 物流商发票管理相关状态
   const [logisticsInvoiceConfig, setLogisticsInvoiceConfig] = useState<LogisticsInvoiceConfig>({ hasTemplate: false });
   const [invoiceTemplateModalVisible, setInvoiceTemplateModalVisible] = useState(false);
-  const [invoiceTemplateForm] = Form.useForm<any>();
+  const [invoiceTemplateForm] = Form.useForm();
   const [invoiceUploadLoading, setInvoiceUploadLoading] = useState(false);
   const [selectedInvoiceProvider, setSelectedInvoiceProvider] = useState<string>('');
   const [selectedInvoiceCountry, setSelectedInvoiceCountry] = useState<string>('');
@@ -528,35 +527,43 @@ const ShippingPage: React.FC = () => {
       return;
     }
 
-    // 使用第三步完成页面的发货数据，按Amazon SKU汇总数量
-    const skuSummary = new Map<string, { amz_sku: string; quantity: number; country: string }>();
+    // 使用第三步完成页面的发货数据，完全按照完成页面数据汇总（不过滤任何记录）
+    const skuSummary = new Map<string, { amz_sku: string; local_sku: string; quantity: number; country: string }>();
     
     shippingData.forEach((item: any) => {
-      const amzSku = item.amz_sku;
-      if (amzSku) {
-        // 从selectedRows中找到对应的国家信息
-        const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === amzSku);
-        const country = selectedRecord?.country || '默认';
-        
-        if (skuSummary.has(amzSku)) {
+      // 完全以完成页面数据为准，使用完成页面"Amazon SKU"列显示的原始值
+      const displayedAmzSku = item.amz_sku; // 使用完成页面中Amazon SKU列实际显示的值
+      const localSku = item.local_sku || item.sku || '';
+      
+      // 从selectedRows中找到对应的国家信息，或使用item中的国家信息
+      const selectedRecord = selectedRows.find((row: MergedShippingData) => 
+        row.amz_sku === item.amz_sku || row.local_sku === localSku
+      );
+      const country = item.country || selectedRecord?.country || '默认';
+      
+      // 创建唯一标识，使用完成页面显示的amz_sku值
+      const uniqueKey = `${displayedAmzSku || 'EMPTY'}_${localSku}_${country}`;
+      
+      if (skuSummary.has(uniqueKey)) {
           // 如果已存在，累加数量
-          const existing = skuSummary.get(amzSku)!;
+        const existing = skuSummary.get(uniqueKey)!;
           existing.quantity += item.quantity;
         } else {
-          // 如果不存在，创建新记录
-          skuSummary.set(amzSku, {
-            amz_sku: amzSku,
+        // 如果不存在，创建新记录，使用完成页面Amazon SKU列的原始显示值
+        skuSummary.set(uniqueKey, {
+          amz_sku: displayedAmzSku, // 完全使用完成页面Amazon SKU列显示的值（可能为null/undefined/空字符串）
+          local_sku: localSku,
             quantity: item.quantity,
             country: country
           });
-        }
       }
     });
     
-    // 转换为数组格式
+    // 转换为数组格式，包含所有完成页面的数据
     const dataToGenerate = Array.from(skuSummary.values()).map(item => ({
       box_num: 'SUMMARY', // 汇总数据不需要具体箱号
-      amz_sku: item.amz_sku,
+      amz_sku: item.amz_sku, // 包含空值
+      local_sku: item.local_sku, // 添加local_sku字段用于识别
       quantity: item.quantity,
       country: item.country
     }));
@@ -564,11 +571,14 @@ const ShippingPage: React.FC = () => {
     if (dataToGenerate.length === 0) {
       Modal.error({
         title: '发货数据异常',
-        content: '发货清单中没有有效的Amazon SKU数据，请检查数据完整性',
+        content: '发货清单中没有任何数据，请先完成批量发货确认流程',
         okText: '知道了'
       });
       return;
     }
+
+    console.log('📋 准备生成Amazon文件的数据:', dataToGenerate);
+    console.log(`📊 数据统计: 共${dataToGenerate.length}个SKU记录`);
 
     
 
@@ -1015,7 +1025,7 @@ const ShippingPage: React.FC = () => {
 
 
   // 获取合并数据（全部显示，不分页）
-  const fetchMergedData = async (status = '待发货', country?: string) => {
+  const fetchMergedData = async (status = '待发货') => {
     setMergedLoading(true);
     try {
       // 如果选择了特定的状态，获取所有数据然后在前端筛选
@@ -1026,10 +1036,6 @@ const ShippingPage: React.FC = () => {
         limit: '1000' // 设置较大的限制来获取所有数据
       });
       
-      // 如果指定了国家，添加到查询参数中
-      if (country) {
-        queryParams.append('country', country);
-      }
 
       
       const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
@@ -1054,8 +1060,7 @@ const ShippingPage: React.FC = () => {
         const unmappedItems = result.data.unmapped_inventory || [];
         setUnmappedInventory(unmappedItems);
         
-        const countryText = country ? `（国家：${country}）` : '';
-        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据${countryText}`);
+        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
       } else {
         message.error(result.message || '获取合并数据失败');
       }
@@ -1103,17 +1108,6 @@ const ShippingPage: React.FC = () => {
     fetchPackingListConfig(); // 获取装箱表配置
     fetchLogisticsInvoiceConfig(); // 获取物流商发票模板配置
   }, []);
-
-  // 添加新的 useEffect 来监听 selectedCountry 变化
-  useEffect(() => {
-    if (selectedCountry) {
-      // 当选择了特定国家时，重新获取合并数据以确保包含该国家的完整数据
-      fetchMergedData('待发货', selectedCountry); 
-    } else {
-      // 当取消选择国家时，重新获取所有数据
-      fetchMergedData('待发货');
-    }
-  }, [selectedCountry]);
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
@@ -1826,8 +1820,8 @@ const ShippingPage: React.FC = () => {
         message.success(`成功创建 ${result.data.created} 个SKU映射`);
         setMappingModalVisible(false);
         (mappingForm as any).resetFields();
-        // 重新加载数据，保持当前的国家筛选
-        fetchMergedData('待发货', selectedCountry || undefined);
+        // 重新加载数据
+        fetchMergedData();
       } else {
         message.error(result.message || '创建映射失败');
       }
@@ -1845,7 +1839,7 @@ const ShippingPage: React.FC = () => {
 
   // 添加映射弹窗相关state
   const [addMappingModalVisible, setAddMappingModalVisible] = useState(false);
-  const [addMappingForm] = Form.useForm<any>();
+  const [addMappingForm] = Form.useForm();
   const [currentMissingMapping, setCurrentMissingMapping] = useState<MergedShippingData | null>(null);
 
   return (
@@ -1978,10 +1972,6 @@ const ShippingPage: React.FC = () => {
                     const newSelectedCountry = selectedCountry === country.country ? '' : country.country;
                     setSelectedCountry(newSelectedCountry);
                     setFilterType(''); // 清除其他筛选
-                    // 清除搜索关键字和状态筛选，确保显示干净的国家数据
-                    setSearchKeyword('');
-                    setStatusFilter('');
-                    setInventoryStatusFilter('');
                   }}
                 >
                   <Statistic
@@ -3729,7 +3719,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
   onSkip, 
   loading = false 
 }: WholeBoxConfirmFormProps) => {
-  const [form] = Form.useForm<any>();
+  const [form] = Form.useForm();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
     data.map((item: WholeBoxConfirmData) => ({
       ...item,

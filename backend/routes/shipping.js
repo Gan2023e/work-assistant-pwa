@@ -2708,14 +2708,24 @@ router.post('/amazon-template/generate', async (req, res) => {
         continue;
       }
 
-      // 按Amazon SKU汇总该国家的数量
+      // 按Amazon SKU汇总该国家的数量（包含空的amz_sku）
       const amazonSkuSummary = {};
       countryData.forEach(item => {
-        if (amazonSkuSummary[item.amz_sku]) {
-          amazonSkuSummary[item.amz_sku] += item.quantity;
+        // 完全以完成页面Amazon SKU列显示的值为准
+        const displayedAmzSku = item.amz_sku; // 使用完成页面Amazon SKU列的原始显示值
+        
+        // 为了避免undefined/null作为对象key的问题，使用字符串表示
+        const skuKey = displayedAmzSku !== undefined && displayedAmzSku !== null ? 
+          String(displayedAmzSku) : ''; // 空字符串表示完成页面显示为空的Amazon SKU
+        
+        if (amazonSkuSummary[skuKey]) {
+          amazonSkuSummary[skuKey] += item.quantity;
         } else {
-          amazonSkuSummary[item.amz_sku] = item.quantity;
+          amazonSkuSummary[skuKey] = item.quantity;
         }
+        
+        // 记录原始数据用于调试
+        console.log(`📦 汇总数据: "${skuKey}" = ${item.quantity} (完成页面Amazon SKU显示值: "${displayedAmzSku}", local_sku: "${item.local_sku}")`);
       });
 
       // 从OSS下载模板文件 - 使用ExcelJS完美保持格式
@@ -2750,11 +2760,12 @@ router.post('/amazon-template/generate', async (req, res) => {
       console.log(`📝 开始使用ExcelJS填写数据，起始行: ${currentRow}`);
       console.log(`📝 目标列: SKU=${config.merchantSkuColumn}, 数量=${config.quantityColumn}`);
       
-      Object.entries(amazonSkuSummary).forEach(([amzSku, quantity]) => {
-        // 使用ExcelJS的方式填写SKU列，完美保持所有格式
+      Object.entries(amazonSkuSummary).forEach(([skuKey, quantity]) => {
+        // 写入Excel时使用完成页面Amazon SKU列的原始显示值
+        const displayValue = skuKey === '' ? '' : skuKey; // 保持空字符串为空
         const skuCell = worksheet.getCell(`${config.merchantSkuColumn}${currentRow}`);
-        skuCell.value = amzSku;
-        console.log(`📝 ExcelJS填写SKU: ${config.merchantSkuColumn}${currentRow} = ${amzSku}`);
+        skuCell.value = displayValue;
+        console.log(`📝 ExcelJS填写SKU: ${config.merchantSkuColumn}${currentRow} = "${displayValue}" (完成页面显示值)`);
 
         // 使用ExcelJS的方式填写数量列，完美保持所有格式
         const quantityCell = worksheet.getCell(`${config.quantityColumn}${currentRow}`);
