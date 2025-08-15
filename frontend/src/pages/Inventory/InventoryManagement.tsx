@@ -601,8 +601,12 @@ const InventoryManagement: React.FC = () => {
       const values = await (mixedBoxEditForm as any).validateFields();
       const { records } = values;
       
-      // 批量更新记录
-      for (const record of records) {
+      // 分离现有记录和新记录
+      const existingRecords = records.filter((record: any) => record.recordId);
+      const newRecords = records.filter((record: any) => !record.recordId);
+      
+      // 更新现有记录
+      for (const record of existingRecords) {
         await fetch(`/api/inventory/edit/${record.recordId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -618,8 +622,34 @@ const InventoryManagement: React.FC = () => {
           })
         });
       }
+      
+      // 创建新记录（添加到混合箱）
+      if (newRecords.length > 0) {
+        const mixBoxNum = editingMixedBoxRecords[0]?.mix_box_num;
+        const firstRecord = editingMixedBoxRecords[0];
+        
+        const newRecordsData = newRecords.map((record: any) => ({
+          sku: record.sku,
+          total_quantity: record.total_quantity,
+          total_boxes: 1, // 混合箱中每个SKU默认1箱
+          country: record.country,
+          mix_box_num: mixBoxNum,
+          操作员: firstRecord.操作员,
+          打包员: record.打包员 || firstRecord.打包员,
+          marketPlace: record.marketPlace || firstRecord.marketPlace,
+          box_type: '混合箱'
+        }));
+        
+        await fetch('/api/inventory/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            records: newRecordsData
+          })
+        });
+      }
 
-      message.success('批量编辑成功');
+      message.success(`批量编辑成功${newRecords.length > 0 ? `，新增 ${newRecords.length} 个SKU` : ''}`);
       setMixedBoxEditVisible(false);
       loadRecordsData();
     } catch (error) {
@@ -1441,67 +1471,129 @@ const InventoryManagement: React.FC = () => {
           <Form.List name="records">
             {(fields, { add, remove }) => (
               <>
-                {fields.map(({ key, name, ...restField }) => (
-                  <Card key={key} size="small" style={{ marginBottom: 16 }}>
-                    <Row gutter={16}>
-                      <Col span={6}>
-                        <Form.Item
-                          {...restField}
-                          label="SKU"
-                          name={[name, 'sku']}
-                          rules={[{ required: true, message: '请输入SKU' }]}
+                {fields.map(({ key, name, ...restField }) => {
+                  const isNewRecord = !mixedBoxEditForm.getFieldValue(['records', name, 'recordId']);
+                  return (
+                    <Card 
+                      key={key} 
+                      size="small" 
+                      style={{ 
+                        marginBottom: 16,
+                        border: isNewRecord ? '2px solid #52c41a' : '1px solid #d9d9d9'
+                      }}
+                      title={isNewRecord ? (
+                        <span style={{ color: '#52c41a' }}>
+                          <PlusOutlined style={{ marginRight: 8 }} />
+                          新增SKU
+                        </span>
+                      ) : null}
+                      extra={isNewRecord ? (
+                        <Button 
+                          type="link" 
+                          danger 
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          onClick={() => remove(name)}
                         >
-                          <Input />
-                        </Form.Item>
-                      </Col>
-                      <Col span={6}>
-                        <Form.Item
-                          {...restField}
-                          label="数量"
-                          name={[name, 'total_quantity']}
-                          rules={[{ required: true, message: '请输入数量' }]}
-                        >
-                          <Input type="number" min={1} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={6}>
-                        <Form.Item
-                          {...restField}
-                          label="国家"
-                          name={[name, 'country']}
-                          rules={[{ required: true, message: '请选择国家' }]}
-                        >
-                          <Select>
-                            <Option value="US">美国</Option>
-                            <Option value="CA">加拿大</Option>
-                            <Option value="UK">英国</Option>
-                            <Option value="DE">德国</Option>
-                            <Option value="FR">法国</Option>
-                            <Option value="IT">意大利</Option>
-                            <Option value="ES">西班牙</Option>
-                            <Option value="JP">日本</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col span={6}>
-                        <Form.Item
-                          {...restField}
-                          label="打包员"
-                          name={[name, '打包员']}
-                        >
-                          <Input />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'recordId']}
-                      hidden
+                          移除
+                        </Button>
+                      ) : null}
                     >
-                      <Input />
-                    </Form.Item>
-                  </Card>
-                ))}
+                      <Row gutter={16}>
+                        <Col span={6}>
+                          <Form.Item
+                            {...restField}
+                            label="SKU"
+                            name={[name, 'sku']}
+                            rules={[{ required: true, message: '请输入SKU' }]}
+                          >
+                            <Input placeholder="输入SKU编码" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...restField}
+                            label="数量"
+                            name={[name, 'total_quantity']}
+                            rules={[{ required: true, message: '请输入数量' }]}
+                          >
+                            <Input type="number" min={1} placeholder="输入数量" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...restField}
+                            label="国家"
+                            name={[name, 'country']}
+                            rules={[{ required: true, message: '请选择国家' }]}
+                          >
+                            <Select placeholder="选择国家">
+                              <Option value="US">美国</Option>
+                              <Option value="CA">加拿大</Option>
+                              <Option value="UK">英国</Option>
+                              <Option value="DE">德国</Option>
+                              <Option value="FR">法国</Option>
+                              <Option value="IT">意大利</Option>
+                              <Option value="ES">西班牙</Option>
+                              <Option value="JP">日本</Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col span={6}>
+                          <Form.Item
+                            {...restField}
+                            label="打包员"
+                            name={[name, '打包员']}
+                          >
+                            <Input placeholder="输入打包员" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'recordId']}
+                        hidden
+                      >
+                        <Input />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'marketPlace']}
+                        hidden
+                      >
+                        <Input />
+                      </Form.Item>
+                    </Card>
+                  );
+                })}
+                
+                {/* 添加新SKU按钮 */}
+                <div style={{ textAlign: 'center', marginTop: 16 }}>
+                  <Button
+                    type="dashed"
+                    onClick={() => {
+                      const firstRecord = editingMixedBoxRecords[0];
+                      add({
+                        sku: '',
+                        total_quantity: '',
+                        country: firstRecord?.country || '',
+                        打包员: firstRecord?.打包员 || '',
+                        marketPlace: firstRecord?.marketPlace || '',
+                        recordId: '' // 空recordId表示新记录
+                      });
+                    }}
+                    block
+                    icon={<PlusOutlined />}
+                    style={{
+                      height: '50px',
+                      fontSize: '16px',
+                      borderColor: '#52c41a',
+                      color: '#52c41a'
+                    }}
+                  >
+                    添加新SKU到混合箱
+                  </Button>
+                </div>
               </>
             )}
           </Form.List>
