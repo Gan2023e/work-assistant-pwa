@@ -20,6 +20,7 @@ import {
   Upload,
   Descriptions
 } from 'antd';
+import type { FormInstance } from 'antd/es/form';
 import { 
   PlusOutlined,
   CheckOutlined,
@@ -279,7 +280,7 @@ const ShippingPage: React.FC = () => {
   // 未映射库存相关状态
   const [unmappedInventory, setUnmappedInventory] = useState<UnmappedInventoryItem[]>([]);
   const [mappingModalVisible, setMappingModalVisible] = useState(false);
-  const [mappingForm] = Form.useForm();
+  const [mappingForm] = Form.useForm<any>();
   
   // 国家库存相关状态
   const [countryInventory, setCountryInventory] = useState<CountryInventory[]>([]);
@@ -288,7 +289,7 @@ const ShippingPage: React.FC = () => {
   // 亚马逊模板相关状态
   const [amazonTemplateConfig, setAmazonTemplateConfig] = useState<AmazonTemplateConfig>({ hasTemplate: false });
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
-  const [templateForm] = Form.useForm();
+  const [templateForm] = Form.useForm<any>();
   const [uploadLoading, setUploadLoading] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [selectedTemplateCountry, setSelectedTemplateCountry] = useState<string>('');
@@ -296,13 +297,13 @@ const ShippingPage: React.FC = () => {
   // 装箱表相关状态
   const [packingListConfig, setPackingListConfig] = useState<PackingListConfig | null>(null);
   const [packingListModalVisible, setPackingListModalVisible] = useState(false);
-  const [packingListForm] = Form.useForm();
+  const [packingListForm] = Form.useForm<any>();
   const [packingListLoading, setPackingListLoading] = useState(false);
   
   // 物流商发票管理相关状态
   const [logisticsInvoiceConfig, setLogisticsInvoiceConfig] = useState<LogisticsInvoiceConfig>({ hasTemplate: false });
   const [invoiceTemplateModalVisible, setInvoiceTemplateModalVisible] = useState(false);
-  const [invoiceTemplateForm] = Form.useForm();
+  const [invoiceTemplateForm] = Form.useForm<any>();
   const [invoiceUploadLoading, setInvoiceUploadLoading] = useState(false);
   const [selectedInvoiceProvider, setSelectedInvoiceProvider] = useState<string>('');
   const [selectedInvoiceCountry, setSelectedInvoiceCountry] = useState<string>('');
@@ -477,7 +478,7 @@ const ShippingPage: React.FC = () => {
         // 重新获取所有模板配置
         await fetchAmazonTemplateConfig();
         setTemplateModalVisible(false);
-        templateForm.resetFields();
+        (templateForm as any).resetFields();
         setSelectedTemplateCountry('');
       } else {
         console.error('❌ 服务器返回错误:', result.message);
@@ -750,7 +751,7 @@ const ShippingPage: React.FC = () => {
         message.success(`${values.logisticsProvider} - ${countryOption?.label || values.country} 发票模板上传成功！`);
         await fetchLogisticsInvoiceConfig();
         setInvoiceTemplateModalVisible(false);
-        invoiceTemplateForm.resetFields();
+        (invoiceTemplateForm as any).resetFields();
         setSelectedInvoiceProvider('');
         setSelectedInvoiceCountry('');
       } else {
@@ -986,7 +987,7 @@ const ShippingPage: React.FC = () => {
             
             // 关闭对话框
             setPackingListModalVisible(false);
-            packingListForm.resetFields();
+            (packingListForm as any).resetFields();
           } else {
             message.destroy();
             message.error('自动填写失败：' + fillResult.message);
@@ -1014,7 +1015,7 @@ const ShippingPage: React.FC = () => {
 
 
   // 获取合并数据（全部显示，不分页）
-  const fetchMergedData = async (status = '待发货') => {
+  const fetchMergedData = async (status = '待发货', country?: string) => {
     setMergedLoading(true);
     try {
       // 如果选择了特定的状态，获取所有数据然后在前端筛选
@@ -1025,6 +1026,10 @@ const ShippingPage: React.FC = () => {
         limit: '1000' // 设置较大的限制来获取所有数据
       });
       
+      // 如果指定了国家，添加到查询参数中
+      if (country) {
+        queryParams.append('country', country);
+      }
 
       
       const response = await fetch(`${API_BASE_URL}/api/shipping/merged-data?${queryParams}`, {
@@ -1049,7 +1054,8 @@ const ShippingPage: React.FC = () => {
         const unmappedItems = result.data.unmapped_inventory || [];
         setUnmappedInventory(unmappedItems);
         
-        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据`);
+        const countryText = country ? `（国家：${country}）` : '';
+        message.success(`加载了 ${result.data.list?.length || 0} 条合并数据${countryText}`);
       } else {
         message.error(result.message || '获取合并数据失败');
       }
@@ -1097,6 +1103,17 @@ const ShippingPage: React.FC = () => {
     fetchPackingListConfig(); // 获取装箱表配置
     fetchLogisticsInvoiceConfig(); // 获取物流商发票模板配置
   }, []);
+
+  // 添加新的 useEffect 来监听 selectedCountry 变化
+  useEffect(() => {
+    if (selectedCountry) {
+      // 当选择了特定国家时，重新获取合并数据以确保包含该国家的完整数据
+      fetchMergedData('待发货', selectedCountry); 
+    } else {
+      // 当取消选择国家时，重新获取所有数据
+      fetchMergedData('待发货');
+    }
+  }, [selectedCountry]);
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
@@ -1726,7 +1743,7 @@ const ShippingPage: React.FC = () => {
     });
     // 使用setTimeout确保表单字段已经渲染完成后再设置值
     setTimeout(() => {
-      mappingForm.setFieldsValue(formValues);
+      (mappingForm as any).setFieldsValue(formValues);
     }, 100);
   };
 
@@ -1736,7 +1753,7 @@ const ShippingPage: React.FC = () => {
     setAddMappingModalVisible(true);
     
     // 预填充表单
-    addMappingForm.setFieldsValue({
+    (addMappingForm as any).setFieldsValue({
       amazon_sku: record.amz_sku,
       country: record.country,
       site: record.site
@@ -1765,7 +1782,7 @@ const ShippingPage: React.FC = () => {
       if (result.code === 0) {
         message.success('映射添加成功！');
         setAddMappingModalVisible(false);
-        addMappingForm.resetFields();
+        (addMappingForm as any).resetFields();
         setCurrentMissingMapping(null);
         
         // 刷新数据
@@ -1808,9 +1825,9 @@ const ShippingPage: React.FC = () => {
       if (result.code === 0) {
         message.success(`成功创建 ${result.data.created} 个SKU映射`);
         setMappingModalVisible(false);
-        mappingForm.resetFields();
-        // 重新加载数据
-        fetchMergedData();
+        (mappingForm as any).resetFields();
+        // 重新加载数据，保持当前的国家筛选
+        fetchMergedData('待发货', selectedCountry || undefined);
       } else {
         message.error(result.message || '创建映射失败');
       }
@@ -1828,7 +1845,7 @@ const ShippingPage: React.FC = () => {
 
   // 添加映射弹窗相关state
   const [addMappingModalVisible, setAddMappingModalVisible] = useState(false);
-  const [addMappingForm] = Form.useForm();
+  const [addMappingForm] = Form.useForm<any>();
   const [currentMissingMapping, setCurrentMissingMapping] = useState<MergedShippingData | null>(null);
 
   return (
@@ -1961,6 +1978,10 @@ const ShippingPage: React.FC = () => {
                     const newSelectedCountry = selectedCountry === country.country ? '' : country.country;
                     setSelectedCountry(newSelectedCountry);
                     setFilterType(''); // 清除其他筛选
+                    // 清除搜索关键字和状态筛选，确保显示干净的国家数据
+                    setSearchKeyword('');
+                    setStatusFilter('');
+                    setInventoryStatusFilter('');
                   }}
                 >
                   <Statistic
@@ -2819,7 +2840,7 @@ const ShippingPage: React.FC = () => {
         open={mappingModalVisible}
         onCancel={() => {
           setMappingModalVisible(false);
-          mappingForm.resetFields();
+          (mappingForm as any).resetFields();
         }}
         footer={null}
         width={800}
@@ -2896,7 +2917,7 @@ const ShippingPage: React.FC = () => {
             <Space>
               <Button onClick={() => {
                 setMappingModalVisible(false);
-                mappingForm.resetFields();
+                (mappingForm as any).resetFields();
               }}>
                 取消
               </Button>
@@ -2916,7 +2937,7 @@ const ShippingPage: React.FC = () => {
           setTemplateModalVisible(false);
           setSelectedTemplateCountry('');
           setAvailableSheets([]); // 清空Sheet页选项
-          templateForm.resetFields();
+          (templateForm as any).resetFields();
         }}
         footer={null}
         width={800}
@@ -3160,7 +3181,7 @@ const ShippingPage: React.FC = () => {
                   <Button onClick={() => {
                     setSelectedTemplateCountry('');
                     setAvailableSheets([]);
-                    templateForm.resetFields();
+                    (templateForm as any).resetFields();
                   }}>
                     取消
                   </Button>
@@ -3199,7 +3220,7 @@ const ShippingPage: React.FC = () => {
         open={packingListModalVisible}
         onCancel={() => {
           setPackingListModalVisible(false);
-          packingListForm.resetFields();
+          (packingListForm as any).resetFields();
           setPackingListConfig(null);
         }}
         footer={null}
@@ -3321,7 +3342,7 @@ const ShippingPage: React.FC = () => {
           setInvoiceTemplateModalVisible(false);
           setSelectedInvoiceProvider('');
           setSelectedInvoiceCountry('');
-          invoiceTemplateForm.resetFields();
+          (invoiceTemplateForm as any).resetFields();
         }}
         footer={null}
         width={800}
@@ -3522,7 +3543,7 @@ const ShippingPage: React.FC = () => {
                   <Button onClick={() => {
                     setSelectedInvoiceProvider('');
                     setSelectedInvoiceCountry('');
-                    invoiceTemplateForm.resetFields();
+                    (invoiceTemplateForm as any).resetFields();
                   }}>
                     取消
                   </Button>
@@ -3578,7 +3599,7 @@ const ShippingPage: React.FC = () => {
         open={addMappingModalVisible}
         onCancel={() => {
           setAddMappingModalVisible(false);
-          addMappingForm.resetFields();
+          (addMappingForm as any).resetFields();
           setCurrentMissingMapping(null);
         }}
         footer={null}
@@ -3635,7 +3656,7 @@ const ShippingPage: React.FC = () => {
                   <Space>
                     <Button onClick={() => {
                       setAddMappingModalVisible(false);
-                      addMappingForm.resetFields();
+                      (addMappingForm as any).resetFields();
                       setCurrentMissingMapping(null);
                     }}>
                       取消
@@ -3708,7 +3729,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
   onSkip, 
   loading = false 
 }: WholeBoxConfirmFormProps) => {
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<any>();
   const [confirmData, setConfirmData] = useState<WholeBoxConfirmData[]>(
     data.map((item: WholeBoxConfirmData) => ({
       ...item,
@@ -3729,7 +3750,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
   `;
 
   useEffect(() => {
-    form.setFieldsValue(
+    (form as any).setFieldsValue(
       confirmData.reduce((acc: any, item: WholeBoxConfirmData, index: number) => {
         acc[`confirm_boxes_${index}`] = item.confirm_boxes;
         acc[`confirm_quantity_${index}`] = item.confirm_quantity;
