@@ -231,7 +231,7 @@ router.get('/inventory-by-country', async (req, res) => {
         status: ['待出库', '部分出库'],
         total_quantity: { [Op.gt]: 0 } // 只查询数量大于0的记录
       },
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type', 'status'],
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type', 'status', 'shipped_quantity'],
       raw: true
     });
 
@@ -243,13 +243,13 @@ router.get('/inventory-by-country', async (req, res) => {
     const wholeBoxStats = {};
     
     allInventory.forEach(item => {
-      // 只处理整箱数据（根据box_type字段判断）且status为"待出库"
+      // 只处理整箱数据（根据box_type字段判断）
       if (item.box_type !== '整箱') {
         return;
       }
       
-      // 只处理status为"待出库"的记录
-      if (item.status !== '待出库') {
+      // 处理status为"待出库"和"部分出库"的记录
+      if (item.status !== '待出库' && item.status !== '部分出库') {
         return;
       }
       
@@ -270,11 +270,31 @@ router.get('/inventory-by-country', async (req, res) => {
         };
       }
       
-      const quantity = parseInt(item.total_quantity) || 0;
-      const boxes = parseInt(item.total_boxes) || 0;
+      const totalQuantity = parseInt(item.total_quantity) || 0;
+      const totalBoxes = parseInt(item.total_boxes) || 0;
+      const shippedQuantity = parseInt(item.shipped_quantity) || 0;
       
-      wholeBoxStats[skuKey].quantity += quantity;
-      wholeBoxStats[skuKey].boxes += boxes;  // 对total_boxes字段求和
+      let remainingBoxes = 0;
+      let remainingQuantity = 0;
+      
+      if (item.status === '待出库') {
+        // 待出库：全部箱数和数量
+        remainingBoxes = totalBoxes;
+        remainingQuantity = totalQuantity;
+      } else if (item.status === '部分出库') {
+        // 部分出库：计算剩余箱数 = total_boxes - shipped_quantity/(total_quantity/total_boxes)
+        if (totalBoxes > 0 && totalQuantity > 0) {
+          const quantityPerBox = totalQuantity / totalBoxes;
+          const shippedBoxes = shippedQuantity / quantityPerBox;
+          remainingBoxes = Math.max(0, totalBoxes - shippedBoxes);
+          remainingQuantity = Math.max(0, totalQuantity - shippedQuantity);
+        }
+      }
+      
+      wholeBoxStats[skuKey].quantity += remainingQuantity;
+      wholeBoxStats[skuKey].boxes += remainingBoxes;
+      
+      console.log(`🧮 整箱计算: ${item.sku} (${item.country}) - ${item.status}: 总${totalBoxes}箱${totalQuantity}件, 已发${shippedQuantity}件, 剩余${remainingBoxes.toFixed(2)}箱${remainingQuantity}件`);
     });
 
     // 步骤3.2：处理混合箱数据 - 先按混合箱号汇总，再筛选有效混合箱
