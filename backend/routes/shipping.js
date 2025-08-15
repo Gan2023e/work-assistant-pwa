@@ -231,7 +231,7 @@ router.get('/inventory-by-country', async (req, res) => {
         status: ['待出库', '部分出库'],
         total_quantity: { [Op.gt]: 0 } // 只查询数量大于0的记录
       },
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type', 'status'],
       raw: true
     });
 
@@ -243,8 +243,13 @@ router.get('/inventory-by-country', async (req, res) => {
     const wholeBoxStats = {};
     
     allInventory.forEach(item => {
-      // 只处理整箱数据（根据box_type字段判断）
+      // 只处理整箱数据（根据box_type字段判断）且status为"待出库"
       if (item.box_type !== '整箱') {
+        return;
+      }
+      
+      // 只处理status为"待出库"的记录
+      if (item.status !== '待出库') {
         return;
       }
       
@@ -261,15 +266,15 @@ router.get('/inventory-by-country', async (req, res) => {
           sku: item.sku,
           country: item.country,
           quantity: 0,
-          boxes: 0,
-          record_count: 0  // 记录整箱记录的数量
+          boxes: 0
         };
       }
       
       const quantity = parseInt(item.total_quantity) || 0;
+      const boxes = parseInt(item.total_boxes) || 0;
       
       wholeBoxStats[skuKey].quantity += quantity;
-      wholeBoxStats[skuKey].record_count += 1;  // 每条整箱记录计数+1，而不是累加total_boxes
+      wholeBoxStats[skuKey].boxes += boxes;  // 对total_boxes字段求和
     });
 
     // 步骤3.2：处理混合箱数据 - 先按混合箱号汇总，再筛选有效混合箱
@@ -333,7 +338,7 @@ router.get('/inventory-by-country', async (req, res) => {
       }
       
       countryStats[stat.country].whole_box_quantity += stat.quantity;
-      countryStats[stat.country].whole_box_count += stat.record_count;  // 使用记录数量而不是boxes字段
+      countryStats[stat.country].whole_box_count += stat.boxes;  // 使用total_boxes字段的求和
       countryStats[stat.country].total_quantity += stat.quantity;
     });
     
@@ -370,7 +375,7 @@ router.get('/inventory-by-country', async (req, res) => {
 
     console.log('\x1b[32m%s\x1b[0m', '📊 格式化后国家库存数据（排除已发货）:', formattedData.length);
     console.log('\x1b[35m%s\x1b[0m', '📊 详细国家统计结果:', formattedData.map(item => 
-      `${item.country}: 整箱${item.whole_box_count}记录${item.whole_box_quantity}件, 混合箱${item.mixed_box_count}箱${item.mixed_box_quantity}件, 总计${item.total_quantity}件`
+      `${item.country}: 整箱${item.whole_box_count}箱${item.whole_box_quantity}件, 混合箱${item.mixed_box_count}箱${item.mixed_box_quantity}件, 总计${item.total_quantity}件`
     ));
     
     // 额外的调试信息：显示有效混合箱的详细信息
