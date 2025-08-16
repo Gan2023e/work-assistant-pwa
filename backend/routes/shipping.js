@@ -1059,16 +1059,17 @@ router.get('/merged-data', async (req, res) => {
         asm.sku_type,
         COALESCE(ls.site, asm.site) as site,
         COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
-        SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
-        SUM(lb.total_quantity) as total_available
+        -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
+        SUM(CASE WHEN lb.box_type = '整箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
+        SUM(CASE WHEN lb.box_type = '整箱' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
+        SUM(CASE WHEN lb.box_type = '混合箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
+        SUM(lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) as total_available
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
       -- 关联listings_sku表获取详细信息
       LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
       WHERE lb.total_quantity > 0
-        AND lb.status = '待出库'
+        AND lb.status IN ('待出库', '部分出库')
       GROUP BY lb.sku, lb.country
       HAVING SUM(lb.total_quantity) != 0
     `;
@@ -1413,17 +1414,18 @@ router.get('/merged-data', async (req, res) => {
       SELECT 
         lb.sku as local_sku,
         lb.country,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
-        SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
-        SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
-        SUM(lb.total_quantity) as total_available
+        -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
+        SUM(CASE WHEN lb.box_type = '整箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
+        SUM(CASE WHEN lb.box_type = '整箱' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
+        SUM(CASE WHEN lb.box_type = '混合箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
+        SUM(lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) as total_available
       FROM local_boxes lb
       LEFT JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
       WHERE lb.total_quantity > 0
-        AND lb.status = '待出库'
+        AND lb.status IN ('待出库', '部分出库')
         AND asm.local_sku IS NULL
       GROUP BY lb.sku, lb.country
-      HAVING SUM(lb.total_quantity) > 0
+      HAVING SUM(lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) > 0
     `;
 
     const unmappedInventory = await sequelize.query(unmappedInventoryQuery, {
@@ -1800,21 +1802,21 @@ router.get('/debug-mapping', async (req, res) => {
     
     console.log('\x1b[33m%s\x1b[0m', '📋 发货需求数据样例:', needsData);
 
-    // 步骤4: 测试库存统计查询
+    // 步骤4: 测试库存统计查询 - 修正：使用box_type字段并计算剩余可用数量
     const inventoryStats = await LocalBox.findAll({
       attributes: [
         'sku',
         'country',
         [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_quantity ELSE 0 END`)
+          sequelize.literal(`CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END`)
         ), 'whole_box_quantity'],
         [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NULL OR mix_box_num = '' THEN total_boxes ELSE 0 END`)
+          sequelize.literal(`CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END`)
         ), 'whole_box_count'],
         [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN mix_box_num IS NOT NULL AND mix_box_num != '' THEN total_quantity ELSE 0 END`)
+          sequelize.literal(`CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END`)
         ), 'mixed_box_quantity'],
-        [sequelize.fn('SUM', sequelize.col('total_quantity')), 'total_quantity']
+        [sequelize.fn('SUM', sequelize.literal('total_quantity - COALESCE(shipped_quantity, 0)')), 'total_available']
       ],
       group: ['sku', 'country'],
       limit: 5,

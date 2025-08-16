@@ -1155,15 +1155,15 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       render: (value: number, record) => (
         <div>
           <div>
-            <Text 
-              type={value >= record.remaining_quantity ? 'success' : 'danger'}
-              strong
+        <Text 
+          type={value >= record.remaining_quantity ? 'success' : 'danger'}
+          strong
               style={{ fontSize: '14px' }}
-            >
-              {value}
-            </Text>
+        >
+          {value}
+        </Text>
           </div>
-          <div>
+        <div>
             <Text type="secondary" style={{ fontSize: '11px' }}>
               {record.whole_box_quantity || 0}+{record.mixed_box_quantity || 0}
             </Text>
