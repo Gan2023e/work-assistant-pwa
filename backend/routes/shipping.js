@@ -1053,7 +1053,12 @@ router.get('/merged-data', async (req, res) => {
           country,
           -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
           SUM(CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
-          SUM(CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END) as whole_box_count,
+          -- 计算整箱的可用箱数：按比例计算剩余箱数
+          SUM(CASE 
+            WHEN box_type = '整箱' AND total_quantity > 0 
+            THEN CEIL((total_quantity - COALESCE(shipped_quantity, 0)) * total_boxes / total_quantity)
+            ELSE 0 
+          END) as whole_box_count,
           -- 计算整箱的可用箱数：箱数 = (total_quantity - shipped_quantity) * total_boxes / total_quantity
           SUM(CASE 
             WHEN box_type = '整箱' AND total_quantity > 0 
@@ -1473,7 +1478,12 @@ router.get('/merged-data', async (req, res) => {
         lb.country,
         -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
         SUM(CASE WHEN lb.box_type = '整箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
-        SUM(CASE WHEN lb.box_type = '整箱' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
+        -- 计算整箱的可用箱数：按比例计算剩余箱数
+        SUM(CASE 
+          WHEN lb.box_type = '整箱' AND lb.total_quantity > 0 
+          THEN CEIL((lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) * lb.total_boxes / lb.total_quantity)
+          ELSE 0 
+        END) as whole_box_count,
         -- 计算整箱的可用箱数：箱数 = (total_quantity - shipped_quantity) * total_boxes / total_quantity
         SUM(CASE 
           WHEN lb.box_type = '整箱' AND lb.total_quantity > 0 
@@ -1876,7 +1886,11 @@ router.get('/debug-mapping', async (req, res) => {
           sequelize.literal(`CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END`)
         ), 'whole_box_quantity'],
         [sequelize.fn('SUM', 
-          sequelize.literal(`CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END`)
+          sequelize.literal(`CASE 
+            WHEN box_type = '整箱' AND total_quantity > 0 
+            THEN CEIL((total_quantity - COALESCE(shipped_quantity, 0)) * total_boxes / total_quantity)
+            ELSE 0 
+          END`)
         ), 'whole_box_count'],
         [sequelize.fn('SUM', 
           sequelize.literal(`CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END`)
@@ -7330,7 +7344,12 @@ router.get('/debug-xb862c2', async (req, res) => {
           sku as local_sku,
           country,
           SUM(CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
-          SUM(CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END) as whole_box_count,
+          -- 计算整箱的可用箱数：按比例计算剩余箱数
+          SUM(CASE 
+            WHEN box_type = '整箱' AND total_quantity > 0 
+            THEN CEIL((total_quantity - COALESCE(shipped_quantity, 0)) * total_boxes / total_quantity)
+            ELSE 0 
+          END) as whole_box_count,
           SUM(CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
           SUM(total_quantity - COALESCE(shipped_quantity, 0)) as total_available
         FROM local_boxes

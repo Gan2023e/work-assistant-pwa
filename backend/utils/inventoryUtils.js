@@ -212,7 +212,7 @@ async function getPendingInventory(filters = {}) {
                 LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END")
             ), 'whole_box_quantity'],
             [LocalBox.sequelize.fn('SUM', 
-                LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END")
+                LocalBox.sequelize.literal("CASE WHEN box_type = '整箱' AND total_quantity > 0 THEN CEIL((total_quantity - COALESCE(shipped_quantity, 0)) * total_boxes / total_quantity) ELSE 0 END")
             ), 'whole_box_count'],
             // 混合箱剩余数量 = 总数量 - 已出库数量
             [LocalBox.sequelize.fn('SUM', 

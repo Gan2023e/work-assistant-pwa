@@ -267,13 +267,18 @@ router.get('/orders/:needNum/details', async (req, res) => {
           const totalQuantity = parseInt(inv.total_quantity) || 0;
           const shippedQuantity = parseInt(inv.shipped_quantity) || 0;
           const availableQuantity = totalQuantity - shippedQuantity; // 剩余可用数量
-          const boxes = parseInt(inv.total_boxes) || 0;
+          const totalBoxes = parseInt(inv.total_boxes) || 0;
           
           // 只统计有剩余数量的库存
           if (availableQuantity > 0) {
             if (inv.box_type === '整箱') {
               wholeBoxQuantity += availableQuantity;
-              wholeBoxCount += boxes;
+              
+              // 计算剩余箱数：按比例计算
+              if (totalQuantity > 0 && totalBoxes > 0) {
+                const remainingBoxes = Math.ceil((availableQuantity / totalQuantity) * totalBoxes);
+                wholeBoxCount += remainingBoxes;
+              }
             } else if (inv.box_type === '混合箱') {
               mixedBoxQuantity += availableQuantity;
             }
