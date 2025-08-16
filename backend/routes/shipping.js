@@ -1046,32 +1046,53 @@ router.get('/merged-data', async (req, res) => {
     // 步骤2: 通过pbi_amzsku_sku表进行映射关联，优先使用sku_type='FBA SKU'的记录
     // 步骤3: 关联listings_sku表获取详细信息
     const inventoryWithMappingQuery = `
+      WITH InventoryAggregated AS (
+        -- 第一步：先聚合库存数据，避免重复计算
+        SELECT 
+          sku as local_sku,
+          country,
+          -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
+          SUM(CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
+          SUM(CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END) as whole_box_count,
+          SUM(CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
+          SUM(total_quantity - COALESCE(shipped_quantity, 0)) as total_available
+        FROM local_boxes
+        WHERE total_quantity > 0
+          AND status IN ('待出库', '部分出库')
+        GROUP BY sku, country
+        HAVING SUM(total_quantity - COALESCE(shipped_quantity, 0)) > 0
+      ),
+      BestMapping AS (
+        -- 第二步：为每个local_sku+country选择最优映射（优先FBA SKU）
+        SELECT 
+          local_sku,
+          country,
+          amz_sku,
+          sku_type,
+          site,
+          ROW_NUMBER() OVER (
+            PARTITION BY local_sku, country 
+            ORDER BY 
+              CASE WHEN sku_type = 'FBA SKU' THEN 1 ELSE 2 END,
+              update_time DESC
+          ) as rn
+        FROM pbi_amzsku_sku
+      )
       SELECT 
-        lb.sku as local_sku,
-        lb.country,
-        -- 优先使用sku_type='FBA SKU'的amz_sku，其次使用其他映射
-        CASE 
-          WHEN asm.sku_type = 'FBA SKU' THEN asm.amz_sku
-          WHEN ls.\`seller-sku\` IS NOT NULL THEN ls.\`seller-sku\`
-          ELSE asm.amz_sku
-        END as amazon_sku,
-        asm.amz_sku as mapping_amz_sku,
-        asm.sku_type,
-        COALESCE(ls.site, asm.site) as site,
+        inv.local_sku,
+        inv.country,
+        bm.amz_sku as amazon_sku,
+        bm.amz_sku as mapping_amz_sku,
+        bm.sku_type,
+        COALESCE(ls.site, bm.site) as site,
         COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
-        -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
-        SUM(CASE WHEN lb.box_type = '整箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
-        SUM(CASE WHEN lb.box_type = '整箱' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
-        SUM(CASE WHEN lb.box_type = '混合箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
-        SUM(lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) as total_available
-      FROM local_boxes lb
-      INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      -- 关联listings_sku表获取详细信息
-      LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
-      WHERE lb.total_quantity > 0
-        AND lb.status IN ('待出库', '部分出库')
-      GROUP BY lb.sku, lb.country
-      HAVING SUM(lb.total_quantity) != 0
+        inv.whole_box_quantity,
+        inv.whole_box_count,
+        inv.mixed_box_quantity,
+        inv.total_available
+      FROM InventoryAggregated inv
+      LEFT JOIN BestMapping bm ON inv.local_sku = bm.local_sku AND inv.country = bm.country AND bm.rn = 1
+      LEFT JOIN listings_sku ls ON bm.amz_sku = ls.\`seller-sku\` AND bm.site = ls.site
     `;
     
     const inventoryWithMapping = await sequelize.query(inventoryWithMappingQuery, {
@@ -7221,6 +7242,126 @@ router.post('/update-shipped-status', async (req, res) => {
       message: '更新库存状态失败',
       error: error.message,
       errorType: error.constructor.name
+    });
+  }
+});
+
+// 调试API：专门测试XB862C2的数据
+router.get('/debug-xb862c2', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 调试XB862C2数据...');
+  
+  try {
+    // 1. 查询XB862C2的原始库存数据
+    const rawInventoryQuery = `
+      SELECT 
+        记录号, sku, total_quantity, shipped_quantity,
+        (total_quantity - COALESCE(shipped_quantity, 0)) as available_quantity,
+        country, box_type, mix_box_num, status, time
+      FROM local_boxes 
+      WHERE sku = 'XB862C2'
+      ORDER BY time DESC
+    `;
+    
+    const rawInventory = await sequelize.query(rawInventoryQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 2. 查询XB862C2的映射关系
+    const mappingQuery = `
+      SELECT 
+        local_sku, amz_sku, country, site, sku_type, update_time
+      FROM pbi_amzsku_sku 
+      WHERE local_sku = 'XB862C2' OR amz_sku = 'FBAXB862C2'
+      ORDER BY sku_type, update_time DESC
+    `;
+    
+    const mappings = await sequelize.query(mappingQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 3. 使用修复后的库存查询逻辑测试
+    const testInventoryQuery = `
+      WITH InventoryAggregated AS (
+        SELECT 
+          sku as local_sku,
+          country,
+          SUM(CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
+          SUM(CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END) as whole_box_count,
+          SUM(CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
+          SUM(total_quantity - COALESCE(shipped_quantity, 0)) as total_available
+        FROM local_boxes
+        WHERE sku = 'XB862C2'
+          AND total_quantity > 0
+          AND status IN ('待出库', '部分出库')
+        GROUP BY sku, country
+      ),
+      BestMapping AS (
+        SELECT 
+          local_sku, country, amz_sku, sku_type, site,
+          ROW_NUMBER() OVER (
+            PARTITION BY local_sku, country 
+            ORDER BY 
+              CASE WHEN sku_type = 'FBA SKU' THEN 1 ELSE 2 END,
+              update_time DESC
+          ) as rn
+        FROM pbi_amzsku_sku
+        WHERE local_sku = 'XB862C2'
+      )
+      SELECT 
+        inv.local_sku, inv.country,
+        bm.amz_sku as amazon_sku, bm.sku_type,
+        inv.whole_box_quantity, inv.mixed_box_quantity, inv.total_available
+      FROM InventoryAggregated inv
+      LEFT JOIN BestMapping bm ON inv.local_sku = bm.local_sku AND inv.country = bm.country AND bm.rn = 1
+    `;
+    
+    const testResult = await sequelize.query(testInventoryQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 4. 查询需求单数据
+    const needsQuery = `
+      SELECT 
+        record_num, need_num, sku, ori_quantity, country, status, create_date
+      FROM pbi_warehouse_products_need 
+      WHERE sku IN ('XB862C2', 'FBAXB862C2')
+      ORDER BY create_date DESC
+    `;
+    
+    const needs = await sequelize.query(needsQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    const result = {
+      raw_inventory: rawInventory,
+      mappings: mappings,
+      aggregated_result: testResult,
+      needs: needs,
+      summary: {
+        raw_records_count: rawInventory.length,
+        mappings_count: mappings.length,
+        aggregated_count: testResult.length,
+        needs_count: needs.length,
+        total_raw_quantity: rawInventory.reduce((sum, item) => sum + (item.total_quantity || 0), 0),
+        total_available_quantity: rawInventory.reduce((sum, item) => sum + (item.available_quantity || 0), 0),
+        aggregated_total: testResult.reduce((sum, item) => sum + (item.total_available || 0), 0)
+      }
+    };
+
+    console.log('\x1b[33m%s\x1b[0m', '📊 XB862C2 调试结果:', result.summary);
+
+    res.json({
+      code: 0,
+      message: 'XB862C2调试数据',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ XB862C2调试失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '调试失败',
+      error: error.message
     });
   }
 });
