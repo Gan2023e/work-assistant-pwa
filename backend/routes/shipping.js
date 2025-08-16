@@ -1032,52 +1032,41 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// 获取Amazon FBA专用发货数据 - 优化Amazon渠道优先逻辑
+// 获取Amazon FBA专用发货数据 - 基于sku_type字段的FBA SKU优先逻辑
 router.get('/merged-data', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA发货数据查询请求');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 优化后的Amazon渠道优先映射流程');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 基于sku_type字段的FBA SKU优先映射流程');
     
-    // 优化后的映射流程：优先显示包含"Amazon"的fulfillment-channel
+    // 重新设计的映射流程：利用pbi_amzsku_sku表的sku_type字段
     // 步骤1: 从local_boxes表获取所有库存
-    // 步骤2: 通过pbi_amzsku_sku表进行映射关联
-    // 步骤3: 优先关联fulfillment-channel包含"Amazon"的listings记录
+    // 步骤2: 通过pbi_amzsku_sku表进行映射关联，优先使用sku_type='FBA SKU'的记录
+    // 步骤3: 关联listings_sku表获取详细信息
     const inventoryWithMappingQuery = `
       SELECT 
         lb.sku as local_sku,
         lb.country,
+        -- 优先使用sku_type='FBA SKU'的amz_sku，其次使用其他映射
         CASE 
-          WHEN ls_amazon.\`seller-sku\` IS NOT NULL THEN ls_amazon.\`seller-sku\`
-          WHEN ls_other.\`seller-sku\` IS NOT NULL THEN ls_other.\`seller-sku\`
+          WHEN asm.sku_type = 'FBA SKU' THEN asm.amz_sku
+          WHEN ls.\`seller-sku\` IS NOT NULL THEN ls.\`seller-sku\`
           ELSE asm.amz_sku
         END as amazon_sku,
         asm.amz_sku as mapping_amz_sku,
-        COALESCE(ls_amazon.site, ls_other.site, asm.site) as site,
-        COALESCE(ls_amazon.\`fulfillment-channel\`, ls_other.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
+        asm.sku_type,
+        COALESCE(ls.site, asm.site) as site,
+        COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
         SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
         SUM(lb.total_quantity) as total_available
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      -- 优先关联fulfillment-channel包含"Amazon"的记录（改进匹配逻辑）
-      LEFT JOIN listings_sku ls_amazon ON asm.amz_sku = ls_amazon.\`seller-sku\` 
-        AND asm.site = ls_amazon.site 
-        AND (ls_amazon.\`fulfillment-channel\` LIKE '%Amazon%' 
-             OR ls_amazon.\`fulfillment-channel\` LIKE '%AMAZON%'
-             OR ls_amazon.\`fulfillment-channel\` REGEXP '^AMAZON_'
-             OR ls_amazon.\`fulfillment-channel\` REGEXP '^Amazon_')
-      -- 如果没有Amazon渠道，则关联其他渠道
-      LEFT JOIN listings_sku ls_other ON asm.amz_sku = ls_other.\`seller-sku\` 
-        AND asm.site = ls_other.site 
-        AND ls_other.\`fulfillment-channel\` NOT LIKE '%Amazon%'
-        AND ls_other.\`fulfillment-channel\` NOT LIKE '%AMAZON%'
-        AND ls_other.\`fulfillment-channel\` NOT REGEXP '^AMAZON_'
-        AND ls_other.\`fulfillment-channel\` NOT REGEXP '^Amazon_'
-        AND ls_amazon.\`seller-sku\` IS NULL
+      -- 关联listings_sku表获取详细信息
+      LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
       WHERE lb.total_quantity > 0
         AND lb.status = '待出库'
       GROUP BY lb.sku, lb.country
@@ -1171,22 +1160,22 @@ router.get('/merged-data', async (req, res) => {
     const inventoryMap = new Map();
     
     inventoryWithMapping.forEach(inv => {
-      // 改进的Amazon渠道检查逻辑
-      const hasAmazonChannel = inv.fulfillment_channel && (
+      // 基于sku_type字段的Amazon渠道检查逻辑
+      const isFbaSku = inv.sku_type === 'FBA SKU';
+      const hasAmazonChannel = isFbaSku || (inv.fulfillment_channel && (
         inv.fulfillment_channel.includes('Amazon') || 
         inv.fulfillment_channel.includes('AMAZON') ||
         inv.fulfillment_channel.startsWith('AMAZON_') ||
         inv.fulfillment_channel.startsWith('Amazon_')
-      );
+      ));
       
       // 添加调试日志
       console.log(`🔍 检查SKU: ${inv.local_sku}_${inv.country}`);
+      console.log(`   sku_type: "${inv.sku_type}"`);
       console.log(`   fulfillment_channel: "${inv.fulfillment_channel}"`);
       console.log(`   amazon_sku: "${inv.amazon_sku}"`);
+      console.log(`   isFbaSku: ${isFbaSku}`);
       console.log(`   hasAmazonChannel: ${hasAmazonChannel}`);
-      
-      // 如果fulfillment-channel不包含"Amazon"，则Amazon SKU留空
-      const effectiveAmazonSku = hasAmazonChannel ? inv.amazon_sku : '';
       
       // 根据是否有Amazon渠道决定状态和Amazon SKU
       if (hasAmazonChannel) {
@@ -1198,15 +1187,16 @@ router.get('/merged-data', async (req, res) => {
           amazon_sku: inv.amazon_sku,
           site: inv.site,
           fulfillment_channel: inv.fulfillment_channel,
+          sku_type: inv.sku_type,
           whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
           whole_box_count: parseInt(inv.whole_box_count) || 0,
           mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
           total_available: parseInt(inv.total_available) || 0,
           country: inv.country,
           data_source: 'mapped_inventory',
-          mapping_method: 'amazon_channel_matching'
+          mapping_method: isFbaSku ? 'fba_sku_type' : 'amazon_channel_matching'
         });
-        console.log(`✅ 已映射库存(Amazon渠道): ${key} - 可用数量: ${inv.total_available}`);
+        console.log(`✅ 已映射库存(Amazon渠道): ${key} - 可用数量: ${inv.total_available}, SKU类型: ${inv.sku_type || '未知'}`);
       } else {
         // 没有Amazon渠道，归类为"库存未映射"
         const key = `${inv.local_sku}_${inv.country}`;
@@ -1216,6 +1206,7 @@ router.get('/merged-data', async (req, res) => {
           amazon_sku: '', // Amazon SKU留空
           site: inv.site,
           fulfillment_channel: inv.fulfillment_channel,
+          sku_type: inv.sku_type,
           whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
           whole_box_count: parseInt(inv.whole_box_count) || 0,
           mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
@@ -1224,7 +1215,7 @@ router.get('/merged-data', async (req, res) => {
           data_source: 'unmapped_inventory',
           mapping_method: 'no_amazon_channel'
         });
-        console.log(`⚠️ 库存未映射(非Amazon渠道): ${key} - 可用数量: ${inv.total_available}, 渠道: ${inv.fulfillment_channel}`);
+        console.log(`⚠️ 库存未映射(非Amazon渠道): ${key} - 可用数量: ${inv.total_available}, 渠道: ${inv.fulfillment_channel}, SKU类型: ${inv.sku_type || '未知'}`);
       }
     });
 
@@ -1293,6 +1284,7 @@ router.get('/merged-data', async (req, res) => {
         local_sku: inventoryInfo.local_sku,
         site: inventoryInfo.site,
         fulfillment_channel: inventoryInfo.fulfillment_channel,
+        sku_type: inventoryInfo.sku_type, // 新增sku_type字段
             quantity: need.ori_quantity || 0,
         shipping_method: need.shipping_method || '',
         marketplace: need.marketplace || '',
@@ -1376,6 +1368,7 @@ router.get('/merged-data', async (req, res) => {
         local_sku: inv.local_sku,
         site: inv.site,
         fulfillment_channel: inv.fulfillment_channel,
+        sku_type: inv.sku_type, // 新增sku_type字段
         quantity: inv.total_available, // 设置为可用库存数量，方便用户调整发货数量
         shipping_method: '',
         marketplace: '',
@@ -1585,7 +1578,7 @@ router.get('/merged-data', async (req, res) => {
 
     res.json({
       code: 0,
-      message: '获取成功 - 库存需求分析（已优化Amazon渠道优先逻辑）',
+      message: '获取成功 - 库存需求分析（基于sku_type字段的FBA SKU优先逻辑）',
       data: {
         list: paginatedRecords,
         total: sortedRecords.length,
@@ -1601,8 +1594,13 @@ router.get('/merged-data', async (req, res) => {
           库存未映射: sortedRecords.filter(r => r.status === '库存未映射')
         },
         summary: statsMap,
-        mapping_method: 'amazon_channel_priority_mapping',
-        optimization_note: '优先显示fulfillment-channel包含"Amazon"的记录，非Amazon渠道归类为"库存未映射"'
+        mapping_method: 'fba_sku_type_priority_mapping',
+        optimization_note: '基于sku_type字段优先识别FBA SKU，确保Amazon渠道的SKU正确显示',
+        new_features: {
+          sku_type_field: '新增sku_type字段支持',
+          fba_sku_priority: 'FBA SKU优先逻辑',
+          simplified_mapping: '简化的映射流程'
+        }
       }
     });
   } catch (error) {
