@@ -734,9 +734,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         '需求数量': item.ori_quantity,
         '已发货': item.shipped_quantity,
         '剩余': item.remaining_quantity,
-        '现有库存': item.total_available,
-        '整箱库存': item.whole_box_quantity,
-        '混合箱库存': item.mixed_box_quantity,
+        '整箱数量': item.whole_box_quantity,
+        '混合箱数量': item.mixed_box_quantity,
+        '可用库存': item.total_available,
         '缺货': item.shortage,
         '状态': item.status,
         '国家': orderDetails.order_summary.country,
@@ -1126,39 +1126,50 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       )
     },
     {
-      title: '现有库存',
-      dataIndex: 'total_available',
-      key: 'total_available',
-      width: 90,
-      align: 'center',
-      render: (value: number, record) => (
-        <Text 
-          type={value >= record.remaining_quantity ? 'success' : 'danger'}
-          strong
-        >
-          {value}
-        </Text>
-      )
-    },
-    {
-      title: '整箱库存',
-      key: 'whole_box_info',
+      title: '整箱数量',
+      dataIndex: 'whole_box_quantity',
+      key: 'whole_box_quantity',
       width: 100,
       align: 'center',
-      render: (_, record) => (
+      render: (value: number, record) => (
         <div>
-          <div><Text>{record.whole_box_quantity}</Text></div>
-          <div><Text type="secondary" style={{ fontSize: '12px' }}>({record.whole_box_count}箱)</Text></div>
+          <div><Text strong>{value || 0}</Text></div>
+          <div><Text type="secondary" style={{ fontSize: '12px' }}>({record.whole_box_count || 0}箱)</Text></div>
         </div>
       )
     },
     {
-      title: '混合箱库存',
+      title: '混合箱数量',
       dataIndex: 'mixed_box_quantity',
       key: 'mixed_box_quantity',
       width: 100,
       align: 'center',
-      render: (value: number) => <Text>{value}</Text>
+      render: (value: number) => <Text strong>{value || 0}</Text>
+    },
+    {
+      title: '可用库存',
+      dataIndex: 'total_available',
+      key: 'total_available',
+      width: 100,
+      align: 'center',
+      render: (value: number, record) => (
+        <div>
+          <div>
+            <Text 
+              type={value >= record.remaining_quantity ? 'success' : 'danger'}
+              strong
+              style={{ fontSize: '14px' }}
+            >
+              {value}
+            </Text>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: '11px' }}>
+              {record.whole_box_quantity || 0}+{record.mixed_box_quantity || 0}
+            </Text>
+          </div>
+        </div>
+      )
     },
     {
       title: '缺货',

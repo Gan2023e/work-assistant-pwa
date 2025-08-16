@@ -236,15 +236,16 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 修正查询逻辑：根据Amazon SKU和国家查询local_sku
+        // 修正查询逻辑：XB862C2等是local_sku，需要查询对应的Amazon SKU
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            amz_sku: item.sku, // item.sku实际存储的是Amazon SKU
+            local_sku: item.sku, // item.sku实际存储的是local_sku
             country: item.country
           }
         });
 
-        const localSku = mapping?.local_sku || null;
+        const localSku = item.sku; // 直接使用，因为item.sku就是local_sku
+        const amazonSku = mapping?.amz_sku || null;
         
         // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
         let inventory = [];
@@ -255,22 +256,27 @@ router.get('/orders/:needNum/details', async (req, res) => {
               country: item.country,
               status: { [Op.in]: ['待出库', '部分出库'] } // 添加状态过滤，排除已出库记录
             },
-            attributes: ['mix_box_num', 'total_quantity', 'total_boxes'],
+            attributes: ['mix_box_num', 'total_quantity', 'total_boxes', 'box_type', 'shipped_quantity'],
             raw: true
           });
         }
 
-        // 计算库存统计
+        // 计算库存统计 - 修正：根据box_type字段区分整箱和混合箱，并计算剩余可用数量
         let wholeBoxQuantity = 0, wholeBoxCount = 0, mixedBoxQuantity = 0;
         inventory.forEach(inv => {
-          const quantity = parseInt(inv.total_quantity) || 0;
+          const totalQuantity = parseInt(inv.total_quantity) || 0;
+          const shippedQuantity = parseInt(inv.shipped_quantity) || 0;
+          const availableQuantity = totalQuantity - shippedQuantity; // 剩余可用数量
           const boxes = parseInt(inv.total_boxes) || 0;
           
-          if (!inv.mix_box_num || inv.mix_box_num.trim() === '') {
-            wholeBoxQuantity += quantity;
-            wholeBoxCount += boxes;
-          } else {
-            mixedBoxQuantity += quantity;
+          // 只统计有剩余数量的库存
+          if (availableQuantity > 0) {
+            if (inv.box_type === '整箱') {
+              wholeBoxQuantity += availableQuantity;
+              wholeBoxCount += boxes;
+            } else if (inv.box_type === '混合箱') {
+              mixedBoxQuantity += availableQuantity;
+            }
           }
         });
 
@@ -292,8 +298,8 @@ router.get('/orders/:needNum/details', async (req, res) => {
 
         return {
           ...item.toJSON(),
-          amz_sku: item.sku, // 原sku字段存储的是Amazon SKU
-          local_sku: localSku, // 真正的本地SKU
+          local_sku: localSku, // 原sku字段存储的是local_sku
+          amz_sku: amazonSku, // 从映射表查询到的Amazon SKU
           whole_box_quantity: wholeBoxQuantity,
           whole_box_count: wholeBoxCount,
           mixed_box_quantity: mixedBoxQuantity,
