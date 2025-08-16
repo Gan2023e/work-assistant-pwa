@@ -2266,12 +2266,13 @@ router.post('/create-mapping', async (req, res) => {
       console.log('\x1b[33m%s\x1b[0m', '⚠️ 发现重复映射:', duplicates.map(d => d.mapping));
     }
 
-    // 准备插入的数据
+    // 准备插入的数据，自动设置sku_type为"FBA SKU"
     const mappingsToCreate = mappings.map(mapping => ({
       local_sku: mapping.local_sku,
       amz_sku: mapping.amz_sku,
       country: mapping.country,
       site: mapping.site || `Amazon.${mapping.country.toLowerCase()}`,
+      sku_type: 'FBA SKU', // 自动设置为FBA SKU类型
       update_time: new Date()
     }));
 
@@ -2281,14 +2282,16 @@ router.post('/create-mapping', async (req, res) => {
     });
     
     console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射创建成功:', createdMappings.length);
+    console.log('\x1b[33m%s\x1b[0m', '📋 所有新创建的映射记录自动设置sku_type为"FBA SKU"');
     
     res.json({
       code: 0,
-      message: 'SKU映射创建成功',
+      message: 'SKU映射创建成功（自动设置为FBA SKU类型）',
       data: {
         created: createdMappings.length,
         duplicates: duplicates.length,
-        details: mappingsToCreate
+        details: mappingsToCreate,
+        sku_type_info: '所有新创建的映射记录自动设置sku_type为"FBA SKU"'
       }
     });
   } catch (error) {
@@ -2361,12 +2364,13 @@ router.post('/add-missing-mapping', async (req, res) => {
       else mappingSite = 'www.amazon.com'; // 默认
     }
 
-    // 创建映射记录
+    // 创建映射记录，自动设置sku_type为"FBA SKU"
     const newMapping = await AmzSkuMapping.create({
       local_sku: local_sku,
       amz_sku: amazon_sku,
       country: country,
       site: mappingSite,
+      sku_type: 'FBA SKU', // 自动设置为FBA SKU类型
       update_time: new Date()
     });
     
@@ -2374,15 +2378,18 @@ router.post('/add-missing-mapping', async (req, res) => {
       local_sku: local_sku,
       amz_sku: amazon_sku,
       country: country,
-      site: mappingSite
+      site: mappingSite,
+      sku_type: 'FBA SKU'
     });
+    console.log('\x1b[33m%s\x1b[0m', '📋 新创建的映射记录自动设置sku_type为"FBA SKU"');
     
     res.json({
       code: 0,
-      message: '映射添加成功',
+      message: '映射添加成功（自动设置为FBA SKU类型）',
       data: {
         mapping: newMapping.toJSON(),
-        has_inventory: !!inventoryExists
+        has_inventory: !!inventoryExists,
+        sku_type_info: '新创建的映射记录自动设置sku_type为"FBA SKU"'
       }
     });
   } catch (error) {
