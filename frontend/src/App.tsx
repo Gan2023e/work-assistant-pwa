@@ -244,11 +244,6 @@ const AppContent: React.FC = () => {
               <ShipmentHistoryPage />
             </ProtectedRoute>
           } />
-          <Route path="/shipping" element={
-            <ProtectedRoute>
-              <ShippingPage />
-            </ProtectedRoute>
-          } />
           <Route path="/logistics" element={
             <ProtectedRoute>
               <LogisticsPage />

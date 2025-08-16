@@ -1066,6 +1066,9 @@ const ShippingPage: React.FC = () => {
 
   // 获取合并数据（全部显示，不分页）
   const fetchMergedData = async (status = '待发货') => {
+    // 防止重复调用
+    if (mergedLoading) return;
+    
     setMergedLoading(true);
     try {
       // 如果选择了特定的状态，获取所有数据然后在前端筛选

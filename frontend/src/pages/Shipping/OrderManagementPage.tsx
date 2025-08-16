@@ -195,27 +195,42 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
   // 根据props.needNum或selectedOrder决定加载详情还是列表
   useEffect(() => {
-    if (needNum) {
+    let isMounted = true; // 防止组件卸载后setState
+    
+    if (needNum && isMounted) {
       setSelectedOrder(needNum);
       fetchOrderDetails(needNum);
-    } else if (selectedOrder) {
+    } else if (selectedOrder && isMounted) {
       fetchOrderDetails(selectedOrder);
-    } else {
+    } else if (isMounted) {
       fetchOrders(1, 20, filters);
     }
-    // eslint-disable-next-line
+    
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needNum, selectedOrder]);
 
   // 初始化时获取国家统计
   useEffect(() => {
-    if (!needNum && !selectedOrder) {
+    let isMounted = true;
+    
+    if (!needNum && !selectedOrder && isMounted) {
       fetchCountryStats();
     }
-    // eslint-disable-next-line
+    
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 获取需求单列表
   const fetchOrders = async (page = 1, pageSize = 20, filterParams: FilterParams = {}) => {
+    // 防止重复调用
+    if (ordersLoading) return;
+    
     setOrdersLoading(true);
     try {
       const queryParams = new URLSearchParams({
@@ -259,6 +274,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
   // 获取国家统计数据
   const fetchCountryStats = async () => {
+    // 防止重复调用
+    if (statsLoading) return;
+    
     setStatsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/order-management/country-stats`, {
@@ -307,6 +325,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
   // 获取需求单详情
   const fetchOrderDetails = async (needNum: string) => {
+    // 防止重复调用
+    if (detailsLoading) return;
+    
     setDetailsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/order-management/orders/${needNum}/details`, {
