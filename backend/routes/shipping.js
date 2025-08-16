@@ -1287,7 +1287,19 @@ router.get('/merged-data', async (req, res) => {
     
     // 5.1. 处理需求数据，分析库存状态
     needsMap.forEach((needInfo, key) => {
-      const inventoryInfo = inventoryMap.get(key);
+      // 修复：尝试用Amazon SKU找到对应的本地SKU，然后再查找库存
+      let inventoryInfo = inventoryMap.get(key);
+      
+      // 如果直接匹配失败，尝试通过SKU映射表找到本地SKU
+      if (!inventoryInfo) {
+        const skuMapping = skuMappingMap.get(key);
+        if (skuMapping && skuMapping.local_sku) {
+          const localSkuKey = `${skuMapping.local_sku}_${needInfo.country}`;
+          inventoryInfo = inventoryMap.get(localSkuKey);
+          console.log(`🔄 Amazon SKU映射: ${key} -> ${localSkuKey} ${inventoryInfo ? '成功' : '失败'}`);
+        }
+      }
+      
       const needQuantity = needInfo.total_quantity;
       
       if (inventoryInfo) {
@@ -1340,8 +1352,10 @@ router.get('/merged-data', async (req, res) => {
         if (inventoryInfo.data_source === 'unmapped_inventory') {
           console.log(`⚠️ ${key}: 需求${needQuantity}, 库存${availableQuantity} - 库存未映射(非Amazon渠道)`);
         } else {
-          console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
-        }
+                  console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
+      }
+      
+
       } else {
         // 有需求但无库存，尝试从SKU映射表获取本地SKU
         const skuMapping = skuMappingMap.get(key);
@@ -1377,7 +1391,17 @@ router.get('/merged-data', async (req, res) => {
         console.log(`❌ ${key}: 需求${needQuantity}, 无库存 - ${statusText}${skuMapping ? `, 本地SKU: ${skuMapping.local_sku}` : ''}`);
       }
       
+      // 标记原始需求键为已处理
       processedKeys.add(key);
+      
+      // 如果通过Amazon SKU映射找到了本地SKU库存，也要标记本地SKU键为已处理
+      if (inventoryInfo) {
+        const skuMapping = skuMappingMap.get(key);
+        if (skuMapping && skuMapping.local_sku) {
+          const localSkuKey = `${skuMapping.local_sku}_${needInfo.country}`;
+          processedKeys.add(localSkuKey);
+        }
+      }
     });
 
         
