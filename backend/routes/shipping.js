@@ -1048,7 +1048,7 @@ router.get('/merged-data', async (req, res) => {
     const inventoryWithMappingQuery = `
       WITH InventoryAggregated AS (
         -- 第一步：先聚合库存数据，避免重复计算
-        SELECT 
+      SELECT 
           sku as local_sku,
           country,
           -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
