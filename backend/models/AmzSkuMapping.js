@@ -28,6 +28,12 @@ const AmzSkuMapping = sequelize.define('AmzSkuMapping', {
     type: DataTypes.DATE,
     allowNull: true,
     comment: '更新时间'
+  },
+  sku_type: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    defaultValue: 'FBA SKU',
+    comment: 'SKU类型，默认为FBA SKU'
   }
 }, {
   tableName: 'pbi_amzsku_sku',
