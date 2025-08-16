@@ -1054,6 +1054,12 @@ router.get('/merged-data', async (req, res) => {
           -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
           SUM(CASE WHEN box_type = '整箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
           SUM(CASE WHEN box_type = '整箱' THEN total_boxes ELSE 0 END) as whole_box_count,
+          -- 计算整箱的可用箱数：箱数 = (total_quantity - shipped_quantity) * total_boxes / total_quantity
+          SUM(CASE 
+            WHEN box_type = '整箱' AND total_quantity > 0 
+            THEN (total_quantity - COALESCE(shipped_quantity, 0)) * total_boxes / total_quantity
+            ELSE 0 
+          END) as available_box_count,
           SUM(CASE WHEN box_type = '混合箱' THEN (total_quantity - COALESCE(shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
           SUM(total_quantity - COALESCE(shipped_quantity, 0)) as total_available
         FROM local_boxes
@@ -1088,6 +1094,7 @@ router.get('/merged-data', async (req, res) => {
         COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
         inv.whole_box_quantity,
         inv.whole_box_count,
+        inv.available_box_count,
         inv.mixed_box_quantity,
         inv.total_available
       FROM InventoryAggregated inv
@@ -1213,6 +1220,7 @@ router.get('/merged-data', async (req, res) => {
           sku_type: inv.sku_type,
           whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
           whole_box_count: parseInt(inv.whole_box_count) || 0,
+          available_box_count: parseFloat(inv.available_box_count) || 0,
           mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
           total_available: parseInt(inv.total_available) || 0,
           country: inv.country,
@@ -1232,6 +1240,7 @@ router.get('/merged-data', async (req, res) => {
           sku_type: inv.sku_type,
           whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
           whole_box_count: parseInt(inv.whole_box_count) || 0,
+          available_box_count: parseFloat(inv.available_box_count) || 0,
           mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
           total_available: parseInt(inv.total_available) || 0,
           country: inv.country,
@@ -1340,6 +1349,7 @@ router.get('/merged-data', async (req, res) => {
         // 库存信息
         whole_box_quantity: inventoryInfo.whole_box_quantity,
         whole_box_count: inventoryInfo.whole_box_count,
+        available_box_count: inventoryInfo.available_box_count,
         mixed_box_quantity: inventoryInfo.mixed_box_quantity,
         total_available: inventoryInfo.total_available,
             shortage: shortageQty,
@@ -1378,6 +1388,7 @@ router.get('/merged-data', async (req, res) => {
             // 库存信息（全为0）
             whole_box_quantity: 0,
             whole_box_count: 0,
+            available_box_count: 0,
             mixed_box_quantity: 0,
             total_available: 0,
             shortage: need.ori_quantity || 0,
@@ -1436,6 +1447,7 @@ router.get('/merged-data', async (req, res) => {
         // 库存信息
         whole_box_quantity: inv.whole_box_quantity,
         whole_box_count: inv.whole_box_count,
+        available_box_count: inv.available_box_count,
         mixed_box_quantity: inv.mixed_box_quantity,
         total_available: inv.total_available,
         shortage: 0,
@@ -1462,6 +1474,12 @@ router.get('/merged-data', async (req, res) => {
         -- 修正：使用box_type字段区分整箱和混合箱，并计算剩余可用数量
         SUM(CASE WHEN lb.box_type = '整箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as whole_box_quantity,
         SUM(CASE WHEN lb.box_type = '整箱' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
+        -- 计算整箱的可用箱数：箱数 = (total_quantity - shipped_quantity) * total_boxes / total_quantity
+        SUM(CASE 
+          WHEN lb.box_type = '整箱' AND lb.total_quantity > 0 
+          THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) * lb.total_boxes / lb.total_quantity
+          ELSE 0 
+        END) as available_box_count,
         SUM(CASE WHEN lb.box_type = '混合箱' THEN (lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) ELSE 0 END) as mixed_box_quantity,
         SUM(lb.total_quantity - COALESCE(lb.shipped_quantity, 0)) as total_available
       FROM local_boxes lb
@@ -1542,6 +1560,7 @@ router.get('/merged-data', async (req, res) => {
         // 库存信息（全为0，因为没有本地SKU映射）
         whole_box_quantity: 0,
         whole_box_count: 0,
+        available_box_count: 0,
         mixed_box_quantity: 0,
         total_available: 0,
         shortage: 0,
@@ -1575,6 +1594,7 @@ router.get('/merged-data', async (req, res) => {
         // 库存信息
         whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
         whole_box_count: parseInt(inv.whole_box_count) || 0,
+        available_box_count: parseFloat(inv.available_box_count) || 0,
         mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
         total_available: parseInt(inv.total_available) || 0,
         shortage: 0,
