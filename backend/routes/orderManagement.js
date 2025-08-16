@@ -236,15 +236,29 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 修正查询逻辑：XB862C2等是local_sku，需要查询对应的Amazon SKU
+        // 修正查询逻辑：需要处理SKU前缀问题
+        // 需求单中的SKU可能包含前缀（如NAXBA968A, FBAXB862A2），需要清理
+        let cleanSku = item.sku;
+        
+        // 更精确的SKU清理逻辑
+        if (cleanSku.startsWith('NAXB')) {
+          cleanSku = 'XB' + cleanSku.substring(4); // NAXBA968A -> XBA968A
+        } else if (cleanSku.startsWith('FBAXB')) {
+          cleanSku = 'XB' + cleanSku.substring(5); // FBAXB862A2 -> XB862A2
+        } else if (cleanSku.startsWith('AGXB')) {
+          cleanSku = 'XB' + cleanSku.substring(4); // AGXB362B1 -> XB362B1
+        } else if (cleanSku.startsWith('SFMB')) {
+          cleanSku = 'MB' + cleanSku.substring(4); // SFMB002B8 -> MB002B8
+        }
+        
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            local_sku: item.sku, // item.sku实际存储的是local_sku
+            local_sku: cleanSku, // 使用清理后的SKU查询映射
             country: item.country
           }
         });
 
-        const localSku = item.sku; // 直接使用，因为item.sku就是local_sku
+        const localSku = cleanSku; // 使用清理后的SKU
         const amazonSku = mapping?.amz_sku || null;
         
         // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
