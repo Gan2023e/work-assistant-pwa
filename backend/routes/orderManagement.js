@@ -236,30 +236,19 @@ router.get('/orders/:needNum/details', async (req, res) => {
     // 查询库存信息和映射关系
     const itemsWithInventory = await Promise.all(
       orderItems.map(async (item) => {
-        // 修正查询逻辑：需要处理SKU前缀问题
-        // 需求单中的SKU可能包含前缀（如NAXBA968A, FBAXB862A2），需要清理
-        let cleanSku = item.sku;
-        
-        // 更精确的SKU清理逻辑
-        if (cleanSku.startsWith('NAXB')) {
-          cleanSku = 'XB' + cleanSku.substring(4); // NAXBA968A -> XBA968A
-        } else if (cleanSku.startsWith('FBAXB')) {
-          cleanSku = 'XB' + cleanSku.substring(5); // FBAXB862A2 -> XB862A2
-        } else if (cleanSku.startsWith('AGXB')) {
-          cleanSku = 'XB' + cleanSku.substring(4); // AGXB362B1 -> XB362B1
-        } else if (cleanSku.startsWith('SFMB')) {
-          cleanSku = 'MB' + cleanSku.substring(4); // SFMB002B8 -> MB002B8
-        }
+        // 修正查询逻辑：需求单中的sku字段实际上是Amazon SKU
+        // 应该在pbi_amzsku_sku表中用amz_sku搜索，找到sku_type为"FBA SKU"的记录
+        const amazonSku = item.sku; // 需求单中的sku就是Amazon SKU
         
         const mapping = await AmzSkuMapping.findOne({
           where: {
-            local_sku: cleanSku, // 使用清理后的SKU查询映射
-            country: item.country
+            amz_sku: amazonSku, // 使用Amazon SKU查询映射
+            country: item.country,
+            sku_type: 'FBA SKU' // 只查找FBA SKU类型的映射
           }
         });
 
-        const localSku = cleanSku; // 使用清理后的SKU
-        const amazonSku = mapping?.amz_sku || null;
+        const localSku = mapping?.local_sku || null; // 从映射表获取local_sku
         
         // 查询库存（使用查到的local_sku，如果没有映射则无法查询库存）
         let inventory = [];
