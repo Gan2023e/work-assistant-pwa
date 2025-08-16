@@ -1032,34 +1032,46 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// 获取Amazon FBA专用发货数据 - 专注FBA渠道的高性能查询
+// 获取Amazon FBA专用发货数据 - 优化Amazon渠道优先逻辑
 router.get('/merged-data', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA发货数据查询请求');
   
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: Amazon FBA专用三步映射流程');
+    console.log('\x1b[33m%s\x1b[0m', '🔄 步骤1: 优化后的Amazon渠道优先映射流程');
     
-    // 改进的映射流程：不再强制要求Amazon FBA渠道，包含所有有映射的库存
+    // 优化后的映射流程：优先显示包含"Amazon"的fulfillment-channel
     // 步骤1: 从local_boxes表获取所有库存
     // 步骤2: 通过pbi_amzsku_sku表进行映射关联
-    // 步骤3: 如果存在listings_sku记录则关联，否则仍然显示（允许DEFAULT等渠道）
+    // 步骤3: 优先关联fulfillment-channel包含"Amazon"的listings记录
     const inventoryWithMappingQuery = `
       SELECT 
         lb.sku as local_sku,
         lb.country,
-        COALESCE(ls.\`seller-sku\`, asm.amz_sku) as amazon_sku,
-        COALESCE(asm.amz_sku, '') as mapping_amz_sku,
-        COALESCE(ls.site, asm.site) as site,
-        COALESCE(ls.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
+        CASE 
+          WHEN ls_amazon.\`seller-sku\` IS NOT NULL THEN ls_amazon.\`seller-sku\`
+          WHEN ls_other.\`seller-sku\` IS NOT NULL THEN ls_other.\`seller-sku\`
+          ELSE asm.amz_sku
+        END as amazon_sku,
+        asm.amz_sku as mapping_amz_sku,
+        COALESCE(ls_amazon.site, ls_other.site, asm.site) as site,
+        COALESCE(ls_amazon.\`fulfillment-channel\`, ls_other.\`fulfillment-channel\`, 'MAPPED') as fulfillment_channel,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_quantity ELSE 0 END) as whole_box_quantity,
         SUM(CASE WHEN lb.mix_box_num IS NULL OR lb.mix_box_num = '' THEN lb.total_boxes ELSE 0 END) as whole_box_count,
         SUM(CASE WHEN lb.mix_box_num IS NOT NULL AND lb.mix_box_num != '' THEN lb.total_quantity ELSE 0 END) as mixed_box_quantity,
         SUM(lb.total_quantity) as total_available
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
+      -- 优先关联fulfillment-channel包含"Amazon"的记录
+      LEFT JOIN listings_sku ls_amazon ON asm.amz_sku = ls_amazon.\`seller-sku\` 
+        AND asm.site = ls_amazon.site 
+        AND ls_amazon.\`fulfillment-channel\` LIKE '%Amazon%'
+      -- 如果没有Amazon渠道，则关联其他渠道
+      LEFT JOIN listings_sku ls_other ON asm.amz_sku = ls_other.\`seller-sku\` 
+        AND asm.site = ls_other.site 
+        AND ls_other.\`fulfillment-channel\` NOT LIKE '%Amazon%'
+        AND ls_amazon.\`seller-sku\` IS NULL
       WHERE lb.total_quantity > 0
         AND lb.status = '待出库'
       GROUP BY lb.sku, lb.country
@@ -1153,21 +1165,50 @@ router.get('/merged-data', async (req, res) => {
     const inventoryMap = new Map();
     
     inventoryWithMapping.forEach(inv => {
-      const key = `${inv.amazon_sku}_${inv.country}`;
-      inventoryMap.set(key, {
-        local_sku: inv.local_sku,
-        amz_sku: inv.amazon_sku,
-        amazon_sku: inv.amazon_sku,
-        site: inv.site,
-        fulfillment_channel: inv.fulfillment_channel,
-        whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
-        whole_box_count: parseInt(inv.whole_box_count) || 0,
-        mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
-        total_available: parseInt(inv.total_available) || 0,
-        country: inv.country,
-        data_source: 'mapped_inventory'
-      });
-      console.log(`✅ 已映射库存: ${key} - 可用数量: ${inv.total_available}`);
+      // 检查fulfillment-channel是否包含"Amazon"
+      const hasAmazonChannel = inv.fulfillment_channel && inv.fulfillment_channel.includes('Amazon');
+      
+      // 如果fulfillment-channel不包含"Amazon"，则Amazon SKU留空
+      const effectiveAmazonSku = hasAmazonChannel ? inv.amazon_sku : '';
+      
+      // 根据是否有Amazon渠道决定状态和Amazon SKU
+      if (hasAmazonChannel) {
+        // 有Amazon渠道，正常显示
+        const key = `${inv.amazon_sku}_${inv.country}`;
+        inventoryMap.set(key, {
+          local_sku: inv.local_sku,
+          amz_sku: inv.amazon_sku,
+          amazon_sku: inv.amazon_sku,
+          site: inv.site,
+          fulfillment_channel: inv.fulfillment_channel,
+          whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
+          whole_box_count: parseInt(inv.whole_box_count) || 0,
+          mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
+          total_available: parseInt(inv.total_available) || 0,
+          country: inv.country,
+          data_source: 'mapped_inventory',
+          mapping_method: 'amazon_channel_matching'
+        });
+        console.log(`✅ 已映射库存(Amazon渠道): ${key} - 可用数量: ${inv.total_available}`);
+      } else {
+        // 没有Amazon渠道，归类为"库存未映射"
+        const key = `${inv.local_sku}_${inv.country}`;
+        inventoryMap.set(key, {
+          local_sku: inv.local_sku,
+          amz_sku: '', // Amazon SKU留空
+          amazon_sku: '', // Amazon SKU留空
+          site: inv.site,
+          fulfillment_channel: inv.fulfillment_channel,
+          whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
+          whole_box_count: parseInt(inv.whole_box_count) || 0,
+          mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
+          total_available: parseInt(inv.total_available) || 0,
+          country: inv.country,
+          data_source: 'unmapped_inventory',
+          mapping_method: 'no_amazon_channel'
+        });
+        console.log(`⚠️ 库存未映射(非Amazon渠道): ${key} - 可用数量: ${inv.total_available}, 渠道: ${inv.fulfillment_channel}`);
+      }
     });
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤4: 构建需求映射表');
@@ -1211,7 +1252,11 @@ router.get('/merged-data', async (req, res) => {
         const availableQuantity = inventoryInfo.total_available;
         let status, shortageQty = 0;
         
-        if (availableQuantity >= needQuantity) {
+        // 检查是否为"库存未映射"状态
+        if (inventoryInfo.data_source === 'unmapped_inventory') {
+          status = '库存未映射';
+          shortageQty = needQuantity; // 全部作为短缺处理
+        } else if (availableQuantity >= needQuantity) {
           status = '库存充足';
         } else if (availableQuantity > 0) {
           status = '库存不足';
@@ -1227,7 +1272,7 @@ router.get('/merged-data', async (req, res) => {
         record_num: need.record_num,
         need_num: need.need_num || '',
             amz_sku: need.sku,
-            amazon_sku: inventoryInfo.amazon_sku,
+            amazon_sku: inventoryInfo.amazon_sku, // 如果是"库存未映射"，这里会是空字符串
         local_sku: inventoryInfo.local_sku,
         site: inventoryInfo.site,
         fulfillment_channel: inventoryInfo.fulfillment_channel,
@@ -1243,13 +1288,17 @@ router.get('/merged-data', async (req, res) => {
         mixed_box_quantity: inventoryInfo.mixed_box_quantity,
         total_available: inventoryInfo.total_available,
             shortage: shortageQty,
-            data_source: 'need_with_inventory',
-            inventory_source: 'mapped_inventory',
-            mapping_method: 'mapped_inventory_matching'
+            data_source: inventoryInfo.data_source === 'unmapped_inventory' ? 'need_with_unmapped_inventory' : 'need_with_inventory',
+            inventory_source: inventoryInfo.data_source,
+            mapping_method: inventoryInfo.mapping_method
           });
         });
         
-        console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
+        if (inventoryInfo.data_source === 'unmapped_inventory') {
+          console.log(`⚠️ ${key}: 需求${needQuantity}, 库存${availableQuantity} - 库存未映射(非Amazon渠道)`);
+        } else {
+          console.log(`🔍 ${key}: 需求${needQuantity}, 库存${availableQuantity} - ${status}`);
+        }
       } else {
         // 有需求但无库存，尝试从SKU映射表获取本地SKU
         const skuMapping = skuMappingMap.get(key);
@@ -1292,11 +1341,21 @@ router.get('/merged-data', async (req, res) => {
     // 6. 处理有已映射库存但无需求的记录（第一步有，第二步没有）
     inventoryMap.forEach((inv, key) => {
       if (!processedKeys.has(key) && inv.total_available > 0) {
+        // 根据数据源决定状态
+        let status, dataSource;
+        if (inv.data_source === 'unmapped_inventory') {
+          status = '库存未映射';
+          dataSource = 'inventory_no_need_unmapped';
+        } else {
+          status = '有库存无需求';
+          dataSource = 'inventory_no_need';
+        }
+        
         allRecords.push({
           record_num: null, // 设置为null表示无需求单的库存
         need_num: '',
-          amz_sku: inv.amz_sku,
-        amazon_sku: inv.amazon_sku,
+          amz_sku: inv.amz_sku, // 如果是"库存未映射"，这里会是空字符串
+        amazon_sku: inv.amazon_sku, // 如果是"库存未映射"，这里会是空字符串
         local_sku: inv.local_sku,
         site: inv.site,
         fulfillment_channel: inv.fulfillment_channel,
@@ -1304,7 +1363,7 @@ router.get('/merged-data', async (req, res) => {
         shipping_method: '',
         marketplace: '',
         country: inv.country,
-        status: '有库存无需求',
+        status: status,
         created_at: new Date().toISOString(),
         // 库存信息
         whole_box_quantity: inv.whole_box_quantity,
@@ -1312,12 +1371,16 @@ router.get('/merged-data', async (req, res) => {
         mixed_box_quantity: inv.mixed_box_quantity,
         total_available: inv.total_available,
         shortage: 0,
-          data_source: 'inventory_no_need',
-          inventory_source: 'mapped_inventory',
-          mapping_method: 'mapped_inventory_matching'
+          data_source: dataSource,
+          inventory_source: inv.data_source,
+          mapping_method: inv.mapping_method
         });
         
-        console.log(`📦 ${key}: 库存${inv.total_available}, 无需求 - 有库存无需求`);
+        if (inv.data_source === 'unmapped_inventory') {
+          console.log(`⚠️ ${key}: 库存${inv.total_available}, 无需求 - 库存未映射(非Amazon渠道)`);
+        } else {
+          console.log(`📦 ${key}: 库存${inv.total_available}, 无需求 - 有库存无需求`);
+        }
       }
     });
 
@@ -1505,7 +1568,7 @@ router.get('/merged-data', async (req, res) => {
 
     res.json({
       code: 0,
-      message: '获取成功 - 库存需求分析（已优化映射逻辑）',
+      message: '获取成功 - 库存需求分析（已优化Amazon渠道优先逻辑）',
       data: {
         list: paginatedRecords,
         total: sortedRecords.length,
@@ -1521,7 +1584,8 @@ router.get('/merged-data', async (req, res) => {
           库存未映射: sortedRecords.filter(r => r.status === '库存未映射')
         },
         summary: statsMap,
-        mapping_method: 'improved_inventory_mapping'
+        mapping_method: 'amazon_channel_priority_mapping',
+        optimization_note: '优先显示fulfillment-channel包含"Amazon"的记录，非Amazon渠道归类为"库存未映射"'
       }
     });
   } catch (error) {
