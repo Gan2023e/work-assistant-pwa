@@ -1180,7 +1180,8 @@ router.get('/merged-data', async (req, res) => {
       // 根据是否有Amazon渠道决定状态和Amazon SKU
       if (hasAmazonChannel) {
         // 有Amazon渠道，正常显示
-        const key = `${inv.amazon_sku}_${inv.country}`;
+        // 修复：使用local_sku_country作为键，确保能正确关联到需求数据
+        const key = `${inv.local_sku}_${inv.country}`;
         inventoryMap.set(key, {
           local_sku: inv.local_sku,
           amz_sku: inv.amazon_sku,
@@ -1245,8 +1246,19 @@ router.get('/merged-data', async (req, res) => {
     console.log('\x1b[33m%s\x1b[0m', `📋 合并后需求: ${needsMap.size} 个SKU`);
 
     console.log('\x1b[33m%s\x1b[0m', '🔄 步骤5: 根据库存和需求关联分析');
-
-        
+    
+    // 添加调试日志：显示库存和需求的键值对应关系
+    console.log('\n🔍 调试：库存和需求键值对应关系');
+    console.log('库存映射表键值:');
+    inventoryMap.forEach((value, key) => {
+      console.log(`  ${key} -> local_sku: ${value.local_sku}, amz_sku: ${value.amz_sku}, sku_type: ${value.sku_type}`);
+    });
+    
+    console.log('\n需求映射表键值:');
+    needsMap.forEach((value, key) => {
+      console.log(`  ${key} -> sku: ${value.sku}, country: ${value.country}`);
+    });
+    
     // 5. 根据库存和需求关联分析，生成四种状态的记录
     const allRecords = [];
     const processedKeys = new Set();
