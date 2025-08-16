@@ -1062,7 +1062,7 @@ router.get('/merged-data', async (req, res) => {
       LEFT JOIN listings_sku ls ON asm.amz_sku = ls.\`seller-sku\` AND asm.site = ls.site
       WHERE lb.total_quantity > 0
         AND lb.status = '待出库'
-      GROUP BY lb.sku, lb.country, COALESCE(ls.\`seller-sku\`, asm.amz_sku), asm.amz_sku, COALESCE(ls.site, asm.site), COALESCE(ls.\`fulfillment-channel\`, 'MAPPED')
+      GROUP BY lb.sku, lb.country
       HAVING SUM(lb.total_quantity) != 0
     `;
     

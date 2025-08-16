@@ -2263,41 +2263,83 @@ const ShippingPage: React.FC = () => {
                     清除筛选
                   </Button>
                   <Text type="secondary" style={{ fontSize: '12px' }}>
-                    共 {mergedData.filter((item: MergedShippingData) => {
-                      // 应用相同的筛选逻辑来显示筛选后的数量
-                      if (selectedCountry && selectedCountry !== '') {
-                        if (item.country !== selectedCountry || item.status === '已发货') {
-                          return false;
+                    共 {(() => {
+                      // 首先进行数据去重，避免重复显示相同记录
+                      const uniqueData = mergedData.filter((item: MergedShippingData, index: number, self: MergedShippingData[]) => {
+                        // 对于有需求单的记录，使用record_num作为唯一标识
+                        if (item.record_num !== null) {
+                          return self.findIndex(x => x.record_num === item.record_num) === index;
                         }
-                      }
-                      if (searchKeyword.trim() !== '') {
-                        const keyword = searchKeyword.toLowerCase();
-                        const searchableFields = [
-                          item.amz_sku?.toLowerCase() || '',
-                          item.amazon_sku?.toLowerCase() || '',
-                          item.local_sku?.toLowerCase() || '',
-                          item.need_num?.toLowerCase() || '',
-                          item.country?.toLowerCase() || '',
-                          item.marketplace?.toLowerCase() || ''
-                        ];
-                        if (!searchableFields.some(field => field.includes(keyword))) {
-                          return false;
-                        }
-                      }
-                      if (statusFilter && item.status !== statusFilter) return false;
-                      if (inventoryStatusFilter && (item.inventory_status || '待出库') !== inventoryStatusFilter) return false;
+                        // 对于无需求单的库存记录，使用local_sku+country作为唯一标识
+                        const key = `${item.local_sku}_${item.country}`;
+                        return self.findIndex(x => x.local_sku === item.local_sku && x.country === item.country && x.record_num === null) === index;
+                      });
                       
-                      switch (filterType) {
-                        case 'needs': return item.quantity > 0;
-                        case 'sufficient': return item.quantity > 0 && item.shortage === 0;
-                        case 'shortage': return item.quantity > 0 && item.shortage > 0;
-                        case 'unmapped': return item.quantity > 0 && !item.local_sku;
-                        case 'inventory-only': return item.quantity === 0 && item.total_available > 0;
-                        case 'missing-mapping': return item.status === '映射缺失';
-                        case 'unmapped-inventory': return item.status === '库存未映射';
-                        default: return item.quantity > 0 || item.total_available > 0;
-                      }
-                    }).length} 条记录
+                      // 然后应用筛选条件
+                      return uniqueData.filter((item: MergedShippingData) => {
+                        // 首先按国家筛选（新增）
+                        if (selectedCountry && selectedCountry !== '') {
+                          if (item.country !== selectedCountry) {
+                            return false;
+                          }
+                          // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
+                          if (item.status === '已发货') {
+                            return false;
+                          }
+                        }
+                        
+                        // 关键词搜索筛选
+                        if (searchKeyword.trim() !== '') {
+                          const keyword = searchKeyword.toLowerCase();
+                          const searchableFields = [
+                            item.amz_sku?.toLowerCase() || '',
+                            item.amazon_sku?.toLowerCase() || '',
+                            item.local_sku?.toLowerCase() || '',
+                            item.need_num?.toLowerCase() || '',
+                            item.country?.toLowerCase() || '',
+                            item.marketplace?.toLowerCase() || ''
+                          ];
+                          if (!searchableFields.some(field => field.includes(keyword))) {
+                            return false;
+                          }
+                        }
+                        
+                        // 状态筛选
+                        if (statusFilter && statusFilter !== '') {
+                          if (item.status !== statusFilter) {
+                            return false;
+                          }
+                        }
+                        
+                        // 库存状态筛选
+                        if (inventoryStatusFilter && inventoryStatusFilter !== '') {
+                          if ((item.inventory_status || '待出库') !== inventoryStatusFilter) {
+                            return false;
+                          }
+                        }
+                        
+                        // 最后按卡片筛选类型进行过滤
+                        switch (filterType) {
+                          case 'needs':
+                            return item.quantity > 0;
+                          case 'sufficient':
+                            return item.quantity > 0 && item.shortage === 0;
+                          case 'shortage':
+                            return item.quantity > 0 && item.shortage > 0;
+                          case 'unmapped':
+                            return item.quantity > 0 && !item.local_sku;
+                          case 'inventory-only':
+                            return item.record_num === null && item.status === '有库存无需求';
+                          case 'missing-mapping':
+                            return item.status === '映射缺失';
+                          case 'unmapped-inventory':
+                            return item.status === '库存未映射';
+                          default:
+                            // 只显示有库存或有需求的记录
+                            return item.quantity > 0 || item.total_available > 0;
+                        }
+                      }).length;
+                    })()} 条记录
                   </Text>
                 </Space>
               </Col>
@@ -2309,71 +2351,83 @@ const ShippingPage: React.FC = () => {
 
           <Table
             columns={mergedColumns}
-            dataSource={mergedData.filter((item: MergedShippingData) => {
-              // 首先按国家筛选（新增）
-              if (selectedCountry && selectedCountry !== '') {
-                if (item.country !== selectedCountry) {
-                  return false;
+            dataSource={(() => {
+              // 首先进行数据去重，避免重复显示相同记录
+              const uniqueData = mergedData.filter((item: MergedShippingData, index: number, self: MergedShippingData[]) => {
+                // 对于有需求单的记录，使用record_num作为唯一标识
+                if (item.record_num !== null) {
+                  return self.findIndex(x => x.record_num === item.record_num) === index;
                 }
-                // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
-                if (item.status === '已发货') {
-                  return false;
+                // 对于无需求单的库存记录，使用local_sku+country作为唯一标识
+                const key = `${item.local_sku}_${item.country}`;
+                return self.findIndex(x => x.local_sku === item.local_sku && x.country === item.country && x.record_num === null) === index;
+              });
+              
+              // 然后应用筛选条件
+              return uniqueData.filter((item: MergedShippingData) => {
+                // 首先按国家筛选（新增）
+                if (selectedCountry && selectedCountry !== '') {
+                  if (item.country !== selectedCountry) {
+                    return false;
+                  }
+                  // 当选择国家时，排除已发货的记录（与国家库存汇总保持一致）
+                  if (item.status === '已发货') {
+                    return false;
+                  }
                 }
-              }
-              
-              // 关键词搜索筛选
-              if (searchKeyword.trim() !== '') {
-                const keyword = searchKeyword.toLowerCase();
-                const searchableFields = [
-                  item.amz_sku?.toLowerCase() || '',
-                  item.amazon_sku?.toLowerCase() || '',
-                  item.local_sku?.toLowerCase() || '',
-                  item.need_num?.toLowerCase() || '',
-                  item.country?.toLowerCase() || '',
-                  item.marketplace?.toLowerCase() || ''
-                ];
-                if (!searchableFields.some(field => field.includes(keyword))) {
-                  return false;
+                
+                // 关键词搜索筛选
+                if (searchKeyword.trim() !== '') {
+                  const keyword = searchKeyword.toLowerCase();
+                  const searchableFields = [
+                    item.amz_sku?.toLowerCase() || '',
+                    item.amazon_sku?.toLowerCase() || '',
+                    item.local_sku?.toLowerCase() || '',
+                    item.need_num?.toLowerCase() || '',
+                    item.country?.toLowerCase() || '',
+                    item.marketplace?.toLowerCase() || ''
+                  ];
+                  if (!searchableFields.some(field => field.includes(keyword))) {
+                    return false;
+                  }
                 }
-              }
-              
-              // 状态筛选
-              if (statusFilter && statusFilter !== '') {
-                if (item.status !== statusFilter) {
-                  return false;
+                
+                // 状态筛选
+                if (statusFilter && statusFilter !== '') {
+                  if (item.status !== statusFilter) {
+                    return false;
+                  }
                 }
-              }
-              
-              // 库存状态筛选
-              if (inventoryStatusFilter && inventoryStatusFilter !== '') {
-                if ((item.inventory_status || '待出库') !== inventoryStatusFilter) {
-                  return false;
+                
+                // 库存状态筛选
+                if (inventoryStatusFilter && inventoryStatusFilter !== '') {
+                  if ((item.inventory_status || '待出库') !== inventoryStatusFilter) {
+                    return false;
+                  }
                 }
-              }
-              
-
-              
-              // 最后按卡片筛选类型进行过滤
-              switch (filterType) {
-                case 'needs':
-                  return item.quantity > 0;
-                case 'sufficient':
-                  return item.quantity > 0 && item.shortage === 0;
-                case 'shortage':
-                  return item.quantity > 0 && item.shortage > 0;
-                case 'unmapped':
-                  return item.quantity > 0 && !item.local_sku;
-                case 'inventory-only':
-                  return item.record_num === null && item.status === '有库存无需求';
-                case 'missing-mapping':
-                  return item.status === '映射缺失';
-                case 'unmapped-inventory':
-                  return item.status === '库存未映射';
-                default:
-                  // 只显示有库存或有需求的记录
-                  return item.quantity > 0 || item.total_available > 0;
-              }
-            })}
+                
+                // 最后按卡片筛选类型进行过滤
+                switch (filterType) {
+                  case 'needs':
+                    return item.quantity > 0;
+                  case 'sufficient':
+                    return item.quantity > 0 && item.shortage === 0;
+                  case 'shortage':
+                    return item.quantity > 0 && item.shortage > 0;
+                  case 'unmapped':
+                    return item.quantity > 0 && !item.local_sku;
+                  case 'inventory-only':
+                    return item.record_num === null && item.status === '有库存无需求';
+                  case 'missing-mapping':
+                    return item.status === '映射缺失';
+                  case 'unmapped-inventory':
+                    return item.status === '库存未映射';
+                  default:
+                    // 只显示有库存或有需求的记录
+                    return item.quantity > 0 || item.total_available > 0;
+                }
+              });
+            })()}
             rowKey={(record: MergedShippingData) => record.record_num !== null ? record.record_num : `manual-${record.local_sku}-${record.country}`}
             loading={mergedLoading}
             pagination={false}
