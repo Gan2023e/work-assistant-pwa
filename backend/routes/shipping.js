@@ -1063,14 +1063,20 @@ router.get('/merged-data', async (req, res) => {
         SUM(lb.total_quantity) as total_available
       FROM local_boxes lb
       INNER JOIN pbi_amzsku_sku asm ON lb.sku = asm.local_sku AND lb.country = asm.country
-      -- 优先关联fulfillment-channel包含"Amazon"的记录
+      -- 优先关联fulfillment-channel包含"Amazon"的记录（改进匹配逻辑）
       LEFT JOIN listings_sku ls_amazon ON asm.amz_sku = ls_amazon.\`seller-sku\` 
         AND asm.site = ls_amazon.site 
-        AND ls_amazon.\`fulfillment-channel\` LIKE '%Amazon%'
+        AND (ls_amazon.\`fulfillment-channel\` LIKE '%Amazon%' 
+             OR ls_amazon.\`fulfillment-channel\` LIKE '%AMAZON%'
+             OR ls_amazon.\`fulfillment-channel\` REGEXP '^AMAZON_'
+             OR ls_amazon.\`fulfillment-channel\` REGEXP '^Amazon_')
       -- 如果没有Amazon渠道，则关联其他渠道
       LEFT JOIN listings_sku ls_other ON asm.amz_sku = ls_other.\`seller-sku\` 
         AND asm.site = ls_other.site 
         AND ls_other.\`fulfillment-channel\` NOT LIKE '%Amazon%'
+        AND ls_other.\`fulfillment-channel\` NOT LIKE '%AMAZON%'
+        AND ls_other.\`fulfillment-channel\` NOT REGEXP '^AMAZON_'
+        AND ls_other.\`fulfillment-channel\` NOT REGEXP '^Amazon_'
         AND ls_amazon.\`seller-sku\` IS NULL
       WHERE lb.total_quantity > 0
         AND lb.status = '待出库'
@@ -1165,8 +1171,19 @@ router.get('/merged-data', async (req, res) => {
     const inventoryMap = new Map();
     
     inventoryWithMapping.forEach(inv => {
-      // 检查fulfillment-channel是否包含"Amazon"
-      const hasAmazonChannel = inv.fulfillment_channel && inv.fulfillment_channel.includes('Amazon');
+      // 改进的Amazon渠道检查逻辑
+      const hasAmazonChannel = inv.fulfillment_channel && (
+        inv.fulfillment_channel.includes('Amazon') || 
+        inv.fulfillment_channel.includes('AMAZON') ||
+        inv.fulfillment_channel.startsWith('AMAZON_') ||
+        inv.fulfillment_channel.startsWith('Amazon_')
+      );
+      
+      // 添加调试日志
+      console.log(`🔍 检查SKU: ${inv.local_sku}_${inv.country}`);
+      console.log(`   fulfillment_channel: "${inv.fulfillment_channel}"`);
+      console.log(`   amazon_sku: "${inv.amazon_sku}"`);
+      console.log(`   hasAmazonChannel: ${hasAmazonChannel}`);
       
       // 如果fulfillment-channel不包含"Amazon"，则Amazon SKU留空
       const effectiveAmazonSku = hasAmazonChannel ? inv.amazon_sku : '';
