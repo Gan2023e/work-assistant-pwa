@@ -2913,150 +2913,159 @@ const Purchase: React.FC = () => {
             style={{ marginBottom: '12px' }}
             bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}
           >
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Row gutter={[12, 8]}>
               {/* 数据管理 */}
-              <div style={{ 
-                padding: '8px', 
-                backgroundColor: '#f8f9fa', 
-                borderRadius: '6px',
-                border: '1px solid #e9ecef'
-              }}>
+              <Col span={8}>
                 <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: '8px', 
-                  color: '#495057',
-                  fontSize: '13px'
+                  padding: '8px', 
+                  backgroundColor: '#f8f9fa', 
+                  borderRadius: '6px',
+                  border: '1px solid #e9ecef',
+                  height: '100%'
                 }}>
-                  📊 数据管理
-                </div>
-                <Space size="middle" wrap>
-                  <Select
-                    placeholder="批量修改状态"
-                    style={{ width: 160 }}
-                    onSelect={(value) => handleBatchUpdateStatus(value)}
-                    disabled={selectedRowKeys.length === 0}
-                    size="small"
-                  >
-                    {getUniqueStatuses().map(statusItem => (
-                      <Option key={statusItem.value} value={statusItem.value}>
-                        {statusItem.value} ({statusItem.count})
-                      </Option>
-                    ))}
-                  </Select>
-                  
-                  <Button 
-                    icon={<UploadOutlined />}
-                    onClick={() => setUploadModalVisible(true)}
-                    loading={loading}
-                    size="small"
-                  >
-                    批量上传新品
-                  </Button>
-
-                  <Popconfirm
-                    title="确定要删除选中的记录吗？"
-                    onConfirm={handleBatchDelete}
-                    okText="确定"
-                    cancelText="取消"
-                    disabled={selectedRowKeys.length === 0}
-                  >
-                    <Button 
-                      danger
-                      icon={<DeleteOutlined />}
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px', 
+                    color: '#495057',
+                    fontSize: '13px'
+                  }}>
+                    📊 数据管理
+                  </div>
+                  <Space size="small" wrap>
+                    <Select
+                      placeholder="批量修改状态"
+                      style={{ width: 140 }}
+                      onSelect={(value) => handleBatchUpdateStatus(value)}
                       disabled={selectedRowKeys.length === 0}
                       size="small"
                     >
-                      批量删除
+                      {getUniqueStatuses().map(statusItem => (
+                        <Option key={statusItem.value} value={statusItem.value}>
+                          {statusItem.value} ({statusItem.count})
+                        </Option>
+                      ))}
+                    </Select>
+                    
+                    <Button 
+                      icon={<UploadOutlined />}
+                      onClick={() => setUploadModalVisible(true)}
+                      loading={loading}
+                      size="small"
+                    >
+                      批量上传新品
                     </Button>
-                  </Popconfirm>
-                </Space>
-              </div>
+
+                    <Popconfirm
+                      title="确定要删除选中的记录吗？"
+                      onConfirm={handleBatchDelete}
+                      okText="确定"
+                      cancelText="取消"
+                      disabled={selectedRowKeys.length === 0}
+                    >
+                      <Button 
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                      >
+                        批量删除
+                      </Button>
+                    </Popconfirm>
+                  </Space>
+                </div>
+              </Col>
 
               {/* CPC相关操作 */}
-              <div style={{ 
-                padding: '8px', 
-                backgroundColor: '#fff7e6', 
-                borderRadius: '6px',
-                border: '1px solid #ffd591'
-              }}>
+              <Col span={8}>
                 <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: '8px', 
-                  color: '#d46b08',
-                  fontSize: '13px'
+                  padding: '8px', 
+                  backgroundColor: '#fff7e6', 
+                  borderRadius: '6px',
+                  border: '1px solid #ffd591',
+                  height: '100%'
                 }}>
-                  🔬 CPC检测
-                </div>
-                <Space size="middle" wrap>
-                  <Button 
-                    type="primary"
-                    onClick={handleBatchSendCpcTest}
-                    disabled={selectedRowKeys.length === 0}
-                    size="small"
-                  >
-                    发送CPC测试申请
-                  </Button>
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px', 
+                    color: '#d46b08',
+                    fontSize: '13px'
+                  }}>
+                    🔬 CPC检测
+                  </div>
+                  <Space size="small" wrap>
+                    <Button 
+                      type="primary"
+                      onClick={handleBatchSendCpcTest}
+                      disabled={selectedRowKeys.length === 0}
+                      size="small"
+                    >
+                      发送CPC测试申请
+                    </Button>
 
-                  <Button 
-                    type="primary"
-                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    onClick={handleBatchMarkCpcSampleSent}
-                    disabled={selectedRowKeys.length === 0}
-                    size="small"
-                  >
-                    标记CPC样品已发
-                  </Button>
-                </Space>
-              </div>
+                    <Button 
+                      type="primary"
+                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                      onClick={handleBatchMarkCpcSampleSent}
+                      disabled={selectedRowKeys.length === 0}
+                      size="small"
+                    >
+                      标记CPC样品已发
+                    </Button>
+                  </Space>
+                </div>
+              </Col>
 
               {/* 文档生成与管理 */}
-              <div style={{ 
-                padding: '8px', 
-                backgroundColor: '#f0f5ff', 
-                borderRadius: '6px',
-                border: '1px solid #adc6ff'
-              }}>
+              <Col span={8}>
                 <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: '8px', 
-                  color: '#1d39c4',
-                  fontSize: '13px'
+                  padding: '8px', 
+                  backgroundColor: '#f0f5ff', 
+                  borderRadius: '6px',
+                  border: '1px solid #adc6ff',
+                  height: '100%'
                 }}>
-                  📄 文档管理
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px', 
+                    color: '#1d39c4',
+                    fontSize: '13px'
+                  }}>
+                    📄 文档管理
+                  </div>
+                  <Space size="small" wrap>
+                    <Button 
+                      icon={<FileExcelOutlined />}
+                      onClick={handleOpenTemplateModal}
+                      loading={globalTemplateLoading}
+                      size="small"
+                    >
+                      管理资料模板
+                    </Button>
+
+                    <Button 
+                      type="primary"
+                      icon={<FileExcelOutlined />}
+                      onClick={handleGenerateUkDataSheet}
+                      disabled={selectedRowKeys.length === 0}
+                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                      size="small"
+                    >
+                      生成英国资料表
+                    </Button>
+
+                    <Button 
+                      type="primary"
+                      icon={<FileExcelOutlined />}
+                      onClick={handleGenerateOtherSiteDataSheet}
+                      style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                      size="small"
+                    >
+                      生成其他站点资料表
+                    </Button>
+                  </Space>
                 </div>
-                <Space size="middle" wrap>
-                  <Button 
-                    icon={<FileExcelOutlined />}
-                    onClick={handleOpenTemplateModal}
-                    loading={globalTemplateLoading}
-                    size="small"
-                  >
-                    管理资料模板
-                  </Button>
-
-                  <Button 
-                    type="primary"
-                    icon={<FileExcelOutlined />}
-                    onClick={handleGenerateUkDataSheet}
-                    disabled={selectedRowKeys.length === 0}
-                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    size="small"
-                  >
-                    生成英国资料表
-                  </Button>
-
-                  <Button 
-                    type="primary"
-                    icon={<FileExcelOutlined />}
-                    onClick={handleGenerateOtherSiteDataSheet}
-                    style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
-                    size="small"
-                  >
-                    生成其他站点资料表
-                  </Button>
-                </Space>
-              </div>
-            </Space>
+              </Col>
+            </Row>
           </Card>
         </Space>
       </div>
