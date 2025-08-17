@@ -2772,8 +2772,15 @@ const Purchase: React.FC = () => {
 
       const initialValues: any = {};
       errorData.missingAmzSkuMappings.forEach((item: any, index: number) => {
-        // Amazon SKU预填写：国家代码前缀 + 子SKU
-        const countryPrefix = fbaSkuCountry || 'US';
+        // Amazon SKU预填写：根据国家映射前缀 + 子SKU
+        const countryToPrefixMap: Record<string, string> = {
+          'US': 'US',    // 美国 → US前缀
+          'CA': 'US',    // 加拿大 → US前缀
+          'UK': 'UK',    // 英国 → UK前缀
+          'AE': 'UK',    // 阿联酋 → UK前缀
+          'AU': 'UK'     // 澳大利亚 → UK前缀
+        };
+        const countryPrefix = countryToPrefixMap[fbaSkuCountry] || 'US';
         initialValues[`amz_sku_${index}`] = `${countryPrefix}${item.childSku}`;
         initialValues[`site_${index}`] = countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
         initialValues[`country_${index}`] = countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
@@ -4528,7 +4535,12 @@ const Purchase: React.FC = () => {
                             rules={[{ required: true, message: '请输入Amazon SKU' }]}
                           >
                             <Input 
-                              placeholder={`建议格式: ${fbaSkuCountry || 'US'}${item.childSku}`}
+                              placeholder={`建议格式: ${(() => {
+                                const countryToPrefixMap: Record<string, string> = {
+                                  'US': 'US', 'CA': 'US', 'UK': 'UK', 'AE': 'UK', 'AU': 'UK'
+                                };
+                                return countryToPrefixMap[fbaSkuCountry] || 'US';
+                              })()}${item.childSku}`}
                               style={{ 
                                 fontSize: '16px', 
                                 padding: '12px',
