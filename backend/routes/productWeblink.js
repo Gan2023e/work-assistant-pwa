@@ -3699,7 +3699,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
     let amzSkuMappings = [];
     if (childSkus.length > 0) {
       amzSkuMappings = await sequelize.query(`
-        SELECT local_sku, amz_sku, country, sku_type 
+        SELECT local_sku, amz_sku, site, country, sku_type 
         FROM pbi_amzsku_sku 
         WHERE local_sku IN (:childSkus) 
           AND sku_type != 'FBA SKU' 
@@ -3716,17 +3716,22 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.log(`📊 找到 ${amzSkuMappings.length} 条Amazon SKU映射记录`);
 
     // 步骤5: 批量查询listings_sku获取ASIN和价格信息
-    const amzSkus = amzSkuMappings.map(item => item.amz_sku);
     console.log('🔍 批量查询listings_sku获取ASIN和价格信息...');
     
     let listingsData = [];
-    if (amzSkus.length > 0) {
+    if (amzSkuMappings.length > 0) {
+      // 构建查询条件，需要匹配amz_sku和site
+      const conditions = amzSkuMappings.map(mapping => 
+        `(\`seller-sku\` = '${mapping.amz_sku}' AND site = '${mapping.site}')`
+      ).join(' OR ');
+      
+      console.log(`🔍 查询条件: ${conditions.length > 200 ? conditions.substring(0, 200) + '...' : conditions}`);
+      
       listingsData = await sequelize.query(`
-        SELECT \`seller-sku\`, asin1, price 
+        SELECT \`seller-sku\`, asin1, price, site 
         FROM listings_sku 
-        WHERE \`seller-sku\` IN (:amzSkus)
+        WHERE ${conditions}
       `, {
-        replacements: { amzSkus: amzSkus },
         type: sequelize.QueryTypes.SELECT
       });
     }
@@ -3736,17 +3741,23 @@ router.post('/generate-fbasku-data', async (req, res) => {
     // 建立查询映射以提高查询效率
     const amzSkuMap = new Map();
     amzSkuMappings.forEach(mapping => {
-      amzSkuMap.set(mapping.local_sku, mapping.amz_sku);
-      console.log(`🔗 SKU映射: ${mapping.local_sku} -> ${mapping.amz_sku}`);
+      // 使用local_sku作为键，包含amz_sku和site信息
+      amzSkuMap.set(mapping.local_sku, {
+        amz_sku: mapping.amz_sku,
+        site: mapping.site
+      });
+      console.log(`🔗 SKU映射: ${mapping.local_sku} -> ${mapping.amz_sku} (${mapping.site})`);
     });
 
     const listingsMap = new Map();
     listingsData.forEach(listing => {
-      listingsMap.set(listing['seller-sku'], {
+      // 使用seller-sku + site作为复合键
+      const compositeKey = `${listing['seller-sku']}_${listing.site}`;
+      listingsMap.set(compositeKey, {
         asin: listing.asin1,
         price: listing.price
       });
-      console.log(`📋 Listings数据: ${listing['seller-sku']} -> ASIN:${listing.asin1}, Price:${listing.price}`);
+      console.log(`📋 Listings数据: ${listing['seller-sku']} (${listing.site}) -> ASIN:${listing.asin1}, Price:${listing.price}`);
     });
     
     console.log(`📊 映射统计: amzSkuMap有${amzSkuMap.size}条记录，listingsMap有${listingsMap.size}条记录`);
@@ -3760,10 +3771,10 @@ router.post('/generate-fbasku-data', async (req, res) => {
     // 检查每个子SKU的数据完整性
     inventorySkus.forEach(inventory => {
       const childSku = inventory.child_sku;
-      const amzSku = amzSkuMap.get(childSku);
+      const amzSkuInfo = amzSkuMap.get(childSku);
       
       // 检查是否缺少Amazon SKU映射
-      if (!amzSku) {
+      if (!amzSkuInfo) {
         missingAmzSkuMappings.push({
           parentSku: inventory.parent_sku,
           childSku: childSku
@@ -3771,12 +3782,13 @@ router.post('/generate-fbasku-data', async (req, res) => {
         console.log(`❌ 缺少Amazon SKU映射: ${childSku}`);
       } else {
         // 如果有Amazon SKU映射，检查是否缺少Listings数据
-        const listingInfo = listingsMap.get(amzSku);
+        const compositeKey = `${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`;
+        const listingInfo = listingsMap.get(compositeKey);
         if (!listingInfo || !listingInfo.asin || !listingInfo.price) {
           missingListingsData.push({
             parentSku: inventory.parent_sku,
             childSku: childSku,
-            amzSku: amzSku,
+            amzSku: amzSkuInfo.amz_sku,
             hasAsin: listingInfo?.asin ? true : false,
             hasPrice: listingInfo?.price ? true : false
           });
@@ -3868,8 +3880,8 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
     inventorySkus.forEach((inventory, index) => {
       const childSku = inventory.child_sku;
-      const amzSku = amzSkuMap.get(childSku);
-      const listingInfo = amzSku ? listingsMap.get(amzSku) : null;
+      const amzSkuInfo = amzSkuMap.get(childSku);
+      const listingInfo = amzSkuInfo ? listingsMap.get(`${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`) : null;
 
       // 确保有足够的行
       if (!data[dataRowIndex]) {
@@ -3890,7 +3902,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
           data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin;
           console.log(`✅ 填写ASIN: ${childSku} -> ${listingInfo.asin}`);
         } else {
-          console.log(`⚠️  跳过ASIN填写: ${childSku}, amzSku: ${amzSku}`);
+          console.log(`⚠️  跳过ASIN填写: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
           // 不填写空值，直接跳过
         }
       }
@@ -3905,7 +3917,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
           data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price;
           console.log(`✅ 填写价格: ${childSku} -> ${listingInfo.price}`);
         } else {
-          console.log(`⚠️  跳过价格填写: ${childSku}, amzSku: ${amzSku}`);
+          console.log(`⚠️  跳过价格填写: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
           // 不填写空值，直接跳过
         }
       }
