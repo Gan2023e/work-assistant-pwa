@@ -3750,7 +3750,50 @@ router.post('/generate-fbasku-data', async (req, res) => {
     
     console.log(`📊 映射统计: amzSkuMap有${amzSkuMap.size}条记录，listingsMap有${listingsMap.size}条记录`);
 
-    // 步骤6: 处理Excel模板
+    // 步骤6: 数据完整性检查
+    console.log('🔍 检查数据完整性...');
+    
+    const missingAmzSkuMappings = []; // 缺少Amazon SKU映射的子SKU
+    const missingListingsData = [];   // 缺少Listings数据的Amazon SKU
+    
+    // 检查每个子SKU的数据完整性
+    inventorySkus.forEach(inventory => {
+      const childSku = inventory.child_sku;
+      const amzSku = amzSkuMap.get(childSku);
+      
+      // 检查是否缺少Amazon SKU映射
+      if (!amzSku) {
+        missingAmzSkuMappings.push({
+          parentSku: inventory.parent_sku,
+          childSku: childSku
+        });
+        console.log(`❌ 缺少Amazon SKU映射: ${childSku}`);
+      } else {
+        // 如果有Amazon SKU映射，检查是否缺少Listings数据
+        const listingInfo = listingsMap.get(amzSku);
+        if (!listingInfo || !listingInfo.asin || !listingInfo.price) {
+          missingListingsData.push({
+            parentSku: inventory.parent_sku,
+            childSku: childSku,
+            amzSku: amzSku,
+            hasAsin: listingInfo?.asin ? true : false,
+            hasPrice: listingInfo?.price ? true : false
+          });
+          console.log(`❌ 缺少Listings数据: ${amzSku} (对应子SKU: ${childSku})`);
+        }
+      }
+    });
+
+    // 记录数据缺失信息，但继续生成Excel
+    const hasDataMissing = missingAmzSkuMappings.length > 0 || missingListingsData.length > 0;
+    
+    if (hasDataMissing) {
+      console.log('⚠️  检测到数据缺失，但继续生成Excel');
+    } else {
+      console.log('✅ 数据完整性检查通过');
+    }
+
+    // 步骤7: 处理Excel模板
     console.log('📝 开始处理Excel模板...');
     const XLSX = require('xlsx');
     
@@ -3838,8 +3881,8 @@ router.post('/generate-fbasku-data', async (req, res) => {
           data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin;
           console.log(`✅ 填写ASIN: ${childSku} -> ${listingInfo.asin}`);
         } else {
-          console.log(`⚠️  未找到ASIN数据: ${childSku}, amzSku: ${amzSku}, listingInfo:`, listingInfo);
-          data[dataRowIndex][columnIndexes['external_product_id']] = ''; // 填写空值而不是跳过
+          console.log(`⚠️  跳过ASIN填写: ${childSku}, amzSku: ${amzSku}`);
+          // 不填写空值，直接跳过
         }
       }
       
@@ -3853,8 +3896,8 @@ router.post('/generate-fbasku-data', async (req, res) => {
           data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price;
           console.log(`✅ 填写价格: ${childSku} -> ${listingInfo.price}`);
         } else {
-          console.log(`⚠️  未找到价格数据: ${childSku}, amzSku: ${amzSku}, listingInfo:`, listingInfo);
-          data[dataRowIndex][columnIndexes['standard_price']] = ''; // 填写空值而不是跳过
+          console.log(`⚠️  跳过价格填写: ${childSku}, amzSku: ${amzSku}`);
+          // 不填写空值，直接跳过
         }
       }
       if (columnIndexes['fulfillment_center_id'] !== undefined) {
@@ -3921,9 +3964,20 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.log(`✅ FBASKU资料生成完成！包含 ${inventorySkus.length} 条记录`);
     console.log(`⏱️  总耗时: ${Date.now() - startTime}ms`);
 
-    // 返回文件
+    // 设置文件下载响应头
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    
+    // 如果有数据缺失，在响应头中添加警告信息
+    if (hasDataMissing) {
+      res.setHeader('X-Data-Missing', 'true');
+      res.setHeader('X-Missing-Data-Info', JSON.stringify({
+        missingAmzSkuMappings: missingAmzSkuMappings,
+        missingListingsData: missingListingsData
+      }));
+      console.log('⚠️  文件已生成，但包含数据缺失信息');
+    }
+    
     res.send(buffer);
 
   } catch (error) {
