@@ -4422,146 +4422,185 @@ const Purchase: React.FC = () => {
                     <Text strong style={{ fontSize: '14px' }}>请为以下子SKU填写Amazon SKU映射信息：</Text>
                   </div>
                   
+                  {/* 表格形式显示数据 */}
                   <div style={{ 
-                    maxHeight: '400px', 
+                    maxHeight: '500px', 
                     overflowY: 'auto', 
                     border: '1px solid #d9d9d9', 
-                    borderRadius: '6px',
-                    padding: '16px',
-                    backgroundColor: '#fafafa'
+                    borderRadius: '8px',
+                    backgroundColor: '#fff'
                   }}>
-                    {missingDataInfo.missingAmzSkuMappings.map((item: any, index: number) => (
-                      <div key={index} style={{ 
-                        padding: '16px',
-                        backgroundColor: '#fff',
-                        borderRadius: '8px',
-                        marginBottom: '12px',
-                        border: '1px solid #e8e8e8'
-                      }}>
-                        <div style={{ marginBottom: '16px' }}>
-                          <Text strong style={{ color: '#1890ff', fontSize: '16px' }}>
-                            母SKU: {item.parentSku} → 子SKU: {item.childSku}
-                          </Text>
-                        </div>
-                        
-                        {/* 预填写信息展示区 */}
-                        <div style={{
-                          marginBottom: '16px',
-                          padding: '12px',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '6px',
-                          border: '1px solid #e9ecef'
-                        }}>
-                          <Row gutter={16}>
-                            <Col span={8}>
-                              <div style={{ marginBottom: '8px' }}>
-                                <Text strong style={{ color: '#666', fontSize: '12px' }}>本地SKU</Text>
-                              </div>
-                              <div style={{
-                                padding: '8px 12px',
-                                backgroundColor: '#fff',
-                                border: '1px solid #d9d9d9',
-                                borderRadius: '4px',
-                                fontSize: '14px'
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      {/* 表头 */}
+                      <thead>
+                        <tr style={{ backgroundColor: '#fafafa' }}>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>母SKU</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>本地SKU</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>站点</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>国家</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#1890ff'
+                          }}>Amazon SKU</th>
+                        </tr>
+                      </thead>
+                      
+                      {/* 数据行 */}
+                      <tbody>
+                        {missingDataInfo.missingAmzSkuMappings.map((item: any, index: number) => {
+                          // 预设数据映射
+                          const countryToSiteMap: Record<string, string> = {
+                            'US': 'www.amazon.com',
+                            'CA': 'www.amazon.ca',
+                            'UK': 'www.amazon.co.uk',
+                            'AE': 'www.amazon.ae',
+                            'AU': 'www.amazon.com.au'
+                          };
+                          const countryToChineseMap: Record<string, string> = {
+                            'US': '美国',
+                            'CA': '加拿大',
+                            'UK': '英国',
+                            'AE': '阿联酋',
+                            'AU': '澳大利亚'
+                          };
+                          const countryToPrefixMap: Record<string, string> = {
+                            'US': 'US', 'CA': 'US', 'UK': 'UK', 'AE': 'UK', 'AU': 'UK'
+                          };
+                          
+                          const site = countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
+                          const country = countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
+                          const prefix = countryToPrefixMap[fbaSkuCountry] || 'US';
+                          
+                          return (
+                            <tr key={index} style={{ 
+                              backgroundColor: index % 2 === 0 ? '#fafafa' : '#fff',
+                              borderBottom: '1px solid #f0f0f0'
+                            }}>
+                              {/* 母SKU */}
+                              <td style={{
+                                padding: '12px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                color: '#262626',
+                                fontWeight: '500'
+                              }}>
+                                {item.parentSku}
+                              </td>
+                              
+                              {/* 本地SKU */}
+                              <td style={{
+                                padding: '12px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                color: '#595959'
                               }}>
                                 {item.childSku}
-                              </div>
-                              <Form.Item name={`local_sku_${index}`} style={{ display: 'none' }}>
-                                <Input />
-                              </Form.Item>
-                            </Col>
-                            
-                            <Col span={8}>
-                              <div style={{ marginBottom: '8px' }}>
-                                <Text strong style={{ color: '#666', fontSize: '12px' }}>站点</Text>
-                              </div>
-                              <div style={{
-                                padding: '8px 12px',
-                                backgroundColor: '#fff',
-                                border: '1px solid #d9d9d9',
-                                borderRadius: '4px',
+                                <Form.Item name={`local_sku_${index}`} style={{ display: 'none' }}>
+                                  <Input />
+                                </Form.Item>
+                              </td>
+                              
+                              {/* 站点 */}
+                              <td style={{
+                                padding: '12px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                color: '#595959'
+                              }}>
+                                {site}
+                                <Form.Item name={`site_${index}`} style={{ display: 'none' }}>
+                                  <Input />
+                                </Form.Item>
+                              </td>
+                              
+                              {/* 国家 */}
+                              <td style={{
+                                padding: '12px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                color: '#595959'
+                              }}>
+                                {country}
+                                <Form.Item name={`country_${index}`} style={{ display: 'none' }}>
+                                  <Input />
+                                </Form.Item>
+                              </td>
+                              
+                              {/* Amazon SKU - 可编辑 */}
+                              <td style={{
+                                padding: '8px 16px',
                                 fontSize: '14px'
                               }}>
-                                {(() => {
-                                  const countryToSiteMap: Record<string, string> = {
-                                    'US': 'www.amazon.com',
-                                    'CA': 'www.amazon.ca',
-                                    'UK': 'www.amazon.co.uk',
-                                    'AE': 'www.amazon.ae',
-                                    'AU': 'www.amazon.com.au'
-                                  };
-                                  return countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
-                                })()}
-                              </div>
-                              <Form.Item name={`site_${index}`} style={{ display: 'none' }}>
-                                <Input />
-                              </Form.Item>
-                            </Col>
-                            
-                            <Col span={8}>
-                              <div style={{ marginBottom: '8px' }}>
-                                <Text strong style={{ color: '#666', fontSize: '12px' }}>国家</Text>
-                              </div>
-                              <div style={{
-                                padding: '8px 12px',
-                                backgroundColor: '#fff',
-                                border: '1px solid #d9d9d9',
-                                borderRadius: '4px',
-                                fontSize: '14px'
-                              }}>
-                                {(() => {
-                                  const countryToChineseMap: Record<string, string> = {
-                                    'US': '美国',
-                                    'CA': '加拿大',
-                                    'UK': '英国',
-                                    'AE': '阿联酋',
-                                    'AU': '澳大利亚'
-                                  };
-                                  return countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
-                                })()}
-                              </div>
-                              <Form.Item name={`country_${index}`} style={{ display: 'none' }}>
-                                <Input />
-                              </Form.Item>
-                            </Col>
-                          </Row>
-                        </div>
-
-                        {/* Amazon SKU 可编辑输入区 */}
-                        <div style={{ marginBottom: '12px' }}>
-                          <Form.Item
-                            name={`amz_sku_${index}`}
-                            label={<Text strong style={{ color: '#1890ff' }}>Amazon SKU (可编辑)</Text>}
-                            rules={[{ required: true, message: '请输入Amazon SKU' }]}
-                          >
-                            <Input 
-                              placeholder={`建议格式: ${(() => {
-                                const countryToPrefixMap: Record<string, string> = {
-                                  'US': 'US', 'CA': 'US', 'UK': 'UK', 'AE': 'UK', 'AU': 'UK'
-                                };
-                                return countryToPrefixMap[fbaSkuCountry] || 'US';
-                              })()}${item.childSku}`}
-                              style={{ 
-                                fontSize: '16px', 
-                                padding: '12px',
-                                borderColor: '#1890ff'
-                              }}
-                            />
-                          </Form.Item>
-                        </div>
-
-                        <div style={{ 
-                          padding: '8px 12px', 
-                          backgroundColor: '#e6f7ff', 
-                          borderRadius: '4px',
-                          fontSize: '12px'
-                        }}>
-                          <Text type="secondary">
-                            💡 SKU类型将自动设置为 "Seller SKU" | 可修改Amazon SKU后点击确认
-                          </Text>
-                        </div>
-                      </div>
-                    ))}
+                                <Form.Item
+                                  name={`amz_sku_${index}`}
+                                  style={{ margin: 0 }}
+                                  rules={[{ required: true, message: '请输入Amazon SKU' }]}
+                                >
+                                  <Input 
+                                    placeholder={`${prefix}${item.childSku}`}
+                                    style={{ 
+                                      fontSize: '14px', 
+                                      borderColor: '#1890ff',
+                                      borderWidth: '2px'
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* 操作提示 */}
+                  <div style={{ 
+                    marginTop: '12px',
+                    padding: '8px 12px', 
+                    backgroundColor: '#e6f7ff', 
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    textAlign: 'center'
+                  }}>
+                    <Text type="secondary">
+                      💡 Amazon SKU已预填写建议格式，可根据需要修改 | SKU类型将自动设置为 "Seller SKU"
+                    </Text>
                   </div>
                 </Form>
               </div>
