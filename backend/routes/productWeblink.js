@@ -3695,19 +3695,22 @@ router.post('/generate-fbasku-data', async (req, res) => {
     const childSkus = inventorySkus.map(item => item.child_sku);
     console.log('🔍 批量查询Amazon SKU映射...');
     
-    const amzSkuMappings = await sequelize.query(`
-      SELECT local_sku, amz_sku, country, sku_type 
-      FROM pbi_amzsku_sku 
-      WHERE local_sku IN (:childSkus) 
-        AND sku_type != 'FBA SKU' 
-        AND country = :country
-    `, {
-      replacements: { 
-        childSkus: childSkus,
-        country: country === 'US' ? '美国' : country
-      },
-      type: sequelize.QueryTypes.SELECT
-    });
+    let amzSkuMappings = [];
+    if (childSkus.length > 0) {
+      amzSkuMappings = await sequelize.query(`
+        SELECT local_sku, amz_sku, country, sku_type 
+        FROM pbi_amzsku_sku 
+        WHERE local_sku IN (:childSkus) 
+          AND sku_type != 'FBA SKU' 
+          AND country = :country
+      `, {
+        replacements: { 
+          childSkus: childSkus,
+          country: country === 'US' ? '美国' : country
+        },
+        type: sequelize.QueryTypes.SELECT
+      });
+    }
 
     console.log(`📊 找到 ${amzSkuMappings.length} 条Amazon SKU映射记录`);
 
@@ -3715,14 +3718,17 @@ router.post('/generate-fbasku-data', async (req, res) => {
     const amzSkus = amzSkuMappings.map(item => item.amz_sku);
     console.log('🔍 批量查询listings_sku获取ASIN和价格信息...');
     
-    const listingsData = await sequelize.query(`
-      SELECT \`seller-sku\`, asin1, price 
-      FROM listings_sku 
-      WHERE \`seller-sku\` IN (:amzSkus)
-    `, {
-      replacements: { amzSkus: amzSkus },
-      type: sequelize.QueryTypes.SELECT
-    });
+    let listingsData = [];
+    if (amzSkus.length > 0) {
+      listingsData = await sequelize.query(`
+        SELECT \`seller-sku\`, asin1, price 
+        FROM listings_sku 
+        WHERE \`seller-sku\` IN (:amzSkus)
+      `, {
+        replacements: { amzSkus: amzSkus },
+        type: sequelize.QueryTypes.SELECT
+      });
+    }
 
     console.log(`📊 找到 ${listingsData.length} 条listings_sku记录`);
 
