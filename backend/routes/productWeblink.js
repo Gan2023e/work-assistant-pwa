@@ -2582,7 +2582,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       console.log('📄 生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
@@ -3611,6 +3611,295 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     console.error('❌ 上传源数据失败:', error);
     res.status(500).json({
       message: '上传失败: ' + error.message,
+      error: error.toString()
+    });
+  }
+});
+
+// ==================== 生成FBASKU资料接口 ====================
+
+// 生成FBASKU资料
+router.post('/generate-fbasku-data', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    console.log('📋 收到生成FBASKU资料请求');
+    
+    const { parentSkus, country } = req.body;
+    
+    if (!Array.isArray(parentSkus) || parentSkus.length === 0) {
+      return res.status(400).json({ message: '请提供要生成资料的母SKU列表' });
+    }
+
+    if (!country) {
+      return res.status(400).json({ message: '请选择生成的国家' });
+    }
+
+    console.log(`📝 处理 ${parentSkus.length} 个母SKU，生成${country}资料:`, parentSkus);
+
+    // 步骤1: 从数据库获取对应国家的模板文件
+    console.log(`🔍 从数据库查找${country}模板文件...`);
+    
+    const countryTemplate = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        country: country,
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']]
+    });
+    
+    if (!countryTemplate) {
+      return res.status(400).json({ message: `未找到${country}站点的资料模板，请先上传${country}模板文件` });
+    }
+
+    console.log(`📄 使用${country}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
+
+    // 步骤2: 下载模板文件
+    console.log(`📥 下载${country}模板文件...`);
+    const { downloadTemplateFromOSS } = require('../utils/oss');
+    
+    const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
+    
+    if (!downloadResult.success) {
+      console.error(`❌ 下载${country}模板失败:`, downloadResult.message);
+      return res.status(500).json({ 
+        message: `下载${country}模板失败: ${downloadResult.message}`,
+        details: downloadResult.error
+      });
+    }
+
+    console.log(`✅ ${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+
+    // 步骤3: 批量查询子SKU信息
+    console.log('🔍 批量查询子SKU信息...');
+    const { sequelize } = require('../models/database');
+    
+    const inventorySkus = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: {
+          [Op.in]: parentSkus
+        }
+      },
+      order: [['parent_sku', 'ASC'], ['child_sku', 'ASC']]
+    });
+
+    if (inventorySkus.length === 0) {
+      return res.status(404).json({ 
+        message: '在数据库中未找到这些母SKU对应的子SKU信息' 
+      });
+    }
+
+    console.log(`📊 找到 ${inventorySkus.length} 条子SKU记录`);
+
+    // 步骤4: 批量查询Amazon SKU映射
+    const childSkus = inventorySkus.map(item => item.child_sku);
+    console.log('🔍 批量查询Amazon SKU映射...');
+    
+    const amzSkuMappings = await sequelize.query(`
+      SELECT local_sku, amz_sku, country, sku_type 
+      FROM pbi_amzsku_sku 
+      WHERE local_sku IN (:childSkus) 
+        AND sku_type != 'FBA SKU' 
+        AND country = :country
+    `, {
+      replacements: { 
+        childSkus: childSkus,
+        country: country === 'US' ? '美国' : country
+      },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    console.log(`📊 找到 ${amzSkuMappings.length} 条Amazon SKU映射记录`);
+
+    // 步骤5: 批量查询listings_sku获取ASIN和价格信息
+    const amzSkus = amzSkuMappings.map(item => item.amz_sku);
+    console.log('🔍 批量查询listings_sku获取ASIN和价格信息...');
+    
+    const listingsData = await sequelize.query(`
+      SELECT \`seller-sku\`, asin1, price 
+      FROM listings_sku 
+      WHERE \`seller-sku\` IN (:amzSkus)
+    `, {
+      replacements: { amzSkus: amzSkus },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    console.log(`📊 找到 ${listingsData.length} 条listings_sku记录`);
+
+    // 建立查询映射以提高查询效率
+    const amzSkuMap = new Map();
+    amzSkuMappings.forEach(mapping => {
+      amzSkuMap.set(mapping.local_sku, mapping.amz_sku);
+    });
+
+    const listingsMap = new Map();
+    listingsData.forEach(listing => {
+      listingsMap.set(listing['seller-sku'], {
+        asin: listing.asin1,
+        price: listing.price
+      });
+    });
+
+    // 步骤6: 处理Excel模板
+    console.log('📝 开始处理Excel模板...');
+    const XLSX = require('xlsx');
+    
+    const workbook = XLSX.read(downloadResult.content, { 
+      type: 'buffer',
+      cellStyles: true,
+      cellNF: true,
+      cellDates: true
+    });
+    
+    console.log('✅ Excel文件加载完成');
+    
+    // 检查是否有Template工作表
+    if (!workbook.Sheets['Template']) {
+      return res.status(400).json({ message: '模板文件中未找到Template工作表' });
+    }
+
+    console.log('✅ 成功加载Template工作表');
+    
+    const worksheet = workbook.Sheets['Template'];
+    
+    // 将工作表转换为二维数组
+    const data = XLSX.utils.sheet_to_json(worksheet, { 
+      header: 1,
+      defval: '',
+      raw: false
+    });
+
+    console.log(`📊 模板数据行数: ${data.length}`);
+    
+    if (data.length < 3) {
+      return res.status(400).json({ message: '模板格式错误：至少需要3行数据（包括标题行）' });
+    }
+
+    const headerRow = data[2]; // 第三行是标题行
+    console.log('📋 标题行:', headerRow);
+
+    // 找到需要填写的列索引
+    const columnIndexes = {};
+    const requiredColumns = [
+      'item_sku', 'update_delete', 'external_product_id', 'external_product_id_type',
+      'standard_price', 'fulfillment_center_id', 'package_height', 'package_width',
+      'package_length', 'package_length_unit_of_measure', 'package_weight',
+      'package_weight_unit_of_measure', 'package_height_unit_of_measure',
+      'package_width_unit_of_measure', 'batteries_required',
+      'supplier_declared_dg_hz_regulation1', 'condition_type'
+    ];
+
+    requiredColumns.forEach(col => {
+      const index = headerRow.findIndex(header => 
+        header && header.toString().toLowerCase() === col.toLowerCase()
+      );
+      if (index !== -1) {
+        columnIndexes[col] = index;
+      }
+    });
+
+    console.log('📋 找到的列索引:', columnIndexes);
+
+    // 步骤7: 填写数据
+    console.log('📝 开始填写数据...');
+    let dataRowIndex = 3; // 从第四行开始填写数据
+
+    inventorySkus.forEach((inventory, index) => {
+      const childSku = inventory.child_sku;
+      const amzSku = amzSkuMap.get(childSku);
+      const listingInfo = amzSku ? listingsMap.get(amzSku) : null;
+
+      // 确保有足够的行
+      if (!data[dataRowIndex]) {
+        data[dataRowIndex] = new Array(headerRow.length).fill('');
+      }
+
+      // 填写各列数据
+      if (columnIndexes['item_sku'] !== undefined) {
+        data[dataRowIndex][columnIndexes['item_sku']] = `NA${childSku}`;
+      }
+      if (columnIndexes['update_delete'] !== undefined) {
+        data[dataRowIndex][columnIndexes['update_delete']] = 'PartialUpdate';
+      }
+      if (columnIndexes['external_product_id'] !== undefined && listingInfo) {
+        data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin || '';
+      }
+      if (columnIndexes['external_product_id_type'] !== undefined) {
+        data[dataRowIndex][columnIndexes['external_product_id_type']] = 'ASIN';
+      }
+      if (columnIndexes['standard_price'] !== undefined && listingInfo) {
+        data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price || '';
+      }
+      if (columnIndexes['fulfillment_center_id'] !== undefined) {
+        data[dataRowIndex][columnIndexes['fulfillment_center_id']] = 'AMAZON_NA';
+      }
+      if (columnIndexes['package_height'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_height']] = '2';
+      }
+      if (columnIndexes['package_width'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_width']] = '5';
+      }
+      if (columnIndexes['package_length'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_length']] = '10';
+      }
+      if (columnIndexes['package_length_unit_of_measure'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_length_unit_of_measure']] = 'CM';
+      }
+      if (columnIndexes['package_weight'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_weight']] = '0.5';
+      }
+      if (columnIndexes['package_weight_unit_of_measure'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_weight_unit_of_measure']] = 'KG';
+      }
+      if (columnIndexes['package_height_unit_of_measure'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_height_unit_of_measure']] = 'CM';
+      }
+      if (columnIndexes['package_width_unit_of_measure'] !== undefined) {
+        data[dataRowIndex][columnIndexes['package_width_unit_of_measure']] = 'CM';
+      }
+      if (columnIndexes['batteries_required'] !== undefined) {
+        data[dataRowIndex][columnIndexes['batteries_required']] = 'No';
+      }
+      if (columnIndexes['supplier_declared_dg_hz_regulation1'] !== undefined) {
+        data[dataRowIndex][columnIndexes['supplier_declared_dg_hz_regulation1']] = 'Not Applicable';
+      }
+      if (columnIndexes['condition_type'] !== undefined) {
+        data[dataRowIndex][columnIndexes['condition_type']] = 'New';
+      }
+
+      dataRowIndex++;
+      
+      console.log(`✅ 处理完成第 ${index + 1}/${inventorySkus.length} 个SKU: ${inventory.parent_sku} -> ${childSku}`);
+    });
+
+    // 步骤8: 生成新的Excel文件
+    console.log('📝 生成新的Excel文件...');
+    
+    const newWorksheet = XLSX.utils.aoa_to_sheet(data);
+    workbook.Sheets['Template'] = newWorksheet;
+    
+    // 生成Excel文件缓冲区
+    const buffer = XLSX.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      cellStyles: true
+    });
+
+    // 生成文件名
+    const fileName = `FBASKU_${country}_${parentSkus.join('_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    console.log(`✅ FBASKU资料生成完成！包含 ${inventorySkus.length} 条记录`);
+    console.log(`⏱️  总耗时: ${Date.now() - startTime}ms`);
+
+    // 返回文件
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('❌ 生成FBASKU资料失败:', error);
+    res.status(500).json({
+      message: '生成失败: ' + error.message,
       error: error.toString()
     });
   }

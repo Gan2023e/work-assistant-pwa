@@ -245,6 +245,11 @@ const Purchase: React.FC = () => {
   // 添加钉钉推送开关状态
   const [enableDingTalkNotification, setEnableDingTalkNotification] = useState(true);
 
+  // FBASKU生成相关状态
+  const [fbaSkuModalVisible, setFbaSkuModalVisible] = useState(false);
+  const [fbaSkuCountry, setFbaSkuCountry] = useState('US');
+  const [fbaSkuLoading, setFbaSkuLoading] = useState(false);
+
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
     try {
@@ -2625,6 +2630,93 @@ const Purchase: React.FC = () => {
     );
   };
 
+  // FBASKU生成相关处理函数
+  const handleGenerateFbaSku = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要生成FBASKU资料的记录');
+      return;
+    }
+    setFbaSkuModalVisible(true);
+  };
+
+  const handleFbaSkuModalOk = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要生成FBASKU资料的记录');
+      return;
+    }
+
+    setFbaSkuLoading(true);
+    
+    try {
+      // 获取选中记录的母SKU
+      const selectedRecords = data.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+      const parentSkus = selectedRecords.map(record => record.parent_sku);
+
+      console.log('生成FBASKU资料，母SKU:', parentSkus, '国家:', fbaSkuCountry);
+
+      // 调用后端API生成FBASKU资料
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-fbasku-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          parentSkus: parentSkus,
+          country: fbaSkuCountry
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '生成失败');
+      }
+
+      // 下载生成的文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // 从响应头获取文件名
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let fileName = `FBASKU_${fbaSkuCountry}_${parentSkus.join('_')}.xlsx`;
+      
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="([^"]+)"/);
+        if (matches && matches[1]) {
+          fileName = matches[1];
+        }
+      }
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理URL对象
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 5000);
+
+      message.success(`成功生成${fbaSkuCountry}站点的FBASKU资料，包含 ${parentSkus.length} 个母SKU`);
+      setFbaSkuModalVisible(false);
+      setSelectedRowKeys([]);
+
+    } catch (error: any) {
+      console.error('生成FBASKU资料失败:', error);
+      message.error('生成失败: ' + error.message);
+    } finally {
+      setFbaSkuLoading(false);
+    }
+  };
+
+  const handleFbaSkuModalCancel = () => {
+    setFbaSkuModalVisible(false);
+    setFbaSkuCountry('US');
+  };
+
   return (
     <div style={{ padding: '16px' }}>
             {/* 统计卡片区域 */}
@@ -3061,6 +3153,17 @@ const Purchase: React.FC = () => {
                       size="small"
                     >
                       生成其他站点资料表
+                    </Button>
+
+                    <Button 
+                      type="primary"
+                      icon={<FileExcelOutlined />}
+                      onClick={handleGenerateFbaSku}
+                      disabled={selectedRowKeys.length === 0}
+                      style={{ backgroundColor: '#fa8c16', borderColor: '#fa8c16' }}
+                      size="small"
+                    >
+                      添加FBASKU
                     </Button>
                   </Space>
                 </div>
@@ -4017,6 +4120,56 @@ const Purchase: React.FC = () => {
             )}
           </Space>
         )}
+      </Modal>
+
+      {/* FBASKU生成弹窗 */}
+      <Modal
+        title="生成FBASKU资料"
+        open={fbaSkuModalVisible}
+        onOk={handleFbaSkuModalOk}
+        onCancel={handleFbaSkuModalCancel}
+        confirmLoading={fbaSkuLoading}
+        okText="生成资料"
+        cancelText="取消"
+        width={500}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <div>
+            <Text>已选择 <Text strong>{selectedRowKeys.length}</Text> 条记录生成FBASKU资料</Text>
+          </div>
+          
+          <div>
+            <Text>选择目标国家：</Text>
+            <Select
+              style={{ width: '100%', marginTop: 8 }}
+              value={fbaSkuCountry}
+              onChange={setFbaSkuCountry}
+              placeholder="请选择国家"
+            >
+              <Option value="US">美国 (US)</Option>
+              <Option value="CA">加拿大 (CA)</Option>
+              <Option value="UK">英国 (UK)</Option>
+              <Option value="AE">阿联酋 (AE)</Option>
+              <Option value="AU">澳大利亚 (AU)</Option>
+            </Select>
+          </div>
+
+          <div style={{ 
+            padding: '12px', 
+            backgroundColor: '#f6f6f6', 
+            borderRadius: '6px',
+            fontSize: '12px',
+            lineHeight: '1.5'
+          }}>
+            <Text type="secondary">
+              <strong>说明：</strong><br />
+              • 将根据选定的母SKU批量生成对应的FBASKU资料<br />
+              • 自动查询子SKU、Amazon SKU映射关系和价格信息<br />
+              • 填写美国站点所需的各项字段信息<br />
+              • 生成的Excel文件可直接用于Amazon后台上传
+            </Text>
+          </div>
+        </Space>
       </Modal>
 
    </div>
