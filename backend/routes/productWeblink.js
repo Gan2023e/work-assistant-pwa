@@ -3736,6 +3736,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
     const amzSkuMap = new Map();
     amzSkuMappings.forEach(mapping => {
       amzSkuMap.set(mapping.local_sku, mapping.amz_sku);
+      console.log(`🔗 SKU映射: ${mapping.local_sku} -> ${mapping.amz_sku}`);
     });
 
     const listingsMap = new Map();
@@ -3744,7 +3745,10 @@ router.post('/generate-fbasku-data', async (req, res) => {
         asin: listing.asin1,
         price: listing.price
       });
+      console.log(`📋 Listings数据: ${listing['seller-sku']} -> ASIN:${listing.asin1}, Price:${listing.price}`);
     });
+    
+    console.log(`📊 映射统计: amzSkuMap有${amzSkuMap.size}条记录，listingsMap有${listingsMap.size}条记录`);
 
     // 步骤6: 处理Excel模板
     console.log('📝 开始处理Excel模板...');
@@ -3792,7 +3796,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
       'package_length', 'package_length_unit_of_measure', 'package_weight',
       'package_weight_unit_of_measure', 'package_height_unit_of_measure',
       'package_width_unit_of_measure', 'batteries_required',
-      'supplier_declared_dg_hz_regulation1', 'condition_type'
+      'supplier_declared_dg_hz_regulation1', 'condition_type', 'country_of_origin'
     ];
 
     requiredColumns.forEach(col => {
@@ -3827,14 +3831,31 @@ router.post('/generate-fbasku-data', async (req, res) => {
       if (columnIndexes['update_delete'] !== undefined) {
         data[dataRowIndex][columnIndexes['update_delete']] = 'PartialUpdate';
       }
-      if (columnIndexes['external_product_id'] !== undefined && listingInfo) {
-        data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin || '';
+      
+      // 增强external_product_id填写逻辑，添加调试信息
+      if (columnIndexes['external_product_id'] !== undefined) {
+        if (listingInfo && listingInfo.asin) {
+          data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin;
+          console.log(`✅ 填写ASIN: ${childSku} -> ${listingInfo.asin}`);
+        } else {
+          console.log(`⚠️  未找到ASIN数据: ${childSku}, amzSku: ${amzSku}, listingInfo:`, listingInfo);
+          data[dataRowIndex][columnIndexes['external_product_id']] = ''; // 填写空值而不是跳过
+        }
       }
+      
       if (columnIndexes['external_product_id_type'] !== undefined) {
         data[dataRowIndex][columnIndexes['external_product_id_type']] = 'ASIN';
       }
-      if (columnIndexes['standard_price'] !== undefined && listingInfo) {
-        data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price || '';
+      
+      // 增强standard_price填写逻辑，添加调试信息
+      if (columnIndexes['standard_price'] !== undefined) {
+        if (listingInfo && listingInfo.price) {
+          data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price;
+          console.log(`✅ 填写价格: ${childSku} -> ${listingInfo.price}`);
+        } else {
+          console.log(`⚠️  未找到价格数据: ${childSku}, amzSku: ${amzSku}, listingInfo:`, listingInfo);
+          data[dataRowIndex][columnIndexes['standard_price']] = ''; // 填写空值而不是跳过
+        }
       }
       if (columnIndexes['fulfillment_center_id'] !== undefined) {
         data[dataRowIndex][columnIndexes['fulfillment_center_id']] = 'AMAZON_NA';
@@ -3871,6 +3892,9 @@ router.post('/generate-fbasku-data', async (req, res) => {
       }
       if (columnIndexes['condition_type'] !== undefined) {
         data[dataRowIndex][columnIndexes['condition_type']] = 'New';
+      }
+      if (columnIndexes['country_of_origin'] !== undefined) {
+        data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
       }
 
       dataRowIndex++;
