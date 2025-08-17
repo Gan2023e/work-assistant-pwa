@@ -1407,7 +1407,15 @@ const ShippingPage: React.FC = () => {
       width: 90,
       align: 'center',
       sorter: (a: MergedShippingData, b: MergedShippingData) => a.whole_box_quantity - b.whole_box_quantity,
-      render: (value: number) => value || '-',
+      render: (value: number, record: MergedShippingData) => {
+        if (!value) return '-';
+        return (
+          <div>
+            <div><Text strong>{value}</Text></div>
+            <div><Text type="secondary" style={{ fontSize: '12px' }}>({record.whole_box_count || 0}箱)</Text></div>
+          </div>
+        );
+      },
     },
     {
       title: (
