@@ -2626,103 +2626,109 @@ const Purchase: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '16px' }}>
             {/* 统计卡片区域 */}
-      <div style={{ marginBottom: '20px' }}>
-        <Row gutter={12} style={{ marginBottom: '12px' }}>
+      <div style={{ marginBottom: '12px' }}>
+        <Row gutter={8} style={{ marginBottom: '8px' }}>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={() => handleCardClick('待P图')}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="待P图"
                 value={statistics.waitingPImage}
                 prefix={<CameraOutlined />}
-                valueStyle={{ color: '#cf1322' }}
+                valueStyle={{ color: '#cf1322', fontSize: '18px' }}
               />
             </Card>
           </Col>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={() => handleCardClick('待上传')}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="待上传"
                 value={statistics.waitingUpload}
                 prefix={<CloudUploadOutlined />}
-                valueStyle={{ color: '#1890ff' }}
+                valueStyle={{ color: '#1890ff', fontSize: '18px' }}
               />
             </Card>
           </Col>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={() => handleCardClick('申请测试', 'cpc_status')}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="CPC测试待审核"
                 value={statistics.cpcTestPending}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#fa8c16' }}
+                valueStyle={{ color: '#fa8c16', fontSize: '18px' }}
               />
             </Card>
           </Col>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={() => handleCardClick('测试中', 'cpc_status')}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="CPC检测中"
                 value={statistics.cpcTesting}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#13c2c2' }}
+                valueStyle={{ color: '#13c2c2', fontSize: '18px' }}
               />
             </Card>
           </Col>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={() => handleCardClick('样品已发', 'cpc_status')}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="CPC已发样品"
                 value={statistics.cpcSampleSent}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#52c41a' }}
+                valueStyle={{ color: '#52c41a', fontSize: '18px' }}
               />
             </Card>
           </Col>
           <Col span={4}>
             <Card 
+              size="small"
               hoverable 
               onClick={handleCpcPendingListingClick}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
             >
               <Statistic
                 title="CPC待上架产品"
                 value={statistics.cpcPendingListing}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#722ed1' }}
+                valueStyle={{ color: '#722ed1', fontSize: '18px' }}
               />
             </Card>
           </Col>
         </Row>
       </div>
 
-            <div style={{ marginBottom: '20px' }}>
-        <Space direction="vertical" style={{ width: '100%' }}>
+            <div style={{ marginBottom: '12px' }}>
+        <Space direction="vertical" size="small" style={{ width: '100%' }}>
           {/* 搜索和筛选区域 */}
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
             <TextArea
-              rows={6}
+              rows={4}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -2731,7 +2737,7 @@ const Purchase: React.FC = () => {
                   ? `请输入SKU（每行一个，支持${isFuzzySearch ? '模糊' : '精确'}查询）`
                   : "请输入产品链接/ID（每行一个，支持模糊查询）"
               }
-              style={{ width: 400 }}
+              style={{ width: 350 }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -2789,8 +2795,8 @@ const Purchase: React.FC = () => {
             </div>
             
             {/* 筛选条件区域 */}
-            <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }}>
-              <Row gutter={[16, 8]} align="middle">
+            <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }} bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}>
+              <Row gutter={[12, 6]} align="middle">
                 <Col span={4}>
                   <div style={{ marginBottom: '4px' }}>产品状态：</div>
                   <Select
@@ -2904,12 +2910,13 @@ const Purchase: React.FC = () => {
                 )}
               </div>
             }
-            style={{ marginBottom: '16px' }}
+            style={{ marginBottom: '12px' }}
+            bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}
           >
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
               {/* 数据管理 */}
               <div style={{ 
-                padding: '12px', 
+                padding: '8px', 
                 backgroundColor: '#f8f9fa', 
                 borderRadius: '6px',
                 border: '1px solid #e9ecef'
@@ -2967,7 +2974,7 @@ const Purchase: React.FC = () => {
 
               {/* CPC相关操作 */}
               <div style={{ 
-                padding: '12px', 
+                padding: '8px', 
                 backgroundColor: '#fff7e6', 
                 borderRadius: '6px',
                 border: '1px solid #ffd591'
@@ -3004,7 +3011,7 @@ const Purchase: React.FC = () => {
 
               {/* 文档生成与管理 */}
               <div style={{ 
-                padding: '12px', 
+                padding: '8px', 
                 backgroundColor: '#f0f5ff', 
                 borderRadius: '6px',
                 border: '1px solid #adc6ff'
