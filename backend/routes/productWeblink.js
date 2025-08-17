@@ -3784,14 +3784,22 @@ router.post('/generate-fbasku-data', async (req, res) => {
       }
     });
 
-    // 记录数据缺失信息，但继续生成Excel
-    const hasDataMissing = missingAmzSkuMappings.length > 0 || missingListingsData.length > 0;
-    
-    if (hasDataMissing) {
-      console.log('⚠️  检测到数据缺失，但继续生成Excel');
-    } else {
-      console.log('✅ 数据完整性检查通过');
+    // 如果存在数据缺失，停止生成并返回详细的错误信息
+    if (missingAmzSkuMappings.length > 0 || missingListingsData.length > 0) {
+      const errorInfo = {
+        success: false,
+        errorType: 'DATA_MISSING',
+        missingAmzSkuMappings: missingAmzSkuMappings,
+        missingListingsData: missingListingsData,
+        message: '数据不完整，无法生成FBASKU资料'
+      };
+      
+      console.log('❌ 数据不完整，停止生成并返回错误信息:', errorInfo);
+      
+      return res.status(400).json(errorInfo);
     }
+    
+    console.log('✅ 数据完整性检查通过');
 
     // 步骤7: 处理Excel模板
     console.log('📝 开始处理Excel模板...');
@@ -3964,20 +3972,9 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.log(`✅ FBASKU资料生成完成！包含 ${inventorySkus.length} 条记录`);
     console.log(`⏱️  总耗时: ${Date.now() - startTime}ms`);
 
-    // 设置文件下载响应头
+    // 返回生成的Excel文件
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    
-    // 如果有数据缺失，在响应头中添加警告信息
-    if (hasDataMissing) {
-      res.setHeader('X-Data-Missing', 'true');
-      res.setHeader('X-Missing-Data-Info', JSON.stringify({
-        missingAmzSkuMappings: missingAmzSkuMappings,
-        missingListingsData: missingListingsData
-      }));
-      console.log('⚠️  文件已生成，但包含数据缺失信息');
-    }
-    
     res.send(buffer);
 
   } catch (error) {

@@ -2715,36 +2715,9 @@ const Purchase: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 5000);
 
-      // 检查是否有数据缺失警告
-      const hasDataMissing = response.headers.get('X-Data-Missing') === 'true';
-      const missingDataInfo = response.headers.get('X-Missing-Data-Info');
-      
-      if (hasDataMissing && missingDataInfo) {
-        try {
-          const parsedMissingData = JSON.parse(missingDataInfo);
-          message.warning(`FBASKU资料已生成，但检测到数据缺失，请查看详情`);
-          
-          // 关闭当前弹窗
-          setFbaSkuModalVisible(false);
-          setSelectedRowKeys([]);
-          
-          // 显示数据缺失对话框
-          showDataMissingModal({
-            errorType: 'DATA_MISSING',
-            missingAmzSkuMappings: parsedMissingData.missingAmzSkuMappings || [],
-            missingListingsData: parsedMissingData.missingListingsData || []
-          });
-        } catch (parseError) {
-          console.error('解析数据缺失信息失败:', parseError);
-          message.success(`成功生成${fbaSkuCountry}站点的FBASKU资料，包含 ${parentSkus.length} 个母SKU`);
-          setFbaSkuModalVisible(false);
-          setSelectedRowKeys([]);
-        }
-      } else {
-        message.success(`成功生成${fbaSkuCountry}站点的FBASKU资料，包含 ${parentSkus.length} 个母SKU`);
-        setFbaSkuModalVisible(false);
-        setSelectedRowKeys([]);
-      }
+      message.success(`成功生成${fbaSkuCountry}站点的FBASKU资料，包含 ${parentSkus.length} 个母SKU`);
+      setFbaSkuModalVisible(false);
+      setSelectedRowKeys([]);
 
     } catch (error: any) {
       console.error('生成FBASKU资料失败:', error);
@@ -4238,36 +4211,45 @@ const Purchase: React.FC = () => {
       >
         {missingDataInfo && (
           <Space direction="vertical" style={{ width: '100%' }} size="large">
-            {/* Amazon SKU映射缺失 */}
+            {/* 优先显示Amazon SKU映射缺失 */}
             {missingDataInfo.missingAmzSkuMappings && missingDataInfo.missingAmzSkuMappings.length > 0 && (
               <div>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px', 
                   backgroundColor: '#fff2e8', 
-                  borderRadius: '6px',
-                  marginBottom: '12px'
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  border: '2px solid #ffad33'
                 }}>
-                  <Text strong style={{ color: '#d46b08', fontSize: '16px' }}>
-                    🔗 pbi_amzsku_sku数据库中缺少记录，需要添加！
+                  <Text strong style={{ color: '#d46b08', fontSize: '18px' }}>
+                    ⚠️ pbi_amzsku_sku数据库中缺少记录，需要手动添加！
                   </Text>
                 </div>
                 
-                <div style={{ marginBottom: '16px' }}>
-                  <Text>以下子SKU缺少Amazon SKU映射关系：</Text>
+                <div style={{ marginBottom: '20px' }}>
+                  <Text strong style={{ fontSize: '14px' }}>缺少Amazon SKU映射的子SKU：</Text>
                   <div style={{ 
-                    maxHeight: '200px', 
+                    maxHeight: '250px', 
                     overflowY: 'auto', 
-                    border: '1px solid #f0f0f0', 
-                    borderRadius: '4px',
-                    padding: '8px',
-                    marginTop: '8px'
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginTop: '8px',
+                    backgroundColor: '#fafafa'
                   }}>
                     {missingDataInfo.missingAmzSkuMappings.map((item: any, index: number) => (
                       <div key={index} style={{ 
-                        padding: '4px 8px',
-                        backgroundColor: index % 2 === 0 ? '#fafafa' : 'transparent'
+                        padding: '8px 12px',
+                        backgroundColor: '#fff',
+                        borderRadius: '4px',
+                        marginBottom: '6px',
+                        border: '1px solid #f0f0f0'
                       }}>
-                        <Text><Text strong>母SKU:</Text> {item.parentSku} → <Text strong>子SKU:</Text> {item.childSku}</Text>
+                        <Text>
+                          <Text strong style={{ color: '#1890ff' }}>母SKU:</Text> {item.parentSku} 
+                          <span style={{ margin: '0 8px', color: '#999' }}>→</span> 
+                          <Text strong style={{ color: '#fa8c16' }}>子SKU:</Text> {item.childSku}
+                        </Text>
                       </div>
                     ))}
                   </div>
@@ -4275,40 +4257,52 @@ const Purchase: React.FC = () => {
               </div>
             )}
 
-            {/* Listings数据缺失 */}
-            {missingDataInfo.missingListingsData && missingDataInfo.missingListingsData.length > 0 && (
+            {/* 只有当没有Amazon SKU映射缺失时，才显示Listings数据缺失 */}
+            {(!missingDataInfo.missingAmzSkuMappings || missingDataInfo.missingAmzSkuMappings.length === 0) && 
+             missingDataInfo.missingListingsData && missingDataInfo.missingListingsData.length > 0 && (
               <div>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px', 
                   backgroundColor: '#f6ffed', 
-                  borderRadius: '6px',
-                  marginBottom: '12px'
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  border: '2px solid #52c41a'
                 }}>
-                  <Text strong style={{ color: '#389e0d', fontSize: '16px' }}>
-                    📋 listings_sku数据库中没有记录，需要添加！
+                  <Text strong style={{ color: '#389e0d', fontSize: '18px' }}>
+                    ⚠️ listings_sku数据库中没有记录，需要添加！
                   </Text>
                 </div>
                 
                 <div>
-                  <Text>以下Amazon SKU缺少Listings数据（ASIN和价格信息）：</Text>
+                  <Text strong style={{ fontSize: '14px' }}>缺少ASIN和价格信息的Amazon SKU：</Text>
                   <div style={{ 
-                    maxHeight: '200px', 
+                    maxHeight: '250px', 
                     overflowY: 'auto', 
-                    border: '1px solid #f0f0f0', 
-                    borderRadius: '4px',
-                    padding: '8px',
-                    marginTop: '8px'
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginTop: '8px',
+                    backgroundColor: '#f9fff9'
                   }}>
                     {missingDataInfo.missingListingsData.map((item: any, index: number) => (
                       <div key={index} style={{ 
-                        padding: '4px 8px',
-                        backgroundColor: index % 2 === 0 ? '#fafafa' : 'transparent'
+                        padding: '8px 12px',
+                        backgroundColor: '#fff',
+                        borderRadius: '4px',
+                        marginBottom: '6px',
+                        border: '1px solid #f0f0f0'
                       }}>
                         <div>
-                          <Text><Text strong>子SKU:</Text> {item.childSku} → <Text strong>Amazon SKU:</Text> {item.amzSku}</Text>
+                          <Text>
+                            <Text strong style={{ color: '#fa8c16' }}>子SKU:</Text> {item.childSku} 
+                            <span style={{ margin: '0 8px', color: '#999' }}>→</span> 
+                            <Text strong style={{ color: '#1890ff' }}>Amazon SKU:</Text> {item.amzSku}
+                          </Text>
                         </div>
-                        <div style={{ marginLeft: '16px', fontSize: '12px', color: '#666' }}>
-                          <Text>缺少: {!item.hasAsin && 'ASIN'} {!item.hasAsin && !item.hasPrice && '、'} {!item.hasPrice && '价格'}</Text>
+                        <div style={{ marginLeft: '16px', fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                          <Text type="secondary">
+                            缺少: {!item.hasAsin && 'ASIN'} {!item.hasAsin && !item.hasPrice && '、'} {!item.hasPrice && '价格'}
+                          </Text>
                         </div>
                       </div>
                     ))}
@@ -4318,15 +4312,21 @@ const Purchase: React.FC = () => {
             )}
 
             <div style={{ 
-              padding: '12px', 
+              padding: '16px', 
               backgroundColor: '#e6f7ff', 
-              borderRadius: '6px',
-              fontSize: '12px'
+              borderRadius: '8px',
+              fontSize: '13px',
+              border: '1px solid #91d5ff'
             }}>
               <Text type="secondary">
-                <strong>说明：</strong><br />
-                • 请先完善上述缺失的数据映射关系<br />
-                • 完成后即可正常生成FBASKU资料
+                <strong>📋 处理说明：</strong><br />
+                {missingDataInfo.missingAmzSkuMappings && missingDataInfo.missingAmzSkuMappings.length > 0 ? (
+                  <>• 请先在 pbi_amzsku_sku 数据库中添加上述子SKU的Amazon SKU映射关系</>
+                ) : (
+                  <>• 请先在 listings_sku 数据库中添加上述Amazon SKU的ASIN和价格信息</>
+                )}
+                <br />
+                • 添加完成后，重新点击"添加FBASKU"按钮即可正常生成资料表
               </Text>
             </div>
           </Space>
