@@ -4035,7 +4035,7 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
           site: mapping.site,
           country: mapping.country,
           local_sku: mapping.local_sku,
-          sku_type: mapping.sku_type || 'Seller SKU', // 默认类型
+          sku_type: mapping.sku_type || 'Local SKU', // 默认类型改为Local SKU
           update_time: new Date()
         });
 

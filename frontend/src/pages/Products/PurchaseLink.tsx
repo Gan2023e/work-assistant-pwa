@@ -2785,6 +2785,7 @@ const Purchase: React.FC = () => {
         initialValues[`site_${index}`] = countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
         initialValues[`country_${index}`] = countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
         initialValues[`local_sku_${index}`] = item.childSku;
+        initialValues[`sku_type_${index}`] = 'Local SKU';  // SKU类型默认为"Local SKU"
       });
       amzSkuMappingForm.setFieldsValue(initialValues);
     }
@@ -2814,7 +2815,7 @@ const Purchase: React.FC = () => {
         site: formValues[`site_${index}`],
         country: formValues[`country_${index}`],
         local_sku: formValues[`local_sku_${index}`],
-        sku_type: 'Seller SKU'
+        sku_type: formValues[`sku_type_${index}`] || 'Local SKU'
       }));
 
       console.log('添加Amazon SKU映射:', mappings);
@@ -4473,6 +4474,15 @@ const Purchase: React.FC = () => {
                           <th style={{
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'left',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>SKU类型</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
                             textAlign: 'left',
                             fontWeight: 'bold',
                             fontSize: '14px',
@@ -4562,6 +4572,19 @@ const Purchase: React.FC = () => {
                                 </Form.Item>
                               </td>
                               
+                              {/* SKU类型 */}
+                              <td style={{
+                                padding: '12px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                color: '#595959'
+                              }}>
+                                Local SKU
+                                <Form.Item name={`sku_type_${index}`} style={{ display: 'none' }}>
+                                  <Input />
+                                </Form.Item>
+                              </td>
+                              
                               {/* Amazon SKU - 可编辑 */}
                               <td style={{
                                 padding: '8px 16px',
@@ -4599,7 +4622,7 @@ const Purchase: React.FC = () => {
                     textAlign: 'center'
                   }}>
                     <Text type="secondary">
-                      💡 Amazon SKU已预填写建议格式，可根据需要修改 | SKU类型将自动设置为 "Seller SKU"
+                      💡 Amazon SKU已预填写建议格式，可根据需要修改 | SKU类型将自动设置为 "Local SKU"
                     </Text>
                   </div>
                 </Form>
