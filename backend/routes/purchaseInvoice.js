@@ -1770,10 +1770,28 @@ router.get('/invoices/:id/file', async (req, res) => {
         // 直接获取文件内容
         const result = await client.get(objectName);
         
-        // 设置响应头
+        // 设置响应头 - 安全处理文件名
+        const rawFileName = invoice.invoice_file_name || '发票文件.pdf';
+        // 清理文件名，移除所有可能导致HTTP头部问题的字符
+        const cleanFileName = rawFileName
+          .replace(/[\r\n\t]/g, '') // 移除回车、换行、制表符
+          .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字符
+          .trim();
+        
+        const safeFileName = cleanFileName || `invoice_${invoice.id}.pdf`;
+        const encodedFileName = encodeURIComponent(safeFileName);
+        
+        // 设置安全的响应头
         res.set({
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="${invoice.invoice_file_name || '发票文件.pdf'}"`
+          'Content-Disposition': `inline; filename*=UTF-8''${encodedFileName}`,
+          'Content-Length': result.content.length.toString(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block'
         });
         
         // 返回文件内容
