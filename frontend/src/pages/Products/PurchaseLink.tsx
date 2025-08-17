@@ -2752,11 +2752,29 @@ const Purchase: React.FC = () => {
 
     // 如果有Amazon SKU映射缺失，初始化表单
     if (errorData.missingAmzSkuMappings && errorData.missingAmzSkuMappings.length > 0) {
+      // 国家代码到Amazon网址的映射
+      const countryToSiteMap: Record<string, string> = {
+        'US': 'www.amazon.com',
+        'CA': 'www.amazon.ca',
+        'UK': 'www.amazon.co.uk',
+        'AE': 'www.amazon.ae',
+        'AU': 'www.amazon.com.au'
+      };
+
+      // 国家代码到中文名称的映射
+      const countryToChineseMap: Record<string, string> = {
+        'US': '美国',
+        'CA': '加拿大',
+        'UK': '英国',
+        'AE': '阿联酋',
+        'AU': '澳大利亚'
+      };
+
       const initialValues: any = {};
       errorData.missingAmzSkuMappings.forEach((item: any, index: number) => {
         initialValues[`amz_sku_${index}`] = '';
-        initialValues[`site_${index}`] = fbaSkuCountry;
-        initialValues[`country_${index}`] = fbaSkuCountry === 'US' ? '美国' : fbaSkuCountry;
+        initialValues[`site_${index}`] = countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
+        initialValues[`country_${index}`] = countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
         initialValues[`local_sku_${index}`] = item.childSku;
       });
       amzSkuMappingForm.setFieldsValue(initialValues);
@@ -4445,11 +4463,11 @@ const Purchase: React.FC = () => {
                               rules={[{ required: true, message: '请选择站点' }]}
                             >
                               <Select>
-                                <Option value="US">美国 (US)</Option>
-                                <Option value="CA">加拿大 (CA)</Option>
-                                <Option value="UK">英国 (UK)</Option>
-                                <Option value="AE">阿联酋 (AE)</Option>
-                                <Option value="AU">澳大利亚 (AU)</Option>
+                                <Option value="www.amazon.com">美国 (www.amazon.com)</Option>
+                                <Option value="www.amazon.ca">加拿大 (www.amazon.ca)</Option>
+                                <Option value="www.amazon.co.uk">英国 (www.amazon.co.uk)</Option>
+                                <Option value="www.amazon.ae">阿联酋 (www.amazon.ae)</Option>
+                                <Option value="www.amazon.com.au">澳大利亚 (www.amazon.com.au)</Option>
                               </Select>
                             </Form.Item>
                           </Col>
