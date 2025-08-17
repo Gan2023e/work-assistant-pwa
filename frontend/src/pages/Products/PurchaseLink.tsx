@@ -253,6 +253,9 @@ const Purchase: React.FC = () => {
   // 数据缺失对话框相关状态
   const [dataMissingModalVisible, setDataMissingModalVisible] = useState(false);
   const [missingDataInfo, setMissingDataInfo] = useState<any>(null);
+  const [amzSkuMappingForm] = Form.useForm();
+  const [mappingFormLoading, setMappingFormLoading] = useState(false);
+  const [currentSelectedParentSkus, setCurrentSelectedParentSkus] = useState<string[]>([]);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -2681,7 +2684,7 @@ const Purchase: React.FC = () => {
           setFbaSkuModalVisible(false);
           
           // 显示数据缺失对话框
-          showDataMissingModal(errorData);
+          showDataMissingModal(errorData, parentSkus);
           return;
         }
         
@@ -2733,15 +2736,170 @@ const Purchase: React.FC = () => {
   };
 
   // 显示数据缺失对话框
-  const showDataMissingModal = (errorData: any) => {
+  const showDataMissingModal = (errorData: any, parentSkus?: string[]) => {
     setMissingDataInfo(errorData);
     setDataMissingModalVisible(true);
+    
+    // 保存当前选择的父SKU，用于后续重新生成
+    if (parentSkus) {
+      setCurrentSelectedParentSkus(parentSkus);
+    } else {
+      const selectedRecords = data.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+      setCurrentSelectedParentSkus(selectedRecords.map(record => record.parent_sku));
+    }
+
+    // 如果有Amazon SKU映射缺失，初始化表单
+    if (errorData.missingAmzSkuMappings && errorData.missingAmzSkuMappings.length > 0) {
+      const initialValues: any = {};
+      errorData.missingAmzSkuMappings.forEach((item: any, index: number) => {
+        initialValues[`amz_sku_${index}`] = '';
+        initialValues[`site_${index}`] = fbaSkuCountry;
+        initialValues[`country_${index}`] = fbaSkuCountry === 'US' ? '美国' : fbaSkuCountry;
+        initialValues[`local_sku_${index}`] = item.childSku;
+      });
+      amzSkuMappingForm.setFieldsValue(initialValues);
+    }
   };
 
   // 处理数据缺失对话框的确认
   const handleDataMissingModalOk = () => {
     setDataMissingModalVisible(false);
     setMissingDataInfo(null);
+    amzSkuMappingForm.resetFields();
+  };
+
+  // 处理Amazon SKU映射添加
+  const handleAddAmzSkuMapping = async () => {
+    if (!missingDataInfo?.missingAmzSkuMappings || missingDataInfo.missingAmzSkuMappings.length === 0) {
+      return;
+    }
+
+    setMappingFormLoading(true);
+
+    try {
+      const formValues = await amzSkuMappingForm.validateFields();
+      
+      // 构建映射数据
+      const mappings = missingDataInfo.missingAmzSkuMappings.map((item: any, index: number) => ({
+        amz_sku: formValues[`amz_sku_${index}`],
+        site: formValues[`site_${index}`],
+        country: formValues[`country_${index}`],
+        local_sku: formValues[`local_sku_${index}`],
+        sku_type: 'Seller SKU'
+      }));
+
+      console.log('添加Amazon SKU映射:', mappings);
+
+      // 调用后端API添加映射
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/batch-add-amz-sku-mapping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mappings })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '添加映射失败');
+      }
+
+      const result = await response.json();
+      message.success(result.message);
+
+      // 关闭对话框
+      setDataMissingModalVisible(false);
+      setMissingDataInfo(null);
+      amzSkuMappingForm.resetFields();
+
+      // 自动重新生成FBASKU资料
+      message.loading('正在重新生成FBASKU资料...', 1);
+      setTimeout(() => {
+        regenerateFbaSkuData();
+      }, 500);
+
+    } catch (error: any) {
+      console.error('添加Amazon SKU映射失败:', error);
+      message.error('添加映射失败: ' + error.message);
+    } finally {
+      setMappingFormLoading(false);
+    }
+  };
+
+  // 重新生成FBASKU资料
+  const regenerateFbaSkuData = async () => {
+    if (currentSelectedParentSkus.length === 0) {
+      message.warning('没有选择的SKU数据');
+      return;
+    }
+
+    setFbaSkuLoading(true);
+
+    try {
+      console.log('重新生成FBASKU资料，母SKU:', currentSelectedParentSkus, '国家:', fbaSkuCountry);
+
+      // 调用后端API生成FBASKU资料
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-fbasku-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          parentSkus: currentSelectedParentSkus,
+          country: fbaSkuCountry
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        
+        // 如果仍有数据缺失，再次显示对话框
+        if (errorData.errorType === 'DATA_MISSING') {
+          showDataMissingModal(errorData, currentSelectedParentSkus);
+          return;
+        }
+        
+        throw new Error(errorData.message || '生成失败');
+      }
+
+      // 下载生成的文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // 从响应头获取文件名
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let fileName = `FBASKU_${fbaSkuCountry}_${currentSelectedParentSkus.join('_')}.xlsx`;
+      
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="([^"]+)"/);
+        if (matches && matches[1]) {
+          fileName = matches[1];
+        }
+      }
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理URL对象
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 5000);
+
+      message.success(`成功生成${fbaSkuCountry}站点的FBASKU资料，包含 ${currentSelectedParentSkus.length} 个母SKU`);
+      setSelectedRowKeys([]);
+
+    } catch (error: any) {
+      console.error('重新生成FBASKU资料失败:', error);
+      message.error('生成失败: ' + error.message);
+    } finally {
+      setFbaSkuLoading(false);
+    }
   };
 
   return (
@@ -4201,17 +4359,19 @@ const Purchase: React.FC = () => {
 
       {/* 数据缺失提示对话框 */}
       <Modal
-        title="数据缺失提示"
+        title="数据缺失处理"
         open={dataMissingModalVisible}
-        onOk={handleDataMissingModalOk}
+        onOk={missingDataInfo?.missingAmzSkuMappings?.length > 0 ? handleAddAmzSkuMapping : handleDataMissingModalOk}
         onCancel={handleDataMissingModalOk}
-        okText="确定"
-        cancelButtonProps={{ style: { display: 'none' } }}
-        width={600}
+        confirmLoading={mappingFormLoading}
+        okText={missingDataInfo?.missingAmzSkuMappings?.length > 0 ? "添加映射并生成资料" : "确定"}
+        cancelText="取消"
+        width={800}
+        style={{ top: 20 }}
       >
         {missingDataInfo && (
           <Space direction="vertical" style={{ width: '100%' }} size="large">
-            {/* 优先显示Amazon SKU映射缺失 */}
+            {/* Amazon SKU映射缺失 - 添加表单输入功能 */}
             {missingDataInfo.missingAmzSkuMappings && missingDataInfo.missingAmzSkuMappings.length > 0 && (
               <div>
                 <div style={{ 
@@ -4222,38 +4382,100 @@ const Purchase: React.FC = () => {
                   border: '2px solid #ffad33'
                 }}>
                   <Text strong style={{ color: '#d46b08', fontSize: '18px' }}>
-                    ⚠️ pbi_amzsku_sku数据库中缺少记录，需要手动添加！
+                    ⚠️ pbi_amzsku_sku数据库中缺少记录，请填写添加！
                   </Text>
                 </div>
                 
-                <div style={{ marginBottom: '20px' }}>
-                  <Text strong style={{ fontSize: '14px' }}>缺少Amazon SKU映射的子SKU：</Text>
+                <Form
+                  form={amzSkuMappingForm}
+                  layout="vertical"
+                  style={{ marginBottom: '20px' }}
+                >
+                  <div style={{ marginBottom: '16px' }}>
+                    <Text strong style={{ fontSize: '14px' }}>请为以下子SKU填写Amazon SKU映射信息：</Text>
+                  </div>
+                  
                   <div style={{ 
-                    maxHeight: '250px', 
+                    maxHeight: '400px', 
                     overflowY: 'auto', 
                     border: '1px solid #d9d9d9', 
                     borderRadius: '6px',
-                    padding: '12px',
-                    marginTop: '8px',
+                    padding: '16px',
                     backgroundColor: '#fafafa'
                   }}>
                     {missingDataInfo.missingAmzSkuMappings.map((item: any, index: number) => (
                       <div key={index} style={{ 
-                        padding: '8px 12px',
+                        padding: '16px',
                         backgroundColor: '#fff',
-                        borderRadius: '4px',
-                        marginBottom: '6px',
-                        border: '1px solid #f0f0f0'
+                        borderRadius: '8px',
+                        marginBottom: '12px',
+                        border: '1px solid #e8e8e8'
                       }}>
-                        <Text>
-                          <Text strong style={{ color: '#1890ff' }}>母SKU:</Text> {item.parentSku} 
-                          <span style={{ margin: '0 8px', color: '#999' }}>→</span> 
-                          <Text strong style={{ color: '#fa8c16' }}>子SKU:</Text> {item.childSku}
-                        </Text>
+                        <div style={{ marginBottom: '12px' }}>
+                          <Text strong style={{ color: '#1890ff' }}>
+                            母SKU: {item.parentSku} → 子SKU: {item.childSku}
+                          </Text>
+                        </div>
+                        
+                        <Row gutter={16}>
+                          <Col span={8}>
+                            <Form.Item
+                              name={`local_sku_${index}`}
+                              label="本地SKU"
+                              rules={[{ required: true, message: '请输入本地SKU' }]}
+                            >
+                              <Input disabled />
+                            </Form.Item>
+                          </Col>
+                          
+                          <Col span={8}>
+                            <Form.Item
+                              name={`amz_sku_${index}`}
+                              label="Amazon SKU"
+                              rules={[{ required: true, message: '请输入Amazon SKU' }]}
+                            >
+                              <Input placeholder="请输入Amazon SKU" />
+                            </Form.Item>
+                          </Col>
+                          
+                          <Col span={8}>
+                            <Form.Item
+                              name={`site_${index}`}
+                              label="站点"
+                              rules={[{ required: true, message: '请选择站点' }]}
+                            >
+                              <Select>
+                                <Option value="US">美国 (US)</Option>
+                                <Option value="CA">加拿大 (CA)</Option>
+                                <Option value="UK">英国 (UK)</Option>
+                                <Option value="AE">阿联酋 (AE)</Option>
+                                <Option value="AU">澳大利亚 (AU)</Option>
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              name={`country_${index}`}
+                              label="国家"
+                              rules={[{ required: true, message: '请输入国家' }]}
+                            >
+                              <Input disabled />
+                            </Form.Item>
+                          </Col>
+                          
+                          <Col span={12}>
+                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                              SKU类型将自动设置为 "Seller SKU"
+                            </Text>
+                          </Col>
+                        </Row>
                       </div>
                     ))}
                   </div>
-                </div>
+                </Form>
               </div>
             )}
 
@@ -4321,12 +4543,12 @@ const Purchase: React.FC = () => {
               <Text type="secondary">
                 <strong>📋 处理说明：</strong><br />
                 {missingDataInfo.missingAmzSkuMappings && missingDataInfo.missingAmzSkuMappings.length > 0 ? (
-                  <>• 请先在 pbi_amzsku_sku 数据库中添加上述子SKU的Amazon SKU映射关系</>
+                  <>• 请填写上述子SKU对应的Amazon SKU映射信息<br />
+                  • 点击"添加映射并生成资料"按钮将自动保存映射并生成FBASKU资料表</>
                 ) : (
-                  <>• 请先在 listings_sku 数据库中添加上述Amazon SKU的ASIN和价格信息</>
+                  <>• 请先在 listings_sku 数据库中添加上述Amazon SKU的ASIN和价格信息<br />
+                  • 添加完成后，重新点击"添加FBASKU"按钮即可正常生成资料表</>
                 )}
-                <br />
-                • 添加完成后，重新点击"添加FBASKU"按钮即可正常生成资料表
               </Text>
             </div>
           </Space>

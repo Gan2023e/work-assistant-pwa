@@ -5,6 +5,7 @@ const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const TemplateLink = require('../models/TemplateLink');
 const ProductInformation = require('../models/ProductInformation');
+const AmzSkuMapping = require('../models/AmzSkuMapping');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -3981,6 +3982,93 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.error('❌ 生成FBASKU资料失败:', error);
     res.status(500).json({
       message: '生成失败: ' + error.message,
+      error: error.toString()
+    });
+  }
+});
+
+// ==================== 批量添加Amazon SKU映射接口 ====================
+
+// 批量添加Amazon SKU映射到pbi_amzsku_sku表
+router.post('/batch-add-amz-sku-mapping', async (req, res) => {
+  try {
+    console.log('📋 收到批量添加Amazon SKU映射请求');
+    
+    const { mappings } = req.body;
+    
+    if (!Array.isArray(mappings) || mappings.length === 0) {
+      return res.status(400).json({ message: '请提供要添加的映射数据' });
+    }
+
+    console.log(`📝 处理 ${mappings.length} 条映射数据:`, mappings);
+
+    // 验证必需字段
+    for (const mapping of mappings) {
+      if (!mapping.amz_sku || !mapping.site || !mapping.country || !mapping.local_sku) {
+        return res.status(400).json({ 
+          message: '映射数据缺少必需字段：amz_sku, site, country, local_sku' 
+        });
+      }
+    }
+
+    // 批量插入数据
+    console.log('🔍 开始批量插入Amazon SKU映射数据...');
+    
+    const insertPromises = mappings.map(async (mapping) => {
+      try {
+        // 检查是否已存在
+        const existing = await AmzSkuMapping.findOne({
+          where: {
+            amz_sku: mapping.amz_sku,
+            site: mapping.site
+          }
+        });
+
+        if (existing) {
+          console.log(`⚠️  映射已存在，跳过: ${mapping.amz_sku} (${mapping.site})`);
+          return { success: false, reason: '映射已存在', mapping };
+        }
+
+        // 插入新记录
+        await AmzSkuMapping.create({
+          amz_sku: mapping.amz_sku,
+          site: mapping.site,
+          country: mapping.country,
+          local_sku: mapping.local_sku,
+          sku_type: mapping.sku_type || 'Seller SKU', // 默认类型
+          update_time: new Date()
+        });
+
+        console.log(`✅ 成功插入: ${mapping.local_sku} -> ${mapping.amz_sku}`);
+        return { success: true, mapping };
+        
+      } catch (error) {
+        console.error(`❌ 插入失败: ${mapping.local_sku} -> ${mapping.amz_sku}`, error);
+        return { success: false, reason: error.message, mapping };
+      }
+    });
+
+    const results = await Promise.all(insertPromises);
+    
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+    
+    console.log(`📊 批量插入结果: 成功${successCount}条, 失败${failureCount}条`);
+
+    res.json({
+      success: true,
+      message: `批量添加Amazon SKU映射完成：成功${successCount}条，失败${failureCount}条`,
+      results: {
+        successCount,
+        failureCount,
+        details: results
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 批量添加Amazon SKU映射失败:', error);
+    res.status(500).json({
+      message: '批量添加失败: ' + error.message,
       error: error.toString()
     });
   }
