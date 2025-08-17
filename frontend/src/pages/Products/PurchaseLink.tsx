@@ -2772,7 +2772,9 @@ const Purchase: React.FC = () => {
 
       const initialValues: any = {};
       errorData.missingAmzSkuMappings.forEach((item: any, index: number) => {
-        initialValues[`amz_sku_${index}`] = '';
+        // Amazon SKU预填写：国家代码前缀 + 子SKU
+        const countryPrefix = fbaSkuCountry || 'US';
+        initialValues[`amz_sku_${index}`] = `${countryPrefix}${item.childSku}`;
         initialValues[`site_${index}`] = countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
         initialValues[`country_${index}`] = countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
         initialValues[`local_sku_${index}`] = item.childSku;
@@ -4429,67 +4431,123 @@ const Purchase: React.FC = () => {
                         marginBottom: '12px',
                         border: '1px solid #e8e8e8'
                       }}>
-                        <div style={{ marginBottom: '12px' }}>
-                          <Text strong style={{ color: '#1890ff' }}>
+                        <div style={{ marginBottom: '16px' }}>
+                          <Text strong style={{ color: '#1890ff', fontSize: '16px' }}>
                             母SKU: {item.parentSku} → 子SKU: {item.childSku}
                           </Text>
                         </div>
                         
-                        <Row gutter={16}>
-                          <Col span={8}>
-                            <Form.Item
-                              name={`local_sku_${index}`}
-                              label="本地SKU"
-                              rules={[{ required: true, message: '请输入本地SKU' }]}
-                            >
-                              <Input disabled />
-                            </Form.Item>
-                          </Col>
-                          
-                          <Col span={8}>
-                            <Form.Item
-                              name={`amz_sku_${index}`}
-                              label="Amazon SKU"
-                              rules={[{ required: true, message: '请输入Amazon SKU' }]}
-                            >
-                              <Input placeholder="请输入Amazon SKU" />
-                            </Form.Item>
-                          </Col>
-                          
-                          <Col span={8}>
-                            <Form.Item
-                              name={`site_${index}`}
-                              label="站点"
-                              rules={[{ required: true, message: '请选择站点' }]}
-                            >
-                              <Select>
-                                <Option value="www.amazon.com">美国 (www.amazon.com)</Option>
-                                <Option value="www.amazon.ca">加拿大 (www.amazon.ca)</Option>
-                                <Option value="www.amazon.co.uk">英国 (www.amazon.co.uk)</Option>
-                                <Option value="www.amazon.ae">阿联酋 (www.amazon.ae)</Option>
-                                <Option value="www.amazon.com.au">澳大利亚 (www.amazon.com.au)</Option>
-                              </Select>
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item
-                              name={`country_${index}`}
-                              label="国家"
-                              rules={[{ required: true, message: '请输入国家' }]}
-                            >
-                              <Input disabled />
-                            </Form.Item>
-                          </Col>
-                          
-                          <Col span={12}>
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              SKU类型将自动设置为 "Seller SKU"
-                            </Text>
-                          </Col>
-                        </Row>
+                        {/* 预填写信息展示区 */}
+                        <div style={{
+                          marginBottom: '16px',
+                          padding: '12px',
+                          backgroundColor: '#f8f9fa',
+                          borderRadius: '6px',
+                          border: '1px solid #e9ecef'
+                        }}>
+                          <Row gutter={16}>
+                            <Col span={8}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <Text strong style={{ color: '#666', fontSize: '12px' }}>本地SKU</Text>
+                              </div>
+                              <div style={{
+                                padding: '8px 12px',
+                                backgroundColor: '#fff',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                              }}>
+                                {item.childSku}
+                              </div>
+                              <Form.Item name={`local_sku_${index}`} style={{ display: 'none' }}>
+                                <Input />
+                              </Form.Item>
+                            </Col>
+                            
+                            <Col span={8}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <Text strong style={{ color: '#666', fontSize: '12px' }}>站点</Text>
+                              </div>
+                              <div style={{
+                                padding: '8px 12px',
+                                backgroundColor: '#fff',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                              }}>
+                                {(() => {
+                                  const countryToSiteMap: Record<string, string> = {
+                                    'US': 'www.amazon.com',
+                                    'CA': 'www.amazon.ca',
+                                    'UK': 'www.amazon.co.uk',
+                                    'AE': 'www.amazon.ae',
+                                    'AU': 'www.amazon.com.au'
+                                  };
+                                  return countryToSiteMap[fbaSkuCountry] || 'www.amazon.com';
+                                })()}
+                              </div>
+                              <Form.Item name={`site_${index}`} style={{ display: 'none' }}>
+                                <Input />
+                              </Form.Item>
+                            </Col>
+                            
+                            <Col span={8}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <Text strong style={{ color: '#666', fontSize: '12px' }}>国家</Text>
+                              </div>
+                              <div style={{
+                                padding: '8px 12px',
+                                backgroundColor: '#fff',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                              }}>
+                                {(() => {
+                                  const countryToChineseMap: Record<string, string> = {
+                                    'US': '美国',
+                                    'CA': '加拿大',
+                                    'UK': '英国',
+                                    'AE': '阿联酋',
+                                    'AU': '澳大利亚'
+                                  };
+                                  return countryToChineseMap[fbaSkuCountry] || fbaSkuCountry;
+                                })()}
+                              </div>
+                              <Form.Item name={`country_${index}`} style={{ display: 'none' }}>
+                                <Input />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </div>
+
+                        {/* Amazon SKU 可编辑输入区 */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <Form.Item
+                            name={`amz_sku_${index}`}
+                            label={<Text strong style={{ color: '#1890ff' }}>Amazon SKU (可编辑)</Text>}
+                            rules={[{ required: true, message: '请输入Amazon SKU' }]}
+                          >
+                            <Input 
+                              placeholder={`建议格式: ${fbaSkuCountry || 'US'}${item.childSku}`}
+                              style={{ 
+                                fontSize: '16px', 
+                                padding: '12px',
+                                borderColor: '#1890ff'
+                              }}
+                            />
+                          </Form.Item>
+                        </div>
+
+                        <div style={{ 
+                          padding: '8px 12px', 
+                          backgroundColor: '#e6f7ff', 
+                          borderRadius: '4px',
+                          fontSize: '12px'
+                        }}>
+                          <Text type="secondary">
+                            💡 SKU类型将自动设置为 "Seller SKU" | 可修改Amazon SKU后点击确认
+                          </Text>
+                        </div>
                       </div>
                     ))}
                   </div>
