@@ -1041,6 +1041,10 @@ router.get('/statistics', async (req, res) => {
     });
 
     // 计算特定状态的产品数量
+    const newProductFirstReviewCount = await ProductWeblink.count({
+      where: { status: '新品一审' }
+    });
+
     const waitingPImageCount = await ProductWeblink.count({
       where: { status: '待P图' }
     });
@@ -1077,6 +1081,7 @@ router.get('/statistics', async (req, res) => {
 
     res.json({
       statistics: {
+        newProductFirstReview: newProductFirstReviewCount,
         waitingPImage: waitingPImageCount,
         waitingUpload: waitingUploadCount,
         cpcTestPending: cpcTestPendingCount,
@@ -4083,6 +4088,80 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
       message: '批量添加失败: ' + error.message,
       error: error.toString()
     });
+  }
+});
+
+// 批量添加新链接（采购用）
+router.post('/batch-add-purchase-links', async (req, res) => {
+  try {
+    const { links } = req.body;
+    
+    if (!Array.isArray(links) || links.length === 0) {
+      return res.status(400).json({ message: '请输入产品链接' });
+    }
+
+    const processedLinks = [];
+    const errors = [];
+
+    // 提取和验证每个链接
+    for (let i = 0; i < links.length; i++) {
+      const rawLink = links[i].trim();
+      if (!rawLink) continue;
+
+      // 提取链接：从https开头到.html部分
+      const linkMatch = rawLink.match(/(https:\/\/[^?\s]+\.html)/);
+      
+      if (linkMatch) {
+        const extractedLink = linkMatch[1];
+        processedLinks.push(extractedLink);
+      } else {
+        errors.push({
+          line: i + 1,
+          originalLink: rawLink,
+          error: '链接格式错误：未找到https开头到html的有效链接部分'
+        });
+      }
+    }
+
+    // 如果有错误，返回错误信息
+    if (errors.length > 0 && processedLinks.length === 0) {
+      return res.status(400).json({ 
+        message: '所有链接格式都不正确',
+        errors: errors
+      });
+    }
+
+    // 准备插入数据
+    const insertData = processedLinks.map(link => ({
+      weblink: link,
+      status: '新品一审',
+      update_time: new Date()
+    }));
+
+    // 批量插入到数据库
+    const createdRecords = await ProductWeblink.bulkCreate(insertData, {
+      ignoreDuplicates: false, // 不忽略重复项，让数据库自然处理
+      returning: true
+    });
+
+    // 构建响应消息
+    let message = `成功添加 ${createdRecords.length} 条采购链接`;
+    if (errors.length > 0) {
+      message += `，跳过 ${errors.length} 条格式错误的链接`;
+    }
+
+    res.json({
+      message: message,
+      data: {
+        successCount: createdRecords.length,
+        totalCount: links.length,
+        errorCount: errors.length,
+        errors: errors
+      }
+    });
+  } catch (err) {
+    console.error('批量添加采购链接失败:', err);
+    res.status(500).json({ message: '服务器错误: ' + err.message });
   }
 });
 
