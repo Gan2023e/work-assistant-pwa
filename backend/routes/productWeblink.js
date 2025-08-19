@@ -1907,7 +1907,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // 母SKU留空
         if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
         if (quantityCol !== -1) data[currentRowIndex][quantityCol] = ''; // 母SKU留空
-        if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = '5+ Years';
+        if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = 'Child';
         if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Parent';
         if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = ''; // 母SKU留空
         if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = ''; // 母SKU留空
@@ -1937,7 +1937,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = 'GCID';
           if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
           if (quantityCol !== -1) data[currentRowIndex][quantityCol] = '15';
-          if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = '5+ Years';
+          if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = 'Child';
           if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Child';
           if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = `UK${parentSku}`;
           if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = 'Variation';
