@@ -4131,32 +4131,75 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       });
     }
 
-    // 准备插入数据
-    const insertData = processedLinks.map(link => ({
+    // 检查重复链接
+    const existingLinks = await ProductWeblink.findAll({
+      where: {
+        weblink: processedLinks
+      },
+      attributes: ['weblink']
+    });
+
+    const existingLinksSet = new Set(existingLinks.map(item => item.weblink));
+    const duplicateLinks = [];
+    const uniqueLinks = [];
+
+    processedLinks.forEach((link, index) => {
+      if (existingLinksSet.has(link)) {
+        duplicateLinks.push({
+          line: links.findIndex(l => l.includes(link)) + 1,
+          originalLink: links.find(l => l.includes(link)),
+          extractedLink: link,
+          error: '链接已存在于数据库中'
+        });
+      } else {
+        uniqueLinks.push(link);
+      }
+    });
+
+    // 准备插入数据（只插入不重复的）
+    const insertData = uniqueLinks.map(link => ({
       weblink: link,
       status: '新品一审',
       update_time: new Date()
     }));
 
     // 批量插入到数据库
-    const createdRecords = await ProductWeblink.bulkCreate(insertData, {
-      ignoreDuplicates: false, // 不忽略重复项，让数据库自然处理
-      returning: true
-    });
+    let createdRecords = [];
+    if (insertData.length > 0) {
+      createdRecords = await ProductWeblink.bulkCreate(insertData, {
+        returning: true
+      });
+    }
+
+    // 合并所有错误（格式错误 + 重复错误）
+    const allErrors = [...errors, ...duplicateLinks];
 
     // 构建响应消息
-    let message = `成功添加 ${createdRecords.length} 条采购链接`;
+    let message = '';
+    if (createdRecords.length > 0) {
+      message = `成功添加 ${createdRecords.length} 条采购链接`;
+    }
+    if (duplicateLinks.length > 0) {
+      if (message) message += `，跳过 ${duplicateLinks.length} 条重复链接`;
+      else message = `跳过 ${duplicateLinks.length} 条重复链接`;
+    }
     if (errors.length > 0) {
-      message += `，跳过 ${errors.length} 条格式错误的链接`;
+      if (message) message += `，跳过 ${errors.length} 条格式错误的链接`;
+      else message = `跳过 ${errors.length} 条格式错误的链接`;
+    }
+    if (!message) {
+      message = '没有添加任何新链接';
     }
 
     res.json({
       message: message,
       data: {
         successCount: createdRecords.length,
-        totalCount: links.length,
+        duplicateCount: duplicateLinks.length,
         errorCount: errors.length,
-        errors: errors
+        totalCount: links.length,
+        errors: allErrors,
+        duplicates: duplicateLinks
       }
     });
   } catch (err) {

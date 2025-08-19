@@ -250,6 +250,26 @@ const Purchase: React.FC = () => {
   const [newLinksModalVisible, setNewLinksModalVisible] = useState(false);
   const [newLinksInput, setNewLinksInput] = useState('');
   const [newLinksLoading, setNewLinksLoading] = useState(false);
+  const [newLinksResultVisible, setNewLinksResultVisible] = useState(false);
+  const [newLinksResult, setNewLinksResult] = useState<{
+    message: string;
+    successCount: number;
+    duplicateCount: number;
+    errorCount: number;
+    totalCount: number;
+    errors: Array<{
+      line: number;
+      originalLink: string;
+      extractedLink?: string;
+      error: string;
+    }>;
+    duplicates: Array<{
+      line: number;
+      originalLink: string;
+      extractedLink: string;
+      error: string;
+    }>;
+  } | null>(null);
 
   // FBASKU生成相关状态
   const [fbaSkuModalVisible, setFbaSkuModalVisible] = useState(false);
@@ -998,40 +1018,12 @@ const Purchase: React.FC = () => {
         return;
       }
 
-      // 显示成功信息和可能的警告
-      if (result.data.errorCount > 0) {
-        const successMessage = result.message;
-        const errorDetails = result.data.errors.map((err: any) => 
-          `第${err.line}行: ${err.error}`
-        ).join('\n');
-        
-        Modal.info({
-          title: '添加完成（部分失败）',
-          content: (
-            <div>
-              <p style={{ color: '#52c41a' }}>{successMessage}</p>
-              <div style={{ marginTop: '12px' }}>
-                <Text strong>错误详情：</Text>
-                <div style={{ 
-                  marginTop: '8px', 
-                  padding: '8px', 
-                  backgroundColor: '#fff2f0', 
-                  borderRadius: '4px',
-                  maxHeight: '150px',
-                  overflow: 'auto'
-                }}>
-                  <Text code style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
-                    {errorDetails}
-                  </Text>
-                </div>
-              </div>
-            </div>
-          ),
-          width: 500
-        });
-      } else {
-        message.success(result.message);
-      }
+      // 设置处理结果并显示详细对话框
+      setNewLinksResult({
+        ...result.data,
+        message: result.message
+      });
+      setNewLinksResultVisible(true);
 
       setNewLinksModalVisible(false);
       setNewLinksInput('');
@@ -3055,109 +3047,109 @@ const Purchase: React.FC = () => {
     <div style={{ padding: '16px' }}>
             {/* 统计卡片区域 */}
       <div style={{ marginBottom: '12px' }}>
-        <Row gutter={8} style={{ marginBottom: '8px' }}>
-          <Col span={4}>
+        <Row gutter={6} style={{ marginBottom: '8px' }}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('新品一审')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="新品一审"
                 value={statistics.newProductFirstReview}
                 prefix={<PlusOutlined />}
-                valueStyle={{ color: '#1890ff', fontSize: '18px' }}
+                valueStyle={{ color: '#1890ff', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('待P图')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="待P图"
                 value={statistics.waitingPImage}
                 prefix={<CameraOutlined />}
-                valueStyle={{ color: '#cf1322', fontSize: '18px' }}
+                valueStyle={{ color: '#cf1322', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('待上传')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="待上传"
                 value={statistics.waitingUpload}
                 prefix={<CloudUploadOutlined />}
-                valueStyle={{ color: '#1890ff', fontSize: '18px' }}
+                valueStyle={{ color: '#1890ff', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('申请测试', 'cpc_status')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="CPC测试待审核"
                 value={statistics.cpcTestPending}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#fa8c16', fontSize: '18px' }}
+                valueStyle={{ color: '#fa8c16', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('测试中', 'cpc_status')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="CPC检测中"
                 value={statistics.cpcTesting}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#13c2c2', fontSize: '18px' }}
+                valueStyle={{ color: '#13c2c2', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
               onClick={() => handleCardClick('样品已发', 'cpc_status')}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="CPC已发样品"
                 value={statistics.cpcSampleSent}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#52c41a', fontSize: '18px' }}
+                valueStyle={{ color: '#52c41a', fontSize: '16px' }}
               />
             </Card>
           </Col>
-          <Col span={4}>
+          <Col span={6}>
             <Card 
               size="small"
               hoverable 
               onClick={handleCpcPendingListingClick}
-              style={{ cursor: 'pointer', minHeight: '80px' }}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
                 title="CPC待上架产品"
                 value={statistics.cpcPendingListing}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#722ed1', fontSize: '18px' }}
+                valueStyle={{ color: '#722ed1', fontSize: '16px' }}
               />
             </Card>
           </Col>
@@ -4859,6 +4851,7 @@ const Purchase: React.FC = () => {
         onCancel={() => {
           setNewLinksModalVisible(false);
           setNewLinksInput('');
+          setNewLinksResult(null);
         }}
         confirmLoading={newLinksLoading}
         okText="确认添加"
@@ -4872,19 +4865,200 @@ const Purchase: React.FC = () => {
               状态将统一设置为"新品一审"
             </Text>
           </div>
+          <div style={{ 
+            marginBottom: '12px', 
+            padding: '8px', 
+            backgroundColor: '#e6f7ff', 
+            borderRadius: '4px',
+            fontSize: '12px'
+          }}>
+            <Text type="secondary">
+              💡 <strong>智能处理：</strong><br />
+              • 自动提取链接中https到.html的部分<br />
+              • 自动跳过数据库中已存在的重复链接<br />
+              • 处理完成后将显示详细的处理结果
+            </Text>
+          </div>
           <TextArea
             value={newLinksInput}
             onChange={(e) => setNewLinksInput(e.target.value)}
-            placeholder="请每行输入一个产品链接，例如：&#10;https://example.com/product1&#10;https://example.com/product2&#10;..."
-            rows={10}
+            placeholder="请每行输入一个产品链接，例如：&#10;@https://detail.1688.com/offer/966426530233.html?spm=a2615.pc_new_goods.wp_pc_new_product_list.0&#10;https://example.com/product2.html&#10;..."
+            rows={8}
             style={{ fontFamily: 'monospace' }}
           />
           <div>
             <Text type="secondary">
-              {newLinksInput.split('\n').filter(line => line.trim()).length} 个有效链接
+              {newLinksInput.split('\n').filter(line => line.trim()).length} 个有效输入行
             </Text>
           </div>
         </Space>
+      </Modal>
+
+             {/* 新链接批量添加结果对话框 */}
+       <Modal
+         title="新链接添加结果"
+         open={newLinksResultVisible}
+         onOk={() => {
+           setNewLinksResultVisible(false);
+           setNewLinksResult(null);
+         }}
+         onCancel={() => {
+           setNewLinksResultVisible(false);
+           setNewLinksResult(null);
+         }}
+         okText="确定"
+         cancelButtonProps={{ style: { display: 'none' } }}
+         width={800}
+       >
+        {newLinksResult && (
+          <Space direction="vertical" style={{ width: '100%' }} size="large">
+            {/* 总体统计 */}
+            <div>
+              <Row gutter={16}>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="总处理链接数"
+                      value={newLinksResult.totalCount}
+                      valueStyle={{ color: '#1890ff' }}
+                      prefix={<LinkOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="成功添加"
+                      value={newLinksResult.successCount}
+                      valueStyle={{ color: '#52c41a' }}
+                      prefix={<CheckCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="重复跳过"
+                      value={newLinksResult.duplicateCount}
+                      valueStyle={{ color: '#faad14' }}
+                      prefix={<ClockCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="格式错误"
+                      value={newLinksResult.errorCount}
+                      valueStyle={{ color: '#ff4d4f' }}
+                      prefix={<CloseCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+            </div>
+
+            {/* 结果说明 */}
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: '#f6ffed', 
+              borderRadius: '6px',
+              border: '1px solid #b7eb8f'
+            }}>
+              <Text style={{ fontSize: '16px', fontWeight: 'bold', color: '#389e0d' }}>
+                {newLinksResult.message}
+              </Text>
+            </div>
+
+            {/* 重复链接详情 */}
+            {newLinksResult.duplicates && newLinksResult.duplicates.length > 0 && (
+              <div>
+                <Text strong style={{ color: '#faad14' }}>🔄 跳过的重复链接：</Text>
+                <Table
+                  size="small"
+                  dataSource={newLinksResult.duplicates}
+                  columns={[
+                    {
+                      title: '行号',
+                      dataIndex: 'line',
+                      key: 'line',
+                      width: 60,
+                      align: 'center'
+                    },
+                    {
+                      title: '提取的链接',
+                      dataIndex: 'extractedLink',
+                      key: 'extractedLink',
+                      ellipsis: true,
+                      render: (text: string) => (
+                        <Tooltip title={text}>
+                          <a href={text} target="_blank" rel="noopener noreferrer">
+                            {text.length > 50 ? `${text.substring(0, 50)}...` : text}
+                          </a>
+                        </Tooltip>
+                      ),
+                    },
+                    {
+                      title: '状态',
+                      dataIndex: 'error',
+                      key: 'error',
+                      width: 120,
+                      render: (text: string) => (
+                        <Tag color="orange">{text}</Tag>
+                      ),
+                    },
+                  ]}
+                  pagination={false}
+                  scroll={{ y: 200 }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
+
+            {/* 格式错误详情 */}
+            {newLinksResult.errors && newLinksResult.errors.filter(err => err.error !== '链接已存在于数据库中').length > 0 && (
+              <div>
+                <Text strong style={{ color: '#ff4d4f' }}>❌ 格式错误的链接：</Text>
+                <Table
+                  size="small"
+                  dataSource={newLinksResult.errors.filter(err => err.error !== '链接已存在于数据库中')}
+                  columns={[
+                    {
+                      title: '行号',
+                      dataIndex: 'line',
+                      key: 'line',
+                      width: 60,
+                      align: 'center'
+                    },
+                    {
+                      title: '原始输入',
+                      dataIndex: 'originalLink',
+                      key: 'originalLink',
+                      ellipsis: true,
+                      render: (text: string) => (
+                        <Tooltip title={text}>
+                          <Text code>{text.length > 50 ? `${text.substring(0, 50)}...` : text}</Text>
+                        </Tooltip>
+                      ),
+                    },
+                    {
+                      title: '错误原因',
+                      dataIndex: 'error',
+                      key: 'error',
+                      width: 200,
+                      render: (text: string) => (
+                        <Tag color="red">{text}</Tag>
+                      ),
+                    },
+                  ]}
+                  pagination={false}
+                  scroll={{ y: 200 }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
+          </Space>
+        )}
       </Modal>
 
    </div>
