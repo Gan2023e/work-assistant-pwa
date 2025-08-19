@@ -178,6 +178,7 @@ const Purchase: React.FC = () => {
   
   // 统计数据（基于全库数据）
   const [statistics, setStatistics] = useState({
+    newProductFirstReview: 0,
     waitingPImage: 0,
     waitingUpload: 0,
     cpcTestPending: 0,
@@ -244,6 +245,11 @@ const Purchase: React.FC = () => {
 
   // 添加钉钉推送开关状态
   const [enableDingTalkNotification, setEnableDingTalkNotification] = useState(true);
+
+  // 新链接（采购用）相关状态
+  const [newLinksModalVisible, setNewLinksModalVisible] = useState(false);
+  const [newLinksInput, setNewLinksInput] = useState('');
+  const [newLinksLoading, setNewLinksLoading] = useState(false);
 
   // FBASKU生成相关状态
   const [fbaSkuModalVisible, setFbaSkuModalVisible] = useState(false);
@@ -933,6 +939,121 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('批量删除失败:', e);
       message.error('批量删除失败');
+    }
+  };
+
+  // 批量添加新链接（采购用）
+  const handleBatchAddNewLinks = async () => {
+    const links = newLinksInput
+      .split('\n')
+      .map(link => link.trim())
+      .filter(Boolean);
+
+    if (links.length === 0) {
+      message.warning('请输入产品链接');
+      return;
+    }
+
+    setNewLinksLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-add-purchase-links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        // 显示详细错误信息
+        if (result.errors && result.errors.length > 0) {
+          const errorDetails = result.errors.map((err: any) => 
+            `第${err.line}行: ${err.error}`
+          ).join('\n');
+          
+          Modal.error({
+            title: '链接格式错误',
+            content: (
+              <div>
+                <p>{result.message}</p>
+                <div style={{ 
+                  marginTop: '12px', 
+                  padding: '8px', 
+                  backgroundColor: '#fff2f0', 
+                  borderRadius: '4px',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <Text code style={{ whiteSpace: 'pre-wrap' }}>
+                    {errorDetails}
+                  </Text>
+                </div>
+              </div>
+            ),
+            width: 500
+          });
+        } else {
+          message.error(result.message || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        return;
+      }
+
+      // 显示成功信息和可能的警告
+      if (result.data.errorCount > 0) {
+        const successMessage = result.message;
+        const errorDetails = result.data.errors.map((err: any) => 
+          `第${err.line}行: ${err.error}`
+        ).join('\n');
+        
+        Modal.info({
+          title: '添加完成（部分失败）',
+          content: (
+            <div>
+              <p style={{ color: '#52c41a' }}>{successMessage}</p>
+              <div style={{ marginTop: '12px' }}>
+                <Text strong>错误详情：</Text>
+                <div style={{ 
+                  marginTop: '8px', 
+                  padding: '8px', 
+                  backgroundColor: '#fff2f0', 
+                  borderRadius: '4px',
+                  maxHeight: '150px',
+                  overflow: 'auto'
+                }}>
+                  <Text code style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
+                    {errorDetails}
+                  </Text>
+                </div>
+              </div>
+            </div>
+          ),
+          width: 500
+        });
+      } else {
+        message.success(result.message);
+      }
+
+      setNewLinksModalVisible(false);
+      setNewLinksInput('');
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+      
+      // 如果当前有搜索或筛选条件，刷新数据
+      const hasSearchInput = input.trim().length > 0;
+      const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
+      
+      if (hasSearchInput) {
+        handleSearch();
+      } else if (hasFilters) {
+        applyFilters(filters);
+      }
+    } catch (e: unknown) {
+      console.error('批量添加新链接失败:', e);
+      const errorMessage = e instanceof Error ? e.message : '批量添加失败';
+      message.error(errorMessage);
+    } finally {
+      setNewLinksLoading(false);
     }
   };
 
@@ -2939,6 +3060,21 @@ const Purchase: React.FC = () => {
             <Card 
               size="small"
               hoverable 
+              onClick={() => handleCardClick('新品一审')}
+              style={{ cursor: 'pointer', minHeight: '80px' }}
+            >
+              <Statistic
+                title="新品一审"
+                value={statistics.newProductFirstReview}
+                prefix={<PlusOutlined />}
+                valueStyle={{ color: '#1890ff', fontSize: '18px' }}
+              />
+            </Card>
+          </Col>
+          <Col span={4}>
+            <Card 
+              size="small"
+              hoverable 
               onClick={() => handleCardClick('待P图')}
               style={{ cursor: 'pointer', minHeight: '80px' }}
             >
@@ -3276,6 +3412,16 @@ const Purchase: React.FC = () => {
                         批量删除
                       </Button>
                     </Popconfirm>
+
+                    <Button 
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => setNewLinksModalVisible(true)}
+                      size="small"
+                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                    >
+                      新链接（采购用）
+                    </Button>
                   </Space>
                 </div>
               </Col>
@@ -4703,6 +4849,42 @@ const Purchase: React.FC = () => {
             </div>
           </Space>
         )}
+      </Modal>
+
+      {/* 新链接（采购用）对话框 */}
+      <Modal
+        title="新链接（采购用）"
+        open={newLinksModalVisible}
+        onOk={handleBatchAddNewLinks}
+        onCancel={() => {
+          setNewLinksModalVisible(false);
+          setNewLinksInput('');
+        }}
+        confirmLoading={newLinksLoading}
+        okText="确认添加"
+        cancelText="取消"
+        width={600}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <Text strong>请输入产品链接（每行一个）：</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>
+              状态将统一设置为"新品一审"
+            </Text>
+          </div>
+          <TextArea
+            value={newLinksInput}
+            onChange={(e) => setNewLinksInput(e.target.value)}
+            placeholder="请每行输入一个产品链接，例如：&#10;https://example.com/product1&#10;https://example.com/product2&#10;..."
+            rows={10}
+            style={{ fontFamily: 'monospace' }}
+          />
+          <div>
+            <Text type="secondary">
+              {newLinksInput.split('\n').filter(line => line.trim()).length} 个有效链接
+            </Text>
+          </div>
+        </Space>
       </Modal>
 
    </div>
