@@ -4908,7 +4908,7 @@ const Purchase: React.FC = () => {
          }}
          okText="确定"
          cancelButtonProps={{ style: { display: 'none' } }}
-         width={800}
+         width={750}
        >
         {newLinksResult && (
           <Space direction="vertical" style={{ width: '100%' }} size="large">
@@ -4975,43 +4975,44 @@ const Purchase: React.FC = () => {
               <div>
                 <Text strong style={{ color: '#faad14' }}>🔄 跳过的重复链接：</Text>
                 <Table
-                  size="small"
-                  dataSource={newLinksResult.duplicates}
-                  columns={[
-                    {
-                      title: '行号',
-                      dataIndex: 'line',
-                      key: 'line',
-                      width: 60,
-                      align: 'center'
-                    },
-                    {
-                      title: '提取的链接',
-                      dataIndex: 'extractedLink',
-                      key: 'extractedLink',
-                      ellipsis: true,
-                      render: (text: string) => (
-                        <Tooltip title={text}>
-                          <a href={text} target="_blank" rel="noopener noreferrer">
-                            {text.length > 50 ? `${text.substring(0, 50)}...` : text}
-                          </a>
-                        </Tooltip>
-                      ),
-                    },
-                    {
-                      title: '状态',
-                      dataIndex: 'error',
-                      key: 'error',
-                      width: 120,
-                      render: (text: string) => (
-                        <Tag color="orange">{text}</Tag>
-                      ),
-                    },
-                  ]}
-                  pagination={false}
-                  scroll={{ y: 200 }}
-                  style={{ marginTop: 8 }}
-                />
+                   size="small"
+                   dataSource={newLinksResult.duplicates}
+                   columns={[
+                     {
+                       title: '行号',
+                       dataIndex: 'line',
+                       key: 'line',
+                       width: 60,
+                       align: 'center'
+                     },
+                     {
+                       title: '提取的链接',
+                       dataIndex: 'extractedLink',
+                       key: 'extractedLink',
+                       width: 350,
+                       ellipsis: true,
+                       render: (text: string) => (
+                         <Tooltip title={text}>
+                           <a href={text} target="_blank" rel="noopener noreferrer">
+                             {text.length > 50 ? `${text.substring(0, 50)}...` : text}
+                           </a>
+                         </Tooltip>
+                       ),
+                     },
+                     {
+                       title: '状态',
+                       dataIndex: 'error',
+                       key: 'error',
+                       width: 120,
+                       render: (text: string) => (
+                         <Tag color="orange">{text}</Tag>
+                       ),
+                     },
+                   ]}
+                   pagination={false}
+                   scroll={{ y: 200 }}
+                   style={{ marginTop: 8 }}
+                 />
               </div>
             )}
 
@@ -5034,6 +5035,7 @@ const Purchase: React.FC = () => {
                       title: '原始输入',
                       dataIndex: 'originalLink',
                       key: 'originalLink',
+                      width: 350,
                       ellipsis: true,
                       render: (text: string) => (
                         <Tooltip title={text}>
@@ -5045,7 +5047,7 @@ const Purchase: React.FC = () => {
                       title: '错误原因',
                       dataIndex: 'error',
                       key: 'error',
-                      width: 200,
+                      width: 180,
                       render: (text: string) => (
                         <Tag color="red">{text}</Tag>
                       ),
