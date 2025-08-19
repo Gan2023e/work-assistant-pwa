@@ -923,8 +923,11 @@ router.post('/filter', async (req, res) => {
 
     res.json({ data: result });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: '筛选失败' });
+    console.error('筛选数据失败:', err);
+    res.status(500).json({ 
+      message: '筛选失败: ' + (err.message || '未知错误'),
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 

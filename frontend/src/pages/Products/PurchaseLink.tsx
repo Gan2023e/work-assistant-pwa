@@ -436,7 +436,16 @@ const Purchase: React.FC = () => {
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const errorData = await res.json();
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (parseError) {
+          console.warn('无法解析错误响应JSON:', parseError);
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await res.json();
@@ -449,7 +458,15 @@ const Purchase: React.FC = () => {
       message.success(`筛选完成，找到 ${filteredData.length} 条符合条件的记录`);
     } catch (e) {
       console.error('筛选失败:', e);
-      message.error('筛选失败');
+      let errorMessage = '筛选失败';
+      
+      if (e instanceof Error) {
+        errorMessage = '筛选失败: ' + e.message;
+      } else if (typeof e === 'string') {
+        errorMessage = '筛选失败: ' + e;
+      }
+      
+      message.error(errorMessage);
     }
   };
 
