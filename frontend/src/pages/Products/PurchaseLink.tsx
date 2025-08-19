@@ -82,6 +82,15 @@ interface ProductRecord {
   cpc_files?: string;
 }
 
+interface SellerInventorySkuRecord {
+  skuid: string;
+  parent_sku: string;
+  child_sku: string;
+  sellercolorname?: string;
+  sellersizename?: string;
+  qty_per_box?: number;
+}
+
 interface CpcFile {
   uid: string;
   name: string;
@@ -289,6 +298,14 @@ const Purchase: React.FC = () => {
   const [amzSkuMappingForm] = Form.useForm();
   const [mappingFormLoading, setMappingFormLoading] = useState(false);
   const [currentSelectedParentSkus, setCurrentSelectedParentSkus] = useState<string[]>([]);
+
+  // SellerInventorySku相关状态
+  const [sellerSkuModalVisible, setSellerSkuModalVisible] = useState(false);
+  const [sellerSkuData, setSellerSkuData] = useState<SellerInventorySkuRecord[]>([]);
+  const [sellerSkuLoading, setSellerSkuLoading] = useState(false);
+  const [currentParentSku, setCurrentParentSku] = useState<string>('');
+  const [sellerSkuEditingKey, setSellerSkuEditingKey] = useState<string>('');
+  const [sellerSkuForm] = Form.useForm();
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1619,7 +1636,16 @@ const Purchase: React.FC = () => {
       key: 'parent_sku', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku)
+      sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
+      render: (text: string) => (
+        <Button 
+          type="link" 
+          style={{ padding: 0, height: 'auto' }}
+          onClick={() => handleParentSkuClick(text)}
+        >
+          {text}
+        </Button>
+      )
     },
     { 
       title: '产品链接', 
@@ -1771,7 +1797,6 @@ const Purchase: React.FC = () => {
       align: 'center',
       width: 120,
       render: (text: any, record: ProductRecord) => (
-        <Space size="small">
           <Button
             type="primary"
             size="small"
@@ -1780,21 +1805,6 @@ const Purchase: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确定要删除这条记录吗？"
-            onConfirm={() => handleRecordDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
       )
     }
   ];
@@ -3201,6 +3211,64 @@ const Purchase: React.FC = () => {
     } finally {
       setFbaSkuLoading(false);
     }
+  };
+
+  // SellerInventorySku相关函数
+  const handleParentSkuClick = async (parentSku: string) => {
+    setCurrentParentSku(parentSku);
+    setSellerSkuModalVisible(true);
+    await loadSellerSkuData(parentSku);
+  };
+
+  const loadSellerSkuData = async (parentSku: string) => {
+    setSellerSkuLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(parentSku)}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      const result = await res.json();
+      setSellerSkuData(result.data || []);
+    } catch (error) {
+      console.error('加载SellerInventorySku数据失败:', error);
+      message.error('加载数据失败');
+    } finally {
+      setSellerSkuLoading(false);
+    }
+  };
+
+  const handleSellerSkuEdit = (record: SellerInventorySkuRecord) => {
+    sellerSkuForm.setFieldsValue(record);
+    setSellerSkuEditingKey(record.skuid);
+  };
+
+  const handleSellerSkuSave = async (skuid: string) => {
+    try {
+      const row = await sellerSkuForm.validateFields();
+      const updateData = { ...row };
+      
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuid)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success('保存成功');
+      setSellerSkuEditingKey('');
+      await loadSellerSkuData(currentParentSku);
+    } catch (error) {
+      console.error('保存SellerInventorySku数据失败:', error);
+      message.error('保存失败');
+    }
+  };
+
+  const handleSellerSkuCancel = () => {
+    setSellerSkuEditingKey('');
+    sellerSkuForm.resetFields();
   };
 
   return (
@@ -5350,6 +5418,129 @@ const Purchase: React.FC = () => {
             )}
           </Space>
         )}
+      </Modal>
+
+      {/* SellerInventorySku Modal */}
+      <Modal
+        title={`母SKU: ${currentParentSku} - 子SKU明细`}
+        visible={sellerSkuModalVisible}
+        onCancel={() => setSellerSkuModalVisible(false)}
+        width={800}
+        footer={null}
+      >
+        <Table
+          dataSource={sellerSkuData}
+          loading={sellerSkuLoading}
+          rowKey="skuid"
+          size="small"
+          pagination={false}
+          scroll={{ y: 400 }}
+          columns={[
+            {
+              title: 'SKU ID',
+              dataIndex: 'skuid',
+              key: 'skuid',
+              width: 120,
+            },
+            {
+              title: '子SKU',
+              dataIndex: 'child_sku',
+              key: 'child_sku',
+              width: 120,
+            },
+            {
+              title: '卖家颜色名称',
+              dataIndex: 'sellercolorname',
+              key: 'sellercolorname',
+              width: 120,
+              render: (text: string, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Form.Item
+                    name="sellercolorname"
+                    style={{ margin: 0 }}
+                    initialValue={text}
+                  >
+                    <Input size="small" />
+                  </Form.Item>
+                ) : (
+                  <span>{text || '-'}</span>
+                );
+              },
+            },
+            {
+              title: '卖家尺寸名称',
+              dataIndex: 'sellersizename',
+              key: 'sellersizename',
+              width: 120,
+              render: (text: string, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Form.Item
+                    name="sellersizename"
+                    style={{ margin: 0 }}
+                    initialValue={text}
+                  >
+                    <Input size="small" />
+                  </Form.Item>
+                ) : (
+                  <span>{text || '-'}</span>
+                );
+              },
+            },
+            {
+              title: '单箱产品数量',
+              dataIndex: 'qty_per_box',
+              key: 'qty_per_box',
+              width: 120,
+              render: (text: number, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Form.Item
+                    name="qty_per_box"
+                    style={{ margin: 0 }}
+                    initialValue={text}
+                  >
+                    <Input size="small" type="number" />
+                  </Form.Item>
+                ) : (
+                  <span>{text || '-'}</span>
+                );
+              },
+            },
+            {
+              title: '操作',
+              key: 'action',
+              width: 120,
+              render: (text: any, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Space>
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleSellerSkuSave(record.skuid)}
+                    >
+                      保存
+                    </Button>
+                    <Button size="small" onClick={handleSellerSkuCancel}>
+                      取消
+                    </Button>
+                  </Space>
+                ) : (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => handleSellerSkuEdit(record)}
+                  >
+                    编辑
+                  </Button>
+                );
+              },
+            },
+          ]}
+        />
+        <Form form={sellerSkuForm} component={false} />
       </Modal>
 
    </div>

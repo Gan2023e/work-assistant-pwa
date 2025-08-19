@@ -4274,4 +4274,96 @@ router.post('/export-excel', async (req, res) => {
   }
 });
 
+// ========== SellerInventorySku相关API ==========
+
+// 根据parent_sku查询SellerInventorySku数据
+router.get('/seller-inventory-sku/:parentSku', async (req, res) => {
+  try {
+    const { parentSku } = req.params;
+    
+    if (!parentSku) {
+      return res.status(400).json({
+        code: 1,
+        message: '母SKU参数不能为空'
+      });
+    }
+
+    console.log('查询SellerInventorySku数据，母SKU:', parentSku);
+
+    const data = await SellerInventorySku.findAll({
+      where: {
+        parent_sku: parentSku
+      },
+      order: [['child_sku', 'ASC']]
+    });
+
+    console.log(`查询到${data.length}条SellerInventorySku记录`);
+
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: data
+    });
+
+  } catch (error) {
+    console.error('查询SellerInventorySku数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '查询失败: ' + error.message
+    });
+  }
+});
+
+// 更新单个SellerInventorySku记录
+router.put('/seller-inventory-sku/:skuid', async (req, res) => {
+  try {
+    const { skuid } = req.params;
+    const updateData = req.body;
+    
+    if (!skuid) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU ID参数不能为空'
+      });
+    }
+
+    console.log('更新SellerInventorySku记录，SKU ID:', skuid, '更新数据:', updateData);
+
+    // 查找记录
+    const record = await SellerInventorySku.findByPk(skuid);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    // 更新记录
+    const [affectedRows] = await SellerInventorySku.update(updateData, {
+      where: { skuid: skuid }
+    });
+
+    if (affectedRows === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '更新失败，记录可能不存在'
+      });
+    }
+
+    console.log('SellerInventorySku记录更新成功，影响行数:', affectedRows);
+
+    res.json({
+      code: 0,
+      message: '更新成功'
+    });
+
+  } catch (error) {
+    console.error('更新SellerInventorySku数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新失败: ' + error.message
+    });
+  }
+});
+
 module.exports = router;
