@@ -1045,6 +1045,10 @@ router.get('/statistics', async (req, res) => {
       where: { status: '新品一审' }
     });
 
+    const infringementSecondReviewCount = await ProductWeblink.count({
+      where: { status: '待审核' }
+    });
+
     const waitingPImageCount = await ProductWeblink.count({
       where: { status: '待P图' }
     });
@@ -1082,6 +1086,7 @@ router.get('/statistics', async (req, res) => {
     res.json({
       statistics: {
         newProductFirstReview: newProductFirstReviewCount,
+        infringementSecondReview: infringementSecondReviewCount,
         waitingPImage: waitingPImageCount,
         waitingUpload: waitingUploadCount,
         cpcTestPending: cpcTestPendingCount,
@@ -4205,6 +4210,67 @@ router.post('/batch-add-purchase-links', async (req, res) => {
   } catch (err) {
     console.error('批量添加采购链接失败:', err);
     res.status(500).json({ message: '服务器错误: ' + err.message });
+  }
+});
+
+// 导出Excel文件
+router.post('/export-excel', async (req, res) => {
+  try {
+    const { data } = req.body;
+    
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ message: '没有数据可导出' });
+    }
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('采购链接管理');
+
+    // 设置列标题
+    const headers = Object.keys(data[0]);
+    worksheet.addRow(headers);
+
+    // 设置标题行样式
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE6F7FF' }
+    };
+
+    // 添加数据行
+    data.forEach(item => {
+      const row = headers.map(header => item[header] || '');
+      worksheet.addRow(row);
+    });
+
+    // 自动调整列宽
+    headers.forEach((header, index) => {
+      const column = worksheet.getColumn(index + 1);
+      let maxLength = header.length;
+      
+      data.forEach(item => {
+        const value = item[header] || '';
+        if (value.toString().length > maxLength) {
+          maxLength = Math.min(value.toString().length, 50); // 限制最大宽度
+        }
+      });
+      
+      column.width = Math.max(maxLength + 2, 10);
+    });
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="purchase_links_export.xlsx"');
+
+    // 写入响应
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    console.error('导出Excel失败:', error);
+    res.status(500).json({ message: '导出失败: ' + error.message });
   }
 });
 

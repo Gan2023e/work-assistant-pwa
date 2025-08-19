@@ -2,7 +2,9 @@ require('dotenv').config(); // 读取 .env
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const cron = require('node-cron');
 const { sequelize } = require('./models');
+const { ProductWeblink } = require('./models');
 const productWeblinkRouter = require('./routes/productWeblink');
 const logisticsRouter = require('./routes/logistics');
 const salaryRouter = require('./routes/salary');
@@ -120,6 +122,9 @@ sequelize.authenticate().then(() => {
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+      
+      // 启动定时任务
+      startScheduledTasks();
     });
   } else {
     // 开发环境才进行数据库同步
@@ -129,10 +134,70 @@ sequelize.authenticate().then(() => {
       
       app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+        
+        // 启动定时任务
+        startScheduledTasks();
       });
     });
   }
 }).catch(err => {
   console.error('❌ 数据库连接失败');
   process.exit(1);
-}); 
+});
+
+// 定时任务函数
+function startScheduledTasks() {
+  console.log('🕐 启动定时任务...');
+  
+  // 每天上午10点检查新品一审记录
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      console.log('🔍 执行定时任务：检查新品一审记录数量...');
+      
+      // 查询新品一审记录数量
+      const newProductFirstReviewCount = await ProductWeblink.count({
+        where: { status: '新品一审' }
+      });
+      
+      console.log(`📊 新品一审记录数量: ${newProductFirstReviewCount}`);
+      
+      if (newProductFirstReviewCount > 0) {
+        // 发送钉钉通知
+        const notificationMessage = `🔔 每日提醒：目前有 ${newProductFirstReviewCount} 个新品一审记录需要处理，请及时处理。`;
+        
+        try {
+          const axios = require('axios');
+          const dingtalkWebhook = process.env.DINGTALK_WEBHOOK_URL;
+          
+          if (!dingtalkWebhook) {
+            console.warn('⚠️ 钉钉Webhook URL未配置，跳过通知发送');
+            return;
+          }
+          
+          await axios.post(dingtalkWebhook, {
+            msgtype: 'text',
+            text: {
+              content: notificationMessage
+            },
+            at: {
+              atMobiles: [process.env.MOBILE_NUM_SARA || ''],
+              isAtAll: false
+            }
+          });
+          
+          console.log('✅ 钉钉通知发送成功');
+        } catch (notificationError) {
+          console.error('❌ 钉钉通知发送失败:', notificationError.message);
+        }
+      } else {
+        console.log('ℹ️ 新品一审记录数量为0，无需发送通知');
+      }
+    } catch (error) {
+      console.error('❌ 定时任务执行失败:', error);
+    }
+  }, {
+    timezone: 'Asia/Shanghai'
+  });
+  
+  console.log('✅ 定时任务启动成功 - 每天上午10点检查新品一审记录');
+} 

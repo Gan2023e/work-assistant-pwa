@@ -49,7 +49,8 @@ import {
   LoadingOutlined,
   CloseCircleOutlined,
   GlobalOutlined,
-  PlayCircleOutlined
+  PlayCircleOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -110,6 +111,11 @@ const Purchase: React.FC = () => {
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editForm] = Form.useForm<any>();
   const [editModalVisible, setEditModalVisible] = useState(false);
+  
+  // 行编辑相关状态
+  const [editingRecord, setEditingRecord] = useState<ProductRecord | null>(null);
+  const [recordEditForm] = Form.useForm<any>();
+  const [recordEditModalVisible, setRecordEditModalVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
   // 多站点模板文件管理
@@ -179,6 +185,7 @@ const Purchase: React.FC = () => {
   // 统计数据（基于全库数据）
   const [statistics, setStatistics] = useState({
     newProductFirstReview: 0,
+    infringementSecondReview: 0,
     waitingPImage: 0,
     waitingUpload: 0,
     cpcTestPending: 0,
@@ -962,6 +969,82 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 批量导出Excel
+  const handleBatchExport = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要导出的记录');
+      return;
+    }
+
+    try {
+      // 获取选中的记录
+      const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
+      const selectedRecords = currentData.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+
+      if (selectedRecords.length === 0) {
+        message.warning('没有找到选中的记录');
+        return;
+      }
+
+      // 准备导出数据
+      const exportData = selectedRecords.map(record => ({
+        '母SKU': record.parent_sku || '',
+        '产品链接': record.weblink || '',
+        '上传时间': record.update_time ? dayjs(record.update_time).format('YYYY-MM-DD HH:mm:ss') : '',
+        '检查时间': record.check_time ? dayjs(record.check_time).format('YYYY-MM-DD HH:mm:ss') : '',
+        '产品状态': record.status || '',
+        '备注': record.notice || '',
+        'CPC测试情况': record.cpc_status || '',
+        'CPC提交情况': record.cpc_submit || '',
+        'Style Number': record.model_number || '',
+        '推荐年龄': record.recommend_age || '',
+        '广告是否创建': record.ads_add || '',
+        '上架母SKU': record.list_parent_sku || '',
+        '缺货率': record.no_inventory_rate || '',
+        '30天销量': record.sales_30days || '',
+        '供应商': record.seller_name || ''
+      }));
+
+      // 调用导出API
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/export-excel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: exportData }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      // 下载文件
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // 生成文件名
+      const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss');
+      link.download = `采购链接管理_${timestamp}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理URL对象
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 5000);
+
+      message.success(`成功导出 ${selectedRecords.length} 条记录到Excel文件`);
+    } catch (e: unknown) {
+      console.error('导出Excel失败:', e);
+      const errorMessage = e instanceof Error ? e.message : '导出失败';
+      message.error(errorMessage);
+    }
+  };
+
   // 批量添加新链接（采购用）
   const handleBatchAddNewLinks = async () => {
     const links = newLinksInput
@@ -1318,6 +1401,179 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 处理记录编辑
+  const handleRecordEdit = (record: ProductRecord) => {
+    setEditingRecord(record);
+    setRecordEditModalVisible(true);
+    recordEditForm.setFieldsValue({
+      parent_sku: record.parent_sku,
+      weblink: record.weblink,
+      status: record.status,
+      notice: record.notice,
+      cpc_status: record.cpc_status,
+      cpc_submit: record.cpc_submit,
+      model_number: record.model_number,
+      recommend_age: record.recommend_age,
+      ads_add: record.ads_add,
+      list_parent_sku: record.list_parent_sku,
+      no_inventory_rate: record.no_inventory_rate,
+      sales_30days: record.sales_30days,
+      seller_name: record.seller_name
+    });
+  };
+
+  // 保存记录编辑
+  const handleSaveRecordEdit = async () => {
+    if (!editingRecord) return;
+
+    try {
+      const values = await recordEditForm.validateFields();
+
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${editingRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success('记录更新成功');
+      setRecordEditModalVisible(false);
+      setEditingRecord(null);
+      recordEditForm.resetFields();
+      
+      // 更新本地数据
+      const updateLocalData = (prevData: ProductRecord[]) => 
+        prevData.map(item => 
+          item.id === editingRecord.id 
+            ? { ...item, ...values }
+            : item
+        );
+      
+      setData(updateLocalData);
+      setOriginalData(updateLocalData);
+      setFilteredData(updateLocalData);
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e: unknown) {
+      console.error('更新记录失败:', e);
+      const errorMessage = e instanceof Error ? e.message : '更新失败';
+      message.error(errorMessage);
+    }
+  };
+
+  // 处理记录删除
+  const handleRecordDelete = async (recordId: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/${recordId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success('删除成功');
+      
+      // 从本地数据中移除删除的记录
+      const removeFromData = (prevData: ProductRecord[]) => 
+        prevData.filter(item => item.id !== recordId);
+      
+      setData(removeFromData);
+      setOriginalData(removeFromData);
+      setFilteredData(removeFromData);
+      
+      // 如果删除的记录在选中列表中，也移除
+      setSelectedRowKeys(prev => prev.filter(key => Number(key) !== recordId));
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e: unknown) {
+      console.error('删除记录失败:', e);
+      const errorMessage = e instanceof Error ? e.message : '删除失败';
+      message.error(errorMessage);
+    }
+  };
+
+  // 批量导出Excel
+  const handleBatchExport = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要导出的记录');
+      return;
+    }
+
+    try {
+      // 获取选中的记录
+      const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
+      const selectedRecords = currentData.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+
+      if (selectedRecords.length === 0) {
+        message.warning('没有找到选中的记录');
+        return;
+      }
+
+      // 准备导出数据
+      const exportData = selectedRecords.map(record => ({
+        '母SKU': record.parent_sku || '',
+        '产品链接': record.weblink || '',
+        '上传时间': record.update_time ? dayjs(record.update_time).format('YYYY-MM-DD HH:mm:ss') : '',
+        '检查时间': record.check_time ? dayjs(record.check_time).format('YYYY-MM-DD HH:mm:ss') : '',
+        '产品状态': record.status || '',
+        '备注': record.notice || '',
+        'CPC测试情况': record.cpc_status || '',
+        'CPC提交情况': record.cpc_submit || '',
+        'Style Number': record.model_number || '',
+        '推荐年龄': record.recommend_age || '',
+        '广告是否创建': record.ads_add || '',
+        '上架母SKU': record.list_parent_sku || '',
+        '缺货率': record.no_inventory_rate || '',
+        '30天销量': record.sales_30days || '',
+        '供应商': record.seller_name || ''
+      }));
+
+      // 调用导出API
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/export-excel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: exportData }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      // 下载文件
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // 生成文件名
+      const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss');
+      link.download = `采购链接管理_${timestamp}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理URL对象
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 5000);
+
+      message.success(`成功导出 ${selectedRecords.length} 条记录到Excel文件`);
+    } catch (e: unknown) {
+      console.error('导出Excel失败:', e);
+      const errorMessage = e instanceof Error ? e.message : '导出失败';
+      message.error(errorMessage);
+    }
+  };
+
   // 新的Excel上传处理（支持SKU, 链接, 备注）
   const handleExcelUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1439,11 +1695,7 @@ const Purchase: React.FC = () => {
       key: 'parent_sku', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'parent_sku'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku)
     },
     { 
       title: '产品链接', 
@@ -1457,11 +1709,7 @@ const Purchase: React.FC = () => {
             {text}
           </a>
         </Tooltip>
-      ) : '',
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'weblink'),
-        style: { cursor: 'pointer' }
-      })
+      ) : ''
     },
     { 
       title: '上传时间', 
@@ -1487,11 +1735,7 @@ const Purchase: React.FC = () => {
       key: 'status', 
       align: 'center',
       width: 100,
-      sorter: (a, b) => (a.status || '').localeCompare(b.status || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'status'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.status || '').localeCompare(b.status || '')
     },
     { 
       title: '备注', 
@@ -1499,11 +1743,7 @@ const Purchase: React.FC = () => {
       key: 'notice', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'notice'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
     },
     { 
       title: 'CPC文件', 
@@ -1535,11 +1775,7 @@ const Purchase: React.FC = () => {
       key: 'cpc_status', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.cpc_status || '').localeCompare(b.cpc_status || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'cpc_status'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.cpc_status || '').localeCompare(b.cpc_status || '')
     },
     { 
       title: 'CPC提交情况', 
@@ -1547,11 +1783,7 @@ const Purchase: React.FC = () => {
       key: 'cpc_submit', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'cpc_submit'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || '')
     },
     { 
       title: 'Style Number', 
@@ -1559,11 +1791,7 @@ const Purchase: React.FC = () => {
       key: 'model_number', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'model_number'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || '')
     },
     { 
       title: '推荐年龄', 
@@ -1571,11 +1799,7 @@ const Purchase: React.FC = () => {
       key: 'recommend_age', 
       align: 'center',
       width: 100,
-      sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'recommend_age'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || '')
     },
     { 
       title: '广告是否创建', 
@@ -1583,11 +1807,7 @@ const Purchase: React.FC = () => {
       key: 'ads_add', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.ads_add || '').localeCompare(b.ads_add || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'ads_add'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.ads_add || '').localeCompare(b.ads_add || '')
     },
     { 
       title: '上架母SKU', 
@@ -1595,11 +1815,7 @@ const Purchase: React.FC = () => {
       key: 'list_parent_sku', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.list_parent_sku || '').localeCompare(b.list_parent_sku || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'list_parent_sku'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.list_parent_sku || '').localeCompare(b.list_parent_sku || '')
     },
     { 
       title: '缺货率', 
@@ -1607,11 +1823,7 @@ const Purchase: React.FC = () => {
       key: 'no_inventory_rate', 
       align: 'center',
       width: 100,
-      sorter: (a, b) => (parseFloat(a.no_inventory_rate) || 0) - (parseFloat(b.no_inventory_rate) || 0),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'no_inventory_rate'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (parseFloat(a.no_inventory_rate) || 0) - (parseFloat(b.no_inventory_rate) || 0)
     },
     { 
       title: '30天销量', 
@@ -1619,11 +1831,7 @@ const Purchase: React.FC = () => {
       key: 'sales_30days', 
       align: 'center',
       width: 100,
-      sorter: (a, b) => (parseInt(a.sales_30days) || 0) - (parseInt(b.sales_30days) || 0),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'sales_30days'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (parseInt(a.sales_30days) || 0) - (parseInt(b.sales_30days) || 0)
     },
     { 
       title: '供应商', 
@@ -1631,12 +1839,40 @@ const Purchase: React.FC = () => {
       key: 'seller_name', 
       align: 'center',
       width: 120,
-      sorter: (a, b) => (a.seller_name || '').localeCompare(b.seller_name || ''),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'seller_name'),
-        style: { cursor: 'pointer' }
-      })
+      sorter: (a, b) => (a.seller_name || '').localeCompare(b.seller_name || '')
     },
+    {
+      title: '编辑',
+      key: 'actions',
+      align: 'center',
+      width: 120,
+      render: (text: any, record: ProductRecord) => (
+        <Space size="small">
+          <Button
+            type="primary"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleRecordEdit(record)}
+          >
+            编辑
+          </Button>
+          <Popconfirm
+            title="确定要删除这条记录吗？"
+            onConfirm={() => handleRecordDelete(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
   ];
 
   // 行选择配置
@@ -3067,6 +3303,21 @@ const Purchase: React.FC = () => {
             <Card 
               size="small"
               hoverable 
+              onClick={() => handleCardClick('待审核')}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
+            >
+              <Statistic
+                title="侵权二审"
+                value={statistics.infringementSecondReview}
+                prefix={<EyeOutlined />}
+                valueStyle={{ color: '#fa541c', fontSize: '16px' }}
+              />
+            </Card>
+          </Col>
+          <Col span={3}>
+            <Card 
+              size="small"
+              hoverable 
               onClick={() => handleCardClick('待P图')}
               style={{ cursor: 'pointer', minHeight: '70px' }}
             >
@@ -3138,7 +3389,7 @@ const Purchase: React.FC = () => {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={3}>
             <Card 
               size="small"
               hoverable 
@@ -3549,17 +3800,27 @@ const Purchase: React.FC = () => {
                   采购链接管理 
                 </span>
                 <span style={{ marginLeft: '16px', color: '#666', fontSize: '12px' }}>
-                  提示：双击单元格可编辑内容（除ID、时间字段外），点击列名可排序
+                  提示：点击"编辑"列可编辑记录，点击列名可排序
                 </span>
               </div>
-              <Button 
-                icon={<LinkOutlined />}
-                onClick={handleBatchOpenLinks}
-                disabled={selectedRowKeys.length === 0}
-                type="primary"
-              >
-                批量打开链接
-              </Button>
+              <Space>
+                <Button 
+                  icon={<FileExcelOutlined />}
+                  onClick={handleBatchExport}
+                  disabled={selectedRowKeys.length === 0}
+                  type="default"
+                >
+                  导出Excel
+                </Button>
+                <Button 
+                  icon={<LinkOutlined />}
+                  onClick={handleBatchOpenLinks}
+                  disabled={selectedRowKeys.length === 0}
+                  type="primary"
+                >
+                  批量打开链接
+                </Button>
+              </Space>
             </div>
           </div>
         )}
@@ -3626,6 +3887,110 @@ const Purchase: React.FC = () => {
               <Input placeholder="请输入内容" />
             )}
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 记录编辑对话框 */}
+      <Modal
+        title={`编辑记录 - ${editingRecord?.parent_sku || ''}`}
+        open={recordEditModalVisible}
+        onOk={handleSaveRecordEdit}
+        onCancel={() => {
+          setRecordEditModalVisible(false);
+          setEditingRecord(null);
+          recordEditForm.resetFields();
+        }}
+        okText="保存"
+        cancelText="取消"
+        width={800}
+      >
+        <Form form={recordEditForm} layout="vertical">
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="母SKU" name="parent_sku">
+                <Input placeholder="请输入母SKU" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="产品状态" name="status">
+                <Select placeholder="请选择状态">
+                  {getUniqueStatuses().map(statusItem => (
+                    <Option key={statusItem.value} value={statusItem.value}>
+                      {statusItem.value}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item label="产品链接" name="weblink">
+                <Input placeholder="请输入产品链接" type="url" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="CPC测试情况" name="cpc_status">
+                <Select placeholder="请选择CPC测试情况" allowClear>
+                  {getUniqueCpcStatuses().map(statusItem => (
+                    <Option key={statusItem.value} value={statusItem.value}>
+                      {statusItem.value}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="CPC提交情况" name="cpc_submit">
+                <AutoComplete
+                  placeholder="选择或输入CPC提交情况"
+                  allowClear
+                  options={getUniqueCpcSubmits().map(submitItem => ({
+                    value: submitItem.value,
+                    label: submitItem.value
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Style Number" name="model_number">
+                <Input placeholder="请输入Style Number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="推荐年龄" name="recommend_age">
+                <Input placeholder="请输入推荐年龄" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="广告是否创建" name="ads_add">
+                <Input placeholder="请输入广告创建状态" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="上架母SKU" name="list_parent_sku">
+                <Input placeholder="请输入上架母SKU" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="缺货率" name="no_inventory_rate">
+                <Input placeholder="请输入缺货率" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="30天销量" name="sales_30days">
+                <Input placeholder="请输入30天销量" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="供应商" name="seller_name">
+                <Input placeholder="请输入供应商名称" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="备注" name="notice">
+                <TextArea rows={2} placeholder="请输入备注" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
 
