@@ -198,6 +198,58 @@ function startScheduledTasks() {
   }, {
     timezone: 'Asia/Shanghai'
   });
+
+  // 每天上午9点半检查待P图记录
+  cron.schedule('30 9 * * *', async () => {
+    try {
+      console.log('🔍 执行定时任务：检查待P图记录数量...');
+      
+      // 查询待P图记录数量
+      const waitingPImageCount = await ProductWeblink.count({
+        where: { status: '待P图' }
+      });
+      
+      console.log(`📊 待P图记录数量: ${waitingPImageCount}`);
+      
+      if (waitingPImageCount > 0) {
+        // 发送钉钉通知
+        const notificationMessage = `🖼️ 每日提醒：目前有 ${waitingPImageCount} 个待P图记录需要处理，请及时处理。`;
+        
+        try {
+          const axios = require('axios');
+          const dingtalkWebhook = process.env.DINGTALK_WEBHOOK_URL;
+          
+          if (!dingtalkWebhook) {
+            console.warn('⚠️ 钉钉Webhook URL未配置，跳过通知发送');
+            return;
+          }
+          
+          await axios.post(dingtalkWebhook, {
+            msgtype: 'text',
+            text: {
+              content: notificationMessage
+            },
+            at: {
+              atMobiles: [process.env.MOBILE_NUM_WULV || ''],
+              isAtAll: false
+            }
+          });
+          
+          console.log('✅ 待P图钉钉通知发送成功');
+        } catch (notificationError) {
+          console.error('❌ 待P图钉钉通知发送失败:', notificationError.message);
+        }
+      } else {
+        console.log('ℹ️ 待P图记录数量为0，无需发送通知');
+      }
+    } catch (error) {
+      console.error('❌ 待P图定时任务执行失败:', error);
+    }
+  }, {
+    timezone: 'Asia/Shanghai'
+  });
   
-  console.log('✅ 定时任务启动成功 - 每天上午10点检查新品一审记录');
+  console.log('✅ 定时任务启动成功：');
+  console.log('   - 每天上午10点检查新品一审记录并@MOBILE_NUM_SARA');
+  console.log('   - 每天上午9点半检查待P图记录并@MOBILE_NUM_WULV');
 } 
