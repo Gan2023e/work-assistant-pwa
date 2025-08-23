@@ -10,6 +10,28 @@
 - 🔒 **登录验证** - 只有登录用户才能使用插件功能
 - ⚡ **自动化流程** - 获取完成后自动关闭标签页
 
+## 生产环境部署
+
+### 快速部署脚本
+
+使用自动化脚本配置生产环境：
+
+```bash
+# 在chrome-extension目录下运行
+node deploy-production.js work-assistant-pwa-production.up.railway.app
+```
+
+这将自动替换所有配置文件中的域名占位符。
+
+### 手动配置
+
+如果需要手动配置，请修改以下文件中的域名：
+- `manifest.json` - 更新 host_permissions 和 matches
+- `background.js` - 更新 API 地址配置
+- `config.js` - 更新生产环境配置
+
+**当前配置的生产环境域名：** `work-assistant-pwa-production.up.railway.app`
+
 ## 安装方法
 
 ### 方法一：开发者模式安装（推荐）

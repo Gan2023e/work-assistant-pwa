@@ -11,15 +11,16 @@
   ],
   "host_permissions": [
     "http://localhost:*/*",
-    "https://*/*"
+    "https://*/*",
+    "https://work-assistant-pwa-production.up.railway.app/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost:*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": ["http://localhost:*/*", "https://*/*", "https://work-assistant-pwa-production.up.railway.app/*"],
+      "js": ["config.js", "content.js"],
       "run_at": "document_end"
     }
   ],

@@ -215,14 +215,27 @@ async function getApiBaseUrl() {
     return result.apiBaseUrl;
   }
   
-  // 默认值 - 根据当前页面判断
+  // 根据当前页面判断环境
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tabs.length > 0) {
     const currentUrl = new URL(tabs[0].url);
+    
+    // 生产环境判断
+    if (currentUrl.hostname === 'work-assistant-pwa-production.up.railway.app') {
+      return 'https://work-assistant-pwa-production.up.railway.app'; // 生产环境API地址
+    }
+    
+    // 本地开发环境
+    if (currentUrl.hostname === 'localhost') {
+      return 'http://localhost:3001';
+    }
+    
+    // 其他情况使用当前域名
     return `${currentUrl.protocol}//${currentUrl.host}`;
   }
   
-  return 'http://localhost:3001'; // 默认后端地址
+  // 默认使用生产环境地址
+  return 'https://work-assistant-pwa-production.up.railway.app';
 }
 
 // 工具函数 - 延迟
