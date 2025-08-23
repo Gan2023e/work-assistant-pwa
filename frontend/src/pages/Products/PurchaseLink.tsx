@@ -3785,6 +3785,19 @@ const Purchase: React.FC = () => {
                       新链接（采购用）
                     </Button>
 
+                    <Button 
+                      icon={<EyeOutlined />}
+                      onClick={handleNewProductReview}
+                      disabled={selectedRowKeys.length === 0}
+                      type="primary"
+                      size="small"
+                      style={{ 
+                        background: '#1677ff',
+                        borderColor: '#1677ff'
+                      }}
+                    >
+                      新品审核
+                    </Button>
 
                   </Space>
                 </div>
@@ -3896,33 +3909,7 @@ const Purchase: React.FC = () => {
         </Space>
       </div>
 
-      {/* 长条新品审核按钮 */}
-      <div style={{ marginBottom: '12px' }}>
-        <Card size="small" bodyStyle={{ padding: '12px' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            background: '#1677ff',
-            color: 'white',
-            padding: '16px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            transition: 'all 0.3s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#4096ff';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#1677ff';
-          }}
-          onClick={handleNewProductReview}
-          >
-            <span style={{ marginRight: '8px', fontSize: '16px' }}>🔍</span>
-            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>新品审核</span>
-          </div>
-        </Card>
-      </div>
+
 
       {/* 数据表格 */}
       <Table
