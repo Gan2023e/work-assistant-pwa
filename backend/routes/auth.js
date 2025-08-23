@@ -362,4 +362,91 @@ router.delete('/users/:userId', authenticateToken, async (req, res) => {
   }
 });
 
+// 获取当前用户信息（Chrome插件用）
+router.get('/current-user', async (req, res) => {
+  try {
+    // 尝试从多个地方获取token
+    let token = null;
+    
+    // 1. 从Authorization header获取
+    if (req.headers.authorization) {
+      token = req.headers.authorization.replace('Bearer ', '');
+    }
+    
+    // 2. 从cookie获取（如果网页应用使用cookie存储token）
+    if (!token && req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    
+    // 3. 从query参数获取
+    if (!token && req.query.token) {
+      token = req.query.token;
+    }
+    
+    if (!token) {
+      return res.status(401).json({ 
+        code: 1,
+        message: '未登录',
+        isLoggedIn: false 
+      });
+    }
+
+    // 验证token
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+      if (err) {
+        return res.status(401).json({ 
+          code: 1,
+          message: 'Token无效或已过期',
+          isLoggedIn: false 
+        });
+      }
+
+      try {
+        // 获取用户详细信息
+        const user = await User.findByPk(decoded.userId, {
+          attributes: ['id', 'username', 'role', 'name', 'isActive', 'lastLoginAt']
+        });
+
+        if (!user || !user.isActive) {
+          return res.status(401).json({ 
+            code: 1,
+            message: '用户不存在或已禁用',
+            isLoggedIn: false 
+          });
+        }
+
+        res.json({
+          code: 0,
+          message: '获取用户信息成功',
+          isLoggedIn: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            name: user.name,
+            lastLoginAt: user.lastLoginAt
+          },
+          token: token
+        });
+
+      } catch (dbError) {
+        console.error('获取用户信息失败:', dbError);
+        res.status(500).json({ 
+          code: 1,
+          message: '服务器错误',
+          isLoggedIn: false 
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('检查登录状态失败:', error);
+    res.status(500).json({ 
+      code: 1,
+      message: '服务器错误',
+      isLoggedIn: false 
+    });
+  }
+});
+
 module.exports = { router, authenticateToken }; 

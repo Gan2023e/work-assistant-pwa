@@ -104,6 +104,13 @@ interface CpcFile {
   };
 }
 
+// 声明全局window对象的扩展属性
+declare global {
+  interface Window {
+    extensionCheckCallback?: (result: boolean) => void;
+  }
+}
+
 interface EditingCell {
   id: number;
   field: string;
@@ -1278,6 +1285,108 @@ const Purchase: React.FC = () => {
       console.error('标记CPC样品已发失败:', e);
       message.error('标记CPC样品已发失败');
     }
+  };
+
+  // 新品审核 - Chrome插件功能
+  const handleNewProductReview = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先勾选要审核的产品记录');
+      return;
+    }
+
+    try {
+      // 获取选中的产品记录
+      const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
+      const selectedRecords = currentData.filter(record => 
+        selectedRowKeys.some(key => Number(key) === record.id)
+      );
+
+      // 检查是否有有效的产品链接
+      const validRecords = selectedRecords.filter(record => record.weblink && record.weblink.trim() !== '');
+      if (validRecords.length === 0) {
+        message.warning('所选记录中没有有效的产品链接');
+        return;
+      }
+
+      if (validRecords.length !== selectedRecords.length) {
+        const invalidCount = selectedRecords.length - validRecords.length;
+        message.warning(`${invalidCount} 条记录没有有效链接，将只审核 ${validRecords.length} 条记录`);
+      }
+
+      // 检查是否安装了Chrome插件
+      const hasExtension = await checkChromeExtension();
+      if (!hasExtension) {
+        Modal.confirm({
+          title: '需要安装Chrome插件',
+          content: (
+            <div>
+              <p>新品审核功能需要安装Chrome插件才能使用。</p>
+              <p style={{ marginTop: '12px' }}>
+                <Text strong>插件功能：</Text>
+              </p>
+              <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+                <li>自动批量打开产品链接</li>
+                <li>获取网页源代码</li>
+                <li>自动关闭链接</li>
+                <li>保存审核数据到数据库</li>
+              </ul>
+              <p style={{ marginTop: '12px', color: '#666' }}>
+                请联系管理员获取插件安装包，或者手动下载安装。
+              </p>
+            </div>
+          ),
+          onOk: () => {
+            // 提供插件下载或安装指引
+            window.open('/chrome-extension/', '_blank');
+          },
+          okText: '获取插件',
+          cancelText: '取消'
+        });
+        return;
+      }
+
+      // 发送消息给Chrome插件开始审核
+      const reviewData = {
+        type: 'START_PRODUCT_REVIEW',
+        products: validRecords.map(record => ({
+          id: record.id,
+          parent_sku: record.parent_sku,
+          weblink: record.weblink
+        }))
+      };
+
+      // 通过postMessage发送给content script
+      window.postMessage(reviewData, '*');
+
+      message.success(`已发送 ${validRecords.length} 个产品到Chrome插件进行审核`);
+      message.info('请在Chrome插件中查看审核进度和结果', 5);
+
+    } catch (error) {
+      console.error('新品审核失败:', error);
+      message.error('启动新品审核失败: ' + error.message);
+    }
+  };
+
+  // 检查Chrome插件是否已安装和激活
+  const checkChromeExtension = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      // 设置检查标识
+      window.extensionCheckCallback = (result: boolean) => {
+        resolve(result);
+        delete window.extensionCheckCallback;
+      };
+
+      // 发送检查消息
+      window.postMessage({ type: 'CHECK_EXTENSION_AVAILABLE' }, '*');
+
+      // 3秒后超时
+      setTimeout(() => {
+        if (window.extensionCheckCallback) {
+          delete window.extensionCheckCallback;
+          resolve(false);
+        }
+      }, 3000);
+    });
   };
 
   // 修复全选后批量打开链接的问题
@@ -3828,6 +3937,18 @@ const Purchase: React.FC = () => {
                   type="primary"
                 >
                   批量打开链接
+                </Button>
+                <Button 
+                  icon={<EyeOutlined />}
+                  onClick={handleNewProductReview}
+                  disabled={selectedRowKeys.length === 0}
+                  type="primary"
+                  style={{ 
+                    background: '#52c41a',
+                    borderColor: '#52c41a'
+                  }}
+                >
+                  新品审核
                 </Button>
               </Space>
             </div>

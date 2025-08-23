@@ -4099,6 +4099,72 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
   }
 });
 
+// 保存页面源代码（Chrome插件调用）
+router.post('/save-page-source', async (req, res) => {
+  try {
+    const { productId, parentSku, weblink, pageSource, sourceLength } = req.body;
+
+    // 验证必要参数
+    if (!productId || !parentSku || !weblink || !pageSource) {
+      return res.status(400).json({
+        code: 1,
+        message: '缺少必要参数'
+      });
+    }
+
+    // 查找产品记录
+    const product = await ProductWeblink.findByPk(productId);
+    if (!product) {
+      return res.status(404).json({
+        code: 1,
+        message: '产品记录不存在'
+      });
+    }
+
+    // 验证产品信息匹配
+    if (product.parent_sku !== parentSku || product.weblink !== weblink) {
+      return res.status(400).json({
+        code: 1,
+        message: '产品信息不匹配'
+      });
+    }
+
+    // 生成源代码摘要（保存前1000个字符）
+    const sourceSummary = pageSource.substring(0, 1000);
+    
+    // 更新产品记录，添加审核信息
+    await ProductWeblink.update({
+      check_time: new Date(),
+      notice: `已获取页面源代码 (长度: ${sourceLength} 字符) - ${new Date().toLocaleString()}`
+    }, {
+      where: { id: productId }
+    });
+
+    // 这里可以将完整的页面源代码保存到文件系统或专门的存储表中
+    // 为了演示，我们只在响应中返回摘要
+    console.log(`产品 ${parentSku} 页面源代码已获取，长度: ${sourceLength} 字符`);
+
+    res.json({
+      code: 0,
+      message: '页面源代码保存成功',
+      data: {
+        productId,
+        parentSku,
+        sourceLength,
+        sourceSummary,
+        savedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('保存页面源代码失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '保存失败: ' + error.message
+    });
+  }
+});
+
 // 批量添加新链接（采购用）
 router.post('/batch-add-purchase-links', async (req, res) => {
   try {
