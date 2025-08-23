@@ -105,7 +105,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // 检查登录状态
   function checkLoginStatus() {
     return new Promise((resolve) => {
+      console.log('🔍 Popup: 发送登录状态检查请求...');
       chrome.runtime.sendMessage({ type: 'CHECK_LOGIN_STATUS' }, (response) => {
+        console.log('📤 Popup: 收到登录状态响应:', response);
         resolve(response || { isLoggedIn: false });
       });
     });
@@ -157,17 +159,21 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // 更新登录状态
   function updateLoginStatus(status) {
+    console.log('🔄 Popup: 更新登录状态:', status);
     const { loginStatus } = elements;
     
     if (status.isLoggedIn) {
+      console.log('✅ Popup: 用户已登录');
       loginStatus.textContent = '已登录';
       loginStatus.className = 'status-badge badge-success';
       
       // 如果有用户信息，显示用户名
       if (status.user && status.user.username) {
         loginStatus.textContent = `已登录 (${status.user.username})`;
+        console.log('👤 Popup: 显示用户名:', status.user.username);
       }
     } else {
+      console.log('❌ Popup: 用户未登录, 错误:', status.error);
       loginStatus.textContent = '未登录';
       loginStatus.className = 'status-badge badge-error';
       

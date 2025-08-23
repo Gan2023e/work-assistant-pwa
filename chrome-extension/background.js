@@ -184,25 +184,105 @@ async function saveProductSource({ productId, parentSku, weblink, pageSource, au
 // 检查登录状态
 async function checkLoginStatus() {
   try {
-    const apiBaseUrl = await getApiBaseUrl();
+    console.log('🔍 开始检查登录状态...');
     
-    // 尝试获取当前用户信息
-    const response = await fetch(`${apiBaseUrl}/api/auth/current-user`, {
-      credentials: 'include'
+    // 获取当前活动标签页
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    console.log('📑 当前标签页:', tabs);
+    
+    if (tabs.length === 0) {
+      console.log('❌ 无法获取当前标签页');
+      return { isLoggedIn: false, error: '无法获取当前标签页' };
+    }
+    
+    const currentTab = tabs[0];
+    console.log('🎯 目标标签页:', currentTab.url, 'ID:', currentTab.id);
+    
+    // 通过content script获取网页中的认证信息
+    console.log('🔧 执行脚本获取认证信息...');
+    const authInfo = await chrome.scripting.executeScript({
+      target: { tabId: currentTab.id },
+      func: () => {
+        try {
+          console.log('🔍 Content script: 开始检查localStorage...');
+          const token = localStorage.getItem('token');
+          const user = localStorage.getItem('user');
+          
+          console.log('🔑 Token存在:', !!token);
+          console.log('👤 User存在:', !!user);
+          
+          if (token && user) {
+            try {
+              const userData = JSON.parse(user);
+              console.log('✅ 用户信息解析成功:', userData.username);
+              return {
+                token: token,
+                user: userData,
+                isLoggedIn: true
+              };
+            } catch (parseError) {
+              console.error('❌ 解析用户信息失败:', parseError);
+              return { isLoggedIn: false, error: '用户信息解析失败' };
+            }
+          } else {
+            console.log('❌ 未找到认证信息');
+            return { isLoggedIn: false, error: '未找到认证信息' };
+          }
+        } catch (error) {
+          console.error('❌ 获取认证信息失败:', error);
+          return { isLoggedIn: false, error: error.message };
+        }
+      }
     });
     
-    if (response.ok) {
-      const userData = await response.json();
-      return { 
-        isLoggedIn: true, 
-        user: userData,
-        authToken: userData.token || ''
-      };
+    console.log('📤 脚本执行结果:', authInfo);
+    
+    if (authInfo && authInfo[0] && authInfo[0].result) {
+      const result = authInfo[0].result;
+      console.log('📋 认证结果:', result);
+      
+      if (result.isLoggedIn && result.token) {
+        console.log('🔐 开始验证Token...');
+        // 验证token是否有效
+        const apiBaseUrl = await getApiBaseUrl();
+        console.log('🌐 API地址:', apiBaseUrl);
+        
+        try {
+          const verifyResponse = await fetch(`${apiBaseUrl}/api/auth/verify`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${result.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log('✅ Token验证响应:', verifyResponse.status, verifyResponse.statusText);
+          
+          if (verifyResponse.ok) {
+            console.log('🎉 登录状态验证成功!');
+            return {
+              isLoggedIn: true,
+              user: result.user,
+              authToken: result.token
+            };
+          } else {
+            console.log('❌ Token验证失败:', verifyResponse.status);
+            return { isLoggedIn: false, error: 'Token验证失败' };
+          }
+        } catch (verifyError) {
+          console.error('❌ Token验证请求失败:', verifyError);
+          return { isLoggedIn: false, error: 'Token验证请求失败' };
+        }
+      } else {
+        console.log('❌ 认证信息不完整:', result);
+        return result;
+      }
     } else {
-      return { isLoggedIn: false };
+      console.log('❌ 无法获取认证信息结果');
+      return { isLoggedIn: false, error: '无法获取认证信息' };
     }
   } catch (error) {
-    console.error('检查登录状态失败:', error);
+    console.error('❌ 检查登录状态失败:', error);
     return { isLoggedIn: false, error: error.message };
   }
 }
