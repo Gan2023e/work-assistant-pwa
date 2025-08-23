@@ -4132,10 +4132,9 @@ router.post('/save-page-source', async (req, res) => {
     // 生成源代码摘要（保存前1000个字符）
     const sourceSummary = pageSource.substring(0, 1000);
     
-    // 更新产品记录，添加审核信息
+    // 更新产品记录，只更新检查时间，不更新备注
     await ProductWeblink.update({
-      check_time: new Date(),
-      notice: `已获取页面源代码 (长度: ${sourceLength} 字符) - ${new Date().toLocaleString()}`
+      check_time: new Date()
     }, {
       where: { id: productId }
     });

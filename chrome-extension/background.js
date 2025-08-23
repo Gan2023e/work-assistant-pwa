@@ -73,6 +73,14 @@ async function startReview(reviewData) {
         // 关闭标签页
         await chrome.tabs.remove(tab.id);
         
+        // 显示获取成功的弹窗
+        await showSourceCodeResult({
+          parentSku: product.parent_sku,
+          weblink: product.weblink,
+          sourceLength: pageSource.length,
+          success: true
+        });
+        
         results.push({
           ...product,
           success: true,
@@ -155,6 +163,7 @@ async function saveProductSource({ productId, parentSku, weblink, pageSource, au
   const apiBaseUrl = await getApiBaseUrl();
   
   try {
+    // 不再更新备注字段，只记录获取时间
     const response = await fetch(`${apiBaseUrl}/api/product_weblink/save-page-source`, {
       method: 'POST',
       headers: {
@@ -166,7 +175,8 @@ async function saveProductSource({ productId, parentSku, weblink, pageSource, au
         parentSku,
         weblink,
         pageSource: pageSource.substring(0, 50000), // 限制长度避免过大
-        sourceLength: pageSource.length
+        sourceLength: pageSource.length,
+        updateNotice: false // 不更新备注字段
       })
     });
     
@@ -316,6 +326,131 @@ async function getApiBaseUrl() {
   
   // 默认使用生产环境地址
   return 'https://work-assistant-pwa-production.up.railway.app';
+}
+
+// 显示源代码获取结果弹窗
+async function showSourceCodeResult({ parentSku, weblink, sourceLength, success }) {
+  try {
+    // 获取当前活动标签页
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length === 0) return;
+    
+    const currentTab = tabs[0];
+    
+    // 在网页中显示弹窗
+    await chrome.scripting.executeScript({
+      target: { tabId: currentTab.id },
+      func: ({ parentSku, weblink, sourceLength, success }) => {
+        // 创建弹窗元素
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+          background: white;
+          border-radius: 8px;
+          padding: 24px;
+          max-width: 500px;
+          width: 90%;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          position: relative;
+        `;
+        
+        const icon = success ? '✅' : '❌';
+        const title = success ? '源代码获取成功' : '源代码获取失败';
+        const bgColor = success ? '#f6ffed' : '#fff2f0';
+        const borderColor = success ? '#b7eb8f' : '#ffccc7';
+        
+        content.innerHTML = `
+          <div style="
+            background: ${bgColor};
+            border: 1px solid ${borderColor};
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+          ">
+            <div style="
+              display: flex;
+              align-items: center;
+              margin-bottom: 12px;
+              font-size: 18px;
+              font-weight: bold;
+              color: ${success ? '#389e0d' : '#cf1322'};
+            ">
+              ${icon} ${title}
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>母SKU:</strong> ${parentSku}
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>产品链接:</strong> 
+              <a href="${weblink}" target="_blank" style="color: #1890ff; word-break: break-all;">
+                ${weblink}
+              </a>
+            </div>
+            ${success ? `
+              <div style="margin-bottom: 8px;">
+                <strong>源代码长度:</strong> ${sourceLength.toLocaleString()} 字符
+              </div>
+              <div style="margin-bottom: 8px;">
+                <strong>获取时间:</strong> ${new Date().toLocaleString()}
+              </div>
+            ` : ''}
+          </div>
+          <div style="text-align: center;">
+            <button id="closeModal" style="
+              background: #1890ff;
+              color: white;
+              border: none;
+              padding: 8px 24px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+            ">
+              确定
+            </button>
+          </div>
+        `;
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // 绑定关闭事件
+        document.getElementById('closeModal').addEventListener('click', () => {
+          document.body.removeChild(modal);
+        });
+        
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            document.body.removeChild(modal);
+          }
+        });
+        
+        // 3秒后自动关闭
+        setTimeout(() => {
+          if (document.body.contains(modal)) {
+            document.body.removeChild(modal);
+          }
+        }, 3000);
+      },
+      args: [{ parentSku, weblink, sourceLength, success }]
+    });
+    
+  } catch (error) {
+    console.error('显示源代码结果弹窗失败:', error);
+  }
 }
 
 // 工具函数 - 延迟
