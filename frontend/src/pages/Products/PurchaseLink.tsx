@@ -579,8 +579,8 @@ const Purchase: React.FC = () => {
         const result = await res.json();
         setCpcFiles(result.data || []);
       }
-    } catch (error) {
-      console.error('加载CPC文件失败:', error);
+    } catch (e) {
+      console.error('加载CPC文件失败:', e);
     }
   };
 
@@ -606,8 +606,8 @@ const Purchase: React.FC = () => {
         console.error(`文件 ${file.name} 上传失败:`, result.message);
         return null;
       }
-    } catch (error) {
-      console.error(`文件 ${file.name} 上传失败:`, error);
+    } catch (e) {
+      console.error(`文件 ${file.name} 上传失败:`, e);
       return null;
     }
   };
@@ -723,7 +723,7 @@ const Purchase: React.FC = () => {
         message.error('所有文件上传失败');
       }
 
-    } catch (error) {
+    } catch (e) {
       message.error('批量上传失败');
     } finally {
       setCpcUploading(false);
@@ -792,7 +792,7 @@ const Purchase: React.FC = () => {
       } else {
         message.error('上传失败');
       }
-    } catch (error) {
+    } catch (e) {
       message.error('上传失败');
     } finally {
       setCpcUploading(false);
@@ -829,7 +829,7 @@ const Purchase: React.FC = () => {
       } else {
         message.error(result.message);
       }
-    } catch (error) {
+    } catch (e) {
       message.error('删除失败');
     }
   };
@@ -880,7 +880,7 @@ const Purchase: React.FC = () => {
       } else {
         message.error('信息应用失败');
       }
-    } catch (error) {
+    } catch (e) {
       message.error('信息应用失败');
     }
   };
@@ -1363,7 +1363,8 @@ const Purchase: React.FC = () => {
 
     } catch (error) {
       console.error('新品审核失败:', error);
-      message.error('启动新品审核失败: ' + error.message);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error('启动新品审核失败: ' + errorMessage);
     }
   };
 
@@ -2064,19 +2065,19 @@ const Purchase: React.FC = () => {
       // 重新获取模板列表
       await fetchTemplateFiles(activeTabKey);
       
-    } catch (error) {
-      console.error('上传模板失败:', error);
+    } catch (e) {
+      console.error('上传模板失败:', e);
       
       // 根据错误类型提供更具体的错误信息
       let errorMessage = '上传模板失败';
-      if (error instanceof Error) {
-        if (error.message.includes('JSON')) {
+      if (e instanceof Error) {
+        if (e.message.includes('JSON')) {
           errorMessage = '数据格式错误，请刷新页面后重试';
-        } else if (error.message.includes('Network')) {
+        } else if (e.message.includes('Network')) {
           errorMessage = '网络连接失败，请检查网络后重试';
-        } else if (error.message.includes('413')) {
+        } else if (e.message.includes('413')) {
           errorMessage = '文件太大，请选择较小的文件';
-        } else if (error.message.includes('400')) {
+        } else if (e.message.includes('400')) {
           errorMessage = '文件格式不正确，请上传有效的Excel文件';
         }
       }
@@ -2108,8 +2109,8 @@ const Purchase: React.FC = () => {
       // 重新获取模板列表
       await fetchTemplateFiles(activeTabKey);
       
-    } catch (error) {
-      console.error('删除模板失败:', error);
+    } catch (e) {
+      console.error('删除模板失败:', e);
       message.error('删除模板失败');
     } finally {
       setTemplateLoading(prev => ({ ...prev, [activeTabKey]: false }));
