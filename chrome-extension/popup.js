@@ -21,9 +21,43 @@ document.addEventListener('DOMContentLoaded', function() {
   // 初始化函数
   async function init() {
     console.log('产品审核助手弹窗已加载');
+    
+    // 检查并自动配置生产环境
+    await autoConfigureProductionEnvironment();
+    
     await updateStatus();
   }
   
+  // 自动配置生产环境
+  async function autoConfigureProductionEnvironment() {
+    try {
+      // 检查当前存储的设置
+      const settings = await chrome.storage.sync.get(['apiBaseUrl']);
+      
+      // 如果API地址仍然是本地地址，自动更新为生产环境
+      if (!settings.apiBaseUrl || settings.apiBaseUrl.includes('localhost')) {
+        const productionApiUrl = 'https://work-assistant-pwa-production.up.railway.app';
+        
+        await chrome.storage.sync.set({ 
+          apiBaseUrl: productionApiUrl 
+        });
+        
+        console.log('✅ 已自动配置生产环境API地址:', productionApiUrl);
+        
+        // 显示提示信息
+        setTimeout(() => {
+          if (elements.loginStatus) {
+            elements.loginStatus.textContent = '配置已更新';
+            elements.loginStatus.className = 'status-badge badge-success';
+            elements.loginStatus.title = '已自动配置为生产环境，请刷新状态';
+          }
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('自动配置生产环境失败:', error);
+    }
+  }
+
   // 绑定事件监听器
   function bindEvents() {
     elements.refreshButton.addEventListener('click', handleRefreshStatus);
@@ -273,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <label style="display: block; margin-bottom: 8px; color: #666; font-size: 14px;">
             后端API地址:
           </label>
-          <input type="text" id="apiUrlInput" placeholder="http://localhost:3001" 
+          <input type="text" id="apiUrlInput" placeholder="https://work-assistant-pwa-production.up.railway.app" 
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
         </div>
         
@@ -343,7 +377,9 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       const settings = await chrome.storage.sync.get(['apiBaseUrl', 'autoCloseTabs', 'waitTime']);
       
-      document.getElementById('apiUrlInput').value = settings.apiBaseUrl || 'http://localhost:3001';
+      // 默认使用Railway生产环境地址
+      const defaultApiUrl = 'https://work-assistant-pwa-production.up.railway.app';
+      document.getElementById('apiUrlInput').value = settings.apiBaseUrl || defaultApiUrl;
       document.getElementById('autoCloseTabsInput').checked = settings.autoCloseTabs !== false;
       document.getElementById('waitTimeInput').value = settings.waitTime || 3;
       
