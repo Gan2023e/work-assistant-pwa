@@ -78,7 +78,8 @@ async function startReview(reviewData) {
           parentSku: product.parent_sku,
           weblink: product.weblink,
           sourceLength: pageSource.length,
-          success: true
+          success: true,
+          pageSource: pageSource
         });
         
         results.push({
@@ -329,7 +330,7 @@ async function getApiBaseUrl() {
 }
 
 // 显示源代码获取结果弹窗
-async function showSourceCodeResult({ parentSku, weblink, sourceLength, success }) {
+async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, pageSource }) {
   try {
     // 获取当前活动标签页
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -340,7 +341,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
     // 在网页中显示弹窗
     await chrome.scripting.executeScript({
       target: { tabId: currentTab.id },
-      func: ({ parentSku, weblink, sourceLength, success }) => {
+      func: ({ parentSku, weblink, sourceLength, success, pageSource }) => {
         // 创建弹窗元素
         const modal = document.createElement('div');
         modal.style.cssText = `
@@ -354,6 +355,8 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
           display: flex;
           align-items: center;
           justify-content: center;
+          overflow-y: auto;
+          padding: 20px;
         `;
         
         const content = document.createElement('div');
@@ -361,10 +364,12 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
           background: white;
           border-radius: 8px;
           padding: 24px;
-          max-width: 500px;
+          max-width: 90%;
           width: 90%;
+          max-height: 90vh;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
           position: relative;
+          overflow-y: auto;
         `;
         
         const icon = success ? '✅' : '❌';
@@ -408,6 +413,47 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
               </div>
             ` : ''}
           </div>
+          
+          ${success && pageSource ? `
+            <div style="margin-bottom: 16px;">
+              <div style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+              ">
+                <strong style="font-size: 14px;">网页源代码：</strong>
+                <button id="copySourceCode" style="
+                  background: #52c41a;
+                  color: white;
+                  border: none;
+                  padding: 4px 12px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  margin-left: 8px;
+                ">
+                  📋 复制源代码
+                </button>
+              </div>
+              <div style="
+                background: #f5f5f5;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                padding: 12px;
+                max-height: 400px;
+                overflow-y: auto;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 1.4;
+                white-space: pre-wrap;
+                word-break: break-all;
+              ">
+                ${pageSource}
+              </div>
+            </div>
+          ` : ''}
+          
           <div style="text-align: center;">
             <button id="closeModal" style="
               background: #1890ff;
@@ -426,6 +472,39 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
         modal.appendChild(content);
         document.body.appendChild(modal);
         
+        // 绑定复制源代码事件
+        if (success && pageSource) {
+          const copyButton = document.getElementById('copySourceCode');
+          if (copyButton) {
+            copyButton.addEventListener('click', async () => {
+              try {
+                await navigator.clipboard.writeText(pageSource);
+                copyButton.textContent = '✅ 已复制';
+                copyButton.style.background = '#52c41a';
+                setTimeout(() => {
+                  copyButton.textContent = '📋 复制源代码';
+                  copyButton.style.background = '#52c41a';
+                }, 2000);
+              } catch (err) {
+                // 降级方案
+                const textArea = document.createElement('textarea');
+                textArea.value = pageSource;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copyButton.textContent = '✅ 已复制';
+                copyButton.style.background = '#52c41a';
+                setTimeout(() => {
+                  copyButton.textContent = '📋 复制源代码';
+                  copyButton.style.background = '#52c41a';
+                }, 2000);
+              }
+            });
+          }
+        }
+        
         // 绑定关闭事件
         document.getElementById('closeModal').addEventListener('click', () => {
           document.body.removeChild(modal);
@@ -438,14 +517,16 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success 
           }
         });
         
-        // 3秒后自动关闭
-        setTimeout(() => {
-          if (document.body.contains(modal)) {
+        // 按ESC键关闭
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && document.body.contains(modal)) {
             document.body.removeChild(modal);
           }
-        }, 3000);
+        });
+        
+        // 不再自动关闭，让用户手动关闭
       },
-      args: [{ parentSku, weblink, sourceLength, success }]
+      args: [{ parentSku, weblink, sourceLength, success, pageSource }]
     });
     
   } catch (error) {

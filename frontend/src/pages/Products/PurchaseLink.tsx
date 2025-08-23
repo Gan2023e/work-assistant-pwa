@@ -3717,41 +3717,6 @@ const Purchase: React.FC = () => {
             bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}
           >
             <Row gutter={[12, 8]}>
-              {/* 新品审核 */}
-              <Col span={8}>
-                <div style={{ 
-                  padding: '8px', 
-                  backgroundColor: '#f6ffed', 
-                  borderRadius: '6px',
-                  border: '1px solid #b7eb8f',
-                  height: '100%'
-                }}>
-                  <div style={{ 
-                    fontWeight: 'bold', 
-                    marginBottom: '8px', 
-                    color: '#389e0d',
-                    fontSize: '13px'
-                  }}>
-                    🔍 新品审核
-                  </div>
-                  <Space size="small" wrap>
-                    <Button 
-                      icon={<EyeOutlined />}
-                      onClick={handleNewProductReview}
-                      disabled={selectedRowKeys.length === 0}
-                      type="primary"
-                      size="small"
-                      style={{ 
-                        background: '#52c41a',
-                        borderColor: '#52c41a'
-                      }}
-                    >
-                      新品审核
-                    </Button>
-                  </Space>
-                </div>
-              </Col>
-
               {/* 数据管理 */}
               <Col span={8}>
                 <div style={{ 
@@ -3818,6 +3783,20 @@ const Purchase: React.FC = () => {
                       style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
                     >
                       新链接（采购用）
+                    </Button>
+
+                    <Button 
+                      icon={<EyeOutlined />}
+                      onClick={handleNewProductReview}
+                      disabled={selectedRowKeys.length === 0}
+                      type="primary"
+                      size="small"
+                      style={{ 
+                        background: '#1677ff',
+                        borderColor: '#1677ff'
+                      }}
+                    >
+                      新品审核
                     </Button>
                   </Space>
                 </div>
