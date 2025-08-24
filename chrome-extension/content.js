@@ -88,41 +88,12 @@
     // 查找"数据管理"栏
     const dataManagementSection = findDataManagementSection();
     if (dataManagementSection) {
+      console.log('找到"数据管理"栏，将在其中插入新品审核按钮');
       return dataManagementSection;
     }
     
-    // 如果找不到"数据管理"栏，回退到原来的逻辑
-    const selectors = [
-      '.ant-space', // Ant Design Space组件
-      '[class*="toolbar"]',
-      '[class*="action"]',
-      '[class*="button-group"]',
-      '.batch-operations',
-      'div:has(button)' // 包含按钮的div
-    ];
-    
-    for (const selector of selectors) {
-      const element = document.querySelector(selector);
-      if (element && element.querySelector('button')) {
-        return element;
-      }
-    }
-    
-    // 如果没有找到理想位置，创建一个新的容器
-    const table = document.querySelector('.ant-table');
-    if (table) {
-      const container = document.createElement('div');
-      container.style.cssText = `
-        margin: 16px 0;
-        padding: 12px;
-        background: #f8f9fa;
-        border-radius: 6px;
-        border: 1px solid #d9d9d9;
-      `;
-      table.parentNode.insertBefore(container, table);
-      return container;
-    }
-    
+    // 如果找不到"数据管理"栏，记录警告但不创建新容器
+    console.warn('未找到"数据管理"栏，无法插入新品审核按钮');
     return null;
   }
 
@@ -134,24 +105,46 @@
     });
     
     if (dataManagementDivs.length > 0) {
+      console.log(`找到 ${dataManagementDivs.length} 个包含"数据管理"的div`);
+      
       // 找到包含"数据管理"的div后，查找其父级容器中的按钮区域
       for (const div of dataManagementDivs) {
-        // 向上查找包含按钮的容器
+        console.log('检查包含"数据管理"的div:', div);
+        
+        // 方法1：直接在同级或子级查找.ant-space容器
+        let buttonContainer = div.parentElement.querySelector('.ant-space');
+        if (buttonContainer) {
+          console.log('在同级找到.ant-space容器:', buttonContainer);
+          return buttonContainer;
+        }
+        
+        // 方法2：向上查找包含按钮的容器
         let parent = div.parentElement;
-        while (parent && parent !== document.body) {
+        let level = 0;
+        
+        while (parent && parent !== document.body && level < 5) {
+          console.log(`检查第${level + 1}级父元素:`, parent.tagName, parent.className);
+          
           // 优先查找.ant-space容器，这是Ant Design的按钮组容器
-          const buttonContainer = parent.querySelector('.ant-space');
+          buttonContainer = parent.querySelector('.ant-space');
           if (buttonContainer) {
+            console.log('找到.ant-space容器:', buttonContainer);
             return buttonContainer;
           }
+          
           // 如果没有找到.ant-space，查找其他包含按钮的容器
           const fallbackContainer = parent.querySelector('[class*="button"], button');
           if (fallbackContainer) {
+            console.log('找到备用按钮容器:', fallbackContainer);
             return fallbackContainer;
           }
+          
           parent = parent.parentElement;
+          level++;
         }
       }
+    } else {
+      console.warn('页面中未找到包含"数据管理"文字的div');
     }
     
     return null;
