@@ -76,7 +76,16 @@
         try {
           insertLocation.appendChild(reviewButton);
           console.log('✅ 方式1成功：直接添加到.ant-space容器末尾');
-          insertSuccess = true;
+          
+          // 验证按钮样式是否正确应用
+          if (validateButtonStyles(reviewButton)) {
+            insertSuccess = true;
+            console.log('✅ 按钮样式验证通过');
+          } else {
+            console.warn('⚠️ 按钮样式验证失败，尝试修复');
+            fixButtonStyles(reviewButton);
+            insertSuccess = true;
+          }
         } catch (error) {
           console.warn('方式1失败:', error);
         }
@@ -89,7 +98,13 @@
           if (lastButton && lastButton.parentNode) {
             lastButton.parentNode.insertBefore(reviewButton, lastButton.nextSibling);
             console.log('✅ 方式2成功：插入到最后一个按钮之后');
-            insertSuccess = true;
+            
+            if (validateButtonStyles(reviewButton)) {
+              insertSuccess = true;
+            } else {
+              fixButtonStyles(reviewButton);
+              insertSuccess = true;
+            }
           }
         } catch (error) {
           console.warn('方式2失败:', error);
@@ -105,7 +120,13 @@
             if (buttonWrapper) {
               buttonWrapper.appendChild(reviewButton);
               console.log('✅ 方式3成功：添加到按钮包装器');
-              insertSuccess = true;
+              
+              if (validateButtonStyles(reviewButton)) {
+                insertSuccess = true;
+              } else {
+                fixButtonStyles(reviewButton);
+                insertSuccess = true;
+              }
             }
           }
         } catch (error) {
@@ -115,6 +136,11 @@
       
       if (insertSuccess) {
         console.log('新品审核按钮已成功添加到"数据管理"栏中');
+        
+        // 最终验证
+        setTimeout(() => {
+          finalValidation(reviewButton);
+        }, 100);
       } else {
         console.error('所有插入方式都失败了，尝试备用方案');
         // 清理创建的按钮
@@ -132,6 +158,128 @@
     }
   }
 
+  // 验证按钮样式
+  function validateButtonStyles(button) {
+    const computedStyle = window.getComputedStyle(button);
+    
+    // 检查关键样式属性
+    const isCorrectWidth = computedStyle.width === 'auto' || parseInt(computedStyle.width) < 200;
+    const isCorrectDisplay = computedStyle.display === 'inline-flex' || computedStyle.display === 'inline-block';
+    const isCorrectBackground = computedStyle.backgroundColor.includes('rgb(22, 119, 255)');
+    
+    console.log('按钮样式验证:', {
+      width: computedStyle.width,
+      display: computedStyle.display,
+      backgroundColor: computedStyle.backgroundColor,
+      isCorrectWidth,
+      isCorrectDisplay,
+      isCorrectBackground
+    });
+    
+    return isCorrectWidth && isCorrectDisplay && isCorrectBackground;
+  }
+
+  // 修复按钮样式
+  function fixButtonStyles(button) {
+    console.log('修复按钮样式...');
+    
+    // 强制应用正确的样式
+    button.style.setProperty('width', 'auto', 'important');
+    button.style.setProperty('display', 'inline-flex', 'important');
+    button.style.setProperty('flex', '0 0 auto', 'important');
+    button.style.setProperty('max-width', 'none', 'important');
+    
+    // 检查父容器是否影响了按钮样式
+    const parent = button.parentElement;
+    if (parent && parent.classList.contains('ant-space')) {
+      // 确保父容器不会强制子元素全宽
+      parent.style.setProperty('align-items', 'flex-start', 'important');
+      parent.style.setProperty('justify-content', 'flex-start', 'important');
+    }
+    
+    console.log('按钮样式修复完成');
+  }
+
+  // 最终验证
+  function finalValidation(button) {
+    console.log('执行最终验证...');
+    
+    const computedStyle = window.getComputedStyle(button);
+    const buttonRect = button.getBoundingClientRect();
+    
+    console.log('按钮最终状态:', {
+      width: computedStyle.width,
+      height: computedStyle.height,
+      display: computedStyle.display,
+      position: computedStyle.position,
+      rect: {
+        width: buttonRect.width,
+        height: buttonRect.height,
+        top: buttonRect.top,
+        left: buttonRect.left
+      }
+    });
+    
+    // 如果按钮仍然太宽，尝试更激进的修复
+    if (buttonRect.width > 200) {
+      console.warn('按钮仍然太宽，尝试激进修复');
+      aggressiveStyleFix(button);
+    }
+  }
+
+  // 激进样式修复
+  function aggressiveStyleFix(button) {
+    console.log('执行激进样式修复...');
+    
+    // 创建新的按钮元素，完全隔离样式
+    const newButton = document.createElement('button');
+    newButton.innerHTML = button.innerHTML;
+    newButton.setAttribute('data-extension-button', 'true');
+    newButton.setAttribute('data-button-type', 'new-product-review');
+    
+    // 应用完全隔离的样式
+    newButton.style.cssText = `
+      all: unset !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      background: #1677ff !important;
+      color: white !important;
+      border: 1px solid #1677ff !important;
+      border-radius: 4px !important;
+      padding: 4px 8px !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      height: 24px !important;
+      line-height: 16px !important;
+      cursor: pointer !important;
+      margin-right: 4px !important;
+      width: auto !important;
+      max-width: none !important;
+      flex: 0 0 auto !important;
+      position: relative !important;
+      z-index: 1000 !important;
+    `;
+    
+    // 添加事件监听器
+    newButton.addEventListener('click', handleReviewClick);
+    newButton.addEventListener('mouseenter', () => {
+      newButton.style.background = '#4096ff !important';
+      newButton.style.borderColor = '#4096ff !important';
+    });
+    newButton.addEventListener('mouseleave', () => {
+      newButton.style.background = '#1677ff !important';
+      newButton.style.borderColor = '#1677ff !important';
+    });
+    
+    // 替换原按钮
+    if (button.parentNode) {
+      button.parentNode.replaceChild(newButton, button);
+      reviewButton = newButton;
+      console.log('✅ 激进样式修复完成，按钮已替换');
+    }
+  }
+  
   // 创建备用按钮方案
   function createFallbackButton() {
     try {
@@ -303,11 +451,24 @@
       white-space: nowrap !important;
       vertical-align: middle !important;
       
-      /* 确保按钮可见 */
+      /* 确保按钮可见且不会变成全宽 */
       opacity: 1 !important;
       visibility: visible !important;
       position: relative !important;
       z-index: 1000 !important;
+      
+      /* 关键：防止按钮变成全宽 */
+      width: auto !important;
+      max-width: none !important;
+      min-width: auto !important;
+      flex: 0 0 auto !important;
+      flex-shrink: 0 !important;
+      flex-grow: 0 !important;
+      
+      /* 确保按钮在容器中正确对齐 */
+      float: none !important;
+      clear: none !important;
+      overflow: visible !important;
     `;
     
     // 添加悬停效果
@@ -327,6 +488,9 @@
     // 添加调试标识
     button.setAttribute('data-extension-button', 'true');
     button.setAttribute('data-button-type', 'new-product-review');
+    
+    // 强制重新计算样式
+    button.offsetHeight;
     
     return button;
   }
