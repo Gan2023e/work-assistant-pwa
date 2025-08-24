@@ -92,17 +92,9 @@
         if (insertSuccess) {
           console.log('新品审核按钮已成功添加到搜索区域');
           
-          // 验证按钮样式是否正确应用
-          if (validateButtonStyles(reviewButton)) {
-            console.log('✅ 按钮样式验证通过');
-          } else {
-            console.warn('⚠️ 按钮样式验证失败，尝试修复');
-            fixButtonStyles(reviewButton);
-          }
-          
           // 最终验证
           setTimeout(() => {
-            finalValidation(reviewButton);
+            console.log('按钮插入完成，功能就绪');
           }, 100);
         }
         
@@ -182,149 +174,6 @@
     }
     
     console.log('父容器宽度修复完成');
-  }
-
-  // 验证按钮样式
-  function validateButtonStyles(button) {
-    const computedStyle = window.getComputedStyle(button);
-    
-    // 检查关键样式属性
-    const isCorrectWidth = computedStyle.width === 'auto' || parseInt(computedStyle.width) < 200;
-    const isCorrectDisplay = computedStyle.display === 'inline-flex' || computedStyle.display === 'inline-block';
-    const isCorrectBackground = computedStyle.backgroundColor.includes('rgb(22, 119, 255)');
-    
-    console.log('按钮样式验证:', {
-      width: computedStyle.width,
-      display: computedStyle.display,
-      backgroundColor: computedStyle.backgroundColor,
-      isCorrectWidth,
-      isCorrectDisplay,
-      isCorrectBackground
-    });
-    
-    return isCorrectWidth && isCorrectDisplay && isCorrectBackground;
-  }
-
-  // 修复按钮样式
-  function fixButtonStyles(button) {
-    console.log('修复按钮样式...');
-    
-    // 强制应用正确的样式
-    button.style.setProperty('width', 'auto', 'important');
-    button.style.setProperty('display', 'inline-flex', 'important');
-    button.style.setProperty('flex', '0 0 auto', 'important');
-    button.style.setProperty('max-width', 'none', 'important');
-    
-    // 检查父容器是否影响了按钮样式
-    const parent = button.parentElement;
-    if (parent && parent.classList.contains('ant-space')) {
-      console.log('检查父容器样式...');
-      
-      // 确保父容器不会强制子元素全宽
-      parent.style.setProperty('align-items', 'flex-start', 'important');
-      parent.style.setProperty('justify-content', 'flex-start', 'important');
-      
-      // 关键：修复父容器的宽度问题
-      // 如果父容器设置了width: 100%，这会导致子元素也变成全宽
-      const parentStyle = window.getComputedStyle(parent);
-      if (parentStyle.width === '100%' || parentStyle.width === '100vw') {
-        console.log('检测到父容器宽度为100%，正在修复...');
-        
-        // 设置父容器为内容自适应宽度
-        parent.style.setProperty('width', 'auto', 'important');
-        parent.style.setProperty('max-width', 'fit-content', 'important');
-        parent.style.setProperty('min-width', 'auto', 'important');
-        
-        // 确保父容器不会影响子元素的宽度
-        parent.style.setProperty('flex-direction', 'row', 'important');
-        parent.style.setProperty('flex-wrap', 'wrap', 'important');
-        parent.style.setProperty('gap', '8px', 'important');
-      }
-      
-      console.log('父容器样式修复完成');
-    }
-    
-    console.log('按钮样式修复完成');
-  }
-
-  // 最终验证
-  function finalValidation(button) {
-    console.log('执行最终验证...');
-    
-    const computedStyle = window.getComputedStyle(button);
-    const buttonRect = button.getBoundingClientRect();
-    
-    console.log('按钮最终状态:', {
-      width: computedStyle.width,
-      height: computedStyle.height,
-      display: computedStyle.display,
-      position: computedStyle.position,
-      rect: {
-        width: buttonRect.width,
-        height: buttonRect.height,
-        top: buttonRect.top,
-        left: buttonRect.left
-      }
-    });
-    
-    // 如果按钮仍然太宽，尝试更激进的修复
-    if (buttonRect.width > 200) {
-      console.warn('按钮仍然太宽，尝试激进修复');
-      aggressiveStyleFix(button);
-    }
-  }
-
-  // 激进样式修复
-  function aggressiveStyleFix(button) {
-    console.log('执行激进样式修复...');
-    
-    // 创建新的按钮元素，完全隔离样式
-    const newButton = document.createElement('button');
-    newButton.innerHTML = button.innerHTML;
-    newButton.setAttribute('data-extension-button', 'true');
-    newButton.setAttribute('data-button-type', 'new-product-review');
-    
-    // 应用完全隔离的样式
-    newButton.style.cssText = `
-      all: unset !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      background: #1677ff !important;
-      color: white !important;
-      border: 1px solid #1677ff !important;
-      border-radius: 4px !important;
-      padding: 4px 8px !important;
-      font-size: 12px !important;
-      font-weight: 500 !important;
-      height: 24px !important;
-      line-height: 16px !important;
-      cursor: pointer !important;
-      margin-right: 4px !important;
-      width: auto !important;
-      max-width: none !important;
-      flex: 0 0 auto !important;
-      position: relative !important;
-      z-index: 1000 !important;
-    `;
-    
-    // 添加事件监听器
-    newButton.addEventListener('click', handleReviewClick);
-    newButton.addEventListener('mouseenter', () => {
-      newButton.style.background = '#4096ff !important';
-      newButton.style.borderColor = '#4096ff !important';
-    });
-    newButton.addEventListener('mouseleave', () => {
-      newButton.style.background = '#1677ff !important';
-      newButton.style.borderColor = '#1677ff !important';
-    });
-    
-    // 替换原按钮
-    if (button.parentNode) {
-      button.parentNode.replaceChild(newButton, button);
-      reviewButton = newButton;
-      console.log('✅ 激进样式修复完成，按钮已替换');
-    }
   }
   
   // 创建备用按钮（如果主要插入方式失败）

@@ -338,11 +338,6 @@
                             clearButton.parentNode.insertBefore(testButton, clearButton.nextSibling);
                             addDebugLog(`  ✅ 测试按钮已插入到"清空"按钮下方`, 'success');
                             
-                            // 验证按钮样式
-                            setTimeout(() => {
-                                validateTestButton(testButton);
-                            }, 100);
-                            
                             return;
                         } catch (error) {
                             addDebugLog(`  ❌ 插入失败: ${error.message}`, 'error');
@@ -425,82 +420,6 @@
                     addDebugLog('✅ 备用方案测试成功：创建了新的按钮区域', 'success');
                 }
             }
-        }
-
-        // 验证测试按钮样式
-        function validateTestButton(button) {
-            addDebugLog('验证测试按钮样式...', 'info');
-            
-            const computedStyle = window.getComputedStyle(button);
-            const buttonRect = button.getBoundingClientRect();
-            
-            addDebugLog('按钮样式验证结果:', 'info');
-            addDebugLog(`  - 计算宽度: ${computedStyle.width}`, 'info');
-            addDebugLog(`  - 计算高度: ${computedStyle.height}`, 'info');
-            addDebugLog(`  - 显示方式: ${computedStyle.display}`, 'info');
-            addDebugLog(`  - 实际宽度: ${buttonRect.width}px`, 'info');
-            addDebugLog(`  - 实际高度: ${buttonRect.height}px`, 'info');
-            
-            // 检查是否有问题
-            if (buttonRect.width > 200) {
-                addDebugLog(`  ⚠️ 按钮太宽 (${buttonRect.width}px)，可能存在样式问题`, 'warning');
-                
-                // 尝试修复
-                addDebugLog('尝试修复按钮样式...', 'info');
-                fixTestButtonStyles(button);
-                
-                // 重新验证
-                setTimeout(() => {
-                    const newRect = button.getBoundingClientRect();
-                    addDebugLog(`修复后按钮宽度: ${newRect.width}px`, 'info');
-                }, 100);
-            } else {
-                addDebugLog(`  ✅ 按钮尺寸正常 (${buttonRect.width}px)`, 'success');
-            }
-        }
-
-        // 修复测试按钮样式
-        function fixTestButtonStyles(button) {
-            addDebugLog('修复测试按钮样式...', 'info');
-            
-            // 强制应用正确的样式
-            button.style.setProperty('width', 'auto', 'important');
-            button.style.setProperty('display', 'inline-flex', 'important');
-            button.style.setProperty('flex', '0 0 auto', 'important');
-            button.style.setProperty('max-width', 'none', 'important');
-            
-            // 检查父容器是否影响了按钮样式
-            const parent = button.parentElement;
-            if (parent && parent.classList.contains('ant-space')) {
-                addDebugLog('检查父容器样式...', 'info');
-                
-                // 确保父容器不会强制子元素全宽
-                parent.style.setProperty('align-items', 'flex-start', 'important');
-                parent.style.setProperty('justify-content', 'flex-start', 'important');
-                
-                addDebugLog('父容器样式已修复', 'info');
-            }
-            
-            addDebugLog('按钮样式修复完成', 'info');
-        }
-
-        // 修复容器宽度问题
-        function fixContainerWidth(container) {
-            addDebugLog('修复容器宽度问题...', 'info');
-            
-            // 设置容器为内容自适应宽度
-            container.style.setProperty('width', 'auto', 'important');
-            container.style.setProperty('max-width', 'fit-content', 'important');
-            container.style.setProperty('min-width', 'auto', 'important');
-            
-            // 确保容器不会影响子元素的宽度
-            container.style.setProperty('flex-direction', 'row', 'important');
-            container.style.setProperty('flex-wrap', 'wrap', 'important');
-            container.style.setProperty('gap', '8px', 'important');
-            container.style.setProperty('align-items', 'flex-start', 'important');
-            container.style.setProperty('justify-content', 'flex-start', 'important');
-            
-            addDebugLog('容器宽度修复完成', 'info');
         }
 
         // 页面加载完成后开始调试
