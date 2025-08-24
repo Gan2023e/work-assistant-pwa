@@ -219,21 +219,36 @@
 
         function checkButtonInsertion() {
             const dataManagementSection = document.querySelector('.data-management-section');
+            const antSpace = dataManagementSection.querySelector('.ant-space');
             const reviewButton = dataManagementSection.querySelector('button[style*="background: #1677ff"]');
             
             const resultDiv = document.getElementById('test-result');
             const resultContent = document.getElementById('result-content');
             
             if (reviewButton && reviewButton.textContent.includes('🔍 新品审核')) {
+                // 检查按钮位置
+                const isLastButton = reviewButton === antSpace.lastElementChild;
+                const buttonIndex = Array.from(antSpace.children).indexOf(reviewButton);
+                const totalButtons = antSpace.children.length;
+                
                 resultContent.innerHTML = `
                     <p><strong>成功！</strong> 新品审核按钮已正确插入到"数据管理"栏中。</p>
-                    <p>按钮样式：</p>
+                    <p>按钮位置验证：</p>
                     <ul>
                         <li>位置：✅ 在"数据管理"栏中</li>
+                        <li>顺序：${isLastButton ? '✅ 在最后位置' : '⚠️ 不在最后位置 (第${buttonIndex + 1}个，共${totalButtons}个)'}</li>
                         <li>大小：✅ 已缩小为适合栏位的小按钮</li>
                         <li>样式：✅ 蓝色背景，白色文字，圆角边框</li>
                         <li>图标：✅ 包含🔍图标</li>
                     </ul>
+                    <p><strong>按钮顺序：</strong></p>
+                    <ol>
+                        ${Array.from(antSpace.children).map((btn, index) => {
+                            const isReviewBtn = btn === reviewButton;
+                            const btnText = btn.textContent.trim();
+                            return `<li style="${isReviewBtn ? 'color: #1677ff; font-weight: bold;' : ''}">${btnText}${isReviewBtn ? ' (新品审核按钮)' : ''}</li>`;
+                        }).join('')}
+                    </ol>
                 `;
                 resultDiv.style.display = 'block';
                 resultDiv.style.background = '#f6ffed';

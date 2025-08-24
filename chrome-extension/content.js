@@ -67,10 +67,16 @@
       // 创建新品审核按钮
       reviewButton = createReviewButton();
       
-      // 插入按钮
-      insertLocation.appendChild(reviewButton);
+      // 将按钮插入到容器的最后位置
+      if (insertLocation.classList.contains('ant-space')) {
+        // 如果是Ant Design的Space组件，直接添加到末尾
+        insertLocation.appendChild(reviewButton);
+      } else {
+        // 如果是其他容器，也添加到末尾
+        insertLocation.appendChild(reviewButton);
+      }
       
-      console.log('新品审核按钮已添加到页面');
+      console.log('新品审核按钮已添加到"数据管理"栏的最后位置');
       
     } catch (error) {
       console.error('添加新品审核按钮失败:', error);
@@ -133,9 +139,15 @@
         // 向上查找包含按钮的容器
         let parent = div.parentElement;
         while (parent && parent !== document.body) {
-          const buttonContainer = parent.querySelector('.ant-space, [class*="button"], button');
+          // 优先查找.ant-space容器，这是Ant Design的按钮组容器
+          const buttonContainer = parent.querySelector('.ant-space');
           if (buttonContainer) {
             return buttonContainer;
+          }
+          // 如果没有找到.ant-space，查找其他包含按钮的容器
+          const fallbackContainer = parent.querySelector('[class*="button"], button');
+          if (fallbackContainer) {
+            return fallbackContainer;
           }
           parent = parent.parentElement;
         }
