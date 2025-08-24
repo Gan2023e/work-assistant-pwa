@@ -3787,8 +3787,7 @@ const Purchase: React.FC = () => {
 
                     <Button 
                       icon={<SearchOutlined />}
-                      onClick={handleBatchOpenLinks}
-                      disabled={selectedRowKeys.length === 0}
+                      onClick={() => handleCardClick('新品一审')}
                       type="primary"
                       size="small"
                       style={{ 
