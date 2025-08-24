@@ -65,6 +65,9 @@
         return createFallbackButton();
       }
       
+      // 在插入按钮之前，先修复父容器的宽度问题
+      fixParentContainerWidth(insertLocation);
+      
       // 创建新品审核按钮
       reviewButton = createReviewButton();
       
@@ -158,6 +161,71 @@
     }
   }
 
+  // 修复父容器的宽度问题
+  function fixParentContainerWidth(container) {
+    if (!container) return;
+    
+    console.log('修复父容器宽度问题...');
+    
+    // 检查容器本身的宽度设置
+    const containerStyle = window.getComputedStyle(container);
+    console.log('容器原始样式:', {
+      width: containerStyle.width,
+      maxWidth: containerStyle.maxWidth,
+      minWidth: containerStyle.minWidth,
+      display: containerStyle.display,
+      flexDirection: containerStyle.flexDirection
+    });
+    
+    // 如果容器设置了100%宽度，修复它
+    if (containerStyle.width === '100%' || containerStyle.width === '100vw') {
+      console.log('检测到容器宽度为100%，正在修复...');
+      
+      // 设置容器为内容自适应宽度
+      container.style.setProperty('width', 'auto', 'important');
+      container.style.setProperty('max-width', 'fit-content', 'important');
+      container.style.setProperty('min-width', 'auto', 'important');
+      
+      // 确保容器不会影响子元素的宽度
+      container.style.setProperty('flex-direction', 'row', 'important');
+      container.style.setProperty('flex-wrap', 'wrap', 'important');
+      container.style.setProperty('gap', '8px', 'important');
+      container.style.setProperty('align-items', 'flex-start', 'important');
+      container.style.setProperty('justify-content', 'flex-start', 'important');
+      
+      console.log('容器宽度修复完成');
+    }
+    
+    // 检查父级容器是否也有宽度问题
+    let parent = container.parentElement;
+    let level = 0;
+    
+    while (parent && parent !== document.body && level < 3) {
+      const parentStyle = window.getComputedStyle(parent);
+      
+      if (parentStyle.width === '100%' || parentStyle.width === '100vw') {
+        console.log(`第${level + 1}级父容器宽度为100%，正在修复...`);
+        
+        // 修复父容器的宽度
+        parent.style.setProperty('width', 'auto', 'important');
+        parent.style.setProperty('max-width', 'fit-content', 'important');
+        parent.style.setProperty('min-width', 'auto', 'important');
+        
+        // 确保父容器不会影响子元素的宽度
+        if (parentStyle.display === 'flex' || parentStyle.display === 'inline-flex') {
+          parent.style.setProperty('flex-direction', 'row', 'important');
+          parent.style.setProperty('flex-wrap', 'wrap', 'important');
+          parent.style.setProperty('gap', '8px', 'important');
+        }
+      }
+      
+      parent = parent.parentElement;
+      level++;
+    }
+    
+    console.log('父容器宽度修复完成');
+  }
+
   // 验证按钮样式
   function validateButtonStyles(button) {
     const computedStyle = window.getComputedStyle(button);
@@ -192,9 +260,30 @@
     // 检查父容器是否影响了按钮样式
     const parent = button.parentElement;
     if (parent && parent.classList.contains('ant-space')) {
+      console.log('检查父容器样式...');
+      
       // 确保父容器不会强制子元素全宽
       parent.style.setProperty('align-items', 'flex-start', 'important');
       parent.style.setProperty('justify-content', 'flex-start', 'important');
+      
+      // 关键：修复父容器的宽度问题
+      // 如果父容器设置了width: 100%，这会导致子元素也变成全宽
+      const parentStyle = window.getComputedStyle(parent);
+      if (parentStyle.width === '100%' || parentStyle.width === '100vw') {
+        console.log('检测到父容器宽度为100%，正在修复...');
+        
+        // 设置父容器为内容自适应宽度
+        parent.style.setProperty('width', 'auto', 'important');
+        parent.style.setProperty('max-width', 'fit-content', 'important');
+        parent.style.setProperty('min-width', 'auto', 'important');
+        
+        // 确保父容器不会影响子元素的宽度
+        parent.style.setProperty('flex-direction', 'row', 'important');
+        parent.style.setProperty('flex-wrap', 'wrap', 'important');
+        parent.style.setProperty('gap', '8px', 'important');
+      }
+      
+      console.log('父容器样式修复完成');
     }
     
     console.log('按钮样式修复完成');
@@ -469,6 +558,23 @@
       float: none !important;
       clear: none !important;
       overflow: visible !important;
+      
+      /* 新增：更强的尺寸约束 */
+      max-width: 120px !important;
+      min-width: 80px !important;
+      width: fit-content !important;
+      
+      /* 确保按钮不会继承父容器的宽度 */
+      box-sizing: content-box !important;
+      margin-left: 0 !important;
+      margin-right: 4px !important;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      
+      /* 防止被CSS Grid或Flexbox影响 */
+      grid-column: unset !important;
+      grid-row: unset !important;
+      order: unset !important;
     `;
     
     // 添加悬停效果

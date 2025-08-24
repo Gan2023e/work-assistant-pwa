@@ -301,6 +301,18 @@
                             addDebugLog(`    - 容器类名: ${antSpace.className}`, 'success');
                             addDebugLog(`    - 容器内按钮数量: ${antSpace.querySelectorAll('button').length}`, 'success');
                             
+                            // 检查容器的宽度设置
+                            const containerStyle = window.getComputedStyle(antSpace);
+                            addDebugLog(`    - 容器宽度: ${containerStyle.width}`, 'info');
+                            addDebugLog(`    - 容器最大宽度: ${containerStyle.maxWidth}`, 'info');
+                            addDebugLog(`    - 容器显示方式: ${containerStyle.display}`, 'info');
+                            
+                            // 如果容器宽度为100%，先修复它
+                            if (containerStyle.width === '100%' || containerStyle.width === '100vw') {
+                                addDebugLog(`    ⚠️ 检测到容器宽度为100%，正在修复...`, 'warning');
+                                fixContainerWidth(antSpace);
+                            }
+                            
                             // 尝试插入测试按钮
                             const testButton = document.createElement('button');
                             testButton.textContent = '🔍 新品审核 (测试)';
@@ -321,6 +333,8 @@
                                 width: auto !important;
                                 max-width: none !important;
                                 flex: 0 0 auto !important;
+                                max-width: 120px !important;
+                                min-width: 80px !important;
                             `;
                             
                             try {
@@ -490,6 +504,25 @@
             }
             
             addDebugLog('按钮样式修复完成', 'info');
+        }
+
+        // 修复容器宽度问题
+        function fixContainerWidth(container) {
+            addDebugLog('修复容器宽度问题...', 'info');
+            
+            // 设置容器为内容自适应宽度
+            container.style.setProperty('width', 'auto', 'important');
+            container.style.setProperty('max-width', 'fit-content', 'important');
+            container.style.setProperty('min-width', 'auto', 'important');
+            
+            // 确保容器不会影响子元素的宽度
+            container.style.setProperty('flex-direction', 'row', 'important');
+            container.style.setProperty('flex-wrap', 'wrap', 'important');
+            container.style.setProperty('gap', '8px', 'important');
+            container.style.setProperty('align-items', 'flex-start', 'important');
+            container.style.setProperty('justify-content', 'flex-start', 'important');
+            
+            addDebugLog('容器宽度修复完成', 'info');
         }
 
         // 页面加载完成后开始调试
