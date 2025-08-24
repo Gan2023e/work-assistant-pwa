@@ -206,8 +206,11 @@
 
         <!-- 手动测试按钮 -->
         <div style="margin-top: 20px; text-align: center;">
-            <button onclick="manualTest()" style="padding: 8px 16px; background: #1677ff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <button onclick="manualTest()" style="padding: 8px 16px; background: #1677ff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">
                 手动测试按钮插入
+            </button>
+            <button onclick="testFallbackSolution()" style="padding: 8px 16px; background: #52c41a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                测试备用方案
             </button>
         </div>
     </div>
@@ -302,18 +305,41 @@
                             const testButton = document.createElement('button');
                             testButton.textContent = '🔍 新品审核 (测试)';
                             testButton.style.cssText = `
-                                background: #1677ff;
-                                color: white;
-                                border: 1px solid #1677ff;
-                                border-radius: 4px;
-                                padding: 4px 8px;
-                                font-size: 12px;
-                                height: 24px;
+                                all: unset;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                justify-content: center !important;
+                                background: #1677ff !important;
+                                color: white !important;
+                                border: 1px solid #1677ff !important;
+                                border-radius: 4px !important;
+                                padding: 4px 8px !important;
+                                font-size: 12px !important;
+                                height: 24px !important;
+                                cursor: pointer !important;
+                                margin-right: 4px !important;
                             `;
                             
-                            antSpace.appendChild(testButton);
-                            addDebugLog(`    ✅ 测试按钮已插入到.ant-space容器中`, 'success');
-                            return;
+                            try {
+                                antSpace.appendChild(testButton);
+                                addDebugLog(`    ✅ 测试按钮已插入到.ant-space容器中`, 'success');
+                                return;
+                            } catch (error) {
+                                addDebugLog(`    ❌ 插入失败: ${error.message}`, 'error');
+                                
+                                // 尝试备用方案
+                                addDebugLog('尝试备用插入方式...', 'info');
+                                try {
+                                    const lastButton = antSpace.querySelector('button:last-child');
+                                    if (lastButton && lastButton.parentNode) {
+                                        lastButton.parentNode.insertBefore(testButton, lastButton.nextSibling);
+                                        addDebugLog(`    ✅ 备用方式成功：插入到最后一个按钮之后`, 'success');
+                                        return;
+                                    }
+                                } catch (fallbackError) {
+                                    addDebugLog(`    ❌ 备用方式也失败: ${fallbackError.message}`, 'error');
+                                }
+                            }
                         }
                         
                         parent = parent.parentElement;
@@ -323,6 +349,76 @@
             }
             
             addDebugLog('❌ 未找到合适的.ant-space容器', 'error');
+            addDebugLog('建议：检查页面DOM结构，确认"数据管理"栏的布局', 'warning');
+        }
+
+        // 测试备用方案
+        function testFallbackSolution() {
+            addDebugLog('测试备用方案...', 'info');
+            
+            const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
+                return div.textContent && div.textContent.includes('数据管理');
+            });
+            
+            if (dataManagementDivs.length > 0) {
+                const dataManagementDiv = dataManagementDivs[0];
+                const parentContainer = dataManagementDiv.parentElement;
+                
+                if (parentContainer) {
+                    // 创建备用容器
+                    const fallbackContainer = document.createElement('div');
+                    fallbackContainer.style.cssText = `
+                        padding: 8px;
+                        background-color: #f8f9fa;
+                        border-radius: 6px;
+                        border: 1px solid #e9ecef;
+                        margin-top: 8px;
+                        margin-bottom: 16px;
+                    `;
+                    
+                    const titleDiv = document.createElement('div');
+                    titleDiv.style.cssText = `
+                        font-weight: bold;
+                        margin-bottom: 8px;
+                        color: #495057;
+                        font-size: 13px;
+                    `;
+                    titleDiv.textContent = '🔍 新品审核 (备用方案)';
+                    
+                    const buttonDiv = document.createElement('div');
+                    buttonDiv.style.cssText = `
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                    `;
+                    
+                    const testButton = document.createElement('button');
+                    testButton.textContent = '🔍 新品审核';
+                    testButton.style.cssText = `
+                        all: unset;
+                        display: inline-flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        background: #1677ff !important;
+                        color: white !important;
+                        border: 1px solid #1677ff !important;
+                        border-radius: 4px !important;
+                        padding: 4px 8px !important;
+                        font-size: 12px !important;
+                        height: 24px !important;
+                        cursor: pointer !important;
+                    `;
+                    
+                    buttonDiv.appendChild(testButton);
+                    fallbackContainer.appendChild(titleDiv);
+                    fallbackContainer.appendChild(buttonDiv);
+                    
+                    // 插入到"数据管理"栏的父容器中
+                    parentContainer.appendChild(fallbackContainer);
+                    
+                    addDebugLog('✅ 备用方案测试成功：创建了新的按钮区域', 'success');
+                }
+            }
         }
 
         // 页面加载完成后开始调试

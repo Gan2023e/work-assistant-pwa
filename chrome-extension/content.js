@@ -54,32 +54,146 @@
     });
   }
   
-  // 添加新品审核按钮
+  // 尝试多种方式插入按钮
   function addReviewButton() {
     try {
       // 查找合适的位置插入按钮
       const insertLocation = findButtonInsertLocation();
       if (!insertLocation) {
-        console.warn('未找到合适的位置插入新品审核按钮');
-        return;
+        console.warn('未找到合适的位置插入新品审核按钮，尝试创建备用方案');
+        // 尝试创建备用方案
+        return createFallbackButton();
       }
       
       // 创建新品审核按钮
       reviewButton = createReviewButton();
       
-      // 将按钮插入到容器的最后位置
+      // 尝试多种插入方式
+      let insertSuccess = false;
+      
+      // 方式1：直接添加到.ant-space容器末尾
       if (insertLocation.classList.contains('ant-space')) {
-        // 如果是Ant Design的Space组件，直接添加到末尾
-        insertLocation.appendChild(reviewButton);
-      } else {
-        // 如果是其他容器，也添加到末尾
-        insertLocation.appendChild(reviewButton);
+        try {
+          insertLocation.appendChild(reviewButton);
+          console.log('✅ 方式1成功：直接添加到.ant-space容器末尾');
+          insertSuccess = true;
+        } catch (error) {
+          console.warn('方式1失败:', error);
+        }
       }
       
-      console.log('新品审核按钮已添加到"数据管理"栏的最后位置');
+      // 方式2：如果方式1失败，尝试插入到最后一个按钮之后
+      if (!insertSuccess) {
+        try {
+          const lastButton = insertLocation.querySelector('button:last-child');
+          if (lastButton && lastButton.parentNode) {
+            lastButton.parentNode.insertBefore(reviewButton, lastButton.nextSibling);
+            console.log('✅ 方式2成功：插入到最后一个按钮之后');
+            insertSuccess = true;
+          }
+        } catch (error) {
+          console.warn('方式2失败:', error);
+        }
+      }
+      
+      // 方式3：如果前两种方式都失败，尝试克隆现有按钮并替换
+      if (!insertSuccess) {
+        try {
+          const existingButton = insertLocation.querySelector('button');
+          if (existingButton) {
+            const buttonWrapper = existingButton.parentNode;
+            if (buttonWrapper) {
+              buttonWrapper.appendChild(reviewButton);
+              console.log('✅ 方式3成功：添加到按钮包装器');
+              insertSuccess = true;
+            }
+          }
+        } catch (error) {
+          console.warn('方式3失败:', error);
+        }
+      }
+      
+      if (insertSuccess) {
+        console.log('新品审核按钮已成功添加到"数据管理"栏中');
+      } else {
+        console.error('所有插入方式都失败了，尝试备用方案');
+        // 清理创建的按钮
+        if (reviewButton && reviewButton.parentNode) {
+          reviewButton.parentNode.removeChild(reviewButton);
+        }
+        // 尝试备用方案
+        createFallbackButton();
+      }
       
     } catch (error) {
       console.error('添加新品审核按钮失败:', error);
+      // 尝试备用方案
+      createFallbackButton();
+    }
+  }
+
+  // 创建备用按钮方案
+  function createFallbackButton() {
+    try {
+      console.log('创建备用按钮方案...');
+      
+      // 查找"数据管理"栏
+      const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
+        return div.textContent && div.textContent.includes('数据管理');
+      });
+      
+      if (dataManagementDivs.length > 0) {
+        const dataManagementDiv = dataManagementDivs[0];
+        const parentContainer = dataManagementDiv.parentElement;
+        
+        if (parentContainer) {
+          // 在"数据管理"栏后面创建一个新的按钮区域
+          const fallbackContainer = document.createElement('div');
+          fallbackContainer.style.cssText = `
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            margin-top: 8px;
+            margin-bottom: 16px;
+          `;
+          
+          const titleDiv = document.createElement('div');
+          titleDiv.style.cssText = `
+            fontWeight: bold;
+            marginBottom: 8px;
+            color: #495057;
+            fontSize: 13px;
+          `;
+          titleDiv.textContent = '🔍 新品审核';
+          
+          const buttonDiv = document.createElement('div');
+          buttonDiv.style.cssText = `
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+          `;
+          
+          const reviewButton = createReviewButton();
+          buttonDiv.appendChild(reviewButton);
+          
+          fallbackContainer.appendChild(titleDiv);
+          fallbackContainer.appendChild(buttonDiv);
+          
+          // 插入到"数据管理"栏的父容器中
+          parentContainer.appendChild(fallbackContainer);
+          
+          console.log('✅ 备用方案成功：创建了新的按钮区域');
+          return true;
+        }
+      }
+      
+      console.error('备用方案也失败了');
+      return false;
+      
+    } catch (error) {
+      console.error('创建备用方案失败:', error);
+      return false;
     }
   }
   
@@ -157,37 +271,62 @@
       <span style="margin-right: 4px;">🔍</span>
       新品审核
     `;
+    
+    // 使用更强的样式隔离，避免与网页CSS冲突
     button.style.cssText = `
-      background: #1677ff;
-      color: white;
-      border: 1px solid #1677ff;
-      border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-      margin-right: 4px;
-      transition: all 0.3s;
-      font-weight: 500;
-      height: 24px;
-      line-height: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      /* 重置所有可能的继承样式 */
+      all: unset;
+      
+      /* 基础样式 */
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      box-sizing: border-box !important;
+      
+      /* 按钮样式 */
+      background: #1677ff !important;
+      color: white !important;
+      border: 1px solid #1677ff !important;
+      border-radius: 4px !important;
+      padding: 4px 8px !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      height: 24px !important;
+      line-height: 16px !important;
+      cursor: pointer !important;
+      margin-right: 4px !important;
+      transition: all 0.3s !important;
+      
+      /* 字体样式 */
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+      text-decoration: none !important;
+      white-space: nowrap !important;
+      vertical-align: middle !important;
+      
+      /* 确保按钮可见 */
+      opacity: 1 !important;
+      visibility: visible !important;
+      position: relative !important;
+      z-index: 1000 !important;
     `;
     
     // 添加悬停效果
     button.addEventListener('mouseenter', () => {
-      button.style.background = '#4096ff';
-      button.style.borderColor = '#4096ff';
+      button.style.background = '#4096ff !important';
+      button.style.borderColor = '#4096ff !important';
     });
     
     button.addEventListener('mouseleave', () => {
-      button.style.background = '#1677ff';
-      button.style.borderColor = '#1677ff';
+      button.style.background = '#1677ff !important';
+      button.style.borderColor = '#1677ff !important';
     });
     
     // 添加点击事件
     button.addEventListener('click', handleReviewClick);
+    
+    // 添加调试标识
+    button.setAttribute('data-extension-button', 'true');
+    button.setAttribute('data-button-type', 'new-product-review');
     
     return button;
   }
