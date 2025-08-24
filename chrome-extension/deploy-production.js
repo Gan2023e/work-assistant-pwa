@@ -1,86 +1,107 @@
 #!/usr/bin/env node
 
 /**
- * Chrome插件生产环境部署脚本
- * 使用方法: node deploy-production.js your-actual-domain.com
+ * Chrome扩展部署脚本
+ * 用于将更新后的扩展部署到生产环境
  */
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-// 获取命令行参数
-const args = process.argv.slice(2);
-const productionDomain = args[0];
+console.log('🚀 开始部署Chrome扩展到生产环境...\n');
 
-if (!productionDomain) {
-  console.error('❌ 错误: 请提供生产环境域名');
-  console.log('使用方法: node deploy-production.js your-actual-domain.com');
+// 检查必要文件
+const requiredFiles = [
+  'manifest.json',
+  'content.js',
+  'background.js',
+  'popup.html',
+  'popup.js',
+  'icon.svg'
+];
+
+console.log('📋 检查必要文件...');
+for (const file of requiredFiles) {
+  if (!fs.existsSync(file)) {
+    console.error(`❌ 缺少必要文件: ${file}`);
+    process.exit(1);
+  }
+  console.log(`✅ ${file}`);
+}
+
+// 读取manifest.json获取版本信息
+try {
+  const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+  console.log(`\n📦 当前版本: ${manifest.version}`);
+  console.log(`📝 扩展名称: ${manifest.name}`);
+} catch (error) {
+  console.error('❌ 无法读取manifest.json:', error.message);
   process.exit(1);
 }
 
-console.log(`🚀 开始配置生产环境部署，目标域名: ${productionDomain}`);
-
-// 文件路径
-const manifestPath = path.join(__dirname, 'manifest.json');
-const backgroundPath = path.join(__dirname, 'background.js');
-const configPath = path.join(__dirname, 'config.js');
-
+// 创建生产环境配置
+console.log('\n🔧 创建生产环境配置...');
 try {
-  // 1. 更新 manifest.json
-  console.log('📝 更新 manifest.json...');
-  let manifestContent = fs.readFileSync(manifestPath, 'utf8');
-  
-  // 替换域名占位符
-  manifestContent = manifestContent.replace(/work-assistant-pwa-production\.up\.railway\.app/g, productionDomain);
-  
-  fs.writeFileSync(manifestPath, manifestContent);
-  console.log('✅ manifest.json 更新完成');
-
-  // 2. 更新 background.js
-  console.log('📝 更新 background.js...');
-  let backgroundContent = fs.readFileSync(backgroundPath, 'utf8');
-  
-  // 替换域名占位符
-  backgroundContent = backgroundContent.replace(/work-assistant-pwa-production\.up\.railway\.app/g, productionDomain);
-  
-  fs.writeFileSync(backgroundPath, backgroundContent);
-  console.log('✅ background.js 更新完成');
-
-  // 3. 更新 config.js
-  console.log('📝 更新 config.js...');
-  let configContent = fs.readFileSync(configPath, 'utf8');
-  
-  // 替换域名占位符
-  configContent = configContent.replace(/work-assistant-pwd\.up\.railway\.app/g, productionDomain);
-  
-  fs.writeFileSync(configPath, configContent);
-  console.log('✅ config.js 更新完成');
-
-  // 4. 创建部署信息文件
-  const deployInfo = {
-    deployedAt: new Date().toISOString(),
-    domain: productionDomain,
-    version: '1.0.0',
-    environment: 'production'
+  const productionConfig = {
+    version: new Date().toISOString().slice(0, 19).replace(/:/g, '-'),
+    deployTime: new Date().toISOString(),
+    changes: [
+      '优化新品审核按钮位置，移动到"数据管理"栏中',
+      '缩小按钮尺寸，提升视觉协调性',
+      '改进DOM元素查找算法，提高按钮插入成功率',
+      '增强页面变化监听，支持动态内容更新'
+    ]
   };
   
-  fs.writeFileSync(
-    path.join(__dirname, 'deploy-info.json'), 
-    JSON.stringify(deployInfo, null, 2)
-  );
-
-  console.log('🎉 生产环境配置完成！');
-  console.log(`📋 部署信息:`);
-  console.log(`   - 目标域名: ${productionDomain}`);
-  console.log(`   - 部署时间: ${deployInfo.deployedAt}`);
-  console.log(`   - 插件版本: ${deployInfo.version}`);
-  
-  console.log('\n📦 下一步操作:');
-  console.log('1. 在Chrome扩展程序页面打包插件');
-  console.log('2. 将生成的.crx文件分发给用户');
-  console.log('3. 或者将整个文件夹打包为ZIP供用户安装');
-
+  fs.writeFileSync('production-config.json', JSON.stringify(productionConfig, null, 2));
+  console.log('✅ 生产环境配置文件已创建');
 } catch (error) {
-  console.error('❌ 部署配置失败:', error.message);
+  console.error('❌ 创建生产环境配置失败:', error.message);
+}
+
+// 创建部署包
+console.log('\n📦 创建部署包...');
+const deployDir = `deploy-${Date.now()}`;
+try {
+  if (!fs.existsSync(deployDir)) {
+    fs.mkdirSync(deployDir);
+  }
+  
+  // 复制必要文件
+  for (const file of requiredFiles) {
+    fs.copyFileSync(file, path.join(deployDir, file));
+  }
+  
+  // 复制其他必要文件
+  const additionalFiles = ['README.md', 'production-config.json'];
+  for (const file of additionalFiles) {
+    if (fs.existsSync(file)) {
+      fs.copyFileSync(file, path.join(deployDir, file));
+    }
+  }
+  
+  console.log(`✅ 部署包已创建: ${deployDir}`);
+} catch (error) {
+  console.error('❌ 创建部署包失败:', error.message);
   process.exit(1);
-} 
+}
+
+// 显示部署说明
+console.log('\n📋 部署说明:');
+console.log('1. 将整个扩展文件夹复制到目标环境');
+console.log('2. 在Chrome浏览器中打开 chrome://extensions/');
+console.log('3. 开启"开发者模式"');
+console.log('4. 点击"加载已解压的扩展程序"');
+console.log('5. 选择扩展文件夹');
+console.log('6. 如果已安装旧版本，先点击"移除"再重新加载');
+
+console.log('\n🔍 主要更新内容:');
+console.log('- 新品审核按钮已移动到"数据管理"栏中');
+console.log('- 按钮尺寸已优化，与其他按钮保持一致');
+console.log('- 改进了按钮插入逻辑，提高成功率');
+console.log('- 增强了页面变化监听能力');
+
+console.log('\n✅ 部署完成！');
+console.log(`📁 部署包位置: ${deployDir}`);
+console.log('\n💡 提示: 部署后请测试按钮是否能正确显示在"数据管理"栏中'); 

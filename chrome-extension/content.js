@@ -79,7 +79,13 @@
   
   // 查找按钮插入位置
   function findButtonInsertLocation() {
-    // 尝试多种选择器查找合适的位置
+    // 查找"数据管理"栏
+    const dataManagementSection = findDataManagementSection();
+    if (dataManagementSection) {
+      return dataManagementSection;
+    }
+    
+    // 如果找不到"数据管理"栏，回退到原来的逻辑
     const selectors = [
       '.ant-space', // Ant Design Space组件
       '[class*="toolbar"]',
@@ -113,25 +119,55 @@
     
     return null;
   }
-  
+
+  // 查找"数据管理"栏
+  function findDataManagementSection() {
+    // 查找包含"数据管理"文字的div
+    const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
+      return div.textContent && div.textContent.includes('数据管理');
+    });
+    
+    if (dataManagementDivs.length > 0) {
+      // 找到包含"数据管理"的div后，查找其父级容器中的按钮区域
+      for (const div of dataManagementDivs) {
+        // 向上查找包含按钮的容器
+        let parent = div.parentElement;
+        while (parent && parent !== document.body) {
+          const buttonContainer = parent.querySelector('.ant-space, [class*="button"], button');
+          if (buttonContainer) {
+            return buttonContainer;
+          }
+          parent = parent.parentElement;
+        }
+      }
+    }
+    
+    return null;
+  }
+
   // 创建新品审核按钮
   function createReviewButton() {
     const button = document.createElement('button');
     button.innerHTML = `
-      <span style="margin-right: 6px;">🔍</span>
+      <span style="margin-right: 4px;">🔍</span>
       新品审核
     `;
     button.style.cssText = `
       background: #1677ff;
       color: white;
       border: 1px solid #1677ff;
-      border-radius: 6px;
-      padding: 6px 16px;
-      font-size: 14px;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
       cursor: pointer;
-      margin-right: 8px;
+      margin-right: 4px;
       transition: all 0.3s;
       font-weight: 500;
+      height: 24px;
+      line-height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
     
     // 添加悬停效果
