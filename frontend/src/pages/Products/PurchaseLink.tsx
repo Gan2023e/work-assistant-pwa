@@ -40,7 +40,6 @@ import {
   CloudUploadOutlined,
   FilterOutlined,
   FilePdfOutlined,
-  EyeOutlined,
   PlusOutlined,
   DownloadOutlined,
   CheckCircleOutlined,
@@ -104,12 +103,7 @@ interface CpcFile {
   };
 }
 
-// 声明全局window对象的扩展属性
-declare global {
-  interface Window {
-    extensionCheckCallback?: (result: boolean) => void;
-  }
-}
+
 
 interface EditingCell {
   id: number;
@@ -1287,67 +1281,9 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 新品审核 - 直接显示审核功能
-  const handleNewProductReview = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('请先勾选要审核的产品记录');
-      return;
-    }
 
-    try {
-      // 获取选中的产品记录
-      const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
-      const selectedRecords = currentData.filter(record => 
-        selectedRowKeys.some(key => Number(key) === record.id)
-      );
 
-      // 检查是否有有效的产品链接
-      const validRecords = selectedRecords.filter(record => record.weblink && record.weblink.trim() !== '');
-      if (validRecords.length === 0) {
-        message.warning('所选记录中没有有效的产品链接');
-        return;
-      }
 
-      if (validRecords.length !== selectedRecords.length) {
-        const invalidCount = selectedRecords.length - validRecords.length;
-        message.warning(`${invalidCount} 条记录没有有效链接，将只审核 ${validRecords.length} 条记录`);
-      }
-
-      // 直接显示新品审核功能，不检查Chrome插件
-      message.success(`已选择 ${validRecords.length} 个产品进行审核`);
-      message.info('新品审核功能已启动，请查看审核进度', 3);
-
-      // 这里可以添加实际的新品审核逻辑
-      // 例如：打开审核页面、显示审核界面等
-
-    } catch (error) {
-      console.error('新品审核失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
-      message.error('启动新品审核失败: ' + errorMessage);
-    }
-  };
-
-  // 检查Chrome插件是否已安装和激活
-  const checkChromeExtension = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      // 设置检查标识
-      window.extensionCheckCallback = (result: boolean) => {
-        resolve(result);
-        delete window.extensionCheckCallback;
-      };
-
-      // 发送检查消息
-      window.postMessage({ type: 'CHECK_EXTENSION_AVAILABLE' }, '*');
-
-      // 3秒后超时
-      setTimeout(() => {
-        if (window.extensionCheckCallback) {
-          delete window.extensionCheckCallback;
-          resolve(false);
-        }
-      }, 3000);
-    });
-  };
 
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
@@ -3387,7 +3323,7 @@ const Purchase: React.FC = () => {
               <Statistic
                 title="侵权二审"
                 value={statistics.infringementSecondReview}
-                prefix={<EyeOutlined />}
+                prefix={<SearchOutlined />}
                 valueStyle={{ color: '#fa541c', fontSize: '16px' }}
               />
             </Card>
@@ -3744,19 +3680,7 @@ const Purchase: React.FC = () => {
                       新链接（采购用）
                     </Button>
 
-                    <Button 
-                      icon={<SearchOutlined />}
-                      onClick={handleNewProductReview}
-                      disabled={selectedRowKeys.length === 0}
-                      type="primary"
-                      size="small"
-                      style={{ 
-                        background: '#1677ff',
-                        borderColor: '#1677ff'
-                      }}
-                    >
-                      新品审核
-                    </Button>
+
 
                   </Space>
                 </div>
@@ -4289,7 +4213,7 @@ const Purchase: React.FC = () => {
                 actions={[
                   <Button
                     type="link"
-                    icon={<EyeOutlined />}
+                    icon={<SearchOutlined />}
                     onClick={() => window.open(file.url, '_blank')}
                     title="在新标签页查看文件"
                   >
