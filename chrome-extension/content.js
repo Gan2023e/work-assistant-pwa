@@ -65,91 +65,49 @@
         return createFallbackButton();
       }
       
-      // 在插入按钮之前，先修复父容器的宽度问题
-      fixParentContainerWidth(insertLocation);
+      console.log('插入位置信息:', insertLocation);
       
       // 创建新品审核按钮
       reviewButton = createReviewButton();
       
-      // 尝试多种插入方式
+      // 根据插入位置信息插入按钮
       let insertSuccess = false;
       
-      // 方式1：直接添加到.ant-space容器末尾
-      if (insertLocation.classList.contains('ant-space')) {
-        try {
-          insertLocation.appendChild(reviewButton);
-          console.log('✅ 方式1成功：直接添加到.ant-space容器末尾');
+      try {
+        if (insertLocation.position === 'after') {
+          // 在"清空"按钮之后插入
+          insertLocation.referenceElement.parentNode.insertBefore(
+            reviewButton, 
+            insertLocation.referenceElement.nextSibling
+          );
+          console.log('✅ 成功：在"清空"按钮下方插入"新品审核"按钮');
+          insertSuccess = true;
+        } else {
+          // 备用方案：直接添加到容器末尾
+          insertLocation.container.appendChild(reviewButton);
+          console.log('✅ 备用方案：添加到容器末尾');
+          insertSuccess = true;
+        }
+        
+        if (insertSuccess) {
+          console.log('新品审核按钮已成功添加到搜索区域');
           
           // 验证按钮样式是否正确应用
           if (validateButtonStyles(reviewButton)) {
-            insertSuccess = true;
             console.log('✅ 按钮样式验证通过');
           } else {
             console.warn('⚠️ 按钮样式验证失败，尝试修复');
             fixButtonStyles(reviewButton);
-            insertSuccess = true;
           }
-        } catch (error) {
-          console.warn('方式1失败:', error);
+          
+          // 最终验证
+          setTimeout(() => {
+            finalValidation(reviewButton);
+          }, 100);
         }
-      }
-      
-      // 方式2：如果方式1失败，尝试插入到最后一个按钮之后
-      if (!insertSuccess) {
-        try {
-          const lastButton = insertLocation.querySelector('button:last-child');
-          if (lastButton && lastButton.parentNode) {
-            lastButton.parentNode.insertBefore(reviewButton, lastButton.nextSibling);
-            console.log('✅ 方式2成功：插入到最后一个按钮之后');
-            
-            if (validateButtonStyles(reviewButton)) {
-              insertSuccess = true;
-            } else {
-              fixButtonStyles(reviewButton);
-              insertSuccess = true;
-            }
-          }
-        } catch (error) {
-          console.warn('方式2失败:', error);
-        }
-      }
-      
-      // 方式3：如果前两种方式都失败，尝试克隆现有按钮并替换
-      if (!insertSuccess) {
-        try {
-          const existingButton = insertLocation.querySelector('button');
-          if (existingButton) {
-            const buttonWrapper = existingButton.parentNode;
-            if (buttonWrapper) {
-              buttonWrapper.appendChild(reviewButton);
-              console.log('✅ 方式3成功：添加到按钮包装器');
-              
-              if (validateButtonStyles(reviewButton)) {
-                insertSuccess = true;
-              } else {
-                fixButtonStyles(reviewButton);
-                insertSuccess = true;
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('方式3失败:', error);
-        }
-      }
-      
-      if (insertSuccess) {
-        console.log('新品审核按钮已成功添加到"数据管理"栏中');
         
-        // 最终验证
-        setTimeout(() => {
-          finalValidation(reviewButton);
-        }, 100);
-      } else {
-        console.error('所有插入方式都失败了，尝试备用方案');
-        // 清理创建的按钮
-        if (reviewButton && reviewButton.parentNode) {
-          reviewButton.parentNode.removeChild(reviewButton);
-        }
+      } catch (error) {
+        console.error('插入按钮失败:', error);
         // 尝试备用方案
         createFallbackButton();
       }
@@ -369,135 +327,129 @@
     }
   }
   
-  // 创建备用按钮方案
+  // 创建备用按钮（如果主要插入方式失败）
   function createFallbackButton() {
+    console.log('创建备用按钮...');
+    
     try {
-      console.log('创建备用按钮方案...');
+      // 查找搜索区域
+      const searchArea = document.querySelector('textarea[placeholder*="SKU"], textarea[placeholder*="产品链接"]');
+      if (!searchArea) {
+        console.warn('未找到搜索区域，无法创建备用按钮');
+        return;
+      }
       
-      // 查找"数据管理"栏
-      const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
-        return div.textContent && div.textContent.includes('数据管理');
-      });
-      
-      if (dataManagementDivs.length > 0) {
-        const dataManagementDiv = dataManagementDivs[0];
-        const parentContainer = dataManagementDiv.parentElement;
-        
-        if (parentContainer) {
-          // 在"数据管理"栏后面创建一个新的按钮区域
-          const fallbackContainer = document.createElement('div');
-          fallbackContainer.style.cssText = `
-            padding: 8px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #e9ecef;
-            margin-top: 8px;
-            margin-bottom: 16px;
-          `;
-          
-          const titleDiv = document.createElement('div');
-          titleDiv.style.cssText = `
-            fontWeight: bold;
-            marginBottom: 8px;
-            color: #495057;
-            fontSize: 13px;
-          `;
-          titleDiv.textContent = '🔍 新品审核';
-          
-          const buttonDiv = document.createElement('div');
-          buttonDiv.style.cssText = `
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-          `;
-          
-          const reviewButton = createReviewButton();
-          buttonDiv.appendChild(reviewButton);
-          
-          fallbackContainer.appendChild(titleDiv);
-          fallbackContainer.appendChild(buttonDiv);
-          
-          // 插入到"数据管理"栏的父容器中
-          parentContainer.appendChild(fallbackContainer);
-          
-          console.log('✅ 备用方案成功：创建了新的按钮区域');
-          return true;
+      // 查找搜索区域的父容器
+      let searchContainer = searchArea.closest('div[style*="display: flex"]');
+      if (!searchContainer) {
+        // 向上查找包含搜索元素的容器
+        searchContainer = searchArea.parentElement;
+        while (searchContainer && searchContainer !== document.body) {
+          const style = window.getComputedStyle(searchContainer);
+          if (style.display === 'flex') {
+            break;
+          }
+          searchContainer = searchContainer.parentElement;
         }
       }
       
-      console.error('备用方案也失败了');
-      return false;
+      if (!searchContainer) {
+        console.warn('未找到搜索容器，无法创建备用按钮');
+        return;
+      }
+      
+      console.log('找到搜索容器，创建备用按钮区域');
+      
+      // 创建备用按钮区域
+      const fallbackArea = document.createElement('div');
+      fallbackArea.style.cssText = `
+        margin-top: 8px;
+        padding: 8px;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      `;
+      
+      // 添加说明文字
+      const label = document.createElement('span');
+      label.textContent = '🔍 新品审核:';
+      label.style.cssText = `
+        font-size: 12px;
+        color: #6c757d;
+        font-weight: 500;
+      `;
+      
+      // 创建按钮
+      const button = createReviewButton();
+      
+      // 组装备用区域
+      fallbackArea.appendChild(label);
+      fallbackArea.appendChild(button);
+      
+      // 插入到搜索容器中
+      searchContainer.appendChild(fallbackArea);
+      
+      console.log('✅ 备用按钮区域创建成功');
+      reviewButton = button;
       
     } catch (error) {
-      console.error('创建备用方案失败:', error);
-      return false;
+      console.error('创建备用按钮失败:', error);
     }
   }
   
   // 查找按钮插入位置
   function findButtonInsertLocation() {
-    // 查找"数据管理"栏
-    const dataManagementSection = findDataManagementSection();
-    if (dataManagementSection) {
-      console.log('找到"数据管理"栏，将在其中插入新品审核按钮');
-      return dataManagementSection;
-    }
+    console.log('查找"清空"按钮位置...');
     
-    // 如果找不到"数据管理"栏，记录警告但不创建新容器
-    console.warn('未找到"数据管理"栏，无法插入新品审核按钮');
-    return null;
-  }
-
-  // 查找"数据管理"栏
-  function findDataManagementSection() {
-    // 查找包含"数据管理"文字的div
-    const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
-      return div.textContent && div.textContent.includes('数据管理');
+    // 查找"清空"按钮
+    const clearButton = Array.from(document.querySelectorAll('button')).find(button => {
+      return button.textContent && button.textContent.trim() === '清空';
     });
     
-    if (dataManagementDivs.length > 0) {
-      console.log(`找到 ${dataManagementDivs.length} 个包含"数据管理"的div`);
-      
-      // 找到包含"数据管理"的div后，查找其父级容器中的按钮区域
-      for (const div of dataManagementDivs) {
-        console.log('检查包含"数据管理"的div:', div);
-        
-        // 方法1：直接在同级或子级查找.ant-space容器
-        let buttonContainer = div.parentElement.querySelector('.ant-space');
-        if (buttonContainer) {
-          console.log('在同级找到.ant-space容器:', buttonContainer);
-          return buttonContainer;
-        }
-        
-        // 方法2：向上查找包含按钮的容器
-        let parent = div.parentElement;
-        let level = 0;
-        
-        while (parent && parent !== document.body && level < 5) {
-          console.log(`检查第${level + 1}级父元素:`, parent.tagName, parent.className);
-          
-          // 优先查找.ant-space容器，这是Ant Design的按钮组容器
-          buttonContainer = parent.querySelector('.ant-space');
-          if (buttonContainer) {
-            console.log('找到.ant-space容器:', buttonContainer);
-            return buttonContainer;
-          }
-          
-          // 如果没有找到.ant-space，查找其他包含按钮的容器
-          const fallbackContainer = parent.querySelector('[class*="button"], button');
-          if (fallbackContainer) {
-            console.log('找到备用按钮容器:', fallbackContainer);
-            return fallbackContainer;
-          }
-          
-          parent = parent.parentElement;
-          level++;
-        }
-      }
-    } else {
-      console.warn('页面中未找到包含"数据管理"文字的div');
+    if (!clearButton) {
+      console.warn('未找到"清空"按钮');
+      return null;
     }
     
+    console.log('找到"清空"按钮:', clearButton);
+    
+    // 查找包含"清空"按钮的父容器
+    // 这个容器应该是一个垂直布局的div，包含搜索相关的按钮
+    let parentContainer = clearButton.parentElement;
+    
+    // 向上查找合适的容器（通常是包含搜索区域的容器）
+    while (parentContainer && parentContainer !== document.body) {
+      const style = window.getComputedStyle(parentContainer);
+      
+      // 检查是否是垂直布局的容器
+      if (style.display === 'flex' && style.flexDirection === 'column') {
+        console.log('找到垂直布局容器:', parentContainer);
+        console.log('容器样式:', {
+          display: style.display,
+          flexDirection: style.flexDirection,
+          gap: style.gap,
+          alignItems: style.alignItems
+        });
+        
+        // 验证这个容器是否包含搜索相关的元素
+        const hasSearchElements = parentContainer.querySelector('textarea, input, select');
+        if (hasSearchElements) {
+          console.log('✅ 确认找到搜索区域容器，将在"清空"按钮下方插入"新品审核"按钮');
+          return {
+            container: parentContainer,
+            referenceElement: clearButton,
+            position: 'after'
+          };
+        }
+      }
+      
+      parentContainer = parentContainer.parentElement;
+    }
+    
+    console.warn('未找到合适的搜索区域容器');
     return null;
   }
 

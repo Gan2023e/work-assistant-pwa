@@ -270,114 +270,92 @@
         function manualTest() {
             addDebugLog('开始手动测试按钮插入...', 'info');
             
-            // 查找"数据管理"栏
-            const dataManagementDivs = Array.from(document.querySelectorAll('div')).filter(div => {
-                return div.textContent && div.textContent.includes('数据管理');
+            // 查找"清空"按钮
+            const clearButton = Array.from(document.querySelectorAll('button')).find(button => {
+                return button.textContent && button.textContent.trim() === '清空';
             });
             
-            addDebugLog(`找到 ${dataManagementDivs.length} 个包含"数据管理"的div`, 'info');
-            
-            if (dataManagementDivs.length > 0) {
-                for (let i = 0; i < dataManagementDivs.length; i++) {
-                    const div = dataManagementDivs[i];
-                    addDebugLog(`检查第${i + 1}个"数据管理"div:`, 'info');
-                    addDebugLog(`  - 标签: ${div.tagName}`, 'info');
-                    addDebugLog(`  - 类名: ${div.className}`, 'info');
-                    addDebugLog(`  - 文本内容: ${div.textContent.trim()}`, 'info');
-                    
-                    // 查找父级容器
-                    let parent = div.parentElement;
-                    let level = 0;
-                    
-                    while (parent && parent !== document.body && level < 5) {
-                        addDebugLog(`  第${level + 1}级父元素:`, 'info');
-                        addDebugLog(`    - 标签: ${parent.tagName}`, 'info');
-                        addDebugLog(`    - 类名: ${parent.className}`, 'info');
-                        
-                        // 查找.ant-space容器
-                        const antSpace = parent.querySelector('.ant-space');
-                        if (antSpace) {
-                            addDebugLog(`    ✅ 找到.ant-space容器!`, 'success');
-                            addDebugLog(`    - 容器类名: ${antSpace.className}`, 'success');
-                            addDebugLog(`    - 容器内按钮数量: ${antSpace.querySelectorAll('button').length}`, 'success');
-                            
-                            // 检查容器的宽度设置
-                            const containerStyle = window.getComputedStyle(antSpace);
-                            addDebugLog(`    - 容器宽度: ${containerStyle.width}`, 'info');
-                            addDebugLog(`    - 容器最大宽度: ${containerStyle.maxWidth}`, 'info');
-                            addDebugLog(`    - 容器显示方式: ${containerStyle.display}`, 'info');
-                            
-                            // 如果容器宽度为100%，先修复它
-                            if (containerStyle.width === '100%' || containerStyle.width === '100vw') {
-                                addDebugLog(`    ⚠️ 检测到容器宽度为100%，正在修复...`, 'warning');
-                                fixContainerWidth(antSpace);
-                            }
-                            
-                            // 尝试插入测试按钮
-                            const testButton = document.createElement('button');
-                            testButton.textContent = '🔍 新品审核 (测试)';
-                            testButton.style.cssText = `
-                                all: unset;
-                                display: inline-flex !important;
-                                align-items: center !important;
-                                justify-content: center !important;
-                                background: #1677ff !important;
-                                color: white !important;
-                                border: 1px solid #1677ff !important;
-                                border-radius: 4px !important;
-                                padding: 4px 8px !important;
-                                font-size: 12px !important;
-                                height: 24px !important;
-                                cursor: pointer !important;
-                                margin-right: 4px !important;
-                                width: auto !important;
-                                max-width: none !important;
-                                flex: 0 0 auto !important;
-                                max-width: 120px !important;
-                                min-width: 80px !important;
-                            `;
-                            
-                            try {
-                                antSpace.appendChild(testButton);
-                                addDebugLog(`    ✅ 测试按钮已插入到.ant-space容器中`, 'success');
-                                
-                                // 验证按钮样式
-                                setTimeout(() => {
-                                    validateTestButton(testButton);
-                                }, 100);
-                                
-                                return;
-                            } catch (error) {
-                                addDebugLog(`    ❌ 插入失败: ${error.message}`, 'error');
-                                
-                                // 尝试备用方案
-                                addDebugLog('尝试备用插入方式...', 'info');
-                                try {
-                                    const lastButton = antSpace.querySelector('button:last-child');
-                                    if (lastButton && lastButton.parentNode) {
-                                        lastButton.parentNode.insertBefore(testButton, lastButton.nextSibling);
-                                        addDebugLog(`    ✅ 备用方式成功：插入到最后一个按钮之后`, 'success');
-                                        
-                                        setTimeout(() => {
-                                            validateTestButton(testButton);
-                                        }, 100);
-                                        
-                                        return;
-                                    }
-                                } catch (fallbackError) {
-                                    addDebugLog(`    ❌ 备用方式也失败: ${fallbackError.message}`, 'error');
-                                }
-                            }
-                        }
-                        
-                        parent = parent.parentElement;
-                        level++;
-                    }
-                }
+            if (!clearButton) {
+                addDebugLog('❌ 未找到"清空"按钮', 'error');
+                return;
             }
             
-            addDebugLog('❌ 未找到合适的.ant-space容器', 'error');
-            addDebugLog('建议：检查页面DOM结构，确认"数据管理"栏的布局', 'warning');
+            addDebugLog('✅ 找到"清空"按钮', 'success');
+            addDebugLog(`  - 按钮文本: ${clearButton.textContent}`, 'info');
+            addDebugLog(`  - 按钮类名: ${clearButton.className}`, 'info');
+            
+            // 查找包含"清空"按钮的父容器
+            let parentContainer = clearButton.parentElement;
+            let level = 0;
+            
+            addDebugLog('查找父容器结构...', 'info');
+            
+            while (parentContainer && parentContainer !== document.body && level < 5) {
+                const style = window.getComputedStyle(parentContainer);
+                
+                addDebugLog(`第${level + 1}级父元素:`, 'info');
+                addDebugLog(`  - 标签: ${parentContainer.tagName}`, 'info');
+                addDebugLog(`  - 类名: ${parentContainer.className}`, 'info');
+                addDebugLog(`  - 显示方式: ${style.display}`, 'info');
+                addDebugLog(`  - 布局方向: ${style.flexDirection}`, 'info');
+                
+                // 检查是否是垂直布局的容器
+                if (style.display === 'flex' && style.flexDirection === 'column') {
+                    addDebugLog(`  ✅ 找到垂直布局容器!`, 'success');
+                    
+                    // 验证这个容器是否包含搜索相关的元素
+                    const hasSearchElements = parentContainer.querySelector('textarea, input, select');
+                    if (hasSearchElements) {
+                        addDebugLog(`  ✅ 确认找到搜索区域容器`, 'success');
+                        addDebugLog(`  - 包含搜索元素: ${hasSearchElements.tagName}`, 'success');
+                        
+                        // 尝试插入测试按钮
+                        const testButton = document.createElement('button');
+                        testButton.textContent = '🔍 新品审核 (测试)';
+                        testButton.style.cssText = `
+                            all: unset;
+                            display: inline-flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            background: #1677ff !important;
+                            color: white !important;
+                            border: 1px solid #1677ff !important;
+                            border-radius: 4px !important;
+                            padding: 4px 8px !important;
+                            font-size: 12px !important;
+                            height: 24px !important;
+                            cursor: pointer !important;
+                            margin-right: 4px !important;
+                            width: auto !important;
+                            max-width: none !important;
+                            flex: 0 0 auto !important;
+                            max-width: 120px !important;
+                            min-width: 80px !important;
+                        `;
+                        
+                        try {
+                            // 在"清空"按钮之后插入
+                            clearButton.parentNode.insertBefore(testButton, clearButton.nextSibling);
+                            addDebugLog(`  ✅ 测试按钮已插入到"清空"按钮下方`, 'success');
+                            
+                            // 验证按钮样式
+                            setTimeout(() => {
+                                validateTestButton(testButton);
+                            }, 100);
+                            
+                            return;
+                        } catch (error) {
+                            addDebugLog(`  ❌ 插入失败: ${error.message}`, 'error');
+                        }
+                    }
+                }
+                
+                parentContainer = parentContainer.parentElement;
+                level++;
+            }
+            
+            addDebugLog('❌ 未找到合适的搜索区域容器', 'error');
+            addDebugLog('建议：检查页面DOM结构，确认"清空"按钮的布局', 'warning');
         }
 
         // 测试备用方案
