@@ -3871,6 +3871,20 @@ const Purchase: React.FC = () => {
                     </Button>
 
                     <Button 
+                      icon={<EyeOutlined />}
+                      onClick={handleNewProductReview}
+                      disabled={selectedRowKeys.length === 0}
+                      type="primary"
+                      size="small"
+                      style={{ 
+                        background: '#1677ff',
+                        borderColor: '#1677ff'
+                      }}
+                    >
+                      新品审核
+                    </Button>
+
+                    <Button 
                       type="primary"
                       icon={<FileExcelOutlined />}
                       onClick={handleGenerateUkDataSheet}
