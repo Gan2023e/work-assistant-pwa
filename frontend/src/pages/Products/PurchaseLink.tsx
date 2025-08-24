@@ -3787,7 +3787,7 @@ const Purchase: React.FC = () => {
 
                     <Button 
                       icon={<SearchOutlined />}
-                      onClick={handleNewProductReview}
+                      onClick={handleBatchOpenLinks}
                       disabled={selectedRowKeys.length === 0}
                       type="primary"
                       size="small"
