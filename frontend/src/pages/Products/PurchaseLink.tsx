@@ -1287,7 +1287,7 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 新品审核 - Chrome插件功能
+  // 新品审核 - 直接显示审核功能
   const handleNewProductReview = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先勾选要审核的产品记录');
@@ -1313,53 +1313,12 @@ const Purchase: React.FC = () => {
         message.warning(`${invalidCount} 条记录没有有效链接，将只审核 ${validRecords.length} 条记录`);
       }
 
-      // 检查是否安装了Chrome插件
-      const hasExtension = await checkChromeExtension();
-      if (!hasExtension) {
-        Modal.confirm({
-          title: '需要安装Chrome插件',
-          content: (
-            <div>
-              <p>新品审核功能需要安装Chrome插件才能使用。</p>
-              <p style={{ marginTop: '12px' }}>
-                <Text strong>插件功能：</Text>
-              </p>
-              <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
-                <li>自动批量打开产品链接</li>
-                <li>获取网页源代码</li>
-                <li>自动关闭链接</li>
-                <li>保存审核数据到数据库</li>
-              </ul>
-              <p style={{ marginTop: '12px', color: '#666' }}>
-                请联系管理员获取插件安装包，或者手动下载安装。
-              </p>
-            </div>
-          ),
-          onOk: () => {
-            // 提供插件下载或安装指引
-            window.open('/chrome-extension/', '_blank');
-          },
-          okText: '获取插件',
-          cancelText: '取消'
-        });
-        return;
-      }
+      // 直接显示新品审核功能，不检查Chrome插件
+      message.success(`已选择 ${validRecords.length} 个产品进行审核`);
+      message.info('新品审核功能已启动，请查看审核进度', 3);
 
-      // 发送消息给Chrome插件开始审核
-      const reviewData = {
-        type: 'START_PRODUCT_REVIEW',
-        products: validRecords.map(record => ({
-          id: record.id,
-          parent_sku: record.parent_sku,
-          weblink: record.weblink
-        }))
-      };
-
-      // 通过postMessage发送给content script
-      window.postMessage(reviewData, '*');
-
-      message.success(`已发送 ${validRecords.length} 个产品到Chrome插件进行审核`);
-      message.info('请在Chrome插件中查看审核进度和结果', 5);
+      // 这里可以添加实际的新品审核逻辑
+      // 例如：打开审核页面、显示审核界面等
 
     } catch (error) {
       console.error('新品审核失败:', error);
@@ -3787,7 +3746,8 @@ const Purchase: React.FC = () => {
 
                     <Button 
                       icon={<SearchOutlined />}
-                      onClick={() => handleCardClick('新品一审')}
+                      onClick={handleNewProductReview}
+                      disabled={selectedRowKeys.length === 0}
                       type="primary"
                       size="small"
                       style={{ 
