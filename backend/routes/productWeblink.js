@@ -1812,6 +1812,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let countryOfOriginCol = -1;
       let areBatteriesIncludedCol = -1;
       let conditionTypeCol = -1;
+      let cpsiaCautionaryStatement1Col = -1;
       
       if (data.length >= 3 && data[2]) { // 第3行，索引为2
         data[2].forEach((header, colIndex) => {
@@ -1849,6 +1850,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
               areBatteriesIncludedCol = colIndex;
             } else if (cellValue === 'condition_type') {
               conditionTypeCol = colIndex;
+            } else if (cellValue === 'cpsia_cautionary_statement1' || cellValue === 'cpsia_cautionary_statement') {
+              cpsiaCautionaryStatement1Col = colIndex;
             }
           }
         });
@@ -1864,7 +1867,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       console.log(`📍 找到扩展列位置 - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
       console.log(`📍 找到其他列位置 - model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
       console.log(`📍 找到关系列位置 - parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
-      console.log(`📍 找到属性列位置 - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}`);
+      console.log(`📍 找到属性列位置 - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}, cpsia_cautionary_statement1: ${cpsiaCautionaryStatement1Col}`);
 
       // 步骤5: 准备填写数据
       console.log('✍️ 准备填写数据到Excel...');
@@ -1897,7 +1900,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           itemSkuCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
           externalProductIdTypeCol, modelCol, quantityCol, ageRangeDescriptionCol,
           parentChildCol, parentSkuCol, relationshipTypeCol, variationThemeCol,
-          countryOfOriginCol, areBatteriesIncludedCol, conditionTypeCol
+          countryOfOriginCol, areBatteriesIncludedCol, conditionTypeCol, cpsiaCautionaryStatement1Col
         ].filter(col => col !== -1);
         const maxCol = Math.max(...allColumns);
         
@@ -1958,6 +1961,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = 'China';
           if (areBatteriesIncludedCol !== -1) data[currentRowIndex][areBatteriesIncludedCol] = 'No';
           if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = 'New';
+          if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
           
           currentRowIndex++;
         });
@@ -2518,7 +2522,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (waterResistanceLevelCol !== -1) data[currentRowIndex][waterResistanceLevelCol] = recordData.water_resistance_level || '';
       if (sizeMapCol !== -1) data[currentRowIndex][sizeMapCol] = recordData.size_map || '';
       if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
-      if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = recordData.cpsia_cautionary_statement1 || '';
+      if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
       if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
       
       // 调试：输出第一条记录填写后的行内容
@@ -2988,7 +2992,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][countryOfOriginCol] = data.country_of_origin || '';
       }
       if (cpsiaCautionaryStatement1Col !== -1) {
-        updatedData[rowIndex][cpsiaCautionaryStatement1Col] = data.cpsia_cautionary_statement1 || '';
+        updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
       }
       if (conditionTypeCol !== -1) {
         updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
@@ -3873,7 +3877,8 @@ router.post('/generate-fbasku-data', async (req, res) => {
       'package_length', 'package_length_unit_of_measure', 'package_weight',
       'package_weight_unit_of_measure', 'package_height_unit_of_measure',
       'package_width_unit_of_measure', 'batteries_required',
-      'supplier_declared_dg_hz_regulation1', 'condition_type', 'country_of_origin'
+      'supplier_declared_dg_hz_regulation1', 'condition_type', 'country_of_origin',
+      'cpsia_cautionary_statement1'
     ];
 
     requiredColumns.forEach(col => {
@@ -3972,6 +3977,9 @@ router.post('/generate-fbasku-data', async (req, res) => {
       }
       if (columnIndexes['country_of_origin'] !== undefined) {
         data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
+      }
+      if (columnIndexes['cpsia_cautionary_statement1'] !== undefined) {
+        data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'ChokingHazardSmallParts';
       }
 
       dataRowIndex++;
