@@ -306,16 +306,10 @@ const Purchase: React.FC = () => {
   const [sellerSkuLoading, setSellerSkuLoading] = useState(false);
   const [currentParentSku, setCurrentParentSku] = useState<string>('');
   const [sellerSkuEditingKey, setSellerSkuEditingKey] = useState<string>('');
-  const [editingValues, setEditingValues] = useState<{
-    sellercolorname: string;
-    sellersizename: string;
-    qty_per_box: number;
-  }>({
-    sellercolorname: '',
-    sellersizename: '',
-    qty_per_box: 0
-  });
-  const [sellerSkuForm] = Form.useForm();
+  // 用于获取输入框值的refs
+  const colorInputRef = useRef<any>(null);
+  const sizeInputRef = useRef<any>(null);
+  const qtyInputRef = useRef<any>(null);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -3269,21 +3263,16 @@ const Purchase: React.FC = () => {
   };
 
   const handleSellerSkuEdit = (record: SellerInventorySkuRecord) => {
-    // 设置编辑状态的值
-    const values = {
-      sellercolorname: record.sellercolorname || '',
-      sellersizename: record.sellersizename || '',
-      qty_per_box: record.qty_per_box || 0,
-    };
-    setEditingValues(values);
-    // 设置表单初始值
-    sellerSkuForm.setFieldsValue(values);
     setSellerSkuEditingKey(record.skuid);
   };
 
   const handleSellerSkuSave = async (skuid: string) => {
     try {
-      const updateData = { ...editingValues };
+      const updateData = {
+        sellercolorname: colorInputRef.current?.input?.value || '',
+        sellersizename: sizeInputRef.current?.input?.value || '',
+        qty_per_box: parseInt(qtyInputRef.current?.input?.value) || 0
+      };
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuid)}`, {
         method: 'PUT',
@@ -3297,11 +3286,6 @@ const Purchase: React.FC = () => {
 
       message.success('保存成功');
       setSellerSkuEditingKey('');
-      setEditingValues({
-        sellercolorname: '',
-        sellersizename: '',
-        qty_per_box: 0
-      });
       await loadSellerSkuData(currentParentSku);
     } catch (error) {
       console.error('保存SellerInventorySku数据失败:', error);
@@ -3311,12 +3295,6 @@ const Purchase: React.FC = () => {
 
   const handleSellerSkuCancel = () => {
     setSellerSkuEditingKey('');
-    setEditingValues({
-      sellercolorname: '',
-      sellersizename: '',
-      qty_per_box: 0
-    });
-    sellerSkuForm.resetFields();
   };
 
   return (
@@ -5509,19 +5487,12 @@ const Purchase: React.FC = () => {
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
-                  <Form.Item
-                    name="sellercolorname"
-                    style={{ margin: 0 }}
-                  >
-                    <Input 
-                      size="small" 
-                      value={editingValues.sellercolorname}
-                      onChange={(e) => setEditingValues(prev => ({
-                        ...prev,
-                        sellercolorname: e.target.value
-                      }))}
-                    />
-                  </Form.Item>
+                  <Input 
+                    ref={colorInputRef}
+                    size="small" 
+                    defaultValue={record.sellercolorname || ''}
+                    key={`sellercolorname-${record.skuid}`}
+                  />
                 ) : (
                   <span>{text || '-'}</span>
                 );
@@ -5535,19 +5506,12 @@ const Purchase: React.FC = () => {
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
-                  <Form.Item
-                    name="sellersizename"
-                    style={{ margin: 0 }}
-                  >
-                    <Input 
-                      size="small" 
-                      value={editingValues.sellersizename}
-                      onChange={(e) => setEditingValues(prev => ({
-                        ...prev,
-                        sellersizename: e.target.value
-                      }))}
-                    />
-                  </Form.Item>
+                  <Input 
+                    ref={sizeInputRef}
+                    size="small" 
+                    defaultValue={record.sellersizename || ''}
+                    key={`sellersizename-${record.skuid}`}
+                  />
                 ) : (
                   <span>{text || '-'}</span>
                 );
@@ -5561,20 +5525,13 @@ const Purchase: React.FC = () => {
               render: (text: number, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
-                  <Form.Item
-                    name="qty_per_box"
-                    style={{ margin: 0 }}
-                  >
-                    <Input 
-                      size="small" 
-                      type="number" 
-                      value={editingValues.qty_per_box.toString()}
-                      onChange={(e) => setEditingValues(prev => ({
-                        ...prev,
-                        qty_per_box: parseInt(e.target.value) || 0
-                      }))}
-                    />
-                  </Form.Item>
+                  <Input 
+                    ref={qtyInputRef}
+                    size="small" 
+                    type="number" 
+                    defaultValue={record.qty_per_box?.toString() || '0'}
+                    key={`qty_per_box-${record.skuid}`}
+                  />
                 ) : (
                   <span>{text || '-'}</span>
                 );
@@ -5612,7 +5569,6 @@ const Purchase: React.FC = () => {
             },
           ]}
         />
-        <Form form={sellerSkuForm} component={false} />
       </Modal>
 
    </div>
