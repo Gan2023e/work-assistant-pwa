@@ -421,22 +421,26 @@
       }
       
       // 确认开始审核
-      const confirmed = confirm(`确定要审核 ${selectedProducts.length} 个产品吗？\n\n这将：\n1. 批量打开产品链接\n2. 获取网页源代码\n3. 自动关闭链接\n4. 保存审核数据`);
+      const confirmed = confirm(`确定要审核 ${selectedProducts.length} 个产品吗？\n\n新的审核流程：\n1. 先审核第一个产品\n2. 点击"下一个产品"继续审核\n3. 可以随时停止审核\n4. 最后显示审核总结`);
       
       if (!confirmed) return;
       
       // 显示进度提示
-      showProgressMessage(`开始审核 ${selectedProducts.length} 个产品...`);
+      showProgressMessage(`开始审核 ${selectedProducts.length} 个产品...\n将逐个审核，请耐心等待`);
       
-      // 开始审核流程
+      // 开始审核流程（只审核第一个产品）
       const results = await startReviewProcess(selectedProducts, loginStatus.authToken);
       
       // 显示结果
       showReviewResults(results);
       
+      // 隐藏进度提示
+      hideProgressMessage();
+      
     } catch (error) {
       console.error('新品审核失败:', error);
       showMessage(`审核失败: ${error.message}`, 'error');
+      hideProgressMessage();
     }
   }
   
@@ -554,28 +558,21 @@
   
   // 显示审核结果
   function showReviewResults(results) {
-    const successCount = results.filter(r => r.success).length;
-    const failureCount = results.length - successCount;
-    
-    let message = `审核完成！\n\n`;
-    message += `✅ 成功: ${successCount} 个产品\n`;
-    if (failureCount > 0) {
-      message += `❌ 失败: ${failureCount} 个产品\n\n`;
-      message += `失败详情:\n`;
-      results.filter(r => !r.success).forEach(r => {
-        message += `• ${r.parent_sku}: ${r.error}\n`;
-      });
+    // 新的审核流程是分步进行的，这里只显示第一个产品的结果
+    if (results.length === 0) {
+      showMessage('审核完成，但没有结果数据', 'warning');
+      return;
     }
     
-    alert(message);
-    
-    // 刷新页面数据（如果有刷新按钮）
-    const refreshButton = document.querySelector('[title*="刷新"]') || 
-                         document.querySelector('[aria-label*="刷新"]') ||
-                         document.querySelector('button:has([class*="reload"])');
-    if (refreshButton) {
-      setTimeout(() => refreshButton.click(), 1000);
+    const result = results[0];
+    if (result.success) {
+      showMessage(`第一个产品审核完成: ${result.parent_sku}`, 'success');
+    } else {
+      showMessage(`第一个产品审核失败: ${result.parent_sku} - ${result.error}`, 'error');
     }
+    
+    // 不再自动刷新页面，让用户通过"下一个"按钮继续
+    console.log('第一个产品审核完成，等待用户继续...');
   }
   
   // 显示消息提示
@@ -613,6 +610,7 @@
       z-index: 9999;
       font-size: 14px;
       min-width: 200px;
+      white-space: pre-line;
     `;
     progressDiv.innerHTML = `
       <div style="display: flex; align-items: center;">
@@ -628,21 +626,40 @@
         </div>
         <div>${text}</div>
       </div>
-      <style>
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      </style>
     `;
+    
+    // 添加CSS动画
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // 移除已存在的进度提示
+    const existingProgress = document.getElementById('review-progress');
+    if (existingProgress) {
+      existingProgress.remove();
+    }
     
     document.body.appendChild(progressDiv);
     
-    // 10秒后自动移除
+    // 10秒后自动隐藏
     setTimeout(() => {
-      const element = document.getElementById('review-progress');
-      if (element) element.remove();
+      if (progressDiv.parentNode) {
+        progressDiv.remove();
+      }
     }, 10000);
+  }
+  
+  // 隐藏进度消息
+  function hideProgressMessage() {
+    const progressDiv = document.getElementById('review-progress');
+    if (progressDiv) {
+      progressDiv.remove();
+    }
   }
   
   // 页面变化监听

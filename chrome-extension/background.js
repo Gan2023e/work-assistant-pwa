@@ -4,32 +4,67 @@ let isReviewing = false; // 审核状态标识
 
 // 监听来自content script的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background收到消息:', message);
+  console.log('📨 收到消息:', message.type, message.data);
   
   if (message.type === 'START_REVIEW') {
-    startReview(message.data).then(result => {
-      sendResponse({ success: true, data: result });
-    }).catch(error => {
-      sendResponse({ success: false, error: error.message });
-    });
+    // 开始审核流程
+    startReview(message.data)
+      .then(results => {
+        console.log('✅ 审核完成:', results);
+        sendResponse({ success: true, data: results });
+      })
+      .catch(error => {
+        console.error('❌ 审核失败:', error);
+        sendResponse({ success: false, error: error.message });
+      });
     return true; // 保持消息通道开放
   }
   
-  if (message.type === 'GET_PAGE_SOURCE') {
-    getPageSource(sender.tab.id).then(source => {
-      sendResponse({ success: true, source });
-    }).catch(error => {
-      sendResponse({ success: false, error: error.message });
-    });
-    return true;
+  if (message.type === 'CONTINUE_REVIEW') {
+    // 继续审核下一个产品
+    continueReview(message.data)
+      .then(results => {
+        console.log('✅ 继续审核完成:', results);
+        sendResponse({ success: true, data: results });
+      })
+      .catch(error => {
+        console.error('❌ 继续审核失败:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true; // 保持消息通道开放
   }
   
   if (message.type === 'CHECK_LOGIN_STATUS') {
-    checkLoginStatus().then(result => {
-      sendResponse(result);
-    });
-    return true;
+    // 检查登录状态
+    checkLoginStatus()
+      .then(status => {
+        console.log('✅ 登录状态检查完成:', status);
+        sendResponse(status);
+      })
+      .catch(error => {
+        console.error('❌ 登录状态检查失败:', error);
+        sendResponse({ isLoggedIn: false, error: error.message });
+      });
+    return true; // 保持消息通道开放
   }
+  
+  if (message.type === 'GET_API_BASE_URL') {
+    // 获取API基础URL
+    getApiBaseUrl()
+      .then(url => {
+        console.log('✅ API基础URL获取完成:', url);
+        sendResponse({ url: url });
+      })
+      .catch(error => {
+        console.error('❌ API基础URL获取失败:', error);
+        sendResponse({ error: error.message });
+      });
+    return true; // 保持消息通道开放
+  }
+  
+  // 其他消息类型
+  console.log('❓ 未知消息类型:', message.type);
+  sendResponse({ error: '未知消息类型' });
 });
 
 // 开始审核流程
@@ -42,25 +77,110 @@ async function startReview(reviewData) {
   const { products, authToken } = reviewData;
   
   try {
-    const results = [];
+    // 只处理第一个产品，等待用户点击"下一个"继续
+    const product = products[0];
+    console.log(`开始审核第一个产品: ${product.parent_sku}`);
     
-    for (let i = 0; i < products.length; i++) {
-      const product = products[i];
-      console.log(`开始审核产品 ${i + 1}/${products.length}: ${product.parent_sku}`);
+    try {
+      // 打开产品链接
+      const tab = await chrome.tabs.create({
+        url: product.weblink,
+        active: false
+      });
       
+      // 等待页面加载
+      await waitForPageLoad(tab.id, 5000);
+      
+      // 获取页面源代码
+      const pageSource = await getPageSource(tab.id);
+      
+      // 发送源代码到后端
+      const saveResult = await saveProductSource({
+        productId: product.id,
+        parentSku: product.parent_sku,
+        weblink: product.weblink,
+        pageSource: pageSource,
+        authToken: authToken
+      });
+      
+      // 关闭标签页
+      await chrome.tabs.remove(tab.id);
+      
+      // 显示获取成功的弹窗，包含"下一个"按钮
+      await showSourceCodeResult({
+        parentSku: product.parent_sku,
+        weblink: product.weblink,
+        sourceLength: pageSource.length,
+        success: true,
+        pageSource: pageSource,
+        currentIndex: 0,
+        totalCount: products.length,
+        products: products,
+        authToken: authToken
+      });
+      
+      return [{
+        ...product,
+        success: true,
+        sourceLength: pageSource.length,
+        saveResult: saveResult
+      }];
+      
+    } catch (error) {
+      console.error(`审核产品失败 ${product.parent_sku}:`, error);
+      
+      // 显示失败弹窗
+      await showSourceCodeResult({
+        parentSku: product.parent_sku,
+        weblink: product.weblink,
+        sourceLength: 0,
+        success: false,
+        pageSource: '',
+        currentIndex: 0,
+        totalCount: products.length,
+        products: products,
+        authToken: authToken
+      });
+      
+      return [{
+        ...product,
+        success: false,
+        error: error.message
+      }];
+    }
+    
+  } finally {
+    isReviewing = false;
+  }
+}
+
+// 继续审核下一个产品
+async function continueReview({ currentIndex, products, authToken }) {
+  if (isReviewing) {
+    throw new Error('已有审核任务在进行中');
+  }
+
+  isReviewing = true;
+
+  try {
+    const results = [];
+    for (let i = currentIndex; i < products.length; i++) {
+      const product = products[i];
+      console.log(`继续审核产品 ${i + 1}/${products.length}: ${product.parent_sku}`);
+
       try {
         // 打开产品链接
         const tab = await chrome.tabs.create({
           url: product.weblink,
           active: false
         });
-        
+
         // 等待页面加载
         await waitForPageLoad(tab.id, 5000);
-        
+
         // 获取页面源代码
         const pageSource = await getPageSource(tab.id);
-        
+
         // 发送源代码到后端
         const saveResult = await saveProductSource({
           productId: product.id,
@@ -69,33 +189,51 @@ async function startReview(reviewData) {
           pageSource: pageSource,
           authToken: authToken
         });
-        
+
         // 关闭标签页
         await chrome.tabs.remove(tab.id);
-        
+
         // 显示获取成功的弹窗
         await showSourceCodeResult({
           parentSku: product.parent_sku,
           weblink: product.weblink,
           sourceLength: pageSource.length,
           success: true,
-          pageSource: pageSource
+          pageSource: pageSource,
+          currentIndex: i,
+          totalCount: products.length,
+          products: products,
+          authToken: authToken
         });
-        
+
         results.push({
           ...product,
           success: true,
           sourceLength: pageSource.length,
           saveResult: saveResult
         });
-        
+
         // 延迟一段时间避免请求过频
         if (i < products.length - 1) {
           await sleep(2000);
         }
-        
+
       } catch (error) {
-        console.error(`审核产品失败 ${product.parent_sku}:`, error);
+        console.error(`继续审核产品失败 ${product.parent_sku}:`, error);
+        
+        // 显示失败弹窗
+        await showSourceCodeResult({
+          parentSku: product.parent_sku,
+          weblink: product.weblink,
+          sourceLength: 0,
+          success: false,
+          pageSource: '',
+          currentIndex: i,
+          totalCount: products.length,
+          products: products,
+          authToken: authToken
+        });
+        
         results.push({
           ...product,
           success: false,
@@ -104,8 +242,12 @@ async function startReview(reviewData) {
       }
     }
     
-    return results;
+    // 所有产品审核完成，显示总结
+    if (results.length > 0) {
+      await showReviewSummary(results);
+    }
     
+    return results;
   } finally {
     isReviewing = false;
   }
@@ -330,7 +472,7 @@ async function getApiBaseUrl() {
 }
 
 // 显示源代码获取结果弹窗
-async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, pageSource }) {
+async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }) {
   try {
     // 获取当前活动标签页
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -341,7 +483,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
     // 在网页中显示弹窗
     await chrome.scripting.executeScript({
       target: { tabId: currentTab.id },
-      func: ({ parentSku, weblink, sourceLength, success, pageSource }) => {
+      func: ({ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }) => {
         // 创建弹窗元素
         const modal = document.createElement('div');
         modal.style.cssText = `
@@ -377,7 +519,23 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         const bgColor = success ? '#f6ffed' : '#fff2f0';
         const borderColor = success ? '#b7eb8f' : '#ffccc7';
         
+        // 进度信息
+        const progressInfo = currentIndex !== undefined && totalCount !== undefined ? 
+          `<div style="
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            text-align: center;
+            font-size: 14px;
+            color: #1890ff;
+          ">
+            📊 审核进度: ${currentIndex + 1} / ${totalCount}
+          </div>` : '';
+        
         content.innerHTML = `
+          ${progressInfo}
           <div style="
             background: ${bgColor};
             border: 1px solid ${borderColor};
@@ -455,6 +613,20 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
           ` : ''}
           
           <div style="text-align: center;">
+            ${currentIndex !== undefined && currentIndex < totalCount - 1 ? `
+              <button id="nextProduct" style="
+                background: #52c41a;
+                color: white;
+                border: none;
+                padding: 8px 24px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                margin-right: 12px;
+              ">
+                🔄 下一个产品
+              </button>
+            ` : ''}
             <button id="closeModal" style="
               background: #1890ff;
               color: white;
@@ -464,7 +636,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
               cursor: pointer;
               font-size: 14px;
             ">
-              确定
+              ${currentIndex !== undefined && currentIndex < totalCount - 1 ? '完成审核' : '确定'}
             </button>
           </div>
         `;
@@ -505,6 +677,27 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
           }
         }
         
+        // 绑定下一个产品事件
+        if (currentIndex !== undefined && currentIndex < totalCount - 1) {
+          const nextButton = document.getElementById('nextProduct');
+          if (nextButton) {
+            nextButton.addEventListener('click', () => {
+              // 关闭当前弹窗
+              document.body.removeChild(modal);
+              
+              // 发送消息给background script继续审核下一个产品
+              chrome.runtime.sendMessage({
+                type: 'CONTINUE_REVIEW',
+                data: {
+                  currentIndex: currentIndex + 1,
+                  products: products,
+                  authToken: authToken
+                }
+              });
+            });
+          }
+        }
+        
         // 绑定关闭事件
         document.getElementById('closeModal').addEventListener('click', () => {
           document.body.removeChild(modal);
@@ -526,11 +719,169 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         
         // 不再自动关闭，让用户手动关闭
       },
-      args: [{ parentSku, weblink, sourceLength, success, pageSource }]
+      args: [{ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }]
     });
     
   } catch (error) {
     console.error('显示源代码结果弹窗失败:', error);
+  }
+}
+
+// 显示审核总结弹窗
+async function showReviewSummary(results) {
+  try {
+    // 获取当前活动标签页
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length === 0) return;
+    
+    const currentTab = tabs[0];
+    
+    // 在网页中显示弹窗
+    await chrome.scripting.executeScript({
+      target: { tabId: currentTab.id },
+      func: ({ results }) => {
+        // 创建弹窗元素
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow-y: auto;
+          padding: 20px;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+          background: white;
+          border-radius: 8px;
+          padding: 24px;
+          max-width: 90%;
+          width: 90%;
+          max-height: 90vh;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          position: relative;
+          overflow-y: auto;
+        `;
+        
+        const successCount = results.filter(r => r.success).length;
+        const failureCount = results.length - successCount;
+        const totalSourceLength = results.reduce((sum, r) => sum + (r.sourceLength || 0), 0);
+        const avgSourceLength = results.length > 0 ? Math.round(totalSourceLength / results.length) : 0;
+        
+        content.innerHTML = `
+          <div style="
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+          ">
+            <div style="
+              display: flex;
+              align-items: center;
+              margin-bottom: 12px;
+              font-size: 18px;
+              font-weight: bold;
+              color: #389e0d;
+            ">
+              🎉 审核总结
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>总产品数:</strong> ${results.length}
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>成功获取源代码的产品数:</strong> ${successCount}
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>失败获取源代码的产品数:</strong> ${failureCount}
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>总源代码长度:</strong> ${totalSourceLength.toLocaleString()} 字符
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>平均源代码长度:</strong> ${avgSourceLength.toLocaleString()} 字符
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>完成时间:</strong> ${new Date().toLocaleString()}
+            </div>
+          </div>
+          
+          ${failureCount > 0 ? `
+            <div style="
+              background: #fff2f0;
+              border: 1px solid #ffccc7;
+              border-radius: 6px;
+              padding: 16px;
+              margin-bottom: 16px;
+            ">
+              <div style="
+                display: flex;
+                align-items: center;
+                margin-bottom: 12px;
+                font-size: 16px;
+                font-weight: bold;
+                color: #cf1322;
+              ">
+                ❌ 失败详情
+              </div>
+              ${results.filter(r => !r.success).map(r => `
+                <div style="margin-bottom: 4px; color: #cf1322;">
+                  • ${r.parent_sku || '未知SKU'}: ${r.error || '未知错误'}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+          
+          <div style="text-align: center;">
+            <button id="closeSummaryModal" style="
+              background: #1890ff;
+              color: white;
+              border: none;
+              padding: 8px 24px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+            ">
+              确定
+            </button>
+          </div>
+        `;
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // 绑定关闭事件
+        document.getElementById('closeSummaryModal').addEventListener('click', () => {
+          document.body.removeChild(modal);
+        });
+        
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            document.body.removeChild(modal);
+          }
+        });
+        
+        // 按ESC键关闭
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && document.body.contains(modal)) {
+            document.body.removeChild(modal);
+          }
+        });
+        
+      },
+      args: [{ results }]
+    });
+    
+  } catch (error) {
+    console.error('显示审核总结弹窗失败:', error);
   }
 }
 
