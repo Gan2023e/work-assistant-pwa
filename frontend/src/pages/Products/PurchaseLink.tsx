@@ -5547,7 +5547,7 @@ const Purchase: React.FC = () => {
             <InputNumber
               placeholder="单箱产品数量"
               value={batchQtyPerBox}
-              onChange={setBatchQtyPerBox}
+              onChange={(value) => setBatchQtyPerBox(value ?? undefined)}
               min={1}
               style={{ width: 120 }}
             />
