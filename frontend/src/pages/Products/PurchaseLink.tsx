@@ -3260,7 +3260,12 @@ const Purchase: React.FC = () => {
   };
 
   const handleSellerSkuEdit = (record: SellerInventorySkuRecord) => {
-    sellerSkuForm.setFieldsValue(record);
+    // 设置表单初始值
+    sellerSkuForm.setFieldsValue({
+      sellercolorname: record.sellercolorname || '',
+      sellersizename: record.sellersizename || '',
+      qty_per_box: record.qty_per_box || 0,
+    });
     setSellerSkuEditingKey(record.skuid);
   };
 
@@ -5452,7 +5457,7 @@ const Purchase: React.FC = () => {
         title={`母SKU: ${currentParentSku} - 子SKU明细`}
         visible={sellerSkuModalVisible}
         onCancel={() => setSellerSkuModalVisible(false)}
-        width={800}
+        width={1200}
         footer={null}
       >
         <Table
@@ -5461,32 +5466,31 @@ const Purchase: React.FC = () => {
           rowKey="skuid"
           size="small"
           pagination={false}
-          scroll={{ y: 400 }}
+          scroll={{ y: 500 }}
           columns={[
             {
               title: 'SKU ID',
               dataIndex: 'skuid',
               key: 'skuid',
-              width: 120,
+              width: 180,
             },
             {
               title: '子SKU',
               dataIndex: 'child_sku',
               key: 'child_sku',
-              width: 120,
+              width: 150,
             },
             {
               title: '卖家颜色名称',
               dataIndex: 'sellercolorname',
               key: 'sellercolorname',
-              width: 120,
+              width: 200,
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
                   <Form.Item
                     name="sellercolorname"
                     style={{ margin: 0 }}
-                    initialValue={text}
                   >
                     <Input size="small" />
                   </Form.Item>
@@ -5499,14 +5503,13 @@ const Purchase: React.FC = () => {
               title: '卖家尺寸名称',
               dataIndex: 'sellersizename',
               key: 'sellersizename',
-              width: 120,
+              width: 150,
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
                   <Form.Item
                     name="sellersizename"
                     style={{ margin: 0 }}
-                    initialValue={text}
                   >
                     <Input size="small" />
                   </Form.Item>
@@ -5526,7 +5529,6 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="qty_per_box"
                     style={{ margin: 0 }}
-                    initialValue={text}
                   >
                     <Input size="small" type="number" />
                   </Form.Item>
