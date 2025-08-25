@@ -5491,6 +5491,7 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="sellercolorname"
                     style={{ margin: 0 }}
+                    initialValue={record.sellercolorname || ''}
                   >
                     <Input size="small" />
                   </Form.Item>
@@ -5510,6 +5511,7 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="sellersizename"
                     style={{ margin: 0 }}
+                    initialValue={record.sellersizename || ''}
                   >
                     <Input size="small" />
                   </Form.Item>
@@ -5529,6 +5531,7 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="qty_per_box"
                     style={{ margin: 0 }}
+                    initialValue={record.qty_per_box || 0}
                   >
                     <Input size="small" type="number" />
                   </Form.Item>
