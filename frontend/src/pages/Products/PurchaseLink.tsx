@@ -5579,6 +5579,7 @@ const Purchase: React.FC = () => {
           pagination={false}
           scroll={{ y: 500 }}
           rowSelection={{
+            type: 'checkbox',
             selectedRowKeys: selectedSkuIds,
             onSelect: (record, selected) => {
               handleBatchSelectRow(record.skuid, selected);
@@ -5589,6 +5590,8 @@ const Purchase: React.FC = () => {
             getCheckboxProps: (record) => ({
               disabled: record.skuid === sellerSkuEditingKey, // 编辑状态下不能选择
             }),
+            columnWidth: 60,
+            fixed: 'left',
           }}
           columns={[
             {
