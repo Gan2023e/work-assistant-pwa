@@ -306,6 +306,15 @@ const Purchase: React.FC = () => {
   const [sellerSkuLoading, setSellerSkuLoading] = useState(false);
   const [currentParentSku, setCurrentParentSku] = useState<string>('');
   const [sellerSkuEditingKey, setSellerSkuEditingKey] = useState<string>('');
+  const [editingValues, setEditingValues] = useState<{
+    sellercolorname: string;
+    sellersizename: string;
+    qty_per_box: number;
+  }>({
+    sellercolorname: '',
+    sellersizename: '',
+    qty_per_box: 0
+  });
   const [sellerSkuForm] = Form.useForm();
 
   // 获取全库统计数据
@@ -3260,19 +3269,21 @@ const Purchase: React.FC = () => {
   };
 
   const handleSellerSkuEdit = (record: SellerInventorySkuRecord) => {
-    // 设置表单初始值
-    sellerSkuForm.setFieldsValue({
+    // 设置编辑状态的值
+    const values = {
       sellercolorname: record.sellercolorname || '',
       sellersizename: record.sellersizename || '',
       qty_per_box: record.qty_per_box || 0,
-    });
+    };
+    setEditingValues(values);
+    // 设置表单初始值
+    sellerSkuForm.setFieldsValue(values);
     setSellerSkuEditingKey(record.skuid);
   };
 
   const handleSellerSkuSave = async (skuid: string) => {
     try {
-      const row = await sellerSkuForm.validateFields();
-      const updateData = { ...row };
+      const updateData = { ...editingValues };
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuid)}`, {
         method: 'PUT',
@@ -3286,6 +3297,11 @@ const Purchase: React.FC = () => {
 
       message.success('保存成功');
       setSellerSkuEditingKey('');
+      setEditingValues({
+        sellercolorname: '',
+        sellersizename: '',
+        qty_per_box: 0
+      });
       await loadSellerSkuData(currentParentSku);
     } catch (error) {
       console.error('保存SellerInventorySku数据失败:', error);
@@ -3295,6 +3311,11 @@ const Purchase: React.FC = () => {
 
   const handleSellerSkuCancel = () => {
     setSellerSkuEditingKey('');
+    setEditingValues({
+      sellercolorname: '',
+      sellersizename: '',
+      qty_per_box: 0
+    });
     sellerSkuForm.resetFields();
   };
 
@@ -5491,9 +5512,15 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="sellercolorname"
                     style={{ margin: 0 }}
-                    initialValue={record.sellercolorname || ''}
                   >
-                    <Input size="small" />
+                    <Input 
+                      size="small" 
+                      value={editingValues.sellercolorname}
+                      onChange={(e) => setEditingValues(prev => ({
+                        ...prev,
+                        sellercolorname: e.target.value
+                      }))}
+                    />
                   </Form.Item>
                 ) : (
                   <span>{text || '-'}</span>
@@ -5511,9 +5538,15 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="sellersizename"
                     style={{ margin: 0 }}
-                    initialValue={record.sellersizename || ''}
                   >
-                    <Input size="small" />
+                    <Input 
+                      size="small" 
+                      value={editingValues.sellersizename}
+                      onChange={(e) => setEditingValues(prev => ({
+                        ...prev,
+                        sellersizename: e.target.value
+                      }))}
+                    />
                   </Form.Item>
                 ) : (
                   <span>{text || '-'}</span>
@@ -5531,9 +5564,16 @@ const Purchase: React.FC = () => {
                   <Form.Item
                     name="qty_per_box"
                     style={{ margin: 0 }}
-                    initialValue={record.qty_per_box || 0}
                   >
-                    <Input size="small" type="number" />
+                    <Input 
+                      size="small" 
+                      type="number" 
+                      value={editingValues.qty_per_box.toString()}
+                      onChange={(e) => setEditingValues(prev => ({
+                        ...prev,
+                        qty_per_box: parseInt(e.target.value) || 0
+                      }))}
+                    />
                   </Form.Item>
                 ) : (
                   <span>{text || '-'}</span>
