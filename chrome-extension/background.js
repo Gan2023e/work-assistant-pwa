@@ -94,6 +94,9 @@ async function startReview(reviewData) {
       // 获取页面源代码
       const pageSource = await getPageSource(tab.id);
       
+      // 从源代码中提取skuMap信息
+      const skuMapInfo = extractSkuMapFromSource(pageSource);
+      
       // 发送源代码到后端
       const saveResult = await saveProductSource({
         productId: product.id,
@@ -112,7 +115,7 @@ async function startReview(reviewData) {
         weblink: product.weblink,
         sourceLength: pageSource.length,
         success: true,
-        pageSource: pageSource,
+        skuMapInfo: skuMapInfo,
         currentIndex: 0,
         totalCount: products.length,
         products: products,
@@ -135,7 +138,7 @@ async function startReview(reviewData) {
         weblink: product.weblink,
         sourceLength: 0,
         success: false,
-        pageSource: '',
+        skuMapInfo: { found: false, message: '获取失败' },
         currentIndex: 0,
         totalCount: products.length,
         products: products,
@@ -181,6 +184,9 @@ async function continueReview({ currentIndex, products, authToken }) {
         // 获取页面源代码
         const pageSource = await getPageSource(tab.id);
 
+        // 从源代码中提取skuMap信息
+        const skuMapInfo = extractSkuMapFromSource(pageSource);
+
         // 发送源代码到后端
         const saveResult = await saveProductSource({
           productId: product.id,
@@ -199,7 +205,7 @@ async function continueReview({ currentIndex, products, authToken }) {
           weblink: product.weblink,
           sourceLength: pageSource.length,
           success: true,
-          pageSource: pageSource,
+          skuMapInfo: skuMapInfo,
           currentIndex: i,
           totalCount: products.length,
           products: products,
@@ -227,7 +233,7 @@ async function continueReview({ currentIndex, products, authToken }) {
           weblink: product.weblink,
           sourceLength: 0,
           success: false,
-          pageSource: '',
+          skuMapInfo: { found: false, message: '获取失败' },
           currentIndex: i,
           totalCount: products.length,
           products: products,
@@ -250,6 +256,122 @@ async function continueReview({ currentIndex, products, authToken }) {
     return results;
   } finally {
     isReviewing = false;
+  }
+}
+
+// 从1688页面源代码中提取SKU映射信息
+function extractSkuMapFromSource(pageSource) {
+  try {
+    const results = {
+      found: false,
+      skuMap: {},
+      rawData: '',
+      message: '未找到1688 SKU映射信息'
+    };
+    
+    // 1688/Alibaba专用的SKU映射模式
+    const patterns = [
+      // 主要的SKU属性映射
+      /(?:var\s+)?skuProps\s*[=:]\s*(\{[^}]+\})/gi,
+      /(?:var\s+)?skuMap\s*[=:]\s*(\{[^}]+\})/gi,
+      
+      // 规格映射
+      /(?:var\s+)?specMap\s*[=:]\s*(\{[^}]+\})/gi,
+      /(?:var\s+)?specProps\s*[=:]\s*(\{[^}]+\})/gi,
+      
+      // 价格相关映射
+      /(?:var\s+)?priceRange\s*[=:]\s*(\{[^}]+\})/gi,
+      /(?:var\s+)?skuPrice\s*[=:]\s*(\{[^}]+\})/gi,
+      
+      // 库存相关映射
+      /(?:var\s+)?inventory\s*[=:]\s*(\{[^}]+\})/gi,
+      /(?:var\s+)?stockMap\s*[=:]\s*(\{[^}]+\})/gi,
+      
+      // 1688特有的产品信息
+      /(?:var\s+)?offerDetail\s*[=:]\s*(\{[^}]+\})/gi,
+      /(?:var\s+)?productDetail\s*[=:]\s*(\{[^}]+\})/gi
+    ];
+    
+    let foundMappings = [];
+    
+    // 遍历1688专用模式进行匹配
+    for (const pattern of patterns) {
+      const matches = [...pageSource.matchAll(pattern)];
+      if (matches.length > 0) {
+        matches.forEach((match, index) => {
+          try {
+            // 尝试解析JSON
+            const jsonStr = match[1];
+            const parsed = JSON.parse(jsonStr);
+            foundMappings.push({
+              type: match[0].match(/(\w+)\s*[=:]/)[1] || 'unknown',
+              data: parsed,
+              raw: jsonStr
+            });
+          } catch (parseError) {
+            // 如果无法解析为JSON，保存原始字符串
+            foundMappings.push({
+              type: match[0].match(/(\w+)\s*[=:]/)[1] || 'unknown',
+              data: match[1],
+              raw: match[1],
+              parseError: true
+            });
+          }
+        });
+      }
+    }
+    
+    // 如果找到了映射数据
+    if (foundMappings.length > 0) {
+      results.found = true;
+      results.skuMap = foundMappings;
+      results.rawData = foundMappings.map(m => `${m.type}: ${m.raw}`).join('\n\n');
+      results.message = `找到 ${foundMappings.length} 个1688 SKU映射对象`;
+    } else {
+      // 尝试更宽松的搜索，查找1688相关的关键词对象
+      const keywords = ['sku', 'spec', 'price', 'inventory', 'stock', 'offer', 'product'];
+      const flexiblePattern = new RegExp(`(?:var\\s+)?(\\w*(?:${keywords.join('|')})\\w*)\\s*[=:]\\s*(\\{[^}]*\\})`, 'gi');
+      
+      const flexibleMatches = [...pageSource.matchAll(flexiblePattern)];
+      if (flexibleMatches.length > 0) {
+        flexibleMatches.forEach((match) => {
+          try {
+            const jsonStr = match[2];
+            const parsed = JSON.parse(jsonStr);
+            foundMappings.push({
+              type: match[1],
+              data: parsed,
+              raw: jsonStr
+            });
+          } catch (parseError) {
+            foundMappings.push({
+              type: match[1],
+              data: match[2],
+              raw: match[2],
+              parseError: true
+            });
+          }
+        });
+        
+        if (foundMappings.length > 0) {
+          results.found = true;
+          results.skuMap = foundMappings;
+          results.rawData = foundMappings.map(m => `${m.type}: ${m.raw}`).join('\n\n');
+          results.message = `找到 ${foundMappings.length} 个可能的1688相关对象`;
+        }
+      }
+    }
+    
+    return results;
+    
+  } catch (error) {
+    console.error('提取1688 SKU映射信息失败:', error);
+    return {
+      found: false,
+      skuMap: {},
+      rawData: '',
+      message: `提取失败: ${error.message}`
+    };
   }
 }
 
@@ -472,7 +594,7 @@ async function getApiBaseUrl() {
 }
 
 // 显示源代码获取结果弹窗
-async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }) {
+async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }) {
   try {
     // 获取当前活动标签页
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -483,7 +605,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
     // 在网页中显示弹窗
     await chrome.scripting.executeScript({
       target: { tabId: currentTab.id },
-      func: ({ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }) => {
+      func: ({ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }) => {
         // 创建弹窗元素
         const modal = document.createElement('div');
         modal.style.cssText = `
@@ -572,7 +694,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
             ` : ''}
           </div>
           
-          ${success && pageSource ? `
+          ${success && skuMapInfo ? `
             <div style="margin-bottom: 16px;">
               <div style="
                 display: flex;
@@ -580,23 +702,25 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 align-items: center;
                 margin-bottom: 8px;
               ">
-                <strong style="font-size: 14px;">网页源代码：</strong>
-                <button id="copySourceCode" style="
-                  background: #52c41a;
-                  color: white;
-                  border: none;
-                  padding: 4px 12px;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-size: 12px;
-                  margin-left: 8px;
-                ">
-                  📋 复制源代码
-                </button>
+                <strong style="font-size: 14px;">SKU映射信息：</strong>
+                ${skuMapInfo.found ? `
+                  <button id="copySkuMap" style="
+                    background: #52c41a;
+                    color: white;
+                    border: none;
+                    padding: 4px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    margin-left: 8px;
+                  ">
+                    📋 复制SKU映射
+                  </button>
+                ` : ''}
               </div>
               <div style="
-                background: #f5f5f5;
-                border: 1px solid #d9d9d9;
+                background: ${skuMapInfo.found ? '#f5f5f5' : '#fff7e6'};
+                border: 1px solid ${skuMapInfo.found ? '#d9d9d9' : '#ffd591'};
                 border-radius: 4px;
                 padding: 12px;
                 max-height: 400px;
@@ -607,7 +731,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 white-space: pre-wrap;
                 word-break: break-all;
               ">
-                ${pageSource}
+                ${skuMapInfo.found ? skuMapInfo.rawData : `⚠️ ${skuMapInfo.message}`}
               </div>
             </div>
           ` : ''}
@@ -644,23 +768,23 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         modal.appendChild(content);
         document.body.appendChild(modal);
         
-        // 绑定复制源代码事件
-        if (success && pageSource) {
-          const copyButton = document.getElementById('copySourceCode');
+        // 绑定复制SKU映射事件
+        if (success && skuMapInfo && skuMapInfo.found) {
+          const copyButton = document.getElementById('copySkuMap');
           if (copyButton) {
             copyButton.addEventListener('click', async () => {
               try {
-                await navigator.clipboard.writeText(pageSource);
+                await navigator.clipboard.writeText(skuMapInfo.rawData);
                 copyButton.textContent = '✅ 已复制';
                 copyButton.style.background = '#52c41a';
                 setTimeout(() => {
-                  copyButton.textContent = '📋 复制源代码';
+                  copyButton.textContent = '📋 复制SKU映射';
                   copyButton.style.background = '#52c41a';
                 }, 2000);
               } catch (err) {
                 // 降级方案
                 const textArea = document.createElement('textarea');
-                textArea.value = pageSource;
+                textArea.value = skuMapInfo.rawData;
                 document.body.appendChild(textArea);
                 textArea.select();
                 document.execCommand('copy');
@@ -669,7 +793,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 copyButton.textContent = '✅ 已复制';
                 copyButton.style.background = '#52c41a';
                 setTimeout(() => {
-                  copyButton.textContent = '📋 复制源代码';
+                  copyButton.textContent = '📋 复制SKU映射';
                   copyButton.style.background = '#52c41a';
                 }, 2000);
               }
@@ -719,7 +843,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         
         // 不再自动关闭，让用户手动关闭
       },
-      args: [{ parentSku, weblink, sourceLength, success, pageSource, currentIndex, totalCount, products, authToken }]
+      args: [{ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }]
     });
     
   } catch (error) {
