@@ -860,15 +860,15 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
               // 关闭当前弹窗
               document.body.removeChild(modal);
               
-              // 发送消息给background script继续审核下一个产品
-              chrome.runtime.sendMessage({
-                type: 'CONTINUE_REVIEW',
+              // 通过postMessage发送消息给content script，然后由content script转发给background script
+              window.postMessage({
+                type: 'CONTINUE_REVIEW_REQUEST',
                 data: {
                   currentIndex: currentIndex + 1,
                   products: products,
                   authToken: authToken
                 }
-              });
+              }, '*');
             });
           }
         }

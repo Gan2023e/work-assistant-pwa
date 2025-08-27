@@ -723,6 +723,18 @@
     if (message.type === 'START_PRODUCT_REVIEW') {
       handleProductReviewMessage(message);
     }
+    
+    if (message.type === 'CONTINUE_REVIEW_REQUEST') {
+      // 转发继续审核请求给background script
+      chrome.runtime.sendMessage({
+        type: 'CONTINUE_REVIEW',
+        data: message.data
+      }, (response) => {
+        if (response && !response.success) {
+          showMessage('继续审核失败: ' + (response.error || '未知错误'), 'error');
+        }
+      });
+    }
   });
   
   // 处理产品审核消息
