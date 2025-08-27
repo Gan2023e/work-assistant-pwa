@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "产品审核助手",
   "version": "1.0.0",
-  "description": "自动获取1688产品链接SKU映射信息，用于新品审核",
+  "description": "自动获取产品链接页面源代码和skuMap信息，用于新品审核",
   "permissions": [
     "activeTab",
     "scripting",

@@ -116,6 +116,7 @@ async function startReview(reviewData) {
         sourceLength: pageSource.length,
         success: true,
         skuMapInfo: skuMapInfo,
+        pageSource: pageSource,
         currentIndex: 0,
         totalCount: products.length,
         products: products,
@@ -139,6 +140,7 @@ async function startReview(reviewData) {
         sourceLength: 0,
         success: false,
         skuMapInfo: { found: false, message: '获取失败' },
+        pageSource: '',
         currentIndex: 0,
         totalCount: products.length,
         products: products,
@@ -206,6 +208,7 @@ async function continueReview({ currentIndex, products, authToken }) {
           sourceLength: pageSource.length,
           success: true,
           skuMapInfo: skuMapInfo,
+          pageSource: pageSource,
           currentIndex: i,
           totalCount: products.length,
           products: products,
@@ -234,6 +237,7 @@ async function continueReview({ currentIndex, products, authToken }) {
           sourceLength: 0,
           success: false,
           skuMapInfo: { found: false, message: '获取失败' },
+          pageSource: '',
           currentIndex: i,
           totalCount: products.length,
           products: products,
@@ -259,61 +263,63 @@ async function continueReview({ currentIndex, products, authToken }) {
   }
 }
 
-// 从1688页面源代码中提取SKU映射信息
+// 从页面源代码中专门提取skuMap信息
 function extractSkuMapFromSource(pageSource) {
   try {
     const results = {
       found: false,
       skuMap: {},
       rawData: '',
-      message: '未找到1688 SKU映射信息'
+      message: '未找到skuMap信息'
     };
     
-    // 1688/Alibaba专用的SKU映射模式
-    const patterns = [
-      // 主要的SKU属性映射
-      /(?:var\s+)?skuProps\s*[=:]\s*(\{[^}]+\})/gi,
-      /(?:var\s+)?skuMap\s*[=:]\s*(\{[^}]+\})/gi,
-      
-      // 规格映射
-      /(?:var\s+)?specMap\s*[=:]\s*(\{[^}]+\})/gi,
-      /(?:var\s+)?specProps\s*[=:]\s*(\{[^}]+\})/gi,
-      
-      // 价格相关映射
-      /(?:var\s+)?priceRange\s*[=:]\s*(\{[^}]+\})/gi,
-      /(?:var\s+)?skuPrice\s*[=:]\s*(\{[^}]+\})/gi,
-      
-      // 库存相关映射
-      /(?:var\s+)?inventory\s*[=:]\s*(\{[^}]+\})/gi,
-      /(?:var\s+)?stockMap\s*[=:]\s*(\{[^}]+\})/gi,
-      
-      // 1688特有的产品信息
-      /(?:var\s+)?offerDetail\s*[=:]\s*(\{[^}]+\})/gi,
-      /(?:var\s+)?productDetail\s*[=:]\s*(\{[^}]+\})/gi
+    // 专门查找skuMap变量的模式
+    const skuMapPatterns = [
+      // 各种可能的skuMap声明方式
+      /(?:var\s+|let\s+|const\s+)?skuMap\s*[=:]\s*(\{[^}]*\})/gi,
+      /(?:var\s+|let\s+|const\s+)?skuMap\s*[=:]\s*(\{[\s\S]*?\})/gi,
+      /(?:window\.|this\.)?skuMap\s*[=:]\s*(\{[^}]*\})/gi,
+      /(?:window\.|this\.)?skuMap\s*[=:]\s*(\{[\s\S]*?\})/gi,
+      // 对象属性中的skuMap
+      /["']?skuMap["']?\s*[=:]\s*(\{[^}]*\})/gi,
+      /["']?skuMap["']?\s*[=:]\s*(\{[\s\S]*?\})/gi
     ];
     
-    let foundMappings = [];
+    let foundSkuMaps = [];
     
-    // 遍历1688专用模式进行匹配
-    for (const pattern of patterns) {
+    // 遍历所有skuMap模式进行匹配
+    for (const pattern of skuMapPatterns) {
       const matches = [...pageSource.matchAll(pattern)];
       if (matches.length > 0) {
         matches.forEach((match, index) => {
           try {
             // 尝试解析JSON
             const jsonStr = match[1];
-            const parsed = JSON.parse(jsonStr);
-            foundMappings.push({
-              type: match[0].match(/(\w+)\s*[=:]/)[1] || 'unknown',
+            let parsed;
+            try {
+              parsed = JSON.parse(jsonStr);
+            } catch (jsonError) {
+              // 如果JSON解析失败，尝试使用eval（仅用于验证格式）
+              try {
+                parsed = eval('(' + jsonStr + ')');
+              } catch (evalError) {
+                parsed = jsonStr; // 保留原始字符串
+              }
+            }
+            
+            foundSkuMaps.push({
+              type: 'skuMap',
               data: parsed,
-              raw: jsonStr
+              raw: jsonStr,
+              fullMatch: match[0]
             });
           } catch (parseError) {
-            // 如果无法解析为JSON，保存原始字符串
-            foundMappings.push({
-              type: match[0].match(/(\w+)\s*[=:]/)[1] || 'unknown',
+            // 如果无法解析，保存原始字符串
+            foundSkuMaps.push({
+              type: 'skuMap',
               data: match[1],
               raw: match[1],
+              fullMatch: match[0],
               parseError: true
             });
           }
@@ -321,51 +327,23 @@ function extractSkuMapFromSource(pageSource) {
       }
     }
     
-    // 如果找到了映射数据
-    if (foundMappings.length > 0) {
+    // 如果找到了skuMap数据
+    if (foundSkuMaps.length > 0) {
       results.found = true;
-      results.skuMap = foundMappings;
-      results.rawData = foundMappings.map(m => `${m.type}: ${m.raw}`).join('\n\n');
-      results.message = `找到 ${foundMappings.length} 个1688 SKU映射对象`;
+      results.skuMap = foundSkuMaps;
+      results.rawData = foundSkuMaps.map((m, index) => {
+        const header = foundSkuMaps.length > 1 ? `skuMap ${index + 1}:\n` : 'skuMap:\n';
+        return header + m.raw;
+      }).join('\n\n');
+      results.message = `找到 ${foundSkuMaps.length} 个skuMap对象`;
     } else {
-      // 尝试更宽松的搜索，查找1688相关的关键词对象
-      const keywords = ['sku', 'spec', 'price', 'inventory', 'stock', 'offer', 'product'];
-      const flexiblePattern = new RegExp(`(?:var\\s+)?(\\w*(?:${keywords.join('|')})\\w*)\\s*[=:]\\s*(\\{[^}]*\\})`, 'gi');
-      
-      const flexibleMatches = [...pageSource.matchAll(flexiblePattern)];
-      if (flexibleMatches.length > 0) {
-        flexibleMatches.forEach((match) => {
-          try {
-            const jsonStr = match[2];
-            const parsed = JSON.parse(jsonStr);
-            foundMappings.push({
-              type: match[1],
-              data: parsed,
-              raw: jsonStr
-            });
-          } catch (parseError) {
-            foundMappings.push({
-              type: match[1],
-              data: match[2],
-              raw: match[2],
-              parseError: true
-            });
-          }
-        });
-        
-        if (foundMappings.length > 0) {
-          results.found = true;
-          results.skuMap = foundMappings;
-          results.rawData = foundMappings.map(m => `${m.type}: ${m.raw}`).join('\n\n');
-          results.message = `找到 ${foundMappings.length} 个可能的1688相关对象`;
-        }
-      }
+      results.message = '未在页面源代码中找到skuMap变量';
     }
     
     return results;
     
   } catch (error) {
-    console.error('提取1688 SKU映射信息失败:', error);
+    console.error('提取skuMap信息失败:', error);
     return {
       found: false,
       skuMap: {},
@@ -594,7 +572,7 @@ async function getApiBaseUrl() {
 }
 
 // 显示源代码获取结果弹窗
-async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }) {
+async function showSourceCodeResult({ parentSku, weblink, sourceLength, success, skuMapInfo, pageSource, currentIndex, totalCount, products, authToken }) {
   try {
     // 获取当前活动标签页
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -605,7 +583,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
     // 在网页中显示弹窗
     await chrome.scripting.executeScript({
       target: { tabId: currentTab.id },
-      func: ({ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }) => {
+      func: ({ parentSku, weblink, sourceLength, success, skuMapInfo, pageSource, currentIndex, totalCount, products, authToken }) => {
         // 创建弹窗元素
         const modal = document.createElement('div');
         modal.style.cssText = `
@@ -702,7 +680,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 align-items: center;
                 margin-bottom: 8px;
               ">
-                <strong style="font-size: 14px;">SKU映射信息：</strong>
+                <strong style="font-size: 14px;">skuMap信息：</strong>
                 ${skuMapInfo.found ? `
                   <button id="copySkuMap" style="
                     background: #52c41a;
@@ -714,7 +692,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                     font-size: 12px;
                     margin-left: 8px;
                   ">
-                    📋 复制SKU映射
+                    📋 复制skuMap
                   </button>
                 ` : ''}
               </div>
@@ -723,7 +701,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 border: 1px solid ${skuMapInfo.found ? '#d9d9d9' : '#ffd591'};
                 border-radius: 4px;
                 padding: 12px;
-                max-height: 400px;
+                max-height: 200px;
                 overflow-y: auto;
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
@@ -732,6 +710,46 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 word-break: break-all;
               ">
                 ${skuMapInfo.found ? skuMapInfo.rawData : `⚠️ ${skuMapInfo.message}`}
+              </div>
+            </div>
+          ` : ''}
+          
+          ${success && pageSource ? `
+            <div style="margin-bottom: 16px;">
+              <div style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+              ">
+                <strong style="font-size: 14px;">网页源代码：</strong>
+                <button id="copySourceCode" style="
+                  background: #1890ff;
+                  color: white;
+                  border: none;
+                  padding: 4px 12px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  margin-left: 8px;
+                ">
+                  📋 复制源代码
+                </button>
+              </div>
+              <div style="
+                background: #f5f5f5;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                padding: 12px;
+                max-height: 300px;
+                overflow-y: auto;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 1.4;
+                white-space: pre-wrap;
+                word-break: break-all;
+              ">
+                ${pageSource}
               </div>
             </div>
           ` : ''}
@@ -768,18 +786,18 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         modal.appendChild(content);
         document.body.appendChild(modal);
         
-        // 绑定复制SKU映射事件
+        // 绑定复制skuMap事件
         if (success && skuMapInfo && skuMapInfo.found) {
-          const copyButton = document.getElementById('copySkuMap');
-          if (copyButton) {
-            copyButton.addEventListener('click', async () => {
+          const copySkuMapButton = document.getElementById('copySkuMap');
+          if (copySkuMapButton) {
+            copySkuMapButton.addEventListener('click', async () => {
               try {
                 await navigator.clipboard.writeText(skuMapInfo.rawData);
-                copyButton.textContent = '✅ 已复制';
-                copyButton.style.background = '#52c41a';
+                copySkuMapButton.textContent = '✅ 已复制';
+                copySkuMapButton.style.background = '#52c41a';
                 setTimeout(() => {
-                  copyButton.textContent = '📋 复制SKU映射';
-                  copyButton.style.background = '#52c41a';
+                  copySkuMapButton.textContent = '📋 复制skuMap';
+                  copySkuMapButton.style.background = '#52c41a';
                 }, 2000);
               } catch (err) {
                 // 降级方案
@@ -790,11 +808,44 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
                 
-                copyButton.textContent = '✅ 已复制';
-                copyButton.style.background = '#52c41a';
+                copySkuMapButton.textContent = '✅ 已复制';
+                copySkuMapButton.style.background = '#52c41a';
                 setTimeout(() => {
-                  copyButton.textContent = '📋 复制SKU映射';
-                  copyButton.style.background = '#52c41a';
+                  copySkuMapButton.textContent = '📋 复制skuMap';
+                  copySkuMapButton.style.background = '#52c41a';
+                }, 2000);
+              }
+            });
+          }
+        }
+        
+        // 绑定复制源代码事件
+        if (success && pageSource) {
+          const copySourceCodeButton = document.getElementById('copySourceCode');
+          if (copySourceCodeButton) {
+            copySourceCodeButton.addEventListener('click', async () => {
+              try {
+                await navigator.clipboard.writeText(pageSource);
+                copySourceCodeButton.textContent = '✅ 已复制';
+                copySourceCodeButton.style.background = '#1890ff';
+                setTimeout(() => {
+                  copySourceCodeButton.textContent = '📋 复制源代码';
+                  copySourceCodeButton.style.background = '#1890ff';
+                }, 2000);
+              } catch (err) {
+                // 降级方案
+                const textArea = document.createElement('textarea');
+                textArea.value = pageSource;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copySourceCodeButton.textContent = '✅ 已复制';
+                copySourceCodeButton.style.background = '#1890ff';
+                setTimeout(() => {
+                  copySourceCodeButton.textContent = '📋 复制源代码';
+                  copySourceCodeButton.style.background = '#1890ff';
                 }, 2000);
               }
             });
@@ -843,7 +894,7 @@ async function showSourceCodeResult({ parentSku, weblink, sourceLength, success,
         
         // 不再自动关闭，让用户手动关闭
       },
-      args: [{ parentSku, weblink, sourceLength, success, skuMapInfo, currentIndex, totalCount, products, authToken }]
+      args: [{ parentSku, weblink, sourceLength, success, skuMapInfo, pageSource, currentIndex, totalCount, products, authToken }]
     });
     
   } catch (error) {
