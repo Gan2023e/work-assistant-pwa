@@ -4239,14 +4239,19 @@ const Purchase: React.FC = () => {
 
           <div style={{ marginBottom: '16px' }}>
             <Upload.Dragger
-              customRequest={({ file, fileList }) => {
-                // 如果是单文件，使用单文件上传逻辑
-                if (Array.isArray(fileList) && fileList.length === 1) {
-                  handleCpcFileUpload(file as File);
-                } else {
-                  // 如果是多文件，使用批量上传逻辑
-                  const files = Array.isArray(fileList) ? fileList.map(f => f as File) : [file as File];
-                  handleMultipleFileUpload(files);
+              customRequest={({ file }) => {
+                // 直接使用单文件上传逻辑
+                handleCpcFileUpload(file as File);
+              }}
+              onChange={(info) => {
+                // 处理多文件上传的情况
+                if (info.fileList && info.fileList.length > 1) {
+                  const files = info.fileList.map(f => f.originFileObj as File).filter(Boolean);
+                  if (files.length > 1) {
+                    // 清空fileList，避免重复处理
+                    info.fileList.length = 0;
+                    handleMultipleFileUpload(files);
+                  }
                 }
               }}
               multiple
