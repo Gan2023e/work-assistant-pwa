@@ -4315,12 +4315,11 @@ const Purchase: React.FC = () => {
                     icon={<DownloadOutlined />}
                     onClick={() => {
                       if (currentRecord && file.uid) {
-                        // 使用后端代理URL下载文件，避免OSS权限问题
-                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download`;
+                        // 使用后端代理URL下载文件，添加download=true参数触发下载
+                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download?download=true`;
                         const link = document.createElement('a');
                         link.href = proxyUrl;
                         link.download = file.name;
-                        link.target = '_blank';
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);

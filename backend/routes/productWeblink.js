@@ -1497,9 +1497,14 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
       const encodedFileName = encodeURIComponent(safeFileName);
       
       // 设置安全的响应头
+      // 检查是否为下载请求（通过查询参数判断）
+      const isDownload = req.query.download === 'true';
+      
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename*=UTF-8''${encodedFileName}`,
+        'Content-Disposition': isDownload 
+          ? `attachment; filename*=UTF-8''${encodedFileName}`
+          : `inline; filename*=UTF-8''${encodedFileName}`,
         'Content-Length': result.content.length.toString(),
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
