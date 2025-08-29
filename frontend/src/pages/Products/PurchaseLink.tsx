@@ -28,7 +28,8 @@ import {
   Tabs,
   Switch,
   Radio,
-  Steps
+  Steps,
+  Dropdown
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -51,7 +52,8 @@ import {
   GlobalOutlined,
   PlayCircleOutlined,
   EditOutlined,
-  EyeOutlined
+  EyeOutlined,
+  DownOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -1824,11 +1826,12 @@ const Purchase: React.FC = () => {
         }
 
         // 有CPC文件时显示文件信息
-        const firstFile = cpcFiles[0];
         return (
           <div>
             <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-              <span style={{ fontSize: '12px' }}>{firstFile?.name || 'CPC文件'}</span>
+              <span style={{ fontSize: '12px' }}>
+                {fileCount === 1 ? (cpcFiles[0]?.name || 'CPC文件') : 'CPC文件'}
+              </span>
               {fileCount > 1 && (
                 <Badge 
                   count={fileCount} 
@@ -1841,41 +1844,135 @@ const Purchase: React.FC = () => {
               共 {fileCount} 个文件
             </div>
             <Space size="small" wrap>
-              <Button
-                type="link"
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() => {
-                  if (firstFile?.uid) {
-                    const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${firstFile.uid}/view`;
-                    window.open(viewUrl, '_blank');
-                  }
-                }}
-                style={{ padding: '0 4px', fontSize: '10px' }}
-                title="查看第一个文件"
-              >
-                查看
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                icon={<DownloadOutlined />}
-                onClick={() => {
-                  if (firstFile?.url && firstFile?.name) {
-                    const link = document.createElement('a');
-                    link.href = firstFile.url;
-                    link.download = firstFile.name;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                  }
-                }}
-                style={{ padding: '0 4px', fontSize: '10px' }}
-                title="下载第一个文件"
-              >
-                下载
-              </Button>
+              {fileCount === 1 ? (
+                // 单个文件时，直接显示查看和下载按钮
+                <>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => {
+                      if (cpcFiles[0]?.uid) {
+                        const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${cpcFiles[0].uid}/view`;
+                        window.open(viewUrl, '_blank');
+                      }
+                    }}
+                    style={{ padding: '0 4px', fontSize: '10px' }}
+                    title="查看文件"
+                  >
+                    查看
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={() => {
+                      if (cpcFiles[0]?.url && cpcFiles[0]?.name) {
+                        const link = document.createElement('a');
+                        link.href = cpcFiles[0].url;
+                        link.download = cpcFiles[0].name;
+                        link.target = '_blank';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }
+                    }}
+                    style={{ padding: '0 4px', fontSize: '10px' }}
+                    title="下载文件"
+                  >
+                    下载
+                  </Button>
+                </>
+              ) : (
+                // 多个文件时，使用下拉菜单
+                <>
+                  <Dropdown
+                    menu={{
+                      items: cpcFiles.map((file, index) => ({
+                        key: file.uid,
+                        label: (
+                          <div style={{ maxWidth: '200px' }}>
+                            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
+                              文件 {index + 1}
+                            </div>
+                            <div style={{ 
+                              fontSize: '11px', 
+                              color: '#666',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {file.name}
+                            </div>
+                          </div>
+                        ),
+                        onClick: () => {
+                          if (file.uid) {
+                            const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${file.uid}/view`;
+                            window.open(viewUrl, '_blank');
+                          }
+                        }
+                      }))
+                    }}
+                    trigger={['click']}
+                  >
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EyeOutlined />}
+                      style={{ padding: '0 4px', fontSize: '10px' }}
+                      title="选择文件查看"
+                    >
+                      查看 <DownOutlined style={{ fontSize: '8px', marginLeft: '2px' }} />
+                    </Button>
+                  </Dropdown>
+                  <Dropdown
+                    menu={{
+                      items: cpcFiles.map((file, index) => ({
+                        key: file.uid,
+                        label: (
+                          <div style={{ maxWidth: '200px' }}>
+                            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
+                              文件 {index + 1}
+                            </div>
+                            <div style={{ 
+                              fontSize: '11px', 
+                              color: '#666',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {file.name}
+                            </div>
+                          </div>
+                        ),
+                        onClick: () => {
+                          if (file.url && file.name) {
+                            const link = document.createElement('a');
+                            link.href = file.url;
+                            link.download = file.name;
+                            link.target = '_blank';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }
+                        }
+                      }))
+                    }}
+                    trigger={['click']}
+                  >
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      style={{ padding: '0 4px', fontSize: '10px' }}
+                      title="选择文件下载"
+                    >
+                      下载 <DownOutlined style={{ fontSize: '8px', marginLeft: '2px' }} />
+                    </Button>
+                  </Dropdown>
+                </>
+              )}
               <Button
                 type="link"
                 size="small"
