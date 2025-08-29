@@ -203,7 +203,8 @@ const Purchase: React.FC = () => {
     cpcTestPending: 0,
     cpcTesting: 0,
     cpcSampleSent: 0,
-    cpcPendingListing: 0
+    cpcPendingListing: 0,
+    canOrganizeMaterials: 0 // 可整理资料数量
   });
   
   // 生成其他站点资料表相关状态
@@ -328,7 +329,18 @@ const Purchase: React.FC = () => {
       const result = await res.json();
       console.log('🔍 获取到的统计数据:', result);
       
-      setStatistics(result.statistics);
+      // 计算可整理资料数量（待P图 + 待上传）
+      const waitingPImageCount = result.statistics.waitingPImage || 0;
+      const waitingUploadCount = result.statistics.waitingUpload || 0;
+      const canOrganizeMaterialsCount = waitingPImageCount + waitingUploadCount;
+      
+      // 更新统计数据，包含可整理资料数量
+      const updatedStatistics = {
+        ...result.statistics,
+        canOrganizeMaterials: canOrganizeMaterialsCount
+      };
+      
+      setStatistics(updatedStatistics);
       setAllDataStats({
         statusStats: result.statusStats || [],
         cpcStatusStats: result.cpcStatusStats || [],
@@ -343,6 +355,12 @@ const Purchase: React.FC = () => {
       } else {
         console.warn('⚠️  CPC提交情况数据为空');
       }
+      
+      console.log('📋 可整理资料统计:', {
+        waitingPImage: waitingPImageCount,
+        waitingUpload: waitingUploadCount,
+        total: canOrganizeMaterialsCount
+      });
     } catch (e) {
       console.error('获取统计数据失败:', e);
     }
@@ -534,6 +552,49 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('筛选CPC待上架产品失败:', e);
       message.error('筛选CPC待上架产品失败');
+    }
+  };
+
+  // 点击可整理资料卡片的特殊处理
+  const handleCanOrganizeMaterialsClick = async () => {
+    try {
+      // 构建查询条件：状态为"待P图"或"待上传"
+      const conditions = {
+        status_in: ['待P图', '待上传'] // 包含多个状态值
+      };
+
+      // 调用后端API获取筛选数据
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-by-status-in`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(conditions),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新筛选状态以反映当前筛选条件
+      setFilters({ 
+        ...filters, 
+        status: '待P图,待上传', // 显示为多个状态
+        cpc_status: '',
+        cpc_submit: '',
+        seller_name: '',
+        dateRange: null
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条可整理资料记录`);
+    } catch (e) {
+      console.error('筛选可整理资料失败:', e);
+      message.error('筛选可整理资料失败');
     }
   };
 
@@ -3517,6 +3578,21 @@ const Purchase: React.FC = () => {
                 value={statistics.waitingUpload}
                 prefix={<CloudUploadOutlined />}
                 valueStyle={{ color: '#1890ff', fontSize: '16px' }}
+              />
+            </Card>
+          </Col>
+          <Col span={3}>
+            <Card 
+              size="small"
+              hoverable 
+              onClick={handleCanOrganizeMaterialsClick}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
+            >
+              <Statistic
+                title="可整理资料"
+                value={statistics.canOrganizeMaterials}
+                prefix={<FilePdfOutlined />}
+                valueStyle={{ color: '#52c41a', fontSize: '16px' }}
               />
             </Card>
           </Col>

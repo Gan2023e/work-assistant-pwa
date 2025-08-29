@@ -969,6 +969,61 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
   }
 });
 
+// 按多个状态值筛选接口（用于可整理资料筛选）
+router.post('/filter-by-status-in', async (req, res) => {
+  try {
+    const { status_in } = req.body;
+    
+    if (!status_in || !Array.isArray(status_in) || status_in.length === 0) {
+      return res.status(400).json({ 
+        message: '请提供有效的状态数组' 
+      });
+    }
+
+    const result = await ProductWeblink.findAll({
+      where: {
+        status: {
+          [Op.in]: status_in
+        }
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name'
+      ],
+      order: [['update_time', 'DESC']]
+    });
+
+    console.log(`📋 按状态筛选查询结果: ${status_in.join(', ')}，共 ${result.length} 条记录`);
+
+    res.json({ 
+      code: 0,
+      message: '筛选成功',
+      data: result 
+    });
+  } catch (err) {
+    console.error('按状态筛选失败:', err);
+    res.status(500).json({ 
+      code: 1,
+      message: '筛选失败: ' + (err.message || '未知错误'),
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
 // 获取全部数据统计信息
 router.get('/statistics', async (req, res) => {
   try {
