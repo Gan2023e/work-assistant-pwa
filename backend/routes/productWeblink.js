@@ -969,6 +969,43 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
   }
 });
 
+// 可整理资料产品筛选接口（待P图和待上传）
+router.post('/filter-can-organize-data', async (req, res) => {
+  try {
+    const result = await ProductWeblink.findAll({
+      where: {
+        status: {
+          [Op.in]: ['待P图', '待上传']
+        }
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name'
+      ],
+      order: [['update_time', 'DESC']]
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '筛选可整理资料产品失败' });
+  }
+});
+
 // 获取全部数据统计信息
 router.get('/statistics', async (req, res) => {
   try {
@@ -1086,12 +1123,22 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
+    // 计算可整理资料的产品数量（待P图和待上传）
+    const canOrganizeDataCount = await ProductWeblink.count({
+      where: {
+        status: {
+          [Op.in]: ['待P图', '待上传']
+        }
+      }
+    });
+
     res.json({
       statistics: {
         newProductFirstReview: newProductFirstReviewCount,
         infringementSecondReview: infringementSecondReviewCount,
         waitingPImage: waitingPImageCount,
         waitingUpload: waitingUploadCount,
+        canOrganizeData: canOrganizeDataCount,
         cpcTestPending: cpcTestPendingCount,
         cpcTesting: cpcTestingCount,
         cpcSampleSent: cpcSampleSentCount,

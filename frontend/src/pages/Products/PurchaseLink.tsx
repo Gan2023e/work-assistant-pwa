@@ -199,6 +199,7 @@ const Purchase: React.FC = () => {
     infringementSecondReview: 0,
     waitingPImage: 0,
     waitingUpload: 0,
+    canOrganizeData: 0,
     cpcTestPending: 0,
     cpcTesting: 0,
     cpcSampleSent: 0,
@@ -533,6 +534,44 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('筛选CPC待上架产品失败:', e);
       message.error('筛选CPC待上架产品失败');
+    }
+  };
+
+  // 点击可整理资料卡片的处理
+  const handleCanOrganizeDataClick = async () => {
+    try {
+      // 调用后端API获取可整理资料的记录
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-can-organize-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新筛选状态以反映当前筛选条件
+      setFilters({ 
+        ...filters, 
+        status: '', // 清除单一状态筛选，因为这里是多状态
+        cpc_status: '',
+        cpc_submit: '',
+        seller_name: '',
+        dateRange: null
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条可整理资料记录（状态为"待P图"和"待上传"）`);
+    } catch (e) {
+      console.error('筛选可整理资料失败:', e);
+      message.error('筛选可整理资料失败');
     }
   };
 
@@ -3439,6 +3478,23 @@ const Purchase: React.FC = () => {
               />
             </Card>
           </Col>
+          <Col span={3}>
+            <Card 
+              size="small"
+              hoverable 
+              onClick={handleCanOrganizeDataClick}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
+            >
+              <Statistic
+                title="可整理资料"
+                value={statistics.canOrganizeData}
+                prefix={<FileExcelOutlined />}
+                valueStyle={{ color: '#722ed1', fontSize: '16px' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+        <Row gutter={6} style={{ marginTop: '8px' }}>
           <Col span={3}>
             <Card 
               size="small"
