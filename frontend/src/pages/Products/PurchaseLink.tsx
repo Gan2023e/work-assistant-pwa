@@ -50,7 +50,8 @@ import {
   CloseCircleOutlined,
   GlobalOutlined,
   PlayCircleOutlined,
-  EditOutlined
+  EditOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -1730,22 +1731,102 @@ const Purchase: React.FC = () => {
       dataIndex: 'cpc_files', 
       key: 'cpc_files', 
       align: 'center',
-      width: 120,
+      width: 200,
       render: (text: string, record: ProductRecord) => {
         const fileCount = getCpcFileCount(record);
-        return (
-          <Space>
-            <Badge count={fileCount} overflowCount={99} size="small">
+        let cpcFiles: CpcFile[] = [];
+        
+        try {
+          if (record.cpc_files) {
+            cpcFiles = JSON.parse(record.cpc_files);
+          }
+        } catch (e) {
+          console.error('解析CPC文件数据失败:', e);
+        }
+
+        if (fileCount === 0) {
+          // 没有CPC文件时显示上传按钮
+          return (
+            <div>
+              <div style={{ color: '#999', fontSize: '12px', marginBottom: '4px' }}>暂无文件</div>
               <Button
                 type="primary"
                 size="small"
+                icon={<UploadOutlined />}
+                onClick={() => handleCpcFileManage(record)}
+                style={{ fontSize: '12px' }}
+              >
+                上传CPC文件
+              </Button>
+            </div>
+          );
+        }
+
+        // 有CPC文件时显示文件信息
+        const firstFile = cpcFiles[0];
+        return (
+          <div>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+              <span style={{ fontSize: '12px' }}>{firstFile?.name || 'CPC文件'}</span>
+              {fileCount > 1 && (
+                <Badge 
+                  count={fileCount} 
+                  size="small" 
+                  style={{ marginLeft: '8px' }}
+                />
+              )}
+            </div>
+            <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+              共 {fileCount} 个文件
+            </div>
+            <Space size="small" wrap>
+              <Button
+                type="link"
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={() => {
+                  if (firstFile?.uid) {
+                    const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${firstFile.uid}/view`;
+                    window.open(viewUrl, '_blank');
+                  }
+                }}
+                style={{ padding: '0 4px', fontSize: '10px' }}
+                title="查看第一个文件"
+              >
+                查看
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                icon={<DownloadOutlined />}
+                onClick={() => {
+                  if (firstFile?.url && firstFile?.name) {
+                    const link = document.createElement('a');
+                    link.href = firstFile.url;
+                    link.download = firstFile.name;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }
+                }}
+                style={{ padding: '0 4px', fontSize: '10px' }}
+                title="下载第一个文件"
+              >
+                下载
+              </Button>
+              <Button
+                type="link"
+                size="small"
                 icon={<FilePdfOutlined />}
                 onClick={() => handleCpcFileManage(record)}
+                style={{ padding: '0 4px', fontSize: '10px' }}
+                title="管理所有文件"
               >
-                CPC文件
+                管理
               </Button>
-            </Badge>
-          </Space>
+            </Space>
+          </div>
         );
       }
     },
@@ -4294,8 +4375,13 @@ const Purchase: React.FC = () => {
                 actions={[
                   <Button
                     type="link"
-                    icon={<SearchOutlined />}
-                    onClick={() => window.open(file.url, '_blank')}
+                    icon={<EyeOutlined />}
+                    onClick={() => {
+                      if (currentRecord && file.uid) {
+                        const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${currentRecord.id}/${file.uid}/view`;
+                        window.open(viewUrl, '_blank');
+                      }
+                    }}
                     title="在新标签页查看文件"
                   >
                     查看
