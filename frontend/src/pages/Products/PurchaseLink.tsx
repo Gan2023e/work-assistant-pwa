@@ -4239,17 +4239,15 @@ const Purchase: React.FC = () => {
 
           <div style={{ marginBottom: '16px' }}>
             <Upload.Dragger
-              beforeUpload={(file, fileList) => {
-                // 如果是单文件，使用原有逻辑
-                if (fileList.length === 1) {
-                  handleCpcFileUpload(file);
-                  return false; // 阻止默认上传，避免重复上传
+              customRequest={({ file, fileList }) => {
+                // 如果是单文件，使用单文件上传逻辑
+                if (Array.isArray(fileList) && fileList.length === 1) {
+                  handleCpcFileUpload(file as File);
+                } else {
+                  // 如果是多文件，使用批量上传逻辑
+                  const files = Array.isArray(fileList) ? fileList.map(f => f as File) : [file as File];
+                  handleMultipleFileUpload(files);
                 }
-                
-                // 如果是多文件，使用批量上传逻辑
-                const files = Array.from(fileList);
-                handleMultipleFileUpload(files);
-                return false; // 阻止默认上传
               }}
               multiple
               showUploadList={false}
