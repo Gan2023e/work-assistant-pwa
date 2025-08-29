@@ -3417,8 +3417,8 @@ const Purchase: React.FC = () => {
     <div style={{ padding: '16px' }}>
             {/* 统计卡片区域 */}
       <div style={{ marginBottom: '12px' }}>
-        <Row gutter={6} style={{ marginBottom: '8px' }}>
-          <Col span={3}>
+        <Row gutter={4} style={{ marginBottom: '8px' }}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3429,11 +3429,11 @@ const Purchase: React.FC = () => {
                 title="新品一审"
                 value={statistics.newProductFirstReview}
                 prefix={<PlusOutlined />}
-                valueStyle={{ color: '#1890ff', fontSize: '16px' }}
+                valueStyle={{ color: '#1890ff', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3444,11 +3444,11 @@ const Purchase: React.FC = () => {
                 title="侵权二审"
                 value={statistics.infringementSecondReview}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#fa541c', fontSize: '16px' }}
+                valueStyle={{ color: '#fa541c', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3459,11 +3459,11 @@ const Purchase: React.FC = () => {
                 title="待P图"
                 value={statistics.waitingPImage}
                 prefix={<CameraOutlined />}
-                valueStyle={{ color: '#cf1322', fontSize: '16px' }}
+                valueStyle={{ color: '#cf1322', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3474,11 +3474,11 @@ const Purchase: React.FC = () => {
                 title="待上传"
                 value={statistics.waitingUpload}
                 prefix={<CloudUploadOutlined />}
-                valueStyle={{ color: '#1890ff', fontSize: '16px' }}
+                valueStyle={{ color: '#1890ff', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3489,13 +3489,11 @@ const Purchase: React.FC = () => {
                 title="可整理资料"
                 value={statistics.canOrganizeData}
                 prefix={<FileExcelOutlined />}
-                valueStyle={{ color: '#722ed1', fontSize: '16px' }}
+                valueStyle={{ color: '#722ed1', fontSize: '14px' }}
               />
             </Card>
           </Col>
-        </Row>
-        <Row gutter={6} style={{ marginTop: '8px' }}>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3506,11 +3504,11 @@ const Purchase: React.FC = () => {
                 title="CPC测试待审核"
                 value={statistics.cpcTestPending}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#fa8c16', fontSize: '16px' }}
+                valueStyle={{ color: '#fa8c16', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3521,11 +3519,11 @@ const Purchase: React.FC = () => {
                 title="CPC检测中"
                 value={statistics.cpcTesting}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#13c2c2', fontSize: '16px' }}
+                valueStyle={{ color: '#13c2c2', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3536,11 +3534,11 @@ const Purchase: React.FC = () => {
                 title="CPC已发样品"
                 value={statistics.cpcSampleSent}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#52c41a', fontSize: '16px' }}
+                valueStyle={{ color: '#52c41a', fontSize: '14px' }}
               />
             </Card>
           </Col>
-          <Col span={3}>
+          <Col span={2}>
             <Card 
               size="small"
               hoverable 
@@ -3551,7 +3549,7 @@ const Purchase: React.FC = () => {
                 title="CPC待上架产品"
                 value={statistics.cpcPendingListing}
                 prefix={<SearchOutlined />}
-                valueStyle={{ color: '#722ed1', fontSize: '16px' }}
+                valueStyle={{ color: '#722ed1', fontSize: '14px' }}
               />
             </Card>
           </Col>
