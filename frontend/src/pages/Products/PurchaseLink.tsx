@@ -4242,7 +4242,8 @@ const Purchase: React.FC = () => {
               beforeUpload={(file, fileList) => {
                 // 如果是单文件，使用原有逻辑
                 if (fileList.length === 1) {
-                  return handleCpcFileUpload(file);
+                  handleCpcFileUpload(file);
+                  return false; // 阻止默认上传，避免重复上传
                 }
                 
                 // 如果是多文件，使用批量上传逻辑
