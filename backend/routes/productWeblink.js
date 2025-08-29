@@ -969,61 +969,6 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
   }
 });
 
-// 按多个状态值筛选接口（用于可整理资料筛选）
-router.post('/filter-by-status-in', async (req, res) => {
-  try {
-    const { status_in } = req.body;
-    
-    if (!status_in || !Array.isArray(status_in) || status_in.length === 0) {
-      return res.status(400).json({ 
-        message: '请提供有效的状态数组' 
-      });
-    }
-
-    const result = await ProductWeblink.findAll({
-      where: {
-        status: {
-          [Op.in]: status_in
-        }
-      },
-      attributes: [
-        'id',
-        'parent_sku',
-        'weblink',
-        'update_time',
-        'check_time',
-        'status',
-        'notice',
-        'cpc_status',
-        'cpc_submit',
-        'model_number',
-        'recommend_age',
-        'ads_add',
-        'list_parent_sku',
-        'no_inventory_rate',
-        'sales_30days',
-        'seller_name'
-      ],
-      order: [['update_time', 'DESC']]
-    });
-
-    console.log(`📋 按状态筛选查询结果: ${status_in.join(', ')}，共 ${result.length} 条记录`);
-
-    res.json({ 
-      code: 0,
-      message: '筛选成功',
-      data: result 
-    });
-  } catch (err) {
-    console.error('按状态筛选失败:', err);
-    res.status(500).json({ 
-      code: 1,
-      message: '筛选失败: ' + (err.message || '未知错误'),
-      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
-  }
-});
-
 // 获取全部数据统计信息
 router.get('/statistics', async (req, res) => {
   try {
@@ -1380,112 +1325,6 @@ router.get('/cpc-files/:id', async (req, res) => {
   }
 });
 
-// 获取CPC文件（代理方式）
-router.get('/cpc-file/:id/:fileUid/view', async (req, res) => {
-  try {
-    const { id, fileUid } = req.params;
-    
-    // 获取产品记录信息
-    const record = await ProductWeblink.findByPk(id);
-    if (!record) {
-      return res.status(404).json({
-        code: 1,
-        message: '记录不存在'
-      });
-    }
-    
-    // 解析CPC文件列表
-    let cpcFiles = [];
-    if (record.cpc_files) {
-      try {
-        cpcFiles = JSON.parse(record.cpc_files);
-      } catch (e) {
-        console.error('解析CPC文件失败:', e);
-        return res.status(500).json({
-          code: 1,
-          message: 'CPC文件数据解析失败'
-        });
-      }
-    }
-    
-    // 查找指定的文件
-    const targetFile = cpcFiles.find(file => file.uid === fileUid);
-    if (!targetFile) {
-      return res.status(404).json({
-        code: 1,
-        message: 'CPC文件不存在'
-      });
-    }
-    
-    // 检查是否有文件URL和对象名
-    if (!targetFile.url || !targetFile.objectName) {
-      return res.status(404).json({
-        code: 1,
-        message: 'CPC文件URL不存在'
-      });
-    }
-    
-    // 如果是OSS链接，直接从OSS读取文件并返回
-    if (targetFile.url.includes('aliyuncs.com')) {
-      try {
-        const OSS = require('ali-oss');
-        const client = new OSS({
-          region: process.env.OSS_REGION || 'oss-cn-shenzhen',
-          accessKeyId: process.env.OSS_ACCESS_KEY_ID,
-          accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-          bucket: process.env.OSS_BUCKET,
-          secure: true
-        });
-        
-        console.log('正在获取CPC文件:', targetFile.objectName);
-        
-        // 直接获取文件内容
-        const result = await client.get(targetFile.objectName);
-        
-        // 设置响应头 - 安全处理文件名
-        const rawFileName = targetFile.name || 'CPC文件.pdf';
-        // 清理文件名，移除所有可能导致HTTP头部问题的字符
-        const cleanFileName = rawFileName
-          .replace(/[\r\n\t]/g, '') // 移除回车、换行、制表符
-          .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字符
-          .trim();
-        
-        const safeFileName = cleanFileName || `cpc_file_${fileUid}.pdf`;
-        const encodedFileName = encodeURIComponent(safeFileName);
-        
-        res.set({
-          'Content-Type': 'application/pdf',
-          'Content-Length': result.content.length,
-          'Content-Disposition': `inline; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`,
-          'Cache-Control': 'public, max-age=86400', // 缓存24小时
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET',
-          'Access-Control-Allow-Headers': 'Content-Type'
-        });
-        
-        res.send(result.content);
-        
-      } catch (ossError) {
-        console.error('从OSS获取CPC文件失败:', ossError);
-        return res.status(500).json({
-          code: 1,
-          message: '获取文件失败: ' + ossError.message
-        });
-      }
-    } else {
-      // 如果不是OSS链接，重定向到原URL
-      res.redirect(targetFile.url);
-    }
-    
-  } catch (error) {
-    console.error('获取CPC文件失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '服务器错误: ' + error.message
-    });
-  }
-});
-
 // 删除CPC文件
 router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
   try {
@@ -1593,6 +1432,113 @@ async function extractCpcInfo(pdfText) {
     return { styleNumber: '', recommendAge: '' };
   }
 }
+
+// CPC文件代理下载接口
+router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
+  try {
+    const { recordId, fileUid } = req.params;
+    
+    // 检查记录是否存在
+    const record = await ProductWeblink.findByPk(recordId);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    // 获取CPC文件列表
+    let cpcFiles = [];
+    if (record.cpc_files) {
+      try {
+        cpcFiles = JSON.parse(record.cpc_files);
+        if (!Array.isArray(cpcFiles)) {
+          cpcFiles = [];
+        }
+      } catch (e) {
+        cpcFiles = [];
+      }
+    }
+
+    // 找到要下载的文件
+    const file = cpcFiles.find(f => f.uid === fileUid);
+    if (!file || !file.objectName) {
+      return res.status(404).json({
+        code: 1,
+        message: '文件不存在'
+      });
+    }
+
+    try {
+      // 直接使用OSS客户端获取文件
+      const OSS = require('ali-oss');
+      const client = new OSS({
+        region: process.env.OSS_REGION,
+        accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+        accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+        bucket: process.env.OSS_BUCKET,
+        endpoint: process.env.OSS_ENDPOINT
+      });
+      
+      console.log('正在获取OSS文件:', file.objectName);
+      
+      // 直接获取文件内容
+      const result = await client.get(file.objectName);
+      
+      // 设置响应头 - 安全处理文件名
+      const rawFileName = file.name || 'CPC文件.pdf';
+      // 清理文件名，移除所有可能导致HTTP头部问题的字符
+      const cleanFileName = rawFileName
+        .replace(/[\r\n\t]/g, '') // 移除回车、换行、制表符
+        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字符
+        .trim();
+      
+      const safeFileName = cleanFileName || `cpc_${fileUid}.pdf`;
+      const encodedFileName = encodeURIComponent(safeFileName);
+      
+      // 设置安全的响应头
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename*=UTF-8''${encodedFileName}`,
+        'Content-Length': result.content.length.toString(),
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block'
+      });
+      
+      // 返回文件内容
+      res.send(result.content);
+      console.log(`✅ CPC文件代理下载成功: ${file.name}`);
+      
+    } catch (ossError) {
+      console.error('OSS下载错误:', ossError);
+      // 根据错误类型提供更详细的错误信息
+      let errorMessage = 'OSS访问失败';
+      if (ossError.code === 'NoSuchKey') {
+        errorMessage = '文件不存在或已被删除';
+      } else if (ossError.code === 'AccessDenied') {
+        errorMessage = 'OSS访问权限不足，请联系管理员';
+      } else if (ossError.message) {
+        errorMessage = `OSS错误: ${ossError.message}`;
+      }
+      
+      res.status(500).json({
+        code: 1,
+        message: errorMessage
+      });
+    }
+
+  } catch (error) {
+    console.error('CPC文件代理下载失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
 
 
 
@@ -4599,182 +4545,6 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '更新失败: ' + error.message
-    });
-  }
-});
-
-// 获取CPC文件（代理方式）
-router.get('/cpc-file/:id/:fileUid/view', async (req, res) => {
-  try {
-    const { id, fileUid } = req.params;
-    
-    // 获取产品记录信息
-    const record = await ProductWeblink.findByPk(id);
-    if (!record) {
-      return res.status(404).json({
-        code: 1,
-        message: '记录不存在'
-      });
-    }
-    
-    // 解析CPC文件列表
-    let cpcFiles = [];
-    if (record.cpc_files) {
-      try {
-        cpcFiles = JSON.parse(record.cpc_files);
-      } catch (e) {
-        console.error('解析CPC文件失败:', e);
-        return res.status(500).json({
-          code: 1,
-          message: 'CPC文件数据解析失败'
-        });
-      }
-    }
-    
-    // 查找指定的文件
-    const targetFile = cpcFiles.find(file => file.uid === fileUid);
-    if (!targetFile) {
-      return res.status(404).json({
-        code: 1,
-        message: 'CPC文件不存在'
-      });
-    }
-    
-    // 检查是否有文件URL和对象名
-    if (!targetFile.url || !targetFile.objectName) {
-      return res.status(404).json({
-        code: 1,
-        message: 'CPC文件URL不存在'
-      });
-    }
-    
-    // 如果是OSS链接，直接从OSS读取文件并返回
-    if (targetFile.url.includes('aliyuncs.com')) {
-      try {
-        const OSS = require('ali-oss');
-        const client = new OSS({
-          region: process.env.OSS_REGION || 'oss-cn-shenzhen',
-          accessKeyId: process.env.OSS_ACCESS_KEY_ID,
-          accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-          bucket: process.env.OSS_BUCKET,
-          secure: true
-        });
-        
-        console.log('正在获取CPC文件:', targetFile.objectName);
-        
-        // 直接获取文件内容
-        const result = await client.get(targetFile.objectName);
-        
-        // 设置响应头 - 安全处理文件名
-        const rawFileName = targetFile.name || 'CPC文件.pdf';
-        // 清理文件名，移除所有可能导致HTTP头部问题的字符
-        const cleanFileName = rawFileName
-          .replace(/[\r\n\t]/g, '') // 移除回车、换行、制表符
-          .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字符
-          .trim();
-        
-        const safeFileName = cleanFileName || `cpc_file_${fileUid}.pdf`;
-        const encodedFileName = encodeURIComponent(safeFileName);
-        
-        res.set({
-          'Content-Type': 'application/pdf',
-          'Content-Length': result.content.length,
-          'Content-Disposition': `inline; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`,
-          'Cache-Control': 'public, max-age=86400', // 缓存24小时
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET',
-          'Access-Control-Allow-Headers': 'Content-Type'
-        });
-        
-        res.send(result.content);
-        
-      } catch (ossError) {
-        console.error('从OSS获取CPC文件失败:', ossError);
-        return res.status(500).json({
-          code: 1,
-          message: '获取文件失败: ' + ossError.message
-        });
-      }
-    } else {
-      // 如果不是OSS链接，重定向到原URL
-      res.redirect(targetFile.url);
-    }
-    
-  } catch (error) {
-    console.error('获取CPC文件失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '服务器错误: ' + error.message
-    });
-  }
-});
-
-// 删除CPC文件
-router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
-  try {
-    const { id, fileUid } = req.params;
-    
-    const record = await ProductWeblink.findByPk(id);
-    if (!record) {
-      return res.status(404).json({
-        code: 1,
-        message: '记录不存在'
-      });
-    }
-
-    let cpcFiles = [];
-    if (record.cpc_files) {
-      try {
-        cpcFiles = JSON.parse(record.cpc_files);
-        if (!Array.isArray(cpcFiles)) {
-          cpcFiles = [];
-        }
-      } catch (e) {
-        cpcFiles = [];
-      }
-    }
-
-    // 找到要删除的文件
-    const fileIndex = cpcFiles.findIndex(file => file.uid === fileUid);
-    if (fileIndex === -1) {
-      return res.status(404).json({
-        code: 1,
-        message: '文件不存在'
-      });
-    }
-
-    const fileToDelete = cpcFiles[fileIndex];
-    
-    // 从OSS中删除文件（如果有objectName）
-    if (fileToDelete.objectName) {
-      try {
-        await deleteFromOSS(fileToDelete.objectName);
-        console.log(`✅ 已从OSS删除文件: ${fileToDelete.objectName}`);
-      } catch (ossError) {
-        console.warn(`⚠️ OSS文件删除失败: ${fileToDelete.objectName}`, ossError.message);
-        // 继续执行数据库删除，即使OSS删除失败
-      }
-    }
-
-    // 从数组中移除文件
-    cpcFiles.splice(fileIndex, 1);
-
-    // 更新数据库
-    await ProductWeblink.update(
-      { cpc_files: JSON.stringify(cpcFiles) },
-      { where: { id: id } }
-    );
-
-    res.json({
-      code: 0,
-      message: '文件删除成功'
-    });
-
-  } catch (error) {
-    console.error('删除CPC文件失败:', error);
-    res.status(500).json({
-      code: 1,
-      message: '服务器错误: ' + error.message
     });
   }
 });

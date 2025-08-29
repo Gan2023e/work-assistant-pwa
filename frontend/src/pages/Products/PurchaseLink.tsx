@@ -28,8 +28,7 @@ import {
   Tabs,
   Switch,
   Radio,
-  Steps,
-  Dropdown
+  Steps
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -51,9 +50,7 @@ import {
   CloseCircleOutlined,
   GlobalOutlined,
   PlayCircleOutlined,
-  EditOutlined,
-  EyeOutlined,
-  DownOutlined
+  EditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -205,8 +202,7 @@ const Purchase: React.FC = () => {
     cpcTestPending: 0,
     cpcTesting: 0,
     cpcSampleSent: 0,
-    cpcPendingListing: 0,
-    canOrganizeMaterials: 0 // 可整理资料数量
+    cpcPendingListing: 0
   });
   
   // 生成其他站点资料表相关状态
@@ -331,18 +327,7 @@ const Purchase: React.FC = () => {
       const result = await res.json();
       console.log('🔍 获取到的统计数据:', result);
       
-      // 计算可整理资料数量（待P图 + 待上传）
-      const waitingPImageCount = result.statistics.waitingPImage || 0;
-      const waitingUploadCount = result.statistics.waitingUpload || 0;
-      const canOrganizeMaterialsCount = waitingPImageCount + waitingUploadCount;
-      
-      // 更新统计数据，包含可整理资料数量
-      const updatedStatistics = {
-        ...result.statistics,
-        canOrganizeMaterials: canOrganizeMaterialsCount
-      };
-      
-      setStatistics(updatedStatistics);
+      setStatistics(result.statistics);
       setAllDataStats({
         statusStats: result.statusStats || [],
         cpcStatusStats: result.cpcStatusStats || [],
@@ -357,12 +342,6 @@ const Purchase: React.FC = () => {
       } else {
         console.warn('⚠️  CPC提交情况数据为空');
       }
-      
-      console.log('📋 可整理资料统计:', {
-        waitingPImage: waitingPImageCount,
-        waitingUpload: waitingUploadCount,
-        total: canOrganizeMaterialsCount
-      });
     } catch (e) {
       console.error('获取统计数据失败:', e);
     }
@@ -554,49 +533,6 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('筛选CPC待上架产品失败:', e);
       message.error('筛选CPC待上架产品失败');
-    }
-  };
-
-  // 点击可整理资料卡片的特殊处理
-  const handleCanOrganizeMaterialsClick = async () => {
-    try {
-      // 构建查询条件：状态为"待P图"或"待上传"
-      const conditions = {
-        status_in: ['待P图', '待上传'] // 包含多个状态值
-      };
-
-      // 调用后端API获取筛选数据
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-by-status-in`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(conditions),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const result = await res.json();
-      const filteredData = result.data || [];
-      
-      setData(filteredData);
-      setOriginalData(filteredData);
-      setFilteredData(filteredData);
-      
-      // 更新筛选状态以反映当前筛选条件
-      setFilters({ 
-        ...filters, 
-        status: '待P图,待上传', // 显示为多个状态
-        cpc_status: '',
-        cpc_submit: '',
-        seller_name: '',
-        dateRange: null
-      });
-      
-      message.success(`筛选完成，找到 ${filteredData.length} 条可整理资料记录`);
-    } catch (e) {
-      console.error('筛选可整理资料失败:', e);
-      message.error('筛选可整理资料失败');
     }
   };
 
@@ -1794,197 +1730,22 @@ const Purchase: React.FC = () => {
       dataIndex: 'cpc_files', 
       key: 'cpc_files', 
       align: 'center',
-      width: 200,
+      width: 120,
       render: (text: string, record: ProductRecord) => {
         const fileCount = getCpcFileCount(record);
-        let cpcFiles: CpcFile[] = [];
-        
-        try {
-          if (record.cpc_files) {
-            cpcFiles = JSON.parse(record.cpc_files);
-          }
-        } catch (e) {
-          console.error('解析CPC文件数据失败:', e);
-        }
-
-        if (fileCount === 0) {
-          // 没有CPC文件时显示上传按钮
-          return (
-            <div>
-              <div style={{ color: '#999', fontSize: '12px', marginBottom: '4px' }}>暂无文件</div>
+        return (
+          <Space>
+            <Badge count={fileCount} overflowCount={99} size="small">
               <Button
                 type="primary"
                 size="small"
-                icon={<UploadOutlined />}
-                onClick={() => handleCpcFileManage(record)}
-                style={{ fontSize: '12px' }}
-              >
-                上传CPC文件
-              </Button>
-            </div>
-          );
-        }
-
-        // 有CPC文件时显示文件信息
-        return (
-          <div>
-            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-              <span style={{ fontSize: '12px' }}>
-                {fileCount === 1 ? (cpcFiles[0]?.name || 'CPC文件') : 'CPC文件'}
-              </span>
-              {fileCount > 1 && (
-                <Badge 
-                  count={fileCount} 
-                  size="small" 
-                  style={{ marginLeft: '8px' }}
-                />
-              )}
-            </div>
-            <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
-              共 {fileCount} 个文件
-            </div>
-            <Space size="small" wrap>
-              {fileCount === 1 ? (
-                // 单个文件时，直接显示查看和下载按钮
-                <>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<EyeOutlined />}
-                    onClick={() => {
-                      if (cpcFiles[0]?.uid) {
-                        const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${cpcFiles[0].uid}/view`;
-                        window.open(viewUrl, '_blank');
-                      }
-                    }}
-                    style={{ padding: '0 4px', fontSize: '10px' }}
-                    title="查看文件"
-                  >
-                    查看
-                  </Button>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<DownloadOutlined />}
-                    onClick={() => {
-                      if (cpcFiles[0]?.url && cpcFiles[0]?.name) {
-                        const link = document.createElement('a');
-                        link.href = cpcFiles[0].url;
-                        link.download = cpcFiles[0].name;
-                        link.target = '_blank';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }
-                    }}
-                    style={{ padding: '0 4px', fontSize: '10px' }}
-                    title="下载文件"
-                  >
-                    下载
-                  </Button>
-                </>
-              ) : (
-                // 多个文件时，使用下拉菜单
-                <>
-                  <Dropdown
-                    menu={{
-                      items: cpcFiles.map((file, index) => ({
-                        key: file.uid,
-                        label: (
-                          <div style={{ maxWidth: '200px' }}>
-                            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
-                              文件 {index + 1}
-                            </div>
-                            <div style={{ 
-                              fontSize: '11px', 
-                              color: '#666',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {file.name}
-                            </div>
-                          </div>
-                        ),
-                        onClick: () => {
-                          if (file.uid) {
-                            const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${record.id}/${file.uid}/view`;
-                            window.open(viewUrl, '_blank');
-                          }
-                        }
-                      }))
-                    }}
-                    trigger={['click']}
-                  >
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<EyeOutlined />}
-                      style={{ padding: '0 4px', fontSize: '10px' }}
-                      title="选择文件查看"
-                    >
-                      查看 <DownOutlined style={{ fontSize: '8px', marginLeft: '2px' }} />
-                    </Button>
-                  </Dropdown>
-                  <Dropdown
-                    menu={{
-                      items: cpcFiles.map((file, index) => ({
-                        key: file.uid,
-                        label: (
-                          <div style={{ maxWidth: '200px' }}>
-                            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
-                              文件 {index + 1}
-                            </div>
-                            <div style={{ 
-                              fontSize: '11px', 
-                              color: '#666',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {file.name}
-                            </div>
-                          </div>
-                        ),
-                        onClick: () => {
-                          if (file.url && file.name) {
-                            const link = document.createElement('a');
-                            link.href = file.url;
-                            link.download = file.name;
-                            link.target = '_blank';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                          }
-                        }
-                      }))
-                    }}
-                    trigger={['click']}
-                  >
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<DownloadOutlined />}
-                      style={{ padding: '0 4px', fontSize: '10px' }}
-                      title="选择文件下载"
-                    >
-                      下载 <DownOutlined style={{ fontSize: '8px', marginLeft: '2px' }} />
-                    </Button>
-                  </Dropdown>
-                </>
-              )}
-              <Button
-                type="link"
-                size="small"
                 icon={<FilePdfOutlined />}
                 onClick={() => handleCpcFileManage(record)}
-                style={{ padding: '0 4px', fontSize: '10px' }}
-                title="管理所有文件"
               >
-                管理
+                CPC文件
               </Button>
-            </Space>
-          </div>
+            </Badge>
+          </Space>
         );
       }
     },
@@ -3682,21 +3443,6 @@ const Purchase: React.FC = () => {
             <Card 
               size="small"
               hoverable 
-              onClick={handleCanOrganizeMaterialsClick}
-              style={{ cursor: 'pointer', minHeight: '70px' }}
-            >
-              <Statistic
-                title="可整理资料"
-                value={statistics.canOrganizeMaterials}
-                prefix={<FilePdfOutlined />}
-                valueStyle={{ color: '#52c41a', fontSize: '16px' }}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card 
-              size="small"
-              hoverable 
               onClick={() => handleCardClick('申请测试', 'cpc_status')}
               style={{ cursor: 'pointer', minHeight: '70px' }}
             >
@@ -4548,11 +4294,14 @@ const Purchase: React.FC = () => {
                 actions={[
                   <Button
                     type="link"
-                    icon={<EyeOutlined />}
+                    icon={<SearchOutlined />}
                     onClick={() => {
                       if (currentRecord && file.uid) {
-                        const viewUrl = `${API_BASE_URL}/api/product_weblink/cpc-file/${currentRecord.id}/${file.uid}/view`;
-                        window.open(viewUrl, '_blank');
+                        // 使用后端代理URL访问文件，避免OSS权限问题
+                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download`;
+                        window.open(proxyUrl, '_blank');
+                      } else {
+                        message.error('无法获取文件信息，请重试');
                       }
                     }}
                     title="在新标签页查看文件"
@@ -4563,13 +4312,19 @@ const Purchase: React.FC = () => {
                     type="link"
                     icon={<DownloadOutlined />}
                     onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = file.url;
-                      link.download = file.name;
-                      link.target = '_blank';
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
+                      if (currentRecord && file.uid) {
+                        // 使用后端代理URL下载文件，避免OSS权限问题
+                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download`;
+                        const link = document.createElement('a');
+                        link.href = proxyUrl;
+                        link.download = file.name;
+                        link.target = '_blank';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      } else {
+                        message.error('无法获取文件信息，请重试');
+                      }
                     }}
                     title="下载文件到本地"
                   >
