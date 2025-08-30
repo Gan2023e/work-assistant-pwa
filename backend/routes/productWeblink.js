@@ -2332,69 +2332,34 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const headers = jsonData[2]; // 第3行是标题行
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
-    console.log('📋 Excel标题行内容:', headers);
-    console.log('📊 数据行数量:', dataRows.length);
-    
     const savedRecords = [];
     const processedRecords = []; // 用于Excel填写的干净数据
     
-    for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex++) {
-      const row = dataRows[rowIndex];
+    for (const row of dataRows) {
       if (!row || row.length === 0) continue;
       
       // 创建数据对象
       const rowData = {};
       headers.forEach((header, index) => {
         if (header && row[index] !== undefined) {
-          const mappedFieldName = header.toLowerCase().replace(/\s+/g, '_');
-          rowData[mappedFieldName] = row[index];
-          
-          // 调试关键字段
-          if (['item_sku', 'parent_child', 'parent_sku'].includes(mappedFieldName)) {
-            console.log(`🔍 字段映射: 原标题="${header}" -> 映射字段="${mappedFieldName}" -> 值="${row[index]}"`);
-          }
+          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[index];
         }
       });
-      
-      // 调试第一行数据的完整信息
-      if (rowIndex === 0) {
-        console.log('📋 第一行数据的关键字段:');
-        console.log(`  - item_sku: "${rowData.item_sku}"`);
-        console.log(`  - parent_child: "${rowData.parent_child}"`);
-        console.log(`  - parent_sku: "${rowData.parent_sku}"`);
-        console.log('📋 第一行所有字段名:', Object.keys(rowData));
-      }
       
       // 设置site字段为选择的国家（转换为中文名称）
       rowData.site = convertCountryCodeToChinese(actualCountry);
       
       // 设置original_parent_sku字段（根据parent_child列判断）
-      console.log(`🔍 处理第${rowIndex+1}行SKU提取:`, {
-        parent_child: rowData.parent_child,
-        item_sku: rowData.item_sku,
-        parent_sku: rowData.parent_sku
-      });
-      
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
         // 当parent_child为"Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         rowData.original_parent_sku = rowData.item_sku.substring(2);
-        console.log(`✅ Parent行提取: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
         // 当parent_child为"Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
-        console.log(`✅ Child行提取: ${rowData.parent_sku} -> ${rowData.original_parent_sku}`);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
         // 兼容处理：如果没有parent_child信息，使用原有逻辑
         rowData.original_parent_sku = rowData.item_sku.substring(2);
         console.warn(`⚠️ 记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
-      } else {
-        console.warn(`❌ 第${rowIndex+1}行无法提取SKU信息:`, {
-          parent_child: rowData.parent_child,
-          item_sku: rowData.item_sku,
-          item_sku_length: rowData.item_sku?.length,
-          parent_sku: rowData.parent_sku,
-          parent_sku_length: rowData.parent_sku?.length
-        });
       }
       
       // 过滤和验证数据，只保留模型中定义的字段
@@ -2415,23 +2380,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`✅ 成功保存 ${savedRecords.length} 条记录到数据库`);
     console.log(`✅ 准备了 ${processedRecords.length} 条记录用于Excel填写`);
-    
-    // 调试：输出保存的记录详情
-    if (processedRecords.length > 0) {
-      console.log('📋 第一条记录详情:', {
-        item_sku: processedRecords[0].item_sku,
-        item_name: processedRecords[0].item_name,
-        original_parent_sku: processedRecords[0].original_parent_sku
-      });
-      
-      // 调试所有记录的item_sku
-      console.log('📋 所有记录的item_sku:');
-      processedRecords.forEach((record, idx) => {
-        console.log(`  记录${idx + 1}: ${record.item_sku}`);
-      });
-    } else {
-      console.log('❌ 没有记录被处理!');
-    }
 
     // 步骤3: 获取对应国家的模板文件
     console.log(`🔍 查找${actualCountry}站点的模板文件...`);
@@ -2927,42 +2875,13 @@ CN
       console.log('🔍 开始生成文件名...');
       console.log(`📊 processedRecords数量: ${processedRecords.length}`);
       
-      // 调试：输出前几条记录的结构
-      if (processedRecords.length > 0) {
-        console.log('📋 第一条记录样例:', {
-          item_sku: processedRecords[0].item_sku,
-          original_parent_sku: processedRecords[0].original_parent_sku,
-          parent_child: processedRecords[0].parent_child,
-          parent_sku: processedRecords[0].parent_sku
-        });
-        
-        // 显示前3条记录的详细信息
-        for (let i = 0; i < Math.min(3, processedRecords.length); i++) {
-          console.log(`📋 记录${i+1}详情:`, {
-            item_sku: processedRecords[i].item_sku,
-            parent_child: processedRecords[i].parent_child,
-            parent_sku: processedRecords[i].parent_sku,
-            original_parent_sku: processedRecords[i].original_parent_sku
-          });
-        }
-      }
-      
       const parentSkus = [...new Set(processedRecords
         .map(record => {
           const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
-          console.log(`🔍 提取SKU: item_sku="${record.item_sku}", original_parent_sku="${record.original_parent_sku}" -> "${parentSku}"`);
           return parentSku;
         })
         .filter(sku => sku && sku.trim())
       )];
-      
-      console.log('📋 提取的母SKU列表:', parentSkus);
-      
-      if (parentSkus.length === 0) {
-        console.warn('⚠️ 未能提取到有效的母SKU，将使用默认名称"DATA"');
-        console.warn('💡 请检查Excel文件中的item_sku、parent_sku字段是否正确填写');
-        console.warn('💡 或检查parent_child字段是否为"Parent"或"Child"');
-      }
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;
@@ -4065,31 +3984,16 @@ CN
       console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
-      console.log('🔍 开始生成批量文件名...');
-      console.log(`📊 transformedRecords数量: ${transformedRecords.length}`);
-      
-      // 调试：输出前几条记录的结构
-      if (transformedRecords.length > 0) {
-        console.log('📋 第一条转换记录样例:', {
-          item_sku: transformedRecords[0].item_sku,
-          original_parent_sku: transformedRecords[0].original_parent_sku
-        });
-      }
-      
       const parentSkus = [...new Set(transformedRecords
         .map(record => {
           const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
-          console.log(`🔍 批量提取SKU: ${record.item_sku} -> ${parentSku}`);
           return parentSku;
         })
         .filter(sku => sku && sku.trim())
       )];
       
-      console.log('📋 批量提取的母SKU列表:', parentSkus);
-      
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${targetCountry}_${skuPart}.xlsx`;
-      console.log('📄 批量生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
