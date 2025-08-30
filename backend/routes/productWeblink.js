@@ -2605,18 +2605,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             outerMaterialType1Col = colIndex;
           } else if (cellValue === 'care_instructions') {
             careInstructionsCol = colIndex;
-          } else if (cellValue === 'age_range_description') {
-            ageRangeDescriptionCol = colIndex;
+          } else if (cellValue === 'model') {
+            modelCol = colIndex;
           } else if (cellValue === 'target_gender') {
             targetGenderCol = colIndex;
           } else if (cellValue === 'department_name') {
             departmentNameCol = colIndex;
           } else if (cellValue === 'special_features') {
             specialFeaturesCol = colIndex;
-          } else if (cellValue === 'style_name') {
-            styleNameCol = colIndex;
-          } else if (cellValue === 'water_resistance_level') {
-            waterResistanceLevelCol = colIndex;
           } else if (cellValue === 'recommended_uses_for_product') {
             recommendedUsesForProductCol = colIndex;
           } else if (cellValue === 'seasons1') {
@@ -2627,8 +2623,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             seasons3Col = colIndex;
           } else if (cellValue === 'seasons4') {
             seasons4Col = colIndex;
-          } else if (cellValue === 'material_type') {
-            materialTypeCol = colIndex;
           } else if (cellValue === 'lifestyle1') {
             lifestyle1Col = colIndex;
           } else if (cellValue === 'lining_description') {
@@ -2653,8 +2647,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             depthHeightFloorToTopUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'import_designation') {
             importDesignationCol = colIndex;
-          } else if (cellValue === 'country_of_origin') {
-            countryOfOriginCol = colIndex;
           } else if (cellValue === 'are_batteries_included') {
             areBatteriesIncludedCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
@@ -3066,58 +3058,6 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             cpsiaCautionaryStatement1Col = colIndex;
           } else if (cellValue === 'condition_type') {
             conditionTypeCol = colIndex;
-          } else if (cellValue === 'closure_type') {
-            closureTypeCol = colIndex;
-          } else if (cellValue === 'outer_material_type1') {
-            outerMaterialType1Col = colIndex;
-          } else if (cellValue === 'care_instructions') {
-            careInstructionsCol = colIndex;
-          } else if (cellValue === 'model') {
-            modelCol = colIndex;
-          } else if (cellValue === 'target_gender') {
-            targetGenderCol = colIndex;
-          } else if (cellValue === 'department_name') {
-            departmentNameCol = colIndex;
-          } else if (cellValue === 'special_features') {
-            specialFeaturesCol = colIndex;
-          } else if (cellValue === 'recommended_uses_for_product') {
-            recommendedUsesForProductCol = colIndex;
-          } else if (cellValue === 'seasons1') {
-            seasons1Col = colIndex;
-          } else if (cellValue === 'seasons2') {
-            seasons2Col = colIndex;
-          } else if (cellValue === 'seasons3') {
-            seasons3Col = colIndex;
-          } else if (cellValue === 'seasons4') {
-            seasons4Col = colIndex;
-          } else if (cellValue === 'lifestyle1') {
-            lifestyle1Col = colIndex;
-          } else if (cellValue === 'lining_description') {
-            liningDescriptionCol = colIndex;
-          } else if (cellValue === 'strap_type') {
-            strapTypeCol = colIndex;
-          } else if (cellValue === 'storage_volume_unit_of_measure') {
-            storageVolumeUnitOfMeasureCol = colIndex;
-          } else if (cellValue === 'storage_volume') {
-            storageVolumeCol = colIndex;
-          } else if (cellValue === 'depth_front_to_back') {
-            depthFrontToBackCol = colIndex;
-          } else if (cellValue === 'depth_front_to_back_unit_of_measure') {
-            depthFrontToBackUnitOfMeasureCol = colIndex;
-          } else if (cellValue === 'depth_width_side_to_side') {
-            depthWidthSideToSideCol = colIndex;
-          } else if (cellValue === 'depth_width_side_to_side_unit_of_measure') {
-            depthWidthSideToSideUnitOfMeasureCol = colIndex;
-          } else if (cellValue === 'depth_height_floor_to_top') {
-            depthHeightFloorToTopCol = colIndex;
-          } else if (cellValue === 'depth_height_floor_to_top_unit_of_measure') {
-            depthHeightFloorToTopUnitOfMeasureCol = colIndex;
-          } else if (cellValue === 'import_designation') {
-            importDesignationCol = colIndex;
-          } else if (cellValue === 'are_batteries_included') {
-            areBatteriesIncludedCol = colIndex;
-          } else if (cellValue === 'manufacturer_contact_information') {
-            manufacturerContactInformationCol = colIndex;
           }
         }
       });
