@@ -2896,20 +2896,38 @@ CN
       if (processedRecords.length > 0) {
         console.log('📋 第一条记录样例:', {
           item_sku: processedRecords[0].item_sku,
-          original_parent_sku: processedRecords[0].original_parent_sku
+          original_parent_sku: processedRecords[0].original_parent_sku,
+          parent_child: processedRecords[0].parent_child,
+          parent_sku: processedRecords[0].parent_sku
         });
+        
+        // 显示前3条记录的详细信息
+        for (let i = 0; i < Math.min(3, processedRecords.length); i++) {
+          console.log(`📋 记录${i+1}详情:`, {
+            item_sku: processedRecords[i].item_sku,
+            parent_child: processedRecords[i].parent_child,
+            parent_sku: processedRecords[i].parent_sku,
+            original_parent_sku: processedRecords[i].original_parent_sku
+          });
+        }
       }
       
       const parentSkus = [...new Set(processedRecords
         .map(record => {
           const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
-          console.log(`🔍 提取SKU: ${record.item_sku} -> ${parentSku}`);
+          console.log(`🔍 提取SKU: item_sku="${record.item_sku}", original_parent_sku="${record.original_parent_sku}" -> "${parentSku}"`);
           return parentSku;
         })
         .filter(sku => sku && sku.trim())
       )];
       
       console.log('📋 提取的母SKU列表:', parentSkus);
+      
+      if (parentSkus.length === 0) {
+        console.warn('⚠️ 未能提取到有效的母SKU，将使用默认名称"DATA"');
+        console.warn('💡 请检查Excel文件中的item_sku、parent_sku字段是否正确填写');
+        console.warn('💡 或检查parent_child字段是否为"Parent"或"Child"');
+      }
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;

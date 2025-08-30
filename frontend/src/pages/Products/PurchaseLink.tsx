@@ -2411,15 +2411,20 @@ const Purchase: React.FC = () => {
         // 直接处理文件下载
         const blob = await response.blob();
         
-        // 从响应头获取文件名
-        const contentDisposition = response.headers.get('content-disposition');
-        let fileName = `${activeSiteTabKey}_data_sheet.xlsx`; // 默认文件名
-        if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
-          if (filenameMatch) {
-            fileName = filenameMatch[1];
+                  // 从响应头获取文件名
+          const contentDisposition = response.headers.get('content-disposition');
+          let fileName = `${activeSiteTabKey}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
+          if (contentDisposition) {
+            // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
+            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+            
+            if (filenameMatch) {
+              fileName = filenameMatch[1];
+            } else if (filenameUtf8Match) {
+              fileName = decodeURIComponent(filenameUtf8Match[1]);
+            }
           }
-        }
         
         // 创建下载链接
         const url = window.URL.createObjectURL(blob);
@@ -2533,7 +2538,7 @@ const Purchase: React.FC = () => {
           
           // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
-          let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
+          let fileName = `${targetCountry}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
           if (contentDisposition) {
             // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
@@ -2725,7 +2730,7 @@ const Purchase: React.FC = () => {
           
           // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
-          let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
+          let fileName = `${targetCountry}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
           if (contentDisposition) {
             // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
