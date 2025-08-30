@@ -2740,7 +2740,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (waterResistanceLevelCol !== -1) data[currentRowIndex][waterResistanceLevelCol] = recordData.water_resistance_level || '';
       if (sizeMapCol !== -1) data[currentRowIndex][sizeMapCol] = recordData.size_map || '';
       if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
-      if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
+      if (cpsiaCautionaryStatement1Col !== -1) {
+        // 加拿大站点特殊处理：使用特定格式的警告语句
+        if (actualCountry === 'CA') {
+          data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
+        } else {
+          data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
+        }
+      }
       if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
       
       // 填写加拿大站点新增字段数据
@@ -3365,7 +3372,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][countryOfOriginCol] = data.country_of_origin || '';
       }
       if (cpsiaCautionaryStatement1Col !== -1) {
-        updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
+        // 加拿大站点特殊处理：使用特定格式的警告语句
+        if (country === 'CA') {
+          updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
+        } else {
+          updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
+        }
       }
       if (conditionTypeCol !== -1) {
         updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
@@ -4620,7 +4632,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
       }
       if (columnIndexes['cpsia_cautionary_statement1'] !== undefined) {
-        data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'ChokingHazardSmallParts';
+        // 加拿大站点特殊处理：使用特定格式的警告语句
+        if (country === 'CA') {
+          data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'Choking Hazard - Small Parts';
+        } else {
+          data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'ChokingHazardSmallParts';
+        }
       }
 
       dataRowIndex++;
