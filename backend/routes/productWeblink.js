@@ -2754,7 +2754,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (seasons3Col !== -1) data[currentRowIndex][seasons3Col] = recordData.seasons3 || '';
       if (seasons4Col !== -1) data[currentRowIndex][seasons4Col] = recordData.seasons4 || '';
       if (lifestyle1Col !== -1) data[currentRowIndex][lifestyle1Col] = recordData.lifestyle1 || '';
-      if (storageVolumeUnitOfMeasureCol !== -1) data[currentRowIndex][storageVolumeUnitOfMeasureCol] = recordData.storage_volume_unit_of_measure || '';
+      if (storageVolumeUnitOfMeasureCol !== -1) {
+        let storageVolumeUnit = recordData.storage_volume_unit_of_measure || '';
+        // 加拿大站点特殊处理：liter转换为Liters
+        if (actualCountry === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
+          storageVolumeUnit = 'Liters';
+        }
+        data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
+      }
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = recordData.storage_volume || '';
       if (depthFrontToBackCol !== -1) data[currentRowIndex][depthFrontToBackCol] = recordData.depth_front_to_back || '';
       if (depthFrontToBackUnitOfMeasureCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = recordData.depth_front_to_back_unit_of_measure || '';
@@ -3348,7 +3355,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][lifestyle1Col] = data.lifestyle1 || '';
       }
       if (storageVolumeUnitOfMeasureCol !== -1) {
-        updatedData[rowIndex][storageVolumeUnitOfMeasureCol] = data.storage_volume_unit_of_measure || '';
+        let storageVolumeUnit = data.storage_volume_unit_of_measure || '';
+        // 加拿大站点特殊处理：liter转换为Liters
+        if (country === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
+          storageVolumeUnit = 'Liters';
+        }
+        updatedData[rowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
       }
       if (storageVolumeCol !== -1) {
         updatedData[rowIndex][storageVolumeCol] = data.storage_volume || '';
@@ -3789,7 +3801,14 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (seasons3Col !== -1) data[currentRowIndex][seasons3Col] = record.seasons3 || '';
       if (seasons4Col !== -1) data[currentRowIndex][seasons4Col] = record.seasons4 || '';
       if (lifestyle1Col !== -1) data[currentRowIndex][lifestyle1Col] = record.lifestyle1 || '';
-      if (storageVolumeUnitOfMeasureCol !== -1) data[currentRowIndex][storageVolumeUnitOfMeasureCol] = record.storage_volume_unit_of_measure || '';
+             if (storageVolumeUnitOfMeasureCol !== -1) {
+         let storageVolumeUnit = record.storage_volume_unit_of_measure || '';
+         // 加拿大站点特殊处理：liter转换为Liters
+         if (targetCountry === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
+           storageVolumeUnit = 'Liters';
+         }
+         data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
+       }
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = record.storage_volume || '';
       if (depthFrontToBackCol !== -1) data[currentRowIndex][depthFrontToBackCol] = record.depth_front_to_back || '';
       if (depthFrontToBackUnitOfMeasureCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = record.depth_front_to_back_unit_of_measure || '';
