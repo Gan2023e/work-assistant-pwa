@@ -33,7 +33,8 @@ app.use(cors({
     /\.netlify\.app$/,
     /\.railway\.app$/
   ],
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'] // 暴露响应头给前端
 }));
 
 app.use(express.json());
