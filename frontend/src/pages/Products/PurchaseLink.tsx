@@ -2413,18 +2413,29 @@ const Purchase: React.FC = () => {
         
                   // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
+          console.log('🔍 单独生成 Content-Disposition:', contentDisposition);
+          
           let fileName = `${activeSiteTabKey}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
           if (contentDisposition) {
             // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
             const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
             
+            console.log('🔍 单独 filename="..." 匹配结果:', filenameMatch);
+            console.log('🔍 单独 filename*=UTF-8\'\'... 匹配结果:', filenameUtf8Match);
+            
             if (filenameMatch) {
               fileName = filenameMatch[1];
+              console.log('✅ 单独使用 filename="..." 格式:', fileName);
             } else if (filenameUtf8Match) {
               fileName = decodeURIComponent(filenameUtf8Match[1]);
+              console.log('✅ 单独使用 filename*=UTF-8\'\'... 格式:', fileName);
             }
+          } else {
+            console.log('⚠️ 单独生成未找到 Content-Disposition 响应头');
           }
+          
+          console.log('📁 单独生成最终文件名:', fileName);
         
         // 创建下载链接
         const url = window.URL.createObjectURL(blob);
@@ -2538,18 +2549,29 @@ const Purchase: React.FC = () => {
           
           // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
+          console.log('🔍 Content-Disposition:', contentDisposition);
+          
           let fileName = `${targetCountry}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
           if (contentDisposition) {
             // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
             const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
             
+            console.log('🔍 filename="..." 匹配结果:', filenameMatch);
+            console.log('🔍 filename*=UTF-8\'\'... 匹配结果:', filenameUtf8Match);
+            
             if (filenameMatch) {
               fileName = filenameMatch[1];
+              console.log('✅ 使用 filename="..." 格式:', fileName);
             } else if (filenameUtf8Match) {
               fileName = decodeURIComponent(filenameUtf8Match[1]);
+              console.log('✅ 使用 filename*=UTF-8\'\'... 格式:', fileName);
             }
+          } else {
+            console.log('⚠️ 未找到 Content-Disposition 响应头');
           }
+          
+          console.log('📁 最终文件名:', fileName);
           
           newDownloadHistory[targetCountry] = {
             blob,
@@ -2730,18 +2752,29 @@ const Purchase: React.FC = () => {
           
           // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
+          console.log('🔍 批量生成 Content-Disposition:', contentDisposition);
+          
           let fileName = `${targetCountry}_DATA.xlsx`; // 默认文件名（后端应该会提供正确的文件名）
           if (contentDisposition) {
             // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
             const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
             
+            console.log('🔍 批量 filename="..." 匹配结果:', filenameMatch);
+            console.log('🔍 批量 filename*=UTF-8\'\'... 匹配结果:', filenameUtf8Match);
+            
             if (filenameMatch) {
               fileName = filenameMatch[1];
+              console.log('✅ 批量使用 filename="..." 格式:', fileName);
             } else if (filenameUtf8Match) {
               fileName = decodeURIComponent(filenameUtf8Match[1]);
+              console.log('✅ 批量使用 filename*=UTF-8\'\'... 格式:', fileName);
             }
+          } else {
+            console.log('⚠️ 批量生成未找到 Content-Disposition 响应头');
           }
+          
+          console.log('📁 批量生成最终文件名:', fileName);
           
           results[targetCountry] = { blob, fileName };
           setBatchProgress(prev => ({ ...prev, [targetCountry]: 'completed' }));
