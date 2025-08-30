@@ -2763,12 +2763,60 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
       }
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = recordData.storage_volume || '';
-      if (depthFrontToBackCol !== -1) data[currentRowIndex][depthFrontToBackCol] = recordData.depth_front_to_back || '';
-      if (depthFrontToBackUnitOfMeasureCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = recordData.depth_front_to_back_unit_of_measure || '';
-      if (depthWidthSideToSideCol !== -1) data[currentRowIndex][depthWidthSideToSideCol] = recordData.depth_width_side_to_side || '';
-      if (depthWidthSideToSideUnitOfMeasureCol !== -1) data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = recordData.depth_width_side_to_side_unit_of_measure || '';
-      if (depthHeightFloorToTopCol !== -1) data[currentRowIndex][depthHeightFloorToTopCol] = recordData.depth_height_floor_to_top || '';
-      if (depthHeightFloorToTopUnitOfMeasureCol !== -1) data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = recordData.depth_height_floor_to_top_unit_of_measure || '';
+      if (depthFrontToBackCol !== -1) {
+        let depthValue = recordData.depth_front_to_back || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (actualCountry === 'CA' && recordData.depth_front_to_back_unit_of_measure && 
+            recordData.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
+            depthValue && !isNaN(parseFloat(depthValue))) {
+          depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
+        }
+        data[currentRowIndex][depthFrontToBackCol] = depthValue;
+      }
+      if (depthFrontToBackUnitOfMeasureCol !== -1) {
+        let depthUnit = recordData.depth_front_to_back_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (actualCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
+          depthUnit = 'Centimeters';
+        }
+        data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
+      }
+              if (depthWidthSideToSideCol !== -1) {
+          let widthValue = recordData.depth_width_side_to_side || '';
+          // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+          if (actualCountry === 'CA' && recordData.depth_width_side_to_side_unit_of_measure && 
+              recordData.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
+              widthValue && !isNaN(parseFloat(widthValue))) {
+            widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
+          }
+          data[currentRowIndex][depthWidthSideToSideCol] = widthValue;
+        }
+        if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
+          let widthUnit = recordData.depth_width_side_to_side_unit_of_measure || '';
+          // 加拿大站点特殊处理：Inches转换为Centimeters
+          if (actualCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
+            widthUnit = 'Centimeters';
+          }
+          data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
+        }
+              if (depthHeightFloorToTopCol !== -1) {
+          let heightValue = recordData.depth_height_floor_to_top || '';
+          // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+          if (actualCountry === 'CA' && recordData.depth_height_floor_to_top_unit_of_measure && 
+              recordData.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
+              heightValue && !isNaN(parseFloat(heightValue))) {
+            heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
+          }
+          data[currentRowIndex][depthHeightFloorToTopCol] = heightValue;
+        }
+        if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
+          let heightUnit = recordData.depth_height_floor_to_top_unit_of_measure || '';
+          // 加拿大站点特殊处理：Inches转换为Centimeters
+          if (actualCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
+            heightUnit = 'Centimeters';
+          }
+          data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
+        }
       
       // 加拿大站点manufacturer_contact_information字段特殊处理
       if (manufacturerContactInformationCol !== -1) {
@@ -3366,22 +3414,58 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][storageVolumeCol] = data.storage_volume || '';
       }
       if (depthFrontToBackCol !== -1) {
-        updatedData[rowIndex][depthFrontToBackCol] = data.depth_front_to_back || '';
+        let depthValue = data.depth_front_to_back || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (country === 'CA' && data.depth_front_to_back_unit_of_measure && 
+            data.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
+            depthValue && !isNaN(parseFloat(depthValue))) {
+          depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
+        }
+        updatedData[rowIndex][depthFrontToBackCol] = depthValue;
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
-        updatedData[rowIndex][depthFrontToBackUnitOfMeasureCol] = data.depth_front_to_back_unit_of_measure || '';
+        let depthUnit = data.depth_front_to_back_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (country === 'CA' && depthUnit.toLowerCase() === 'inches') {
+          depthUnit = 'Centimeters';
+        }
+        updatedData[rowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
       if (depthWidthSideToSideCol !== -1) {
-        updatedData[rowIndex][depthWidthSideToSideCol] = data.depth_width_side_to_side || '';
+        let widthValue = data.depth_width_side_to_side || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (country === 'CA' && data.depth_width_side_to_side_unit_of_measure && 
+            data.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
+            widthValue && !isNaN(parseFloat(widthValue))) {
+          widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
+        }
+        updatedData[rowIndex][depthWidthSideToSideCol] = widthValue;
       }
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
-        updatedData[rowIndex][depthWidthSideToSideUnitOfMeasureCol] = data.depth_width_side_to_side_unit_of_measure || '';
+        let widthUnit = data.depth_width_side_to_side_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (country === 'CA' && widthUnit.toLowerCase() === 'inches') {
+          widthUnit = 'Centimeters';
+        }
+        updatedData[rowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
       }
       if (depthHeightFloorToTopCol !== -1) {
-        updatedData[rowIndex][depthHeightFloorToTopCol] = data.depth_height_floor_to_top || '';
+        let heightValue = data.depth_height_floor_to_top || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (country === 'CA' && data.depth_height_floor_to_top_unit_of_measure && 
+            data.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
+            heightValue && !isNaN(parseFloat(heightValue))) {
+          heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
+        }
+        updatedData[rowIndex][depthHeightFloorToTopCol] = heightValue;
       }
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
-        updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = data.depth_height_floor_to_top_unit_of_measure || '';
+        let heightUnit = data.depth_height_floor_to_top_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (country === 'CA' && heightUnit.toLowerCase() === 'inches') {
+          heightUnit = 'Centimeters';
+        }
+        updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
       // 加拿大站点manufacturer_contact_information字段特殊处理
@@ -3810,12 +3894,60 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
          data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
        }
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = record.storage_volume || '';
-      if (depthFrontToBackCol !== -1) data[currentRowIndex][depthFrontToBackCol] = record.depth_front_to_back || '';
-      if (depthFrontToBackUnitOfMeasureCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = record.depth_front_to_back_unit_of_measure || '';
-      if (depthWidthSideToSideCol !== -1) data[currentRowIndex][depthWidthSideToSideCol] = record.depth_width_side_to_side || '';
-      if (depthWidthSideToSideUnitOfMeasureCol !== -1) data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = record.depth_width_side_to_side_unit_of_measure || '';
-      if (depthHeightFloorToTopCol !== -1) data[currentRowIndex][depthHeightFloorToTopCol] = record.depth_height_floor_to_top || '';
-      if (depthHeightFloorToTopUnitOfMeasureCol !== -1) data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = record.depth_height_floor_to_top_unit_of_measure || '';
+      if (depthFrontToBackCol !== -1) {
+        let depthValue = record.depth_front_to_back || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (targetCountry === 'CA' && record.depth_front_to_back_unit_of_measure && 
+            record.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
+            depthValue && !isNaN(parseFloat(depthValue))) {
+          depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
+        }
+        data[currentRowIndex][depthFrontToBackCol] = depthValue;
+      }
+      if (depthFrontToBackUnitOfMeasureCol !== -1) {
+        let depthUnit = record.depth_front_to_back_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (targetCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
+          depthUnit = 'Centimeters';
+        }
+        data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
+      }
+      if (depthWidthSideToSideCol !== -1) {
+        let widthValue = record.depth_width_side_to_side || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (targetCountry === 'CA' && record.depth_width_side_to_side_unit_of_measure && 
+            record.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
+            widthValue && !isNaN(parseFloat(widthValue))) {
+          widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
+        }
+        data[currentRowIndex][depthWidthSideToSideCol] = widthValue;
+      }
+      if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
+        let widthUnit = record.depth_width_side_to_side_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (targetCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
+          widthUnit = 'Centimeters';
+        }
+        data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
+      }
+      if (depthHeightFloorToTopCol !== -1) {
+        let heightValue = record.depth_height_floor_to_top || '';
+        // 加拿大站点特殊处理：如果单位是Inches，转换为厘米
+        if (targetCountry === 'CA' && record.depth_height_floor_to_top_unit_of_measure && 
+            record.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
+            heightValue && !isNaN(parseFloat(heightValue))) {
+          heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
+        }
+        data[currentRowIndex][depthHeightFloorToTopCol] = heightValue;
+      }
+      if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
+        let heightUnit = record.depth_height_floor_to_top_unit_of_measure || '';
+        // 加拿大站点特殊处理：Inches转换为Centimeters
+        if (targetCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
+          heightUnit = 'Centimeters';
+        }
+        data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
+      }
       
       // 加拿大站点manufacturer_contact_information字段特殊处理
       if (manufacturerContactInformationCol !== -1) {
