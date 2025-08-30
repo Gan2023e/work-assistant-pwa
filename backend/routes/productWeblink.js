@@ -2502,7 +2502,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let cpsiaCautionaryStatement1Col = -1;
     let conditionTypeCol = -1;
     
-    // 加拿大特定字段的列变量
+    // 加拿大站点新增字段的列变量
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -2601,18 +2601,12 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             conditionTypeCol = colIndex;
           } else if (cellValue === 'closure_type') {
             closureTypeCol = colIndex;
-          } else if (cellValue === 'outer_material_type1') {
-            outerMaterialType1Col = colIndex;
           } else if (cellValue === 'care_instructions') {
             careInstructionsCol = colIndex;
           } else if (cellValue === 'model') {
             modelCol = colIndex;
           } else if (cellValue === 'target_gender') {
             targetGenderCol = colIndex;
-          } else if (cellValue === 'department_name') {
-            departmentNameCol = colIndex;
-          } else if (cellValue === 'special_features') {
-            specialFeaturesCol = colIndex;
           } else if (cellValue === 'recommended_uses_for_product') {
             recommendedUsesForProductCol = colIndex;
           } else if (cellValue === 'seasons1') {
@@ -2625,10 +2619,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             seasons4Col = colIndex;
           } else if (cellValue === 'lifestyle1') {
             lifestyle1Col = colIndex;
-          } else if (cellValue === 'lining_description') {
-            liningDescriptionCol = colIndex;
-          } else if (cellValue === 'strap_type') {
-            strapTypeCol = colIndex;
           } else if (cellValue === 'storage_volume_unit_of_measure') {
             storageVolumeUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'storage_volume') {
@@ -2645,10 +2635,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             depthHeightFloorToTopCol = colIndex;
           } else if (cellValue === 'depth_height_floor_to_top_unit_of_measure') {
             depthHeightFloorToTopUnitOfMeasureCol = colIndex;
-          } else if (cellValue === 'import_designation') {
-            importDesignationCol = colIndex;
-          } else if (cellValue === 'are_batteries_included') {
-            areBatteriesIncludedCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
             manufacturerContactInformationCol = colIndex;
           }
@@ -2705,15 +2691,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
         swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
         styleNameCol, colorMapCol, materialTypeCol, genericKeywordsCol, waterResistanceLevelCol,
-        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol,
-        closureTypeCol, careInstructionsCol, modelCol, targetGenderCol, recommendedUsesForProductCol,
-        seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col, storageVolumeUnitOfMeasureCol,
-        storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol, depthWidthSideToSideCol,
-        depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, depthHeightFloorToTopUnitOfMeasureCol,
-        manufacturerContactInformationCol, outerMaterialType1Col, departmentNameCol, specialFeaturesCol,
-        liningDescriptionCol, strapTypeCol, importDesignationCol, areBatteriesIncludedCol
+        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol
       ].filter(col => col !== -1);
-      const maxCol = allColumns.length > 0 ? Math.max(...allColumns) : 0;
+      const maxCol = Math.max(...allColumns);
       
       // 确保当前行有足够的列
       if (!data[currentRowIndex]) {
@@ -2762,6 +2742,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
       if (cpsiaCautionaryStatement1Col !== -1) data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
       if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
+      
+      // 填写加拿大站点新增字段数据
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = recordData.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = recordData.care_instructions || '';
       if (modelCol !== -1) data[currentRowIndex][modelCol] = recordData.model || '';
@@ -2780,8 +2762,22 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = recordData.depth_width_side_to_side_unit_of_measure || '';
       if (depthHeightFloorToTopCol !== -1) data[currentRowIndex][depthHeightFloorToTopCol] = recordData.depth_height_floor_to_top || '';
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = recordData.depth_height_floor_to_top_unit_of_measure || '';
-      if (importDesignationCol !== -1) data[currentRowIndex][importDesignationCol] = recordData.import_designation || '';
-      if (manufacturerContactInformationCol !== -1) data[currentRowIndex][manufacturerContactInformationCol] = recordData.manufacturer_contact_information || '';
+      
+      // 加拿大站点manufacturer_contact_information字段特殊处理
+      if (manufacturerContactInformationCol !== -1) {
+        if (actualCountry === 'CA') {
+          // 对于加拿大站点，统一填写指定的制造商联系信息
+          data[currentRowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
+Room 825, Building C, Part C
+Qinghu Tech Park
+Shenzhen, Longhua, Guangdong 518000
+CN
+8618123615703`;
+        } else {
+          // 其他站点保持原有逻辑
+          data[currentRowIndex][manufacturerContactInformationCol] = recordData.manufacturer_contact_information || '';
+        }
+      }
       
       // 调试：输出第一条记录填写后的行内容
       if (index === 0) {
@@ -2950,7 +2946,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let cpsiaCautionaryStatement1Col = -1;
     let conditionTypeCol = -1;
     
-    // 加拿大特定字段的列变量
+    // 加拿大站点新增字段的列变量
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -2970,15 +2966,6 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let depthHeightFloorToTopCol = -1;
     let depthHeightFloorToTopUnitOfMeasureCol = -1;
     let manufacturerContactInformationCol = -1;
-    
-    // 其他字段的列变量
-    let outerMaterialType1Col = -1;
-    let departmentNameCol = -1;
-    let specialFeaturesCol = -1;
-    let liningDescriptionCol = -1;
-    let strapTypeCol = -1;
-    let importDesignationCol = -1;
-    let areBatteriesIncludedCol = -1;
     
     const missingColumns = [];
     
@@ -3058,6 +3045,44 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             cpsiaCautionaryStatement1Col = colIndex;
           } else if (cellValue === 'condition_type') {
             conditionTypeCol = colIndex;
+          } else if (cellValue === 'closure_type') {
+            closureTypeCol = colIndex;
+          } else if (cellValue === 'care_instructions') {
+            careInstructionsCol = colIndex;
+          } else if (cellValue === 'model') {
+            modelCol = colIndex;
+          } else if (cellValue === 'target_gender') {
+            targetGenderCol = colIndex;
+          } else if (cellValue === 'recommended_uses_for_product') {
+            recommendedUsesForProductCol = colIndex;
+          } else if (cellValue === 'seasons1') {
+            seasons1Col = colIndex;
+          } else if (cellValue === 'seasons2') {
+            seasons2Col = colIndex;
+          } else if (cellValue === 'seasons3') {
+            seasons3Col = colIndex;
+          } else if (cellValue === 'seasons4') {
+            seasons4Col = colIndex;
+          } else if (cellValue === 'lifestyle1') {
+            lifestyle1Col = colIndex;
+          } else if (cellValue === 'storage_volume_unit_of_measure') {
+            storageVolumeUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'storage_volume') {
+            storageVolumeCol = colIndex;
+          } else if (cellValue === 'depth_front_to_back') {
+            depthFrontToBackCol = colIndex;
+          } else if (cellValue === 'depth_front_to_back_unit_of_measure') {
+            depthFrontToBackUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'depth_width_side_to_side') {
+            depthWidthSideToSideCol = colIndex;
+          } else if (cellValue === 'depth_width_side_to_side_unit_of_measure') {
+            depthWidthSideToSideUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'depth_height_floor_to_top') {
+            depthHeightFloorToTopCol = colIndex;
+          } else if (cellValue === 'depth_height_floor_to_top_unit_of_measure') {
+            depthHeightFloorToTopUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'manufacturer_contact_information') {
+            manufacturerContactInformationCol = colIndex;
           }
         }
       });
@@ -3157,7 +3182,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       
       // 确保行有足够的列
-      const allColumns = [
+      const maxCol = Math.max(
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
         otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
@@ -3167,12 +3192,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         styleNameCol, colorMapCol, materialTypeCol, genericKeywordsCol, waterResistanceLevelCol,
         sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol,
         closureTypeCol, careInstructionsCol, modelCol, targetGenderCol, recommendedUsesForProductCol,
-        seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col, storageVolumeUnitOfMeasureCol,
-        storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol, depthWidthSideToSideCol,
-        depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, depthHeightFloorToTopUnitOfMeasureCol,
-        manufacturerContactInformationCol
-      ].filter(col => col !== -1);
-      const maxCol = Math.max(...allColumns);
+        seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
+        storageVolumeUnitOfMeasureCol, storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol,
+        depthWidthSideToSideCol, depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, 
+        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol
+      );
       
       for (let i = updatedData[rowIndex].length; i <= maxCol; i++) {
         updatedData[rowIndex][i] = '';
@@ -3292,7 +3316,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
       }
       
-      // 填写加拿大特定字段
+      // 填写加拿大站点新增字段数据
       if (closureTypeCol !== -1) {
         updatedData[rowIndex][closureTypeCol] = data.closure_type || '';
       }
@@ -3348,10 +3372,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = data.depth_height_floor_to_top_unit_of_measure || '';
       }
       
-      // 特殊处理加拿大的manufacturer_contact_information字段
+      // 加拿大站点manufacturer_contact_information字段特殊处理
       if (manufacturerContactInformationCol !== -1) {
         if (country === 'CA') {
-          // 加拿大站点统一填写指定的联系信息
+          // 对于加拿大站点，统一填写指定的制造商联系信息
           updatedData[rowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
 Room 825, Building C, Part C
 Qinghu Tech Park
@@ -3359,31 +3383,9 @@ Shenzhen, Longhua, Guangdong 518000
 CN
 8618123615703`;
         } else {
+          // 其他站点保持原有逻辑
           updatedData[rowIndex][manufacturerContactInformationCol] = data.manufacturer_contact_information || '';
         }
-      }
-      
-      // 填写其他字段数据
-      if (outerMaterialType1Col !== -1) {
-        updatedData[rowIndex][outerMaterialType1Col] = data.outer_material_type1 || '';
-      }
-      if (departmentNameCol !== -1) {
-        updatedData[rowIndex][departmentNameCol] = data.department_name || '';
-      }
-      if (specialFeaturesCol !== -1) {
-        updatedData[rowIndex][specialFeaturesCol] = data.special_features || '';
-      }
-      if (liningDescriptionCol !== -1) {
-        updatedData[rowIndex][liningDescriptionCol] = data.lining_description || '';
-      }
-      if (strapTypeCol !== -1) {
-        updatedData[rowIndex][strapTypeCol] = data.strap_type || '';
-      }
-      if (importDesignationCol !== -1) {
-        updatedData[rowIndex][importDesignationCol] = data.import_designation || '';
-      }
-      if (areBatteriesIncludedCol !== -1) {
-        updatedData[rowIndex][areBatteriesIncludedCol] = data.are_batteries_included || '';
       }
 
       addedCount++;
@@ -3615,26 +3617,26 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
-    // 加拿大特定字段的列变量（批量生成）
-    let closureTypeBatchCol = -1;
-    let careInstructionsBatchCol = -1;
-    let modelBatchCol = -1;
-    let targetGenderBatchCol = -1;
-    let recommendedUsesForProductBatchCol = -1;
-    let seasons1BatchCol = -1;
-    let seasons2BatchCol = -1;
-    let seasons3BatchCol = -1;
-    let seasons4BatchCol = -1;
-    let lifestyle1BatchCol = -1;
-    let storageVolumeUnitOfMeasureBatchCol = -1;
-    let storageVolumeBatchCol = -1;
-    let depthFrontToBackBatchCol = -1;
-    let depthFrontToBackUnitOfMeasureBatchCol = -1;
-    let depthWidthSideToSideBatchCol = -1;
-    let depthWidthSideToSideUnitOfMeasureBatchCol = -1;
-    let depthHeightFloorToTopBatchCol = -1;
-    let depthHeightFloorToTopUnitOfMeasureBatchCol = -1;
-    let manufacturerContactInformationBatchCol = -1;
+    // 加拿大站点新增字段的列变量
+    let closureTypeCol = -1;
+    let careInstructionsCol = -1;
+    let modelCol = -1;
+    let targetGenderCol = -1;
+    let recommendedUsesForProductCol = -1;
+    let seasons1Col = -1;
+    let seasons2Col = -1;
+    let seasons3Col = -1;
+    let seasons4Col = -1;
+    let lifestyle1Col = -1;
+    let storageVolumeUnitOfMeasureCol = -1;
+    let storageVolumeCol = -1;
+    let depthFrontToBackCol = -1;
+    let depthFrontToBackUnitOfMeasureCol = -1;
+    let depthWidthSideToSideCol = -1;
+    let depthWidthSideToSideUnitOfMeasureCol = -1;
+    let depthHeightFloorToTopCol = -1;
+    let depthHeightFloorToTopUnitOfMeasureCol = -1;
+    let manufacturerContactInformationCol = -1;
     
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
@@ -3677,43 +3679,43 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
           } else if (cellValue === 'bullet_point5') {
             bulletPoint5Col = colIndex;
           } else if (cellValue === 'closure_type') {
-            closureTypeBatchCol = colIndex;
+            closureTypeCol = colIndex;
           } else if (cellValue === 'care_instructions') {
-            careInstructionsBatchCol = colIndex;
+            careInstructionsCol = colIndex;
           } else if (cellValue === 'model') {
-            modelBatchCol = colIndex;
+            modelCol = colIndex;
           } else if (cellValue === 'target_gender') {
-            targetGenderBatchCol = colIndex;
+            targetGenderCol = colIndex;
           } else if (cellValue === 'recommended_uses_for_product') {
-            recommendedUsesForProductBatchCol = colIndex;
+            recommendedUsesForProductCol = colIndex;
           } else if (cellValue === 'seasons1') {
-            seasons1BatchCol = colIndex;
+            seasons1Col = colIndex;
           } else if (cellValue === 'seasons2') {
-            seasons2BatchCol = colIndex;
+            seasons2Col = colIndex;
           } else if (cellValue === 'seasons3') {
-            seasons3BatchCol = colIndex;
+            seasons3Col = colIndex;
           } else if (cellValue === 'seasons4') {
-            seasons4BatchCol = colIndex;
+            seasons4Col = colIndex;
           } else if (cellValue === 'lifestyle1') {
-            lifestyle1BatchCol = colIndex;
+            lifestyle1Col = colIndex;
           } else if (cellValue === 'storage_volume_unit_of_measure') {
-            storageVolumeUnitOfMeasureBatchCol = colIndex;
+            storageVolumeUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'storage_volume') {
-            storageVolumeBatchCol = colIndex;
+            storageVolumeCol = colIndex;
           } else if (cellValue === 'depth_front_to_back') {
-            depthFrontToBackBatchCol = colIndex;
+            depthFrontToBackCol = colIndex;
           } else if (cellValue === 'depth_front_to_back_unit_of_measure') {
-            depthFrontToBackUnitOfMeasureBatchCol = colIndex;
+            depthFrontToBackUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'depth_width_side_to_side') {
-            depthWidthSideToSideBatchCol = colIndex;
+            depthWidthSideToSideCol = colIndex;
           } else if (cellValue === 'depth_width_side_to_side_unit_of_measure') {
-            depthWidthSideToSideUnitOfMeasureBatchCol = colIndex;
+            depthWidthSideToSideUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'depth_height_floor_to_top') {
-            depthHeightFloorToTopBatchCol = colIndex;
+            depthHeightFloorToTopCol = colIndex;
           } else if (cellValue === 'depth_height_floor_to_top_unit_of_measure') {
-            depthHeightFloorToTopUnitOfMeasureBatchCol = colIndex;
+            depthHeightFloorToTopUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
-            manufacturerContactInformationBatchCol = colIndex;
+            manufacturerContactInformationCol = colIndex;
           }
         }
       });
@@ -3740,14 +3742,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
         otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
         bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
-        closureTypeBatchCol, careInstructionsBatchCol, modelBatchCol, targetGenderBatchCol, 
-        recommendedUsesForProductBatchCol, seasons1BatchCol, seasons2BatchCol, seasons3BatchCol, 
-        seasons4BatchCol, lifestyle1BatchCol, storageVolumeUnitOfMeasureBatchCol, storageVolumeBatchCol,
-        depthFrontToBackBatchCol, depthFrontToBackUnitOfMeasureBatchCol, depthWidthSideToSideBatchCol,
-        depthWidthSideToSideUnitOfMeasureBatchCol, depthHeightFloorToTopBatchCol, 
-        depthHeightFloorToTopUnitOfMeasureBatchCol, manufacturerContactInformationBatchCol
+        closureTypeCol, careInstructionsCol, modelCol, targetGenderCol, recommendedUsesForProductCol,
+        seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
+        storageVolumeUnitOfMeasureCol, storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol,
+        depthWidthSideToSideCol, depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, 
+        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol
       ].filter(col => col !== -1);
-      const maxCol = allColumns.length > 0 ? Math.max(...allColumns) : 0;
+      const maxCol = Math.max(...allColumns);
       
       // 确保当前行有足够的列
       if (!data[currentRowIndex]) {
@@ -3777,38 +3778,39 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = record.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = record.bullet_point5 || '';
       
-      // 填写加拿大特定字段（批量生成）
-      if (closureTypeBatchCol !== -1) data[currentRowIndex][closureTypeBatchCol] = record.closure_type || '';
-      if (careInstructionsBatchCol !== -1) data[currentRowIndex][careInstructionsBatchCol] = record.care_instructions || '';
-      if (modelBatchCol !== -1) data[currentRowIndex][modelBatchCol] = record.model || '';
-      if (targetGenderBatchCol !== -1) data[currentRowIndex][targetGenderBatchCol] = record.target_gender || '';
-      if (recommendedUsesForProductBatchCol !== -1) data[currentRowIndex][recommendedUsesForProductBatchCol] = record.recommended_uses_for_product || '';
-      if (seasons1BatchCol !== -1) data[currentRowIndex][seasons1BatchCol] = record.seasons1 || '';
-      if (seasons2BatchCol !== -1) data[currentRowIndex][seasons2BatchCol] = record.seasons2 || '';
-      if (seasons3BatchCol !== -1) data[currentRowIndex][seasons3BatchCol] = record.seasons3 || '';
-      if (seasons4BatchCol !== -1) data[currentRowIndex][seasons4BatchCol] = record.seasons4 || '';
-      if (lifestyle1BatchCol !== -1) data[currentRowIndex][lifestyle1BatchCol] = record.lifestyle1 || '';
-      if (storageVolumeUnitOfMeasureBatchCol !== -1) data[currentRowIndex][storageVolumeUnitOfMeasureBatchCol] = record.storage_volume_unit_of_measure || '';
-      if (storageVolumeBatchCol !== -1) data[currentRowIndex][storageVolumeBatchCol] = record.storage_volume || '';
-      if (depthFrontToBackBatchCol !== -1) data[currentRowIndex][depthFrontToBackBatchCol] = record.depth_front_to_back || '';
-      if (depthFrontToBackUnitOfMeasureBatchCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureBatchCol] = record.depth_front_to_back_unit_of_measure || '';
-      if (depthWidthSideToSideBatchCol !== -1) data[currentRowIndex][depthWidthSideToSideBatchCol] = record.depth_width_side_to_side || '';
-      if (depthWidthSideToSideUnitOfMeasureBatchCol !== -1) data[currentRowIndex][depthWidthSideToSideUnitOfMeasureBatchCol] = record.depth_width_side_to_side_unit_of_measure || '';
-      if (depthHeightFloorToTopBatchCol !== -1) data[currentRowIndex][depthHeightFloorToTopBatchCol] = record.depth_height_floor_to_top || '';
-      if (depthHeightFloorToTopUnitOfMeasureBatchCol !== -1) data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureBatchCol] = record.depth_height_floor_to_top_unit_of_measure || '';
+      // 填写加拿大站点新增字段数据
+      if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = record.closure_type || '';
+      if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = record.care_instructions || '';
+      if (modelCol !== -1) data[currentRowIndex][modelCol] = record.model || '';
+      if (targetGenderCol !== -1) data[currentRowIndex][targetGenderCol] = record.target_gender || '';
+      if (recommendedUsesForProductCol !== -1) data[currentRowIndex][recommendedUsesForProductCol] = record.recommended_uses_for_product || '';
+      if (seasons1Col !== -1) data[currentRowIndex][seasons1Col] = record.seasons1 || '';
+      if (seasons2Col !== -1) data[currentRowIndex][seasons2Col] = record.seasons2 || '';
+      if (seasons3Col !== -1) data[currentRowIndex][seasons3Col] = record.seasons3 || '';
+      if (seasons4Col !== -1) data[currentRowIndex][seasons4Col] = record.seasons4 || '';
+      if (lifestyle1Col !== -1) data[currentRowIndex][lifestyle1Col] = record.lifestyle1 || '';
+      if (storageVolumeUnitOfMeasureCol !== -1) data[currentRowIndex][storageVolumeUnitOfMeasureCol] = record.storage_volume_unit_of_measure || '';
+      if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = record.storage_volume || '';
+      if (depthFrontToBackCol !== -1) data[currentRowIndex][depthFrontToBackCol] = record.depth_front_to_back || '';
+      if (depthFrontToBackUnitOfMeasureCol !== -1) data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = record.depth_front_to_back_unit_of_measure || '';
+      if (depthWidthSideToSideCol !== -1) data[currentRowIndex][depthWidthSideToSideCol] = record.depth_width_side_to_side || '';
+      if (depthWidthSideToSideUnitOfMeasureCol !== -1) data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = record.depth_width_side_to_side_unit_of_measure || '';
+      if (depthHeightFloorToTopCol !== -1) data[currentRowIndex][depthHeightFloorToTopCol] = record.depth_height_floor_to_top || '';
+      if (depthHeightFloorToTopUnitOfMeasureCol !== -1) data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = record.depth_height_floor_to_top_unit_of_measure || '';
       
-      // 特殊处理加拿大的manufacturer_contact_information字段（批量生成）
-      if (manufacturerContactInformationBatchCol !== -1) {
+      // 加拿大站点manufacturer_contact_information字段特殊处理
+      if (manufacturerContactInformationCol !== -1) {
         if (targetCountry === 'CA') {
-          // 加拿大站点统一填写指定的联系信息
-          data[currentRowIndex][manufacturerContactInformationBatchCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
+          // 对于加拿大站点，统一填写指定的制造商联系信息
+          data[currentRowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
 Room 825, Building C, Part C
 Qinghu Tech Park
 Shenzhen, Longhua, Guangdong 518000
 CN
 8618123615703`;
         } else {
-          data[currentRowIndex][manufacturerContactInformationBatchCol] = record.manufacturer_contact_information || '';
+          // 其他站点保持原有逻辑
+          data[currentRowIndex][manufacturerContactInformationCol] = record.manufacturer_contact_information || '';
         }
       }
       
