@@ -2535,9 +2535,14 @@ const Purchase: React.FC = () => {
           const contentDisposition = response.headers.get('content-disposition');
           let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
           if (contentDisposition) {
+            // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+            
             if (filenameMatch) {
               fileName = filenameMatch[1];
+            } else if (filenameUtf8Match) {
+              fileName = decodeURIComponent(filenameUtf8Match[1]);
             }
           }
           
@@ -2722,9 +2727,14 @@ const Purchase: React.FC = () => {
           const contentDisposition = response.headers.get('content-disposition');
           let fileName = `${targetCountry}_data_sheet.xlsx`; // 默认文件名
           if (contentDisposition) {
+            // 尝试匹配两种格式：filename="..." 和 filename*=UTF-8''...
             const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            const filenameUtf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+            
             if (filenameMatch) {
               fileName = filenameMatch[1];
+            } else if (filenameUtf8Match) {
+              fileName = decodeURIComponent(filenameUtf8Match[1]);
             }
           }
           
