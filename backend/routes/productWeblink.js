@@ -2332,34 +2332,69 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const headers = jsonData[2]; // 第3行是标题行
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
+    console.log('📋 Excel标题行内容:', headers);
+    console.log('📊 数据行数量:', dataRows.length);
+    
     const savedRecords = [];
     const processedRecords = []; // 用于Excel填写的干净数据
     
-    for (const row of dataRows) {
+    for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex++) {
+      const row = dataRows[rowIndex];
       if (!row || row.length === 0) continue;
       
       // 创建数据对象
       const rowData = {};
       headers.forEach((header, index) => {
         if (header && row[index] !== undefined) {
-          rowData[header.toLowerCase().replace(/\s+/g, '_')] = row[index];
+          const mappedFieldName = header.toLowerCase().replace(/\s+/g, '_');
+          rowData[mappedFieldName] = row[index];
+          
+          // 调试关键字段
+          if (['item_sku', 'parent_child', 'parent_sku'].includes(mappedFieldName)) {
+            console.log(`🔍 字段映射: 原标题="${header}" -> 映射字段="${mappedFieldName}" -> 值="${row[index]}"`);
+          }
         }
       });
+      
+      // 调试第一行数据的完整信息
+      if (rowIndex === 0) {
+        console.log('📋 第一行数据的关键字段:');
+        console.log(`  - item_sku: "${rowData.item_sku}"`);
+        console.log(`  - parent_child: "${rowData.parent_child}"`);
+        console.log(`  - parent_sku: "${rowData.parent_sku}"`);
+        console.log('📋 第一行所有字段名:', Object.keys(rowData));
+      }
       
       // 设置site字段为选择的国家（转换为中文名称）
       rowData.site = convertCountryCodeToChinese(actualCountry);
       
       // 设置original_parent_sku字段（根据parent_child列判断）
+      console.log(`🔍 处理第${rowIndex+1}行SKU提取:`, {
+        parent_child: rowData.parent_child,
+        item_sku: rowData.item_sku,
+        parent_sku: rowData.parent_sku
+      });
+      
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
         // 当parent_child为"Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         rowData.original_parent_sku = rowData.item_sku.substring(2);
+        console.log(`✅ Parent行提取: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
         // 当parent_child为"Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
+        console.log(`✅ Child行提取: ${rowData.parent_sku} -> ${rowData.original_parent_sku}`);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
         // 兼容处理：如果没有parent_child信息，使用原有逻辑
         rowData.original_parent_sku = rowData.item_sku.substring(2);
         console.warn(`⚠️ 记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
+      } else {
+        console.warn(`❌ 第${rowIndex+1}行无法提取SKU信息:`, {
+          parent_child: rowData.parent_child,
+          item_sku: rowData.item_sku,
+          item_sku_length: rowData.item_sku?.length,
+          parent_sku: rowData.parent_sku,
+          parent_sku_length: rowData.parent_sku?.length
+        });
       }
       
       // 过滤和验证数据，只保留模型中定义的字段
