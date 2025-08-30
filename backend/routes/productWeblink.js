@@ -2295,6 +2295,69 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
 
     console.log(`📝 处理国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
 
+    // 处理文本字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    const processTextForUKAUAE = (text, fieldType = 'general') => {
+      if (!text) return text;
+      
+      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+        // 对于brand_name和manufacturer字段，统一设置为SellerFun
+        if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
+          return 'SellerFun';
+        }
+        // 对于item_name字段，如果开头是JiaYou要替换成SellerFun
+        if (fieldType === 'item_name') {
+          return text.replace(/^JiaYou/g, 'SellerFun');
+        }
+      }
+      
+      return text;
+    };
+
+    // 处理SKU字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    const processSkuForUKAUAE = (sku) => {
+      if (!sku) return sku;
+      
+      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+        // SKU前缀改为UK
+        return sku.replace(/^[A-Z]{2}/, 'UK');
+      }
+      
+      return sku;
+    };
+
+    // 处理model字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    const processModelForUKAUAE = (model) => {
+      if (!model) return model;
+      
+      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+        // model字段加上UK前缀
+        if (model.startsWith('UK')) {
+          return model;
+        }
+        return 'UK' + model;
+      }
+      
+      return model;
+    };
+
+    // 处理图片URL的特殊规则（针对英国、澳大利亚、阿联酋）
+    const processImageUrlForUKAUAE = (url) => {
+      if (!url) return url;
+      
+      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+        // 如果域名包含jiayou，改成pic.sellerfun.net
+        let processedUrl = url.replace(/jiayou\.ink/g, 'pic.sellerfun.net');
+        
+        // SKU前缀改成UK (例如：USXBC188 -> UKXBC188)
+        processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
+        processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\./g, '/UK$1.');
+        
+        return processedUrl;
+      }
+      
+      return url;
+    };
+
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
     const workbook = xlsx.read(uploadedFile.buffer);
@@ -2458,6 +2521,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let otherImageUrl3Col = -1;
     let otherImageUrl4Col = -1;
     let otherImageUrl5Col = -1;
+    let otherImageUrl6Col = -1;
+    let otherImageUrl7Col = -1;
+    let otherImageUrl8Col = -1;
     let productDescriptionCol = -1;
     let bulletPoint1Col = -1;
     let bulletPoint2Col = -1;
@@ -2687,18 +2753,21 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       
       // 填写数据
-      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = recordData.item_sku || '';
-      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = recordData.item_name || '';
+      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = processSkuForUKAUAE(recordData.item_sku || '');
+      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = processTextForUKAUAE(recordData.item_name || '', 'item_name');
       if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = recordData.color_name || '';
       if (sizeNameCol !== -1) data[currentRowIndex][sizeNameCol] = recordData.size_name || '';
-      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = recordData.brand_name || '';
-      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = recordData.manufacturer || '';
-      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = recordData.main_image_url || '';
-      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = recordData.other_image_url1 || '';
-      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = recordData.other_image_url2 || '';
-      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = recordData.other_image_url3 || '';
-      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = recordData.other_image_url4 || '';
-      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = recordData.other_image_url5 || '';
+      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = processTextForUKAUAE(recordData.brand_name || '', 'brand_name');
+      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = processTextForUKAUAE(recordData.manufacturer || '', 'manufacturer');
+      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = processImageUrlForUKAUAE(recordData.main_image_url || '');
+      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = processImageUrlForUKAUAE(recordData.other_image_url1 || '');
+      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = processImageUrlForUKAUAE(recordData.other_image_url2 || '');
+      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = processImageUrlForUKAUAE(recordData.other_image_url3 || '');
+      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = processImageUrlForUKAUAE(recordData.other_image_url4 || '');
+      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = processImageUrlForUKAUAE(recordData.other_image_url5 || '');
+      if (otherImageUrl6Col !== -1) data[currentRowIndex][otherImageUrl6Col] = processImageUrlForUKAUAE(recordData.other_image_url6 || '');
+      if (otherImageUrl7Col !== -1) data[currentRowIndex][otherImageUrl7Col] = processImageUrlForUKAUAE(recordData.other_image_url7 || '');
+      if (otherImageUrl8Col !== -1) data[currentRowIndex][otherImageUrl8Col] = processImageUrlForUKAUAE(recordData.other_image_url8 || '');
       if (productDescriptionCol !== -1) data[currentRowIndex][productDescriptionCol] = recordData.product_description || '';
       if (bulletPoint1Col !== -1) data[currentRowIndex][bulletPoint1Col] = recordData.bullet_point1 || '';
       if (bulletPoint2Col !== -1) data[currentRowIndex][bulletPoint2Col] = recordData.bullet_point2 || '';
@@ -2711,10 +2780,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = recordData.external_product_id_type || '';
       if (quantityCol !== -1) data[currentRowIndex][quantityCol] = recordData.quantity || '';
       if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = recordData.age_range_description || '';
-      if (swatchImageUrlCol !== -1) data[currentRowIndex][swatchImageUrlCol] = recordData.swatch_image_url || '';
+      if (swatchImageUrlCol !== -1) data[currentRowIndex][swatchImageUrlCol] = processImageUrlForUKAUAE(recordData.swatch_image_url || '');
       if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = recordData.relationship_type || '';
       if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = recordData.variation_theme || '';
-      if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = recordData.parent_sku || '';
+      if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = processSkuForUKAUAE(recordData.parent_sku || '');
       if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = recordData.parent_child || '';
       if (styleNameCol !== -1) data[currentRowIndex][styleNameCol] = recordData.style_name || '';
       if (colorMapCol !== -1) data[currentRowIndex][colorMapCol] = recordData.color_map || '';
@@ -2736,7 +2805,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       // 填写加拿大站点新增字段数据
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = recordData.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = recordData.care_instructions || '';
-      if (modelCol !== -1) data[currentRowIndex][modelCol] = recordData.model || '';
+      if (modelCol !== -1) data[currentRowIndex][modelCol] = processModelForUKAUAE(recordData.model || '');
       if (targetGenderCol !== -1) data[currentRowIndex][targetGenderCol] = recordData.target_gender || '';
       if (recommendedUsesForProductCol !== -1) data[currentRowIndex][recommendedUsesForProductCol] = recordData.recommended_uses_for_product || '';
       if (seasons1Col !== -1) data[currentRowIndex][seasons1Col] = recordData.seasons1 || '';
@@ -2953,6 +3022,9 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let otherImageUrl3Col = -1;
     let otherImageUrl4Col = -1;
     let otherImageUrl5Col = -1;
+    let otherImageUrl6Col = -1;
+    let otherImageUrl7Col = -1;
+    let otherImageUrl8Col = -1;
     let productDescriptionCol = -1;
     let bulletPoint1Col = -1;
     let bulletPoint2Col = -1;
@@ -3031,6 +3103,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             otherImageUrl4Col = colIndex;
           } else if (cellValue === 'other_image_url5') {
             otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'other_image_url6') {
+            otherImageUrl6Col = colIndex;
+          } else if (cellValue === 'other_image_url7') {
+            otherImageUrl7Col = colIndex;
+          } else if (cellValue === 'other_image_url8') {
+            otherImageUrl8Col = colIndex;
           } else if (cellValue === 'product_description') {
             productDescriptionCol = colIndex;
           } else if (cellValue === 'bullet_point1') {
@@ -3149,8 +3227,22 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     console.log(`📍 源文件类型: ${sourceCountryType}, 目标国家: ${country}`);
 
     // 处理文本内容，根据源文件和目标国家决定品牌替换规则
-    const processTextContent = (text) => {
+    const processTextContent = (text, fieldType = 'general') => {
       if (!text) return text;
+      
+      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规则
+      if (country === 'UK' || country === 'AU' || country === 'AE') {
+        // 对于brand_name和manufacturer字段，统一设置为SellerFun
+        if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
+          return 'SellerFun';
+        }
+        // 对于item_name字段，如果开头是JiaYou要替换成SellerFun
+        if (fieldType === 'item_name') {
+          return text.replace(/^JiaYou/g, 'SellerFun');
+        }
+        // 其他文本字段的一般处理
+        return text.replace(/JiaYou/g, 'SellerFun');
+      }
       
       // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，SellerFun改成JiaYou
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
@@ -3169,6 +3261,18 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     const processImageUrl = (url) => {
       if (!url) return url;
       
+      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规则
+      if (country === 'UK' || country === 'AU' || country === 'AE') {
+        // 如果域名包含jiayou，改成pic.sellerfun.net
+        let processedUrl = url.replace(/jiayou\.ink/g, 'pic.sellerfun.net');
+        
+        // SKU前缀改成UK (例如：USXBC188 -> UKXBC188)
+        processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
+        processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\./g, '/UK$1.');
+        
+        return processedUrl;
+      }
+      
       // 如果源文件不是美国/加拿大，在生成美国/加拿大资料表时，JiaYou改成SellerFun
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
         return url.replace(/JiaYou/g, 'SellerFun');
@@ -3180,6 +3284,34 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       
       return url;
+    };
+
+    // 处理SKU字段，根据目标国家决定前缀
+    const processSkuField = (sku) => {
+      if (!sku) return sku;
+      
+      // 如果目标国家是英国、澳大利亚、阿联酋，SKU前缀改为UK
+      if (country === 'UK' || country === 'AU' || country === 'AE') {
+        return sku.replace(/^[A-Z]{2}/, 'UK');
+      }
+      
+      return sku;
+    };
+
+    // 处理model字段，根据目标国家决定前缀
+    const processModelField = (model) => {
+      if (!model) return model;
+      
+      // 如果目标国家是英国、澳大利亚、阿联酋，model字段加上UK前缀
+      if (country === 'UK' || country === 'AU' || country === 'AE') {
+        // 如果已经有UK前缀就不重复添加
+        if (model.startsWith('UK')) {
+          return model;
+        }
+        return 'UK' + model;
+      }
+      
+      return model;
     };
 
     // 调试：输出模板前几行的内容
@@ -3219,7 +3351,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       const maxCol = Math.max(
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
-        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        otherImageUrl4Col, otherImageUrl5Col, otherImageUrl6Col, otherImageUrl7Col, otherImageUrl8Col, productDescriptionCol,
         bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
         feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
         swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
@@ -3240,10 +3372,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       const data = record.dataValues || record;
       
       if (itemSkuCol !== -1) {
-        updatedData[rowIndex][itemSkuCol] = data.item_sku || '';
+        updatedData[rowIndex][itemSkuCol] = processSkuField(data.item_sku || '');
       }
       if (itemNameCol !== -1) {
-        updatedData[rowIndex][itemNameCol] = processTextContent(data.item_name) || '';
+        updatedData[rowIndex][itemNameCol] = processTextContent(data.item_name, 'item_name') || '';
       }
       if (colorNameCol !== -1) {
         updatedData[rowIndex][colorNameCol] = data.color_name || '';
@@ -3252,10 +3384,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][sizeNameCol] = data.size_name || '';
       }
       if (brandNameCol !== -1) {
-        updatedData[rowIndex][brandNameCol] = processTextContent(data.brand_name) || '';
+        updatedData[rowIndex][brandNameCol] = processTextContent(data.brand_name, 'brand_name') || '';
       }
       if (manufacturerCol !== -1) {
-        updatedData[rowIndex][manufacturerCol] = processTextContent(data.manufacturer) || '';
+        updatedData[rowIndex][manufacturerCol] = processTextContent(data.manufacturer, 'manufacturer') || '';
       }
       if (mainImageUrlCol !== -1) {
         updatedData[rowIndex][mainImageUrlCol] = processImageUrl(data.main_image_url) || '';
@@ -3274,6 +3406,15 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (otherImageUrl5Col !== -1) {
         updatedData[rowIndex][otherImageUrl5Col] = processImageUrl(data.other_image_url5) || '';
+      }
+      if (otherImageUrl6Col !== -1) {
+        updatedData[rowIndex][otherImageUrl6Col] = processImageUrl(data.other_image_url6) || '';
+      }
+      if (otherImageUrl7Col !== -1) {
+        updatedData[rowIndex][otherImageUrl7Col] = processImageUrl(data.other_image_url7) || '';
+      }
+      if (otherImageUrl8Col !== -1) {
+        updatedData[rowIndex][otherImageUrl8Col] = processImageUrl(data.other_image_url8) || '';
       }
       if (productDescriptionCol !== -1) {
         updatedData[rowIndex][productDescriptionCol] = processTextContent(data.product_description) || '';
@@ -3317,7 +3458,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][variationThemeCol] = data.variation_theme || '';
       }
       if (parentSkuCol !== -1) {
-        updatedData[rowIndex][parentSkuCol] = data.parent_sku || '';
+        updatedData[rowIndex][parentSkuCol] = processSkuField(data.parent_sku || '');
       }
       if (parentChildCol !== -1) {
         updatedData[rowIndex][parentChildCol] = data.parent_child || '';
@@ -3363,7 +3504,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][careInstructionsCol] = data.care_instructions || '';
       }
       if (modelCol !== -1) {
-        updatedData[rowIndex][modelCol] = data.model || '';
+        updatedData[rowIndex][modelCol] = processModelField(data.model || '');
       }
       if (targetGenderCol !== -1) {
         updatedData[rowIndex][targetGenderCol] = data.target_gender || '';
