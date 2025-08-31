@@ -2308,6 +2308,12 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
+        // 对于department_name字段，如果是英国站点且内容是"Unisex Child"，则替换为"Unisex Kids"
+        if (fieldType === 'department_name' && actualCountry === 'UK') {
+          if (text.trim() === 'Unisex Child') {
+            return 'Unisex Kids';
+          }
+        }
       }
       
       return text;
@@ -2973,7 +2979,7 @@ CN
 
       // 填写department_name字段
       if (departmentNameCol !== -1) {
-        data[currentRowIndex][departmentNameCol] = processTextForUKAUAE(recordData.department_name || '');
+        data[currentRowIndex][departmentNameCol] = processTextForUKAUAE(recordData.department_name || '', 'department_name');
       }
       
       // 调试：输出第一条记录填写后的行内容
@@ -3325,6 +3331,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         // 对于item_name字段，如果开头是JiaYou要替换成SellerFun
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
+        }
+        // 对于department_name字段，如果是英国站点且内容是"Unisex Child"，则替换为"Unisex Kids"
+        if (fieldType === 'department_name' && country === 'UK') {
+          if (text.trim() === 'Unisex Child') {
+            return 'Unisex Kids';
+          }
         }
         // 其他文本字段的一般处理
         return text.replace(/JiaYou/g, 'SellerFun');
@@ -3743,7 +3755,7 @@ CN
 
       // 填写department_name字段
       if (departmentNameCol !== -1) {
-        updatedData[rowIndex][departmentNameCol] = processTextContent(data.department_name || '', 'general');
+        updatedData[rowIndex][departmentNameCol] = processTextContent(data.department_name || '', 'department_name');
       }
 
       addedCount++;
@@ -4277,7 +4289,12 @@ CN
 
       // 填写department_name字段
       if (departmentNameCol !== -1) {
-        data[currentRowIndex][departmentNameCol] = record.department_name || '';
+        let departmentNameValue = record.department_name || '';
+        // 英国站点特殊处理：Unisex Child 替换为 Unisex Kids
+        if (targetCountry === 'UK' && departmentNameValue.trim() === 'Unisex Child') {
+          departmentNameValue = 'Unisex Kids';
+        }
+        data[currentRowIndex][departmentNameCol] = departmentNameValue;
       }
       
       currentRowIndex++;
