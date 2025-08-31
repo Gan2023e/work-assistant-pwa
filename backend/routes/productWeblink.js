@@ -2579,6 +2579,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let countryOfOriginCol = -1;
     let cpsiaCautionaryStatement1Col = -1;
     let conditionTypeCol = -1;
+    let departmentNameCol = -1;
     
     // 加拿大站点新增字段的列变量
     let closureTypeCol = -1;
@@ -2715,6 +2716,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             depthHeightFloorToTopUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
             manufacturerContactInformationCol = colIndex;
+          } else if (cellValue === 'department_name') {
+            departmentNameCol = colIndex;
           }
         }
       });
@@ -2769,7 +2772,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
         swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
         styleNameCol, colorMapCol, materialTypeCol, genericKeywordsCol, waterResistanceLevelCol,
-        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol
+        sizeMapCol, countryOfOriginCol, cpsiaCautionaryStatement1Col, conditionTypeCol, departmentNameCol
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
@@ -2967,6 +2970,11 @@ CN
           data[currentRowIndex][manufacturerContactInformationCol] = recordData.manufacturer_contact_information || '';
         }
       }
+
+      // 填写department_name字段
+      if (departmentNameCol !== -1) {
+        data[currentRowIndex][departmentNameCol] = processTextForUKAUAE(recordData.department_name || '');
+      }
       
       // 调试：输出第一条记录填写后的行内容
       if (index === 0) {
@@ -3147,6 +3155,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let depthHeightFloorToTopCol = -1;
     let depthHeightFloorToTopUnitOfMeasureCol = -1;
     let manufacturerContactInformationCol = -1;
+    let departmentNameCol = -1;
     
     const missingColumns = [];
     
@@ -3270,6 +3279,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             depthHeightFloorToTopUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
             manufacturerContactInformationCol = colIndex;
+          } else if (cellValue === 'department_name') {
+            departmentNameCol = colIndex;
           }
         }
       });
@@ -3730,6 +3741,11 @@ CN
         }
       }
 
+      // 填写department_name字段
+      if (departmentNameCol !== -1) {
+        updatedData[rowIndex][departmentNameCol] = processTextContent(data.department_name || '', 'general');
+      }
+
       addedCount++;
       
       // 调试：输出第一条数据填写后的行内容
@@ -4058,6 +4074,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             depthHeightFloorToTopUnitOfMeasureCol = colIndex;
           } else if (cellValue === 'manufacturer_contact_information') {
             manufacturerContactInformationCol = colIndex;
+          } else if (cellValue === 'department_name') {
+            departmentNameCol = colIndex;
           }
         }
       });
@@ -4088,7 +4106,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
         storageVolumeUnitOfMeasureCol, storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol,
         depthWidthSideToSideCol, depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, 
-        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol
+        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol, departmentNameCol
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
@@ -4255,6 +4273,11 @@ CN
           // 其他站点保持原有逻辑
           data[currentRowIndex][manufacturerContactInformationCol] = record.manufacturer_contact_information || '';
         }
+      }
+
+      // 填写department_name字段
+      if (departmentNameCol !== -1) {
+        data[currentRowIndex][departmentNameCol] = record.department_name || '';
       }
       
       currentRowIndex++;
