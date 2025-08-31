@@ -2308,10 +2308,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // 对于department_name字段，如果是英国站点且内容是"Unisex Child"，则替换为"Unisex Kids"
-        if (fieldType === 'department_name' && actualCountry === 'UK') {
+        // 对于department_name字段的特殊处理
+        if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
-            return 'Unisex Kids';
+            if (actualCountry === 'UK' || actualCountry === 'AU') {
+              return 'Unisex Kids';
+            } else if (actualCountry === 'AE') {
+              return 'unisex-child';
+            }
           }
         }
       }
@@ -3332,10 +3336,14 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // 对于department_name字段，如果是英国站点且内容是"Unisex Child"，则替换为"Unisex Kids"
-        if (fieldType === 'department_name' && country === 'UK') {
+        // 对于department_name字段的特殊处理
+        if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
-            return 'Unisex Kids';
+            if (country === 'UK' || country === 'AU') {
+              return 'Unisex Kids';
+            } else if (country === 'AE') {
+              return 'unisex-child';
+            }
           }
         }
         // 其他文本字段的一般处理
@@ -4290,9 +4298,13 @@ CN
       // 填写department_name字段
       if (departmentNameCol !== -1) {
         let departmentNameValue = record.department_name || '';
-        // 英国站点特殊处理：Unisex Child 替换为 Unisex Kids
-        if (targetCountry === 'UK' && departmentNameValue.trim() === 'Unisex Child') {
-          departmentNameValue = 'Unisex Kids';
+        // 特殊处理：根据目标站点转换department_name字段
+        if (departmentNameValue.trim() === 'Unisex Child') {
+          if (targetCountry === 'UK' || targetCountry === 'AU') {
+            departmentNameValue = 'Unisex Kids';
+          } else if (targetCountry === 'AE') {
+            departmentNameValue = 'unisex-child';
+          }
         }
         data[currentRowIndex][departmentNameCol] = departmentNameValue;
       }
