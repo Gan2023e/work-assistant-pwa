@@ -2345,8 +2345,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (!url) return url;
       
       if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
-        // 如果域名包含jiayou，改成pic.sellerfun.net
-        let processedUrl = url.replace(/jiayou\.ink/g, 'pic.sellerfun.net');
+        // 如果域名包含pic.jiayou.ink，改成pic.sellerfun.net
+        let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
         
         // SKU前缀改成UK (例如：USXBC188 -> UKXBC188)
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
@@ -3263,8 +3263,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       
       // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规则
       if (country === 'UK' || country === 'AU' || country === 'AE') {
-        // 如果域名包含jiayou，改成pic.sellerfun.net
-        let processedUrl = url.replace(/jiayou\.ink/g, 'pic.sellerfun.net');
+        // 如果域名包含pic.jiayou.ink，改成pic.sellerfun.net
+        let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
         
         // SKU前缀改成UK (例如：USXBC188 -> UKXBC188)
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
