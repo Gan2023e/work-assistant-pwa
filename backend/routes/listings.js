@@ -68,12 +68,8 @@ router.get('/', async (req, res) => {
       'www.amazon.ae': '阿联酋'
     };
 
-    // 获取所有可能的国家列表（按中文国家名称）
-    const allCountries = await AmzSkuMapping.findAll({
-      attributes: [[sequelize.fn('DISTINCT', sequelize.col('country')), 'country']],
-      raw: true
-    });
-    const countryList = [...new Set(allCountries.map(c => c.country).filter(Boolean))];
+    // 定义5个主要国家
+    const countryList = ['美国', '英国', '德国', '法国', '意大利'];
 
     // 获取所有站点列表（用于后续处理）
     const allSites = await AmzSkuMapping.findAll({
@@ -103,8 +99,8 @@ router.get('/', async (req, res) => {
         };
       });
 
-      // 计算上架状态统计
-      const listedCount = Object.values(countryStatus).filter(s => s.isListed).length;
+      // 计算上架状态统计（只考虑5个主要国家）
+      const listedCount = countryList.filter(country => countryStatus[country]?.isListed).length;
       const totalCountries = countryList.length;
       let listingStatus;
       if (listedCount === 0) {

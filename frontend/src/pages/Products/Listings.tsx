@@ -218,17 +218,37 @@ const Listings: React.FC = () => {
   
   // 导出数据
   const handleExport = () => {
-    const csvData = listings.map(sku => ({
-      母SKU: sku.parent_sku,
-      子SKU: sku.child_sku,
-      颜色: sku.sellercolorname || '',
-      尺寸: sku.sellersizename || '',
-      装箱数量: sku.qty_per_box || '',
-      上架状态: sku.listingStatus === 'listed' ? '全部上架' : 
-                sku.listingStatus === 'partial' ? '部分上架' : '未上架',
-      上架率: `${sku.listingRate}%`,
-      上架站点数: `${sku.listedCount}/${sku.totalCountries}`
-    }));
+    const mainCountries = ['美国', '英国', '德国', '法国', '意大利'];
+    
+    const csvData = listings.map(sku => {
+      const baseData = {
+        母SKU: sku.parent_sku,
+        子SKU: sku.child_sku,
+        颜色: sku.sellercolorname || '',
+        尺寸: sku.sellersizename || '',
+        装箱数量: sku.qty_per_box || '',
+      };
+      
+      // 添加每个国家的Amazon SKU信息
+      const countryData: any = {};
+      mainCountries.forEach(country => {
+        const status = sku.countryStatus[country];
+        if (status?.isListed && status.mappings.length > 0) {
+          countryData[country] = status.mappings.map(m => m.amzSku).join(';');
+        } else {
+          countryData[country] = '';
+        }
+      });
+      
+      return {
+        ...baseData,
+        ...countryData,
+        上架状态: sku.listingStatus === 'listed' ? '全部上架' : 
+                  sku.listingStatus === 'partial' ? '部分上架' : '未上架',
+        上架率: `${sku.listingRate}%`,
+        上架国家数: `${sku.listedCount}/${sku.totalCountries}`
+      };
+    });
     
     const csv = [
       Object.keys(csvData[0]).join(','),
@@ -319,8 +339,11 @@ const Listings: React.FC = () => {
     );
   };
 
-  // 表格列配置 - 动态生成国家列
+  // 表格列配置 - 固定5个主要国家列
   const getColumns = () => {
+    // 定义5个主要国家
+    const mainCountries = ['美国', '英国', '德国', '法国', '意大利'];
+    
     const baseColumns = [
       {
         title: '母SKU',
@@ -360,8 +383,8 @@ const Listings: React.FC = () => {
       }
     ];
 
-    // 动态生成国家列
-    const countryColumns = countryList.map(country => ({
+    // 固定生成5个主要国家列
+    const countryColumns = mainCountries.map(country => ({
       title: country,
       key: `country-${country}`,
       width: 120,
@@ -480,7 +503,7 @@ const Listings: React.FC = () => {
             onChange={(value) => updateQueryParams({ site: value })}
           >
             <Option value="all">全部国家</Option>
-            {countryList.map(country => (
+            {['美国', '英国', '德国', '法国', '意大利'].map(country => (
               <Option key={country} value={country}>
                 {country}
               </Option>
@@ -566,7 +589,7 @@ const Listings: React.FC = () => {
           dataSource={listings}
           loading={loading}
           pagination={false}
-          scroll={{ x: 800 + (countryList.length * 120) }}
+          scroll={{ x: 1450 }}
           rowKey="skuid"
           onChange={handleTableChange}
           locale={{
@@ -643,7 +666,7 @@ const Listings: React.FC = () => {
             rules={[{ required: true, message: '请选择国家' }]}
           >
             <Select placeholder="请选择国家">
-              {countryList.map(country => (
+              {['美国', '英国', '德国', '法国', '意大利'].map(country => (
                 <Option key={country} value={country}>
                   {country}
                 </Option>
