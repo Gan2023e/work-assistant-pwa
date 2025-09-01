@@ -13,6 +13,7 @@ import LoginPage from './pages/Auth/LoginPage';
 import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
 import Listings from './pages/Products/Listings';
+import ListingsDebug from './pages/Products/ListingsDebug';
 import PurchaseInvoice from './pages/Products/PurchaseInvoice';
 import ShippingPage from './pages/Shipping/ShippingPage';
 import OrderManagementPage from './pages/Shipping/OrderManagementPage';
@@ -221,6 +222,11 @@ const AppContent: React.FC = () => {
           <Route path="/products/listings" element={
             <ProtectedRoute>
               <Listings />
+            </ProtectedRoute>
+          } />
+          <Route path="/debug/listings" element={
+            <ProtectedRoute>
+              <ListingsDebug />
             </ProtectedRoute>
           } />
           <Route path="/products/purchase-invoice" element={

@@ -89,6 +89,9 @@ const Listings: React.FC = () => {
       const result: ListingsResponse = await response.json();
       
       if (result.code === 0) {
+        console.log('API返回数据:', result.data);
+        console.log('记录数量:', result.data.records.length);
+        console.log('国家列表:', result.data.countryList);
         setListings(result.data.records);
         setTotal(result.data.total);
         setSiteList(result.data.siteList);
