@@ -218,7 +218,7 @@ const Listings: React.FC = () => {
   
   // 导出数据
   const handleExport = () => {
-    const mainCountries = ['美国', '英国', '德国', '法国', '意大利'];
+    const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
     
     const csvData = listings.map(sku => {
       const baseData = {
@@ -352,7 +352,7 @@ const Listings: React.FC = () => {
   // 表格列配置 - 固定5个主要国家列
   const getColumns = () => {
     // 定义5个主要国家
-    const mainCountries = ['美国', '英国', '德国', '法国', '意大利'];
+    const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
     
     const baseColumns = [
       {
@@ -518,7 +518,7 @@ const Listings: React.FC = () => {
             onChange={(value) => updateQueryParams({ site: value })}
           >
             <Option value="all">全部国家</Option>
-            {['美国', '英国', '德国', '法国', '意大利'].map(country => (
+            {['美国', '加拿大', '英国', '澳大利亚', '阿联酋'].map(country => (
               <Option key={country} value={country}>
                 {country}
               </Option>
@@ -601,7 +601,7 @@ const Listings: React.FC = () => {
       <Card>
         <Table
           columns={getColumns()}
-          dataSource={listings.filter(item => item.countryStatus)} // 只显示有完整数据的记录
+          dataSource={listings} // 显示所有记录
           loading={loading}
           pagination={false}
           scroll={{ x: 1450 }}
@@ -681,7 +681,7 @@ const Listings: React.FC = () => {
             rules={[{ required: true, message: '请选择国家' }]}
           >
             <Select placeholder="请选择国家">
-              {['美国', '英国', '德国', '法国', '意大利'].map(country => (
+              {['美国', '加拿大', '英国', '澳大利亚', '阿联酋'].map(country => (
                 <Option key={country} value={country}>
                   {country}
                 </Option>

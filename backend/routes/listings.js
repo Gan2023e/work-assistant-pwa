@@ -69,7 +69,7 @@ router.get('/', async (req, res) => {
     };
 
     // 定义5个主要国家
-    const countryList = ['美国', '英国', '德国', '法国', '意大利'];
+    const countryList = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
 
     // 获取所有站点列表（用于后续处理）
     const allSites = await AmzSkuMapping.findAll({
