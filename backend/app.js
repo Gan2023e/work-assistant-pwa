@@ -17,6 +17,7 @@ const fbaInventoryRouter = require('./routes/fbaInventory');
 const purchaseInvoiceRouter = require('./routes/purchaseInvoice');
 const dingtalkRouter = require('./routes/dingtalk');
 const inventoryRouter = require('./routes/inventory');
+const listingsRouter = require('./routes/listings');
 const { router: authRouter } = require('./routes/auth');
 
 // 强制触发Railway重新部署 - 2025-01-08 - 修复URL配置
@@ -79,6 +80,7 @@ app.use('/api/fba-inventory', fbaInventoryRouter);
 app.use('/api/purchase-invoice', purchaseInvoiceRouter);
 app.use('/api/dingtalk', dingtalkRouter);
 app.use('/api/inventory', inventoryRouter);
+app.use('/api/listings', listingsRouter);
 console.log('✅ API routes registered');
 
 // 静态文件服务 - 用于图片访问
@@ -108,7 +110,10 @@ app.get('/', (req, res) => {
       '/api/order-management/orders/:needNum/details',
       '/api/order-management/check-conflicts',
       '/api/dingtalk/send-message',
-      '/api/dingtalk/warehouse-demand'
+      '/api/dingtalk/warehouse-demand',
+      '/api/listings',
+      '/api/listings/statistics',
+      '/api/listings/mappings/batch'
     ]
   });
 });

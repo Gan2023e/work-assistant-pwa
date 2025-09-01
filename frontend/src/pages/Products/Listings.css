@@ -1,0 +1,274 @@
+.listings-page {
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: calc(100vh - 64px);
+}
+
+.listings-header {
+  background: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.listings-title {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.listings-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.listings-filters .ant-input-search {
+  width: 300px;
+}
+
+.listings-filters .ant-select {
+  width: 120px;
+}
+
+.listings-stats {
+  background: white;
+  padding: 20px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #1890ff;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.listings-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sku-card {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+  transition: all 0.3s ease;
+}
+
+.sku-card:hover {
+  background: #fafafa;
+}
+
+.sku-card:last-child {
+  border-bottom: none;
+}
+
+.sku-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.sku-basic-info {
+  flex: 1;
+}
+
+.sku-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.sku-subtitle {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.sku-details {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #999;
+}
+
+.sku-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sites-status {
+  margin-bottom: 12px;
+}
+
+.sites-status-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.site-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.site-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid #d9d9d9;
+  background: #fafafa;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.site-tag.listed {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  color: #52c41a;
+}
+
+.site-tag.unlisted {
+  background: #fff2e8;
+  border-color: #ffbb96;
+  color: #fa541c;
+}
+
+.site-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.listing-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.listing-rate {
+  font-weight: 600;
+}
+
+.listing-rate.high {
+  color: #52c41a;
+}
+
+.listing-rate.medium {
+  color: #faad14;
+}
+
+.listing-rate.low {
+  color: #f5222d;
+}
+
+.progress-bar {
+  width: 60px;
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(to right, #f5222d, #faad14, #52c41a);
+  transition: width 0.3s ease;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #d9d9d9;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .listings-page {
+    padding: 16px;
+  }
+  
+  .listings-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .listings-filters .ant-input-search,
+  .listings-filters .ant-select {
+    width: 100%;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .sku-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .sku-actions {
+    align-self: flex-start;
+  }
+  
+  .sku-details {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .site-tags {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .batch-actions {
+    flex-direction: column;
+  }
+  
+  .site-tag {
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+} 
