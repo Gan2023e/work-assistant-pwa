@@ -2842,7 +2842,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
           data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'ChokingHazardSmallParts';
         }
       }
-      if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
+      if (conditionTypeCol !== -1) {
+        // 阿联酋站点特殊处理：统一填写 "new, new"
+        if (actualCountry === 'AE') {
+          data[currentRowIndex][conditionTypeCol] = 'new, new';
+        } else {
+          data[currentRowIndex][conditionTypeCol] = recordData.condition_type || '';
+        }
+      }
       
       // 填写加拿大站点新增字段数据
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = recordData.closure_type || '';
@@ -3599,7 +3606,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         }
       }
       if (conditionTypeCol !== -1) {
-        updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
+        // 阿联酋站点特殊处理：统一填写 "new, new"
+        if (country === 'AE') {
+          updatedData[rowIndex][conditionTypeCol] = 'new, new';
+        } else {
+          updatedData[rowIndex][conditionTypeCol] = data.condition_type || '';
+        }
       }
       
       // 填写加拿大站点新增字段数据
@@ -4943,7 +4955,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['supplier_declared_dg_hz_regulation1']] = 'Not Applicable';
       }
       if (columnIndexes['condition_type'] !== undefined) {
-        data[dataRowIndex][columnIndexes['condition_type']] = 'New';
+        // 阿联酋站点特殊处理：统一填写 "new, new"
+        if (country === 'AE') {
+          data[dataRowIndex][columnIndexes['condition_type']] = 'new, new';
+        } else {
+          data[dataRowIndex][columnIndexes['condition_type']] = 'New';
+        }
       }
       if (columnIndexes['country_of_origin'] !== undefined) {
         data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
