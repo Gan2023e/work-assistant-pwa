@@ -9,14 +9,15 @@ import {
   Empty,
   Modal,
   Form,
-  Upload,
   Tag,
   Tooltip,
   Popconfirm,
-  Space
+  Space,
+  Table,
+  Progress,
+  Card
 } from 'antd';
 import {
-  SearchOutlined,
   PlusOutlined,
   UploadOutlined,
   DownloadOutlined,
@@ -24,7 +25,8 @@ import {
   DeleteOutlined,
   EyeOutlined,
   ReloadOutlined,
-  InfoCircleOutlined
+  CheckOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import BatchImportModal from '../../components/BatchImportModal';
@@ -263,98 +265,182 @@ const Listings: React.FC = () => {
     if (rate >= 40) return 'medium';
     return 'low';
   };
-  
-  // 渲染站点标签
-  const renderSiteTags = (sku: ParentSkuData) => {
+
+  // 渲染站点状态标签
+  const renderSiteStatus = (siteStatus: Record<string, any>, childSku: string) => {
     return siteList.map(site => {
-      const status = sku.siteStatus[site];
+      const status = siteStatus[site];
       return (
         <Tooltip
           key={site}
           title={
             status?.isListed 
               ? `已上架 - Amazon SKU: ${status.amzSku} (${status.country})`
-              : '未上架'
+              : '未上架 - 点击添加映射'
           }
         >
-          <span
-            className={`site-tag ${status?.isListed ? 'listed' : 'unlisted'}`}
+          <Tag
+            color={status?.isListed ? 'success' : 'default'}
+            style={{ 
+              cursor: status?.isListed ? 'default' : 'pointer',
+              marginBottom: 2
+            }}
             onClick={() => {
               if (!status?.isListed) {
-                setSelectedSku(sku);
-                addForm.setFieldsValue({
-                  local_sku: sku.child_sku,
-                  site: site
-                });
-                setAddMappingVisible(true);
+                const skuData = listings.find(sku => sku.child_sku === childSku);
+                if (skuData) {
+                  setSelectedSku(skuData);
+                  addForm.setFieldsValue({
+                    local_sku: childSku,
+                    site: site
+                  });
+                  setAddMappingVisible(true);
+                }
               }
             }}
           >
-            {site.replace('Amazon.', '')}: {status?.isListed ? '✓' : '✗'}
-          </span>
+            {status?.isListed ? <CheckOutlined /> : <CloseOutlined />}
+            {site.replace('Amazon.', '').replace('www.amazon.', '')}
+          </Tag>
         </Tooltip>
       );
     });
   };
-  
-  // 渲染SKU卡片
-  const renderSkuCard = (sku: ParentSkuData) => (
-    <div key={sku.skuid} className="sku-card">
-      <div className="sku-header">
-        <div className="sku-basic-info">
-          <div className="sku-title">{sku.parent_sku}</div>
-          <div className="sku-subtitle">{sku.child_sku}</div>
-          <div className="sku-details">
-            {sku.sellercolorname && <span>颜色: {sku.sellercolorname}</span>}
-            {sku.sellersizename && <span>尺寸: {sku.sellersizename}</span>}
-            {sku.qty_per_box && <span>装箱: {sku.qty_per_box}个</span>}
-          </div>
+
+  // 表格列配置
+  const columns = [
+    {
+      title: '母SKU',
+      dataIndex: 'parent_sku',
+      key: 'parent_sku',
+      width: 120,
+      fixed: 'left' as const,
+      sorter: true,
+    },
+    {
+      title: '子SKU',
+      dataIndex: 'child_sku',
+      key: 'child_sku',
+      width: 120,
+      fixed: 'left' as const,
+    },
+    {
+      title: '颜色',
+      dataIndex: 'sellercolorname',
+      key: 'sellercolorname',
+      width: 80,
+      render: (text: string) => text || '-',
+    },
+    {
+      title: '尺寸',
+      dataIndex: 'sellersizename', 
+      key: 'sellersizename',
+      width: 80,
+      render: (text: string) => text || '-',
+    },
+    {
+      title: '装箱数量',
+      dataIndex: 'qty_per_box',
+      key: 'qty_per_box',
+      width: 80,
+      render: (text: number) => text ? `${text}个` : '-',
+    },
+    {
+      title: '站点上架状态',
+      key: 'siteStatus',
+      width: 300,
+      render: (_, record: ParentSkuData) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {renderSiteStatus(record.siteStatus, record.child_sku)}
         </div>
-        <div className="sku-actions">
-          <Button
-            type="text"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewSkuDetail(sku)}
-          />
-          <Button
-            type="text"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setSelectedSku(sku);
-              addForm.setFieldsValue({ local_sku: sku.child_sku });
-              setAddMappingVisible(true);
+      ),
+    },
+    {
+      title: '上架进度',
+      key: 'listingProgress',
+      width: 150,
+      render: (_, record: ParentSkuData) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Progress
+            percent={record.listingRate}
+            size="small"
+            strokeColor={{
+              '0%': '#f5222d',
+              '50%': '#faad14',
+              '100%': '#52c41a'
             }}
+            showInfo={false}
+            style={{ flex: 1, minWidth: 60 }}
           />
+          <span style={{ fontSize: 12, minWidth: 60 }}>
+            {record.listedCount}/{record.totalSites} ({record.listingRate}%)
+          </span>
         </div>
-      </div>
-      
-      <div className="sites-status">
-        <div className="sites-status-title">站点上架状态:</div>
-        <div className="site-tags">
-          {renderSiteTags(sku)}
-        </div>
-      </div>
-      
-      <div className="listing-summary">
-        <span className={`listing-rate ${getListingRateClass(sku.listingRate)}`}>
-          {sku.listingRate}%
-        </span>
-        <div className="progress-bar">
-          <div 
-            className="progress-fill"
-            style={{ width: `${sku.listingRate}%` }}
-          />
-        </div>
-        <span>({sku.listedCount}/{sku.totalSites})</span>
-      </div>
-    </div>
-  );
+      ),
+    },
+    {
+      title: '上架状态',
+      dataIndex: 'listingStatus',
+      key: 'listingStatus',
+      width: 100,
+      render: (status: string) => {
+        const statusMap = {
+          'listed': { color: 'success', text: '全部上架' },
+          'partial': { color: 'warning', text: '部分上架' },
+          'unlisted': { color: 'default', text: '未上架' }
+        };
+        const config = statusMap[status as keyof typeof statusMap];
+        return <Tag color={config.color}>{config.text}</Tag>;
+      },
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 120,
+      fixed: 'right' as const,
+      render: (_, record: ParentSkuData) => (
+        <Space size="small">
+          <Tooltip title="查看详情">
+            <Button
+              type="text"
+              icon={<EyeOutlined />}
+              onClick={() => handleViewSkuDetail(record)}
+            />
+          </Tooltip>
+          <Tooltip title="添加映射">
+            <Button
+              type="text"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setSelectedSku(record);
+                addForm.setFieldsValue({ local_sku: record.child_sku });
+                setAddMappingVisible(true);
+              }}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
   
   // 组件加载时获取数据
   useEffect(() => {
     fetchListings();
     fetchStatistics();
   }, [fetchListings, fetchStatistics]);
+
+  // 表格变化处理
+  const handleTableChange = (pagination: any, filters: any, sorter: any) => {
+    const { field, order } = sorter;
+    if (field && order) {
+      setQueryParams(prev => ({
+        ...prev,
+        sort_by: field,
+        sort_order: order === 'ascend' ? 'ASC' : 'DESC',
+        page: 1
+      }));
+    }
+  };
 
   return (
     <div className="listings-page">
@@ -378,7 +464,7 @@ const Listings: React.FC = () => {
             <Option value="all">全部站点</Option>
             {siteList.map(site => (
               <Option key={site} value={site}>
-                {site.replace('Amazon.', '')}
+                {site.replace('Amazon.', '').replace('www.amazon.', '')}
               </Option>
             ))}
           </Select>
@@ -429,7 +515,7 @@ const Listings: React.FC = () => {
       
       {/* 统计数据 */}
       {statistics && (
-        <div className="listings-stats">
+        <Card className="listings-stats">
           <div className="stats-grid">
             <div className="stat-item">
               <span className="stat-value">{statistics.totalSkus}</span>
@@ -452,40 +538,39 @@ const Listings: React.FC = () => {
               <span className="stat-label">总映射数</span>
             </div>
           </div>
-        </div>
+        </Card>
       )}
       
-      {/* 内容区域 */}
-      <div className="listings-content">
-        <Spin spinning={loading}>
-          {listings.length === 0 ? (
-            <div className="empty-state">
-              <Empty
-                description="暂无数据"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            </div>
-          ) : (
-            <>
-              {listings.map(renderSkuCard)}
-              
-              <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid #f0f0f0' }}>
-                <Pagination
-                  current={queryParams.page}
-                  pageSize={queryParams.limit}
-                  total={total}
-                  showSizeChanger
-                  showQuickJumper
-                  showTotal={(total, range) =>
-                    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
-                  }
-                  onChange={handlePageChange}
-                />
-              </div>
-            </>
-          )}
-        </Spin>
-      </div>
+      {/* 表格内容 */}
+      <Card>
+        <Table
+          columns={columns}
+          dataSource={listings}
+          loading={loading}
+          pagination={false}
+          scroll={{ x: 1200 }}
+          rowKey="skuid"
+          onChange={handleTableChange}
+          locale={{
+            emptyText: <Empty description="暂无数据" />
+          }}
+        />
+        
+        {/* 分页器 */}
+        <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <Pagination
+            current={queryParams.page}
+            pageSize={queryParams.limit}
+            total={total}
+            showSizeChanger
+            showQuickJumper
+            showTotal={(total, range) =>
+              `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+            }
+            onChange={handlePageChange}
+          />
+        </div>
+      </Card>
       
       {/* 添加映射弹窗 */}
       <Modal
@@ -546,7 +631,7 @@ const Listings: React.FC = () => {
             label="SKU类型"
             name="sku_type"
           >
-            <Select placeholder="请选择SKU类型">
+            <Select placeholder="请选择SKU类型" defaultValue="FBA SKU">
               <Option value="FBA SKU">FBA SKU</Option>
               <Option value="Local SKU">Local SKU</Option>
             </Select>
