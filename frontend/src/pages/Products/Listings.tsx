@@ -290,9 +290,14 @@ const Listings: React.FC = () => {
 
   // 渲染国家状态内容
   const renderCountryStatus = (countryStatus: Record<string, any>, childSku: string, country: string) => {
+    // 安全检查：确保 countryStatus 存在
+    if (!countryStatus) {
+      return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
+    }
+    
     const status = countryStatus[country];
     
-    if (!status?.isListed || status.mappings.length === 0) {
+    if (!status?.isListed || !status.mappings || status.mappings.length === 0) {
       return (
         <Button
           type="text"
@@ -329,7 +334,12 @@ const Listings: React.FC = () => {
                 margin: 1,
                 cursor: 'pointer'
               }}
-              onClick={() => handleViewSkuDetail(listings.find(sku => sku.child_sku === childSku)!)}
+              onClick={() => {
+                const targetSku = listings.find(sku => sku.child_sku === childSku);
+                if (targetSku) {
+                  handleViewSkuDetail(targetSku);
+                }
+              }}
             >
               {mapping.amzSku}
             </Tag>
