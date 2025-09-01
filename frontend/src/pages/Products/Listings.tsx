@@ -50,6 +50,7 @@ const Listings: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [statistics, setStatistics] = useState<ListingsStatistics | null>(null);
   const [siteList, setSiteList] = useState<string[]>([]);
+  const [countryList, setCountryList] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
   
   // 查询参数
@@ -91,6 +92,7 @@ const Listings: React.FC = () => {
         setListings(result.data.records);
         setTotal(result.data.total);
         setSiteList(result.data.siteList);
+        setCountryList(result.data.countryList || []);
       } else {
         message.error(result.message || '获取数据失败');
       }
@@ -225,7 +227,7 @@ const Listings: React.FC = () => {
       上架状态: sku.listingStatus === 'listed' ? '全部上架' : 
                 sku.listingStatus === 'partial' ? '部分上架' : '未上架',
       上架率: `${sku.listingRate}%`,
-      上架站点数: `${sku.listedCount}/${sku.totalSites}`
+      上架站点数: `${sku.listedCount}/${sku.totalCountries}`
     }));
     
     const csv = [
@@ -266,162 +268,178 @@ const Listings: React.FC = () => {
     return 'low';
   };
 
-  // 渲染站点状态标签
-  const renderSiteStatus = (siteStatus: Record<string, any>, childSku: string) => {
-    return siteList.map(site => {
-      const status = siteStatus[site];
+  // 渲染国家状态内容
+  const renderCountryStatus = (countryStatus: Record<string, any>, childSku: string, country: string) => {
+    const status = countryStatus[country];
+    
+    if (!status?.isListed || status.mappings.length === 0) {
       return (
-        <Tooltip
-          key={site}
-          title={
-            status?.isListed 
-              ? `已上架 - Amazon SKU: ${status.amzSku} (${status.country})`
-              : '未上架 - 点击添加映射'
-          }
+        <Button
+          type="text"
+          size="small"
+          style={{ color: '#999', fontSize: 12 }}
+          onClick={() => {
+            const skuData = listings.find(sku => sku.child_sku === childSku);
+            if (skuData) {
+              setSelectedSku(skuData);
+              addForm.setFieldsValue({
+                local_sku: childSku,
+                country: country
+              });
+              setAddMappingVisible(true);
+            }
+          }}
         >
-          <Tag
-            color={status?.isListed ? 'success' : 'default'}
-            style={{ 
-              cursor: status?.isListed ? 'default' : 'pointer',
-              marginBottom: 2
-            }}
-            onClick={() => {
-              if (!status?.isListed) {
-                const skuData = listings.find(sku => sku.child_sku === childSku);
-                if (skuData) {
-                  setSelectedSku(skuData);
-                  addForm.setFieldsValue({
-                    local_sku: childSku,
-                    site: site
-                  });
-                  setAddMappingVisible(true);
-                }
-              }
-            }}
-          >
-            {status?.isListed ? <CheckOutlined /> : <CloseOutlined />}
-            {site.replace('Amazon.', '').replace('www.amazon.', '')}
-          </Tag>
-        </Tooltip>
+          + 添加
+        </Button>
       );
-    });
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {status.mappings.map((mapping: any, index: number) => (
+          <Tooltip
+            key={`${mapping.amzSku}-${index}`}
+            title={`站点: ${mapping.site} | 类型: ${mapping.skuType} | 更新时间: ${mapping.updateTime ? new Date(mapping.updateTime).toLocaleDateString() : '-'}`}
+          >
+            <Tag
+              color="blue"
+              style={{ 
+                fontSize: 11, 
+                margin: 1,
+                cursor: 'pointer'
+              }}
+              onClick={() => handleViewSkuDetail(listings.find(sku => sku.child_sku === childSku)!)}
+            >
+              {mapping.amzSku}
+            </Tag>
+          </Tooltip>
+        ))}
+      </div>
+    );
   };
 
-  // 表格列配置
-  const columns = [
-    {
-      title: '母SKU',
-      dataIndex: 'parent_sku',
-      key: 'parent_sku',
-      width: 120,
-      fixed: 'left' as const,
-      sorter: true,
-    },
-    {
-      title: '子SKU',
-      dataIndex: 'child_sku',
-      key: 'child_sku',
-      width: 120,
-      fixed: 'left' as const,
-    },
-    {
-      title: '颜色',
-      dataIndex: 'sellercolorname',
-      key: 'sellercolorname',
-      width: 80,
-      render: (text: string) => text || '-',
-    },
-    {
-      title: '尺寸',
-      dataIndex: 'sellersizename', 
-      key: 'sellersizename',
-      width: 80,
-      render: (text: string) => text || '-',
-    },
-    {
-      title: '装箱数量',
-      dataIndex: 'qty_per_box',
-      key: 'qty_per_box',
-      width: 80,
-      render: (text: number) => text ? `${text}个` : '-',
-    },
-    {
-      title: '站点上架状态',
-      key: 'siteStatus',
-      width: 300,
-      render: (_, record: ParentSkuData) => (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {renderSiteStatus(record.siteStatus, record.child_sku)}
-        </div>
-      ),
-    },
-    {
-      title: '上架进度',
-      key: 'listingProgress',
-      width: 150,
-      render: (_, record: ParentSkuData) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Progress
-            percent={record.listingRate}
-            size="small"
-            strokeColor={{
-              '0%': '#f5222d',
-              '50%': '#faad14',
-              '100%': '#52c41a'
-            }}
-            showInfo={false}
-            style={{ flex: 1, minWidth: 60 }}
-          />
-          <span style={{ fontSize: 12, minWidth: 60 }}>
-            {record.listedCount}/{record.totalSites} ({record.listingRate}%)
-          </span>
-        </div>
-      ),
-    },
-    {
-      title: '上架状态',
-      dataIndex: 'listingStatus',
-      key: 'listingStatus',
-      width: 100,
-      render: (status: string) => {
-        const statusMap = {
-          'listed': { color: 'success', text: '全部上架' },
-          'partial': { color: 'warning', text: '部分上架' },
-          'unlisted': { color: 'default', text: '未上架' }
-        };
-        const config = statusMap[status as keyof typeof statusMap];
-        return <Tag color={config.color}>{config.text}</Tag>;
+  // 表格列配置 - 动态生成国家列
+  const getColumns = () => {
+    const baseColumns = [
+      {
+        title: '母SKU',
+        dataIndex: 'parent_sku',
+        key: 'parent_sku',
+        width: 120,
+        fixed: 'left' as const,
+        sorter: true,
       },
-    },
-    {
-      title: '操作',
-      key: 'actions',
+      {
+        title: '子SKU',
+        dataIndex: 'child_sku',
+        key: 'child_sku',
+        width: 120,
+        fixed: 'left' as const,
+      },
+      {
+        title: '颜色',
+        dataIndex: 'sellercolorname',
+        key: 'sellercolorname',
+        width: 80,
+        render: (text: string) => text || '-',
+      },
+      {
+        title: '尺寸',
+        dataIndex: 'sellersizename', 
+        key: 'sellersizename',
+        width: 80,
+        render: (text: string) => text || '-',
+      },
+      {
+        title: '装箱数量',
+        dataIndex: 'qty_per_box',
+        key: 'qty_per_box',
+        width: 80,
+        render: (text: number) => text ? `${text}个` : '-',
+      }
+    ];
+
+    // 动态生成国家列
+    const countryColumns = countryList.map(country => ({
+      title: country,
+      key: `country-${country}`,
       width: 120,
-      fixed: 'right' as const,
-      render: (_, record: ParentSkuData) => (
-        <Space size="small">
-          <Tooltip title="查看详情">
-            <Button
-              type="text"
-              icon={<EyeOutlined />}
-              onClick={() => handleViewSkuDetail(record)}
-            />
-          </Tooltip>
-          <Tooltip title="添加映射">
-            <Button
-              type="text"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setSelectedSku(record);
-                addForm.setFieldsValue({ local_sku: record.child_sku });
-                setAddMappingVisible(true);
+      render: (text: any, record: ParentSkuData) => 
+        renderCountryStatus(record.countryStatus, record.child_sku, country),
+    }));
+
+    const endColumns = [
+      {
+        title: '上架进度',
+        key: 'listingProgress',
+        width: 150,
+        render: (text: any, record: ParentSkuData) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Progress
+              percent={record.listingRate}
+              size="small"
+              strokeColor={{
+                '0%': '#f5222d',
+                '50%': '#faad14',
+                '100%': '#52c41a'
               }}
+              showInfo={false}
+              style={{ flex: 1, minWidth: 60 }}
             />
-          </Tooltip>
-        </Space>
-      ),
-    },
-  ];
+            <span style={{ fontSize: 12, minWidth: 60 }}>
+              {record.listedCount}/{record.totalCountries} ({record.listingRate}%)
+            </span>
+          </div>
+        ),
+      },
+      {
+        title: '上架状态',
+        dataIndex: 'listingStatus',
+        key: 'listingStatus',
+        width: 100,
+        render: (status: string) => {
+          const statusMap = {
+            'listed': { color: 'success', text: '全部上架' },
+            'partial': { color: 'warning', text: '部分上架' },
+            'unlisted': { color: 'default', text: '未上架' }
+          };
+          const config = statusMap[status as keyof typeof statusMap];
+          return <Tag color={config.color}>{config.text}</Tag>;
+        },
+      },
+      {
+        title: '操作',
+        key: 'actions',
+        width: 120,
+        fixed: 'right' as const,
+        render: (text: any, record: ParentSkuData) => (
+          <Space size="small">
+            <Tooltip title="查看详情">
+              <Button
+                type="text"
+                icon={<EyeOutlined />}
+                onClick={() => handleViewSkuDetail(record)}
+              />
+            </Tooltip>
+            <Tooltip title="添加映射">
+              <Button
+                type="text"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setSelectedSku(record);
+                  addForm.setFieldsValue({ local_sku: record.child_sku });
+                  setAddMappingVisible(true);
+                }}
+              />
+            </Tooltip>
+          </Space>
+        ),
+      },
+    ];
+
+    return [...baseColumns, ...countryColumns, ...endColumns];
+  };
   
   // 组件加载时获取数据
   useEffect(() => {
@@ -461,10 +479,10 @@ const Listings: React.FC = () => {
             value={queryParams.site}
             onChange={(value) => updateQueryParams({ site: value })}
           >
-            <Option value="all">全部站点</Option>
-            {siteList.map(site => (
-              <Option key={site} value={site}>
-                {site.replace('Amazon.', '').replace('www.amazon.', '')}
+            <Option value="all">全部国家</Option>
+            {countryList.map(country => (
+              <Option key={country} value={country}>
+                {country}
               </Option>
             ))}
           </Select>
@@ -544,11 +562,11 @@ const Listings: React.FC = () => {
       {/* 表格内容 */}
       <Card>
         <Table
-          columns={columns}
+          columns={getColumns()}
           dataSource={listings}
           loading={loading}
           pagination={false}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 800 + (countryList.length * 120) }}
           rowKey="skuid"
           onChange={handleTableChange}
           locale={{
@@ -622,9 +640,15 @@ const Listings: React.FC = () => {
           <Form.Item
             label="国家"
             name="country"
-            rules={[{ required: true, message: '请输入国家' }]}
+            rules={[{ required: true, message: '请选择国家' }]}
           >
-            <Input placeholder="请输入国家" />
+            <Select placeholder="请选择国家">
+              {countryList.map(country => (
+                <Option key={country} value={country}>
+                  {country}
+                </Option>
+              ))}
+            </Select>
           </Form.Item>
           
           <Form.Item

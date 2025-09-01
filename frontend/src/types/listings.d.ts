@@ -1,10 +1,15 @@
-// 站点状态信息
-export interface SiteStatus {
+// 映射详情信息
+export interface MappingDetail {
+  amzSku: string;
+  site: string;
+  skuType: string;
+  updateTime: string;
+}
+
+// 国家状态信息
+export interface CountryStatus {
   isListed: boolean;
-  amzSku: string | null;
-  country: string | null;
-  updateTime: string | null;
-  skuType: string | null;
+  mappings: MappingDetail[];
 }
 
 // 母SKU信息
@@ -15,10 +20,10 @@ export interface ParentSkuData {
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
-  siteStatus: Record<string, SiteStatus>;
+  countryStatus: Record<string, CountryStatus>;
   listingStatus: 'listed' | 'unlisted' | 'partial';
   listedCount: number;
-  totalSites: number;
+  totalCountries: number;
   listingRate: number;
 }
 
@@ -41,6 +46,7 @@ export interface ListingsResponse {
     current: number;
     pageSize: number;
     records: ParentSkuData[];
+    countryList: string[];
     siteList: string[];
     summary: {
       totalSkus: number;

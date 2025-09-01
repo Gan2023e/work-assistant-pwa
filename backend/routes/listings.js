@@ -53,7 +53,29 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // 获取所有可能的站点列表
+    // 站点到中文国家名称的映射
+    const siteToCountryMap = {
+      'www.amazon.com': '美国',
+      'www.amazon.co.uk': '英国', 
+      'www.amazon.de': '德国',
+      'www.amazon.fr': '法国',
+      'www.amazon.it': '意大利',
+      'www.amazon.es': '西班牙',
+      'www.amazon.ca': '加拿大',
+      'www.amazon.co.jp': '日本',
+      'www.amazon.com.au': '澳大利亚',
+      'www.amazon.sg': '新加坡',
+      'www.amazon.ae': '阿联酋'
+    };
+
+    // 获取所有可能的国家列表（按中文国家名称）
+    const allCountries = await AmzSkuMapping.findAll({
+      attributes: [[sequelize.fn('DISTINCT', sequelize.col('country')), 'country']],
+      raw: true
+    });
+    const countryList = [...new Set(allCountries.map(c => c.country).filter(Boolean))];
+
+    // 获取所有站点列表（用于后续处理）
     const allSites = await AmzSkuMapping.findAll({
       attributes: [[sequelize.fn('DISTINCT', sequelize.col('site')), 'site']],
       raw: true
@@ -65,26 +87,29 @@ router.get('/', async (req, res) => {
       // 找到该child_sku的所有映射
       const skuMappings = mappings.filter(m => m.local_sku === sku.child_sku);
       
-      // 按站点组织映射数据
-      const siteStatus = {};
-      siteList.forEach(site => {
-        const mapping = skuMappings.find(m => m.site === site);
-        siteStatus[site] = {
-          isListed: !!mapping,
-          amzSku: mapping ? mapping.amz_sku : null,
-          country: mapping ? mapping.country : null,
-          updateTime: mapping ? mapping.update_time : null,
-          skuType: mapping ? mapping.sku_type : null
+      // 按国家组织映射数据
+      const countryStatus = {};
+      countryList.forEach(country => {
+        // 找到该国家的所有映射
+        const countryMappings = skuMappings.filter(m => m.country === country);
+        countryStatus[country] = {
+          isListed: countryMappings.length > 0,
+          mappings: countryMappings.map(m => ({
+            amzSku: m.amz_sku,
+            site: m.site,
+            skuType: m.sku_type,
+            updateTime: m.update_time
+          }))
         };
       });
 
       // 计算上架状态统计
-      const listedCount = Object.values(siteStatus).filter(s => s.isListed).length;
-      const totalSites = siteList.length;
+      const listedCount = Object.values(countryStatus).filter(s => s.isListed).length;
+      const totalCountries = countryList.length;
       let listingStatus;
       if (listedCount === 0) {
         listingStatus = 'unlisted';
-      } else if (listedCount === totalSites) {
+      } else if (listedCount === totalCountries) {
         listingStatus = 'listed';
       } else {
         listingStatus = 'partial';
@@ -97,11 +122,11 @@ router.get('/', async (req, res) => {
         sellercolorname: sku.sellercolorname,
         sellersizename: sku.sellersizename,
         qty_per_box: sku.qty_per_box,
-        siteStatus,
+        countryStatus,
         listingStatus,
         listedCount,
-        totalSites,
-        listingRate: totalSites > 0 ? Math.round((listedCount / totalSites) * 100) : 0
+        totalCountries,
+        listingRate: totalCountries > 0 ? Math.round((listedCount / totalCountries) * 100) : 0
       };
     });
 
@@ -111,9 +136,10 @@ router.get('/', async (req, res) => {
       filteredResult = result.filter(item => item.listingStatus === status);
     }
 
-    // 根据站点过滤
+    // 根据国家过滤
     if (site && site !== 'all') {
-      filteredResult = filteredResult.filter(item => item.siteStatus[site]?.isListed);
+      // site参数现在用于国家过滤
+      filteredResult = filteredResult.filter(item => item.countryStatus[site]?.isListed);
     }
 
     console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${filteredResult.length} 个母SKU的Listings数据`);
@@ -126,7 +152,8 @@ router.get('/', async (req, res) => {
         current: parseInt(page),
         pageSize: parseInt(limit),
         records: filteredResult,
-        siteList,
+        countryList: countryList.sort(), // 按字母顺序排序
+        siteList, // 保留原有字段以兼容性
         summary: {
           totalSkus: count,
           listedSkus: result.filter(r => r.listingStatus === 'listed').length,
