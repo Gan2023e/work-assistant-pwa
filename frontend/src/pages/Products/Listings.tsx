@@ -393,14 +393,19 @@ const Listings: React.FC = () => {
       }
     ];
 
-    // 固定生成5个主要国家列
-    const countryColumns = mainCountries.map(country => ({
-      title: country,
-      key: `country-${country}`,
-      width: 120,
-      render: (text: any, record: ParentSkuData) => 
-        renderCountryStatus(record.countryStatus, record.child_sku, country),
-    }));
+          // 固定生成5个主要国家列
+      const countryColumns = mainCountries.map(country => ({
+        title: country,
+        key: `country-${country}`,
+        width: 120,
+        render: (text: any, record: ParentSkuData) => {
+          // 双重安全检查
+          if (!record || !record.countryStatus) {
+            return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
+          }
+          return renderCountryStatus(record.countryStatus, record.child_sku, country);
+        },
+      }));
 
     const endColumns = [
       {
@@ -596,7 +601,7 @@ const Listings: React.FC = () => {
       <Card>
         <Table
           columns={getColumns()}
-          dataSource={listings}
+          dataSource={listings.filter(item => item.countryStatus)} // 只显示有完整数据的记录
           loading={loading}
           pagination={false}
           scroll={{ x: 1450 }}
