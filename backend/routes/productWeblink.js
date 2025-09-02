@@ -4082,6 +4082,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let depthHeightFloorToTopCol = -1;
     let depthHeightFloorToTopUnitOfMeasureCol = -1;
     let manufacturerContactInformationCol = -1;
+    let departmentNameCol = -1;
+    
+    // 添加缺失字段的列变量
+    let outerMaterialTypeCol = -1;
+    let outerMaterialType1Col = -1;
+    let liningDescriptionCol = -1;
+    let strapTypeCol = -1;
     
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
@@ -4163,6 +4170,14 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             manufacturerContactInformationCol = colIndex;
           } else if (cellValue === 'department_name') {
             departmentNameCol = colIndex;
+          } else if (cellValue === 'outer_material_type') {
+            outerMaterialTypeCol = colIndex;
+          } else if (cellValue === 'outer_material_type1') {
+            outerMaterialType1Col = colIndex;
+          } else if (cellValue === 'lining_description') {
+            liningDescriptionCol = colIndex;
+          } else if (cellValue === 'strap_type') {
+            strapTypeCol = colIndex;
           }
         }
       });
@@ -4193,7 +4208,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
         storageVolumeUnitOfMeasureCol, storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol,
         depthWidthSideToSideCol, depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, 
-        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol, departmentNameCol
+        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol, departmentNameCol,
+        outerMaterialTypeCol, outerMaterialType1Col, liningDescriptionCol, strapTypeCol
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
@@ -4279,6 +4295,10 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             depthUnit = 'Centimetres';
           }
         }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (targetCountry === 'AE' && depthUnit === 'Centimetres') {
+          depthUnit = 'Centimeters';
+        }
         data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
       if (depthWidthSideToSideCol !== -1) {
@@ -4310,6 +4330,10 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
           } else if (widthUnit === 'Centimeters') {
             widthUnit = 'Centimetres';
           }
+        }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (targetCountry === 'AE' && widthUnit === 'Centimetres') {
+          widthUnit = 'Centimeters';
         }
         data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
       }
@@ -4343,6 +4367,10 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             heightUnit = 'Centimetres';
           }
         }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (targetCountry === 'AE' && heightUnit === 'Centimetres') {
+          heightUnit = 'Centimeters';
+        }
         data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
@@ -4374,6 +4402,34 @@ CN
           }
         }
         data[currentRowIndex][departmentNameCol] = departmentNameValue;
+      }
+
+      // 填写outer_material_type字段
+      if (outerMaterialTypeCol !== -1) {
+        data[currentRowIndex][outerMaterialTypeCol] = record.outer_material_type || '';
+      }
+      
+      // 填写outer_material_type1字段（特别处理字段映射）
+      if (outerMaterialType1Col !== -1) {
+        // 字段映射规则：
+        // - 英国站/澳洲站/阿联酋站等使用 outer_material_type 字段
+        // - 美国站/加拿大站使用 outer_material_type1 字段
+        // 当从英国等站点生成美国/加拿大站资料时，需要将outer_material_type的值映射到outer_material_type1
+        if (sourceCountry !== 'US' && sourceCountry !== 'CA' && (targetCountry === 'US' || targetCountry === 'CA') && record.outer_material_type) {
+          data[currentRowIndex][outerMaterialType1Col] = record.outer_material_type;
+        } else {
+          data[currentRowIndex][outerMaterialType1Col] = record.outer_material_type1 || '';
+        }
+      }
+
+      // 填写lining_description字段
+      if (liningDescriptionCol !== -1) {
+        data[currentRowIndex][liningDescriptionCol] = record.lining_description || '';
+      }
+
+      // 填写strap_type字段
+      if (strapTypeCol !== -1) {
+        data[currentRowIndex][strapTypeCol] = record.strap_type || '';
       }
       
       currentRowIndex++;
