@@ -3174,6 +3174,12 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let manufacturerContactInformationCol = -1;
     let departmentNameCol = -1;
     
+    // 新增缺失字段的列变量
+    let outerMaterialTypeCol = -1;
+    let outerMaterialType1Col = -1;
+    let liningDescriptionCol = -1;
+    let strapTypeCol = -1;
+    
     const missingColumns = [];
     
     if (updatedData.length >= 3 && updatedData[2]) {
@@ -3298,6 +3304,14 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             manufacturerContactInformationCol = colIndex;
           } else if (cellValue === 'department_name') {
             departmentNameCol = colIndex;
+          } else if (cellValue === 'outer_material_type') {
+            outerMaterialTypeCol = colIndex;
+          } else if (cellValue === 'outer_material_type1') {
+            outerMaterialType1Col = colIndex;
+          } else if (cellValue === 'lining_description') {
+            liningDescriptionCol = colIndex;
+          } else if (cellValue === 'strap_type') {
+            strapTypeCol = colIndex;
           }
         }
       });
@@ -3474,7 +3488,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
         storageVolumeUnitOfMeasureCol, storageVolumeCol, depthFrontToBackCol, depthFrontToBackUnitOfMeasureCol,
         depthWidthSideToSideCol, depthWidthSideToSideUnitOfMeasureCol, depthHeightFloorToTopCol, 
-        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol
+        depthHeightFloorToTopUnitOfMeasureCol, manufacturerContactInformationCol, departmentNameCol,
+        outerMaterialTypeCol, outerMaterialType1Col, liningDescriptionCol, strapTypeCol
       );
       
       for (let i = updatedData[rowIndex].length; i <= maxCol; i++) {
@@ -3690,6 +3705,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             depthUnit = 'Centimetres';
           }
         }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (country === 'AE' && depthUnit === 'Centimetres') {
+          depthUnit = 'Centimeters';
+        }
         updatedData[rowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
       if (depthWidthSideToSideCol !== -1) {
@@ -3721,6 +3740,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
           } else if (widthUnit === 'Centimeters') {
             widthUnit = 'Centimetres';
           }
+        }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (country === 'AE' && widthUnit === 'Centimetres') {
+          widthUnit = 'Centimeters';
         }
         updatedData[rowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
       }
@@ -3754,6 +3777,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             heightUnit = 'Centimetres';
           }
         }
+        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
+        if (country === 'AE' && heightUnit === 'Centimetres') {
+          heightUnit = 'Centimeters';
+        }
         updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
@@ -3776,6 +3803,34 @@ CN
       // 填写department_name字段
       if (departmentNameCol !== -1) {
         updatedData[rowIndex][departmentNameCol] = processTextContent(data.department_name || '', 'department_name');
+      }
+
+      // 填写outer_material_type字段
+      if (outerMaterialTypeCol !== -1) {
+        updatedData[rowIndex][outerMaterialTypeCol] = data.outer_material_type || '';
+      }
+      
+      // 填写outer_material_type1字段（特别处理字段映射）
+      if (outerMaterialType1Col !== -1) {
+        // 字段映射规则：
+        // - 英国站/澳洲站/阿联酋站等使用 outer_material_type 字段
+        // - 美国站/加拿大站使用 outer_material_type1 字段
+        // 当从英国等站点生成美国/加拿大站资料时，需要将outer_material_type的值映射到outer_material_type1
+        if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA') && data.outer_material_type) {
+          updatedData[rowIndex][outerMaterialType1Col] = data.outer_material_type;
+        } else {
+          updatedData[rowIndex][outerMaterialType1Col] = data.outer_material_type1 || '';
+        }
+      }
+
+      // 填写lining_description字段
+      if (liningDescriptionCol !== -1) {
+        updatedData[rowIndex][liningDescriptionCol] = data.lining_description || '';
+      }
+
+      // 填写strap_type字段
+      if (strapTypeCol !== -1) {
+        updatedData[rowIndex][strapTypeCol] = data.strap_type || '';
       }
 
       addedCount++;
