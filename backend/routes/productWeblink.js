@@ -3779,8 +3779,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             depthUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (country === 'AE' && depthUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((country === 'CA' || country === 'AE' || country === 'AU') && depthUnit === 'Centimetres') {
           depthUnit = 'Centimeters';
         }
         updatedData[rowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
@@ -3815,8 +3815,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             widthUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (country === 'AE' && widthUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((country === 'CA' || country === 'AE' || country === 'AU') && widthUnit === 'Centimetres') {
           widthUnit = 'Centimeters';
         }
         updatedData[rowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
@@ -3851,8 +3851,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             heightUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (country === 'AE' && heightUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((country === 'CA' || country === 'AE' || country === 'AU') && heightUnit === 'Centimetres') {
           heightUnit = 'Centimeters';
         }
         updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
