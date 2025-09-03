@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const ProductWeblink = require('../models/ProductWeblink');
@@ -14,23 +14,23 @@ const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
-// 国家代码转换为中文名称的映射�?
+// 国家代码转换为中文名称的映射表表
 function convertCountryCodeToChinese(countryCode) {
   const countryMapping = {
     'US': '美国',
-    'CA': '加拿�?, 
+    'CA': '加拿大', 
     'UK': '英国',
     'DE': '德国',
     'FR': '法国',
-    'AE': '阿联�?,
+    'AE': '阿联酋',
     'AU': '澳大利亚'
   };
   return countryMapping[countryCode] || countryCode;
 }
 
-// 过滤和验证ProductInformation数据的工具函�?
+// 过滤和验证ProductInformation数据的工具函数数
 function filterValidFields(data) {
-  // ProductInformation模型中定义的字段及其长度限制
+  // ProductInformation模型中定义的字段及其长度限制制
   const validFields = {
     // 原有字段
     site: { type: 'string', maxLength: 10 },
@@ -40,7 +40,7 @@ function filterValidFields(data) {
     external_product_id: { type: 'string', maxLength: 30 },
     external_product_id_type: { type: 'string', maxLength: 30 },
     brand_name: { type: 'string', maxLength: 30 },
-    product_description: { type: 'text', maxLength: null }, // TEXT类型，通常无长度限�?
+    product_description: { type: 'text', maxLength: null }, // TEXT类型，通常无长度限制制
     bullet_point1: { type: 'string', maxLength: 500 },
     bullet_point2: { type: 'string', maxLength: 500 },
     bullet_point3: { type: 'string', maxLength: 500 },
@@ -75,7 +75,8 @@ function filterValidFields(data) {
     quantity: { type: 'integer', maxLength: null },
     list_price: { type: 'decimal', maxLength: null },
     
-    // 新增字段 - 产品属�?
+    // 新增字段 - 产品属性性
+    // 新增字段 - 产品属性?
     closure_type: { type: 'string', maxLength: 50 },
     outer_material_type1: { type: 'string', maxLength: 50 },
     care_instructions: { type: 'string', maxLength: 100 },
@@ -87,7 +88,7 @@ function filterValidFields(data) {
     water_resistance_level: { type: 'string', maxLength: 50 },
     recommended_uses_for_product: { type: 'string', maxLength: 100 },
     
-    // 新增字段 - 季节和生活方�?
+    // 新增字段 - 季节和生活方式?
     seasons1: { type: 'string', maxLength: 20 },
     seasons2: { type: 'string', maxLength: 20 },
     seasons3: { type: 'string', maxLength: 20 },
@@ -97,7 +98,7 @@ function filterValidFields(data) {
     lining_description: { type: 'string', maxLength: 100 },
     strap_type: { type: 'string', maxLength: 50 },
     
-    // 新增字段 - 尺寸和容�?
+    // 新增字段 - 尺寸和容量?
     storage_volume_unit_of_measure: { type: 'string', maxLength: 20 },
     storage_volume: { type: 'integer', maxLength: null },
     depth_front_to_back: { type: 'decimal', maxLength: null },
@@ -123,15 +124,15 @@ function filterValidFields(data) {
       if (fieldConfig.type === 'string' && fieldConfig.maxLength) {
         // 字符串类型的长度处理
         if (typeof value === 'string' && value.length > fieldConfig.maxLength) {
-          // 截断过长的字符串，并添加省略�?
+          // 截断过长的字符串，并添加省略�?
           value = value.substring(0, fieldConfig.maxLength - 3) + '...';
-          console.warn(`⚠️ 字段 ${fieldName} 长度超限，已截断: 原长�?{data[fieldName].length} -> 截断�?{value.length}`);
+          console.warn(`⚠️ 字段 ${fieldName} 长度超限，已截断: 原长�?{data[fieldName].length} -> 截断�?{value.length}`);
         } else if (typeof value !== 'string') {
           // 非字符串转换为字符串
           value = String(value);
           if (value.length > fieldConfig.maxLength) {
             value = value.substring(0, fieldConfig.maxLength - 3) + '...';
-            console.warn(`⚠️ 字段 ${fieldName} 转换为字符串后长度超限，已截�? ${value.length}`);
+            console.warn(`⚠️ 字段 ${fieldName} 转换为字符串后长度超限，已截�? ${value.length}`);
           }
         }
       } else if (fieldConfig.type === 'decimal') {
@@ -155,11 +156,11 @@ function filterValidFields(data) {
           value = null;
         }
       } else if (fieldConfig.type === 'text') {
-        // text类型无长度限制，转换为字符串即可
+        // text类型无长度限制制，转换为字符串即可
         value = String(value);
       }
       
-      // 只保存非null�?
+      // 只保存非null�?
       if (value !== null) {
         filteredData[fieldName] = value;
       }
@@ -186,12 +187,12 @@ const upload = multer({
     if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls)$/i)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支持的文件类型: ${file.mimetype}，请上传Excel文件(.xlsx�?xls)`));
+      cb(new Error(`不支持的文件类型: ${file.mimetype}，请上传Excel文件(.xlsx�?xls)`));
     }
   }
 });
 
-// 配置CPC文件上传中间�?
+// 配置CPC文件上传中间�?
 const cpcStorage = multer.memoryStorage();
 const cpcUpload = multer({
   storage: cpcStorage,
@@ -208,7 +209,7 @@ const cpcUpload = multer({
   }
 });
 
-// 搜索功能（优化后�?
+// 搜索功能（优化后�?
 router.post('/search', async (req, res) => {
   try {
     const { keywords, searchType = 'auto', isFuzzy = true } = req.body;
@@ -220,7 +221,7 @@ router.post('/search', async (req, res) => {
 
     let orConditions = [];
 
-    // 根据搜索类型构建不同的查询条�?
+    // 根据搜索类型构建不同的查询条�?
     if (searchType === 'sku') {
       // 搜索SKU
       orConditions = keywords.map(keyword => {
@@ -235,12 +236,12 @@ router.post('/search', async (req, res) => {
         }
       });
     } else if (searchType === 'weblink') {
-      // 搜索产品链接/ID - 只支持模糊搜�?
+      // 搜索产品链接/ID - 只支持模糊搜�?
       orConditions = keywords.map(keyword => ({
         weblink: { [Op.like]: `%${keyword}%` }
       }));
     } else {
-      // 默认模式（auto�? 同时搜索SKU和产品链�?
+      // 默认模式（auto�? 同时搜索SKU和产品链�?
       orConditions = keywords.map(keyword => ({
         [Op.or]: [
           { parent_sku: { [Op.like]: `%${keyword}%` } },
@@ -249,7 +250,7 @@ router.post('/search', async (req, res) => {
       }));
     }
     
-    console.log('🔍 最终查询条�?', JSON.stringify(orConditions, null, 2));
+    console.log('🔍 最终查询条�?', JSON.stringify(orConditions, null, 2));
 
     const result = await ProductWeblink.findAll({
       where: {
@@ -279,11 +280,11 @@ router.post('/search', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
-// 批量更新状�?
+// 批量更新状态
 router.post('/batch-update-status', async (req, res) => {
   try {
     const { ids, status } = req.body;
@@ -303,7 +304,7 @@ router.post('/batch-update-status', async (req, res) => {
     res.json({ message: '批量更新成功' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -335,7 +336,7 @@ router.post('/batch-send-cpc-test', async (req, res) => {
     res.json({ message: `成功提交 ${ids.length} 条CPC测试申请` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -367,7 +368,7 @@ router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
     res.json({ message: `成功标记 ${ids.length} 条CPC样品已发` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -388,7 +389,7 @@ router.post('/batch-delete', async (req, res) => {
     res.json({ message: '批量删除成功' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -405,7 +406,7 @@ router.put('/update/:id', async (req, res) => {
     res.json({ message: '更新成功' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '服务器错�? });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -421,7 +422,7 @@ async function sendDingTalkNotification(newProductCount) {
       return;
     }
 
-    // 如果有SECRET_KEY，计算签�?
+    // 如果有SECRET_KEY，计算签�?
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -437,13 +438,13 @@ async function sendDingTalkNotification(newProductCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认�?
+    // 使用配置的手机号，如果没有配置则使用默认�?
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `�?{newProductCount}款新品上传数据库，需要先审核再批图！@${mobileNumber}`
+        content: `�?{newProductCount}款新品上传数据库，需要先审核再批图！@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -459,12 +460,12 @@ async function sendDingTalkNotification(newProductCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('钉钉通知发送成�?);
+      console.log('钉钉通知发送成�?);
     } else {
-      console.error('钉钉通知发送失�?', response.data);
+      console.error('钉钉通知发送失�?', response.data);
     }
   } catch (error) {
-    console.error('发送钉钉通知时出�?', error.message);
+    console.error('发送钉钉通知时出�?', error.message);
   }
 }
 
@@ -480,7 +481,7 @@ async function sendCpcTestNotification(cpcTestCount) {
       return;
     }
 
-    // 如果有SECRET_KEY，计算签�?
+    // 如果有SECRET_KEY，计算签�?
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -496,13 +497,13 @@ async function sendCpcTestNotification(cpcTestCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认�?
+    // 使用配置的手机号，如果没有配置则使用默认�?
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `�?{cpcTestCount}款产品申请CPC测试，请及时处理！@${mobileNumber}`
+        content: `�?{cpcTestCount}款产品申请CPC测试，请及时处理！@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -518,12 +519,12 @@ async function sendCpcTestNotification(cpcTestCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('CPC测试申请钉钉通知发送成�?);
+      console.log('CPC测试申请钉钉通知发送成�?);
     } else {
-      console.error('CPC测试申请钉钉通知发送失�?', response.data);
+      console.error('CPC测试申请钉钉通知发送失�?', response.data);
     }
   } catch (error) {
-    console.error('发送CPC测试申请钉钉通知时出�?', error.message);
+    console.error('发送CPC测试申请钉钉通知时出�?', error.message);
   }
 }
 
@@ -539,7 +540,7 @@ async function sendCpcSampleSentNotification(sampleCount) {
       return;
     }
 
-    // 如果有SECRET_KEY，计算签�?
+    // 如果有SECRET_KEY，计算签�?
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -555,13 +556,13 @@ async function sendCpcSampleSentNotification(sampleCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认�?
+    // 使用配置的手机号，如果没有配置则使用默认�?
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `已标�?{sampleCount}款产品CPC样品已发，请及时跟进测试进度！@${mobileNumber}`
+        content: `已标�?{sampleCount}款产品CPC样品已发，请及时跟进测试进度！@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -577,26 +578,26 @@ async function sendCpcSampleSentNotification(sampleCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('CPC样品已发钉钉通知发送成�?);
+      console.log('CPC样品已发钉钉通知发送成�?);
     } else {
-      console.error('CPC样品已发钉钉通知发送失�?', response.data);
+      console.error('CPC样品已发钉钉通知发送失�?', response.data);
     }
   } catch (error) {
-    console.error('发送CPC样品已发钉钉通知时出�?', error.message);
+    console.error('发送CPC样品已发钉钉通知时出�?', error.message);
   }
 }
 
-// 生成SKU的函�?
+// 生成SKU的函�?
 function generateSKU() {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
   
   let sku = '';
-  // �?个字符是字母
+  // �?个字符是字母
   for (let i = 0; i < 3; i++) {
     sku += letters.charAt(Math.floor(Math.random() * letters.length));
   }
-  // �?个字符是数字
+  // �?个字符是数字
   for (let i = 0; i < 3; i++) {
     sku += numbers.charAt(Math.floor(Math.random() * numbers.length));
   }
@@ -604,7 +605,7 @@ function generateSKU() {
   return sku;
 }
 
-// Excel文件上传（原有的�?
+// Excel文件上传（原有的�?
 router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -618,7 +619,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 
     const newRecords = [];
     
-    // 跳过表头，从第二行开始处�?
+    // 跳过表头，从第二行开始处�?
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (row[0] && row[0].trim()) { // A列有产品链接
@@ -633,7 +634,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
           let parent_sku;
           do {
             parent_sku = generateSKU();
-            // 确保生成的SKU不重�?
+            // 确保生成的SKU不重�?
             const skuExists = await ProductWeblink.findOne({
               where: { parent_sku }
             });
@@ -644,7 +645,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
             parent_sku,
             weblink,
             update_time: new Date(),
-            status: '待处�?
+            status: '待处�?
           });
         }
       }
@@ -669,13 +670,13 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
   }
 });
 
-// 新的Excel上传（支持SKU, 链接, 备注�?
+// 新的Excel上传（支持SKU, 链接, 备注�?
 router.post('/upload-excel-new', (req, res) => {
   // 使用multer中间件，并处理可能的错误
   upload.single('file')(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: '文件太大，请选择小于10MB的文�? });
+        return res.status(400).json({ message: '文件太大，请选择小于10MB的文�? });
       } else if (err.message.includes('不支持的文件类型')) {
         return res.status(400).json({ message: err.message });
       } else {
@@ -688,7 +689,7 @@ router.post('/upload-excel-new', (req, res) => {
         return res.status(400).json({ message: '请选择Excel文件' });
       }
 
-          // 获取钉钉推送开关状�?
+          // 获取钉钉推送开关状�?
       const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
 
       let workbook, data;
@@ -696,7 +697,7 @@ router.post('/upload-excel-new', (req, res) => {
         workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         
         if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          return res.status(400).json({ message: 'Excel文件无有效工作表，请检查文件格�? });
+          return res.status(400).json({ message: 'Excel文件无有效工作表，请检查文件格�? });
         }
         
         const sheetName = workbook.SheetNames[0];
@@ -708,18 +709,18 @@ router.post('/upload-excel-new', (req, res) => {
         
         data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
       } catch (excelError) {
-        return res.status(400).json({ message: 'Excel文件格式错误，请确保上传正确�?xlsx�?xls文件' });
+        return res.status(400).json({ message: 'Excel文件格式错误，请确保上传正确�?xlsx�?xls文件' });
       }
 
-          // 优化空表检�?- 快速失�?
+          // 优化空表检�?- 快速失�?
       if (!data || data.length === 0) {
-        return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上�? });
+        return res.status(400).json({ message: 'Excel文件为空，请添加数据后重新上�? });
       }
 
-      // 检查是否有任何非空�?
+      // 检查是否有任何非空�?
       const hasValidData = data.some(row => row && row[0] && row[0].toString().trim());
       if (!hasValidData) {
-        return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息�? });
+        return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息�? });
       }
     const newRecords = [];
     const skippedRecords = [];
@@ -756,11 +757,11 @@ router.post('/upload-excel-new', (req, res) => {
         const weblink = row[1] ? row[1].toString().trim() : '';
         const notice = row[2] ? row[2].toString().trim() : '';
         
-        // 1. 优先检查产品ID重复（从链接中提取产品ID�?
+        // 1. 优先检查产品ID重复（从链接中提取产品ID�?
         if (weblink) {
           const productId = extractProductId(weblink);
           if (productId) {
-            // 查找数据库中是否已有包含相同产品ID的链�?
+            // 查找数据库中是否已有包含相同产品ID的链�?
             const existingProductId = await ProductWeblink.findOne({
               where: {
                 weblink: {
@@ -771,7 +772,7 @@ router.post('/upload-excel-new', (req, res) => {
             
             if (existingProductId) {
               const skipReason = '产品链接已经存在';
-              errors.push(`�?{i+1}行：产品ID ${productId} 已存在于SKU ${existingProductId.parent_sku}`);
+              errors.push(`�?{i+1}行：产品ID ${productId} 已存在于SKU ${existingProductId.parent_sku}`);
               skippedRecords.push({
                 row: i + 1,
                 sku: parent_sku,
@@ -783,14 +784,14 @@ router.post('/upload-excel-new', (req, res) => {
           }
         }
 
-        // 2. 检查SKU是否已存�?
+        // 2. 检查SKU是否已存�?
         const existing = await ProductWeblink.findOne({
           where: { parent_sku }
         });
         
         if (existing) {
-          const skipReason = 'SKU已存�?;
-          errors.push(`�?{i+1}行：SKU ${parent_sku} 已存在`);
+          const skipReason = 'SKU已存�?;
+          errors.push(`�?{i+1}行：SKU ${parent_sku} 已存在`);
           skippedRecords.push({
             row: i + 1,
             sku: parent_sku,
@@ -805,7 +806,7 @@ router.post('/upload-excel-new', (req, res) => {
           weblink,
           notice,
           update_time: new Date(),
-          status: '待审�?
+          status: '待审�?
         });
       }
     }
@@ -827,7 +828,7 @@ router.post('/upload-excel-new', (req, res) => {
         // 如果没有找到任何有效数据，返回统一格式
         const errorMsg = errors.length > 0 
           ? `没有找到有效的数据行。所有行都被跳过`
-          : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息�?;
+          : 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息�?;
         return res.status(400).json({ 
           message: errorMsg,
           success: false,
@@ -863,7 +864,7 @@ router.post('/upload-excel-new', (req, res) => {
   });
 });
 
-// 筛选数据接�?
+// 筛选数据接�?
 router.post('/filter', async (req, res) => {
   try {
     const { status, cpc_status, cpc_submit, seller_name, dateRange } = req.body;
@@ -888,7 +889,7 @@ router.post('/filter', async (req, res) => {
       whereConditions.seller_name = { [Op.like]: `%${seller_name}%` };
     }
     
-    // 添加时间范围筛�?
+    // 添加时间范围筛�?
     if (dateRange && dateRange.length === 2) {
       const [startDate, endDate] = dateRange;
       whereConditions.update_time = {
@@ -923,15 +924,15 @@ router.post('/filter', async (req, res) => {
 
     res.json({ data: result });
   } catch (err) {
-    console.error('筛选数据失�?', err);
+    console.error('筛选数据失�?', err);
     res.status(500).json({ 
-      message: '筛选失�? ' + (err.message || '未知错误'),
+      message: '筛选失�? ' + (err.message || '未知错误'),
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 });
 
-// CPC待上架产品筛选接口（测试完成且CPC提交情况为空�?
+// CPC待上架产品筛选接口（测试完成且CPC提交情况为空�?
 router.post('/filter-cpc-pending-listing', async (req, res) => {
   try {
     const result = await ProductWeblink.findAll({
@@ -965,7 +966,7 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: '筛选CPC待上架产品失�? });
+    res.status(500).json({ message: '筛选CPC待上架产品失�? });
   }
 });
 
@@ -975,7 +976,7 @@ router.post('/filter-can-organize-data', async (req, res) => {
     const result = await ProductWeblink.findAll({
       where: {
         status: {
-          [Op.in]: ['待P�?, '待上�?]
+          [Op.in]: ['待P�?, '待上�?]
         }
       },
       attributes: [
@@ -1009,7 +1010,7 @@ router.post('/filter-can-organize-data', async (req, res) => {
 // 获取全部数据统计信息
 router.get('/statistics', async (req, res) => {
   try {
-    // 获取状态统�?
+    // 获取状态统�?
     const statusStats = await ProductWeblink.findAll({
       attributes: [
         'status',
@@ -1025,7 +1026,7 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
-    // 获取CPC状态统�?
+    // 获取CPC状态统�?
     const cpcStatusStats = await ProductWeblink.findAll({
       attributes: [
         'cpc_status',
@@ -1064,7 +1065,7 @@ router.get('/statistics', async (req, res) => {
 
     console.log('📊 CPC提交情况统计查询结果:', cpcSubmitStats);
 
-    // 获取供应商统�?
+    // 获取供应商统�?
     const supplierStats = await ProductWeblink.findAll({
       attributes: [
         'seller_name',
@@ -1082,19 +1083,19 @@ router.get('/statistics', async (req, res) => {
 
     // 计算特定状态的产品数量
     const newProductFirstReviewCount = await ProductWeblink.count({
-      where: { status: '新品一�? }
+      where: { status: '新品一�? }
     });
 
     const infringementSecondReviewCount = await ProductWeblink.count({
-      where: { status: '待审�? }
+      where: { status: '待审�? }
     });
 
     const waitingPImageCount = await ProductWeblink.count({
-      where: { status: '待P�? }
+      where: { status: '待P�? }
     });
 
     const waitingUploadCount = await ProductWeblink.count({
-      where: { status: '待上�? }
+      where: { status: '待上�? }
     });
 
     // 计算CPC测试待审核的产品数量（申请测试状态）
@@ -1102,9 +1103,9 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '申请测试' }
     });
 
-    // 计算CPC检测中的产品数�?
+    // 计算CPC检测中的产品数�?
     const cpcTestingCount = await ProductWeblink.count({
-      where: { cpc_status: '测试�? }
+      where: { cpc_status: '测试�? }
     });
 
     // 计算CPC已发样品数量
@@ -1112,7 +1113,7 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '样品已发' }
     });
 
-    // 计算CPC待上架产品数量（测试完成且CPC提交情况为空�?
+    // 计算CPC待上架产品数量（测试完成且CPC提交情况为空�?
     const cpcPendingListingCount = await ProductWeblink.count({
       where: {
         cpc_status: '测试完成',
@@ -1127,7 +1128,7 @@ router.get('/statistics', async (req, res) => {
     const canOrganizeDataCount = await ProductWeblink.count({
       where: {
         status: {
-          [Op.in]: ['待P�?, '待上�?]
+          [Op.in]: ['待P�?, '待上�?]
         }
       }
     });
@@ -1153,7 +1154,7 @@ router.get('/statistics', async (req, res) => {
         count: parseInt(item.count)
       })),
       cpcSubmitStats: cpcSubmitStats
-        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // 过滤空�?
+        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // 过滤空�?
         .map(item => ({
           value: item.cpc_submit,
           count: parseInt(item.count) || 0
@@ -1173,7 +1174,7 @@ router.get('/statistics', async (req, res) => {
 
 
 
-// 测试端点 - 检查SellerInventorySku�?
+// 测试端点 - 检查SellerInventorySku�?
 router.get('/test-seller-sku', async (req, res) => {
   try {
     const count = await SellerInventorySku.count();
@@ -1206,12 +1207,12 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
       });
     }
 
-    // 检查记录是否存�?
+    // 检查记录是否存�?
     const record = await ProductWeblink.findByPk(id);
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: '记录不存�?
+        message: '记录不存�?
       });
     }
 
@@ -1226,13 +1227,13 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         });
       }
 
-      // 解析PDF文件获取Style Number和推荐年�?
+      // 解析PDF文件获取Style Number和推荐年�?
       let extractedData = { styleNumber: '', recommendAge: '' };
       try {
         const pdfData = await pdf(req.file.buffer);
         extractedData = await extractCpcInfo(pdfData.text);
       } catch (parseError) {
-        console.warn('PDF解析失败，跳过自动提�?', parseError.message);
+        console.warn('PDF解析失败，跳过自动提�?', parseError.message);
       }
 
       // 准备文件信息，处理中文文件名
@@ -1260,10 +1261,10 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         }
       }
 
-      // 添加新文�?
+      // 添加新文�?
       existingFiles.push(fileInfo);
 
-      // 更新数据库记�?
+      // 更新数据库记�?
       const updateData = {
         cpc_files: JSON.stringify(existingFiles)
       };
@@ -1273,10 +1274,10 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge)
       );
 
-      // 不再自动更新数据库字段，改为返回提取信息让前端确�?
-      // 只在控制台记录提取结�?
+      // 不再自动更新数据库字段，改为返回提取信息让前端确�?
+      // 只在控制台记录提取结�?
       if (!hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
-        console.log(`📝 从CPC文件中提取信�?(SKU: ${record.parent_sku}):`);
+        console.log(`📝 从CPC文件中提取信�?(SKU: ${record.parent_sku}):`);
         if (extractedData.styleNumber) {
           console.log(`  - Style Number: ${extractedData.styleNumber}`);
         }
@@ -1287,10 +1288,10 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         console.log(`ℹ️ SKU ${record.parent_sku} 已有提取信息，跳过重复提取`);
       }
 
-      // 如果CPC文件数量达到2个或以上，自动更新CPC测试情况�?已测�?
+      // 如果CPC文件数量达到2个或以上，自动更新CPC测试情况�?已测�?
       if (existingFiles.length >= 2) {
-        updateData.cpc_status = '已测�?;
-        console.log(`📋 SKU ${record.parent_sku} 的CPC文件数量达到${existingFiles.length}个，自动更新CPC测试情况�?已测�?`);
+        updateData.cpc_status = '已测�?;
+        console.log(`📋 SKU ${record.parent_sku} 的CPC文件数量达到${existingFiles.length}个，自动更新CPC测试情况�?已测�?`);
       }
 
       await ProductWeblink.update(updateData, {
@@ -1327,7 +1328,7 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
     console.error('CPC文件上传处理失败:', error);
     res.status(500).json({
       code: 1,
-      message: '服务器错�? ' + error.message
+      message: '服务器错误 ' + error.message
     });
   }
 });
@@ -1341,7 +1342,7 @@ router.get('/cpc-files/:id', async (req, res) => {
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: '记录不存�?
+        message: '记录不存�?
       });
     }
 
@@ -1367,7 +1368,7 @@ router.get('/cpc-files/:id', async (req, res) => {
     console.error('获取CPC文件列表失败:', error);
     res.status(500).json({
       code: 1,
-      message: '服务器错�? ' + error.message
+      message: '服务器错误 ' + error.message
     });
   }
 });
@@ -1381,7 +1382,7 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: '记录不存�?
+        message: '记录不存�?
       });
     }
 
@@ -1402,17 +1403,17 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
     if (fileIndex === -1) {
       return res.status(404).json({
         code: 1,
-        message: '文件不存�?
+        message: '文件不存�?
       });
     }
 
     const fileToDelete = cpcFiles[fileIndex];
     
-    // 从OSS中删除文件（如果有objectName�?
+    // 从OSS中删除文件（如果有objectName�?
     if (fileToDelete.objectName) {
       try {
         await deleteFromOSS(fileToDelete.objectName);
-        console.log(`�?已从OSS删除文件: ${fileToDelete.objectName}`);
+        console.log(`�?已从OSS删除文件: ${fileToDelete.objectName}`);
       } catch (ossError) {
         console.warn(`⚠️ OSS文件删除失败: ${fileToDelete.objectName}`, ossError.message);
         // 继续执行数据库删除，即使OSS删除失败
@@ -1422,7 +1423,7 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
     // 从数组中移除文件
     cpcFiles.splice(fileIndex, 1);
 
-    // 更新数据�?
+    // 更新数据�?
     await ProductWeblink.update(
       { cpc_files: JSON.stringify(cpcFiles) },
       { where: { id: id } }
@@ -1437,7 +1438,7 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
     console.error('删除CPC文件失败:', error);
     res.status(500).json({
       code: 1,
-      message: '服务器错�? ' + error.message
+      message: '服务器错误 ' + error.message
     });
   }
 });
@@ -1453,19 +1454,19 @@ async function extractCpcInfo(pdfText) {
                            pdfText.includes("CHILDRENS PRODUCT CERTIFICATE");
     
     if (!isCpcCertificate) {
-      console.log("📄 非CHILDREN'S PRODUCT CERTIFICATE文件，跳过信息提�?);
-      return result; // 返回空结�?
+      console.log("📄 非CHILDREN'S PRODUCT CERTIFICATE文件，跳过信息提�?);
+      return result; // 返回空结�?
     }
     
-    console.log("📋 检测到CHILDREN'S PRODUCT CERTIFICATE文件，开始提取信�?..");
+    console.log("📋 检测到CHILDREN'S PRODUCT CERTIFICATE文件，开始提取信�?..");
     
-    // 提取Style Number（在"Model"后面�?
+    // 提取Style Number（在"Model"后面�?
     const modelMatch = pdfText.match(/Model[:\s]*([A-Z0-9]+)/i);
     if (modelMatch) {
       result.styleNumber = modelMatch[1].trim();
     }
     
-    // 提取推荐年龄（在"Age grading"后面�?
+    // 提取推荐年龄（在"Age grading"后面�?
     const ageMatch = pdfText.match(/Age\s+grading[:\s]*([^\n\r]+)/i);
     if (ageMatch) {
       result.recommendAge = ageMatch[1].trim();
@@ -1485,12 +1486,12 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
   try {
     const { recordId, fileUid } = req.params;
     
-    // 检查记录是否存�?
+    // 检查记录是否存�?
     const record = await ProductWeblink.findByPk(recordId);
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: '记录不存�?
+        message: '记录不存�?
       });
     }
 
@@ -1512,12 +1513,12 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
     if (!file || !file.objectName) {
       return res.status(404).json({
         code: 1,
-        message: '文件不存�?
+        message: '文件不存�?
       });
     }
 
     try {
-      // 直接使用OSS客户端获取文�?
+      // 直接使用OSS客户端获取文�?
       const OSS = require('ali-oss');
       const client = new OSS({
         region: process.env.OSS_REGION,
@@ -1532,19 +1533,19 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
       // 直接获取文件内容
       const result = await client.get(file.objectName);
       
-      // 设置响应�?- 安全处理文件�?
+      // 设置响应�?- 安全处理文件�?
       const rawFileName = file.name || 'CPC文件.pdf';
-      // 清理文件名，移除所有可能导致HTTP头部问题的字�?
+      // 清理文件名，移除所有可能导致HTTP头部问题的字�?
       const cleanFileName = rawFileName
         .replace(/[\r\n\t]/g, '') // 移除回车、换行、制表符
-        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字�?
+        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // 只保留可打印ASCII字符和中文字�?
         .trim();
       
       const safeFileName = cleanFileName || `cpc_${fileUid}.pdf`;
       const encodedFileName = encodeURIComponent(safeFileName);
       
       // 设置安全的响应头
-      // 检查是否为下载请求（通过查询参数判断�?
+      // 检查是否为下载请求（通过查询参数判断�?
       const isDownload = req.query.download === 'true';
       
       res.set({
@@ -1563,7 +1564,7 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
       
       // 返回文件内容
       res.send(result.content);
-      console.log(`�?CPC文件代理下载成功: ${file.name}`);
+      console.log(`�?CPC文件代理下载成功: ${file.name}`);
       
     } catch (ossError) {
       console.error('OSS下载错误:', ossError);
@@ -1572,7 +1573,7 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
       if (ossError.code === 'NoSuchKey') {
         errorMessage = '文件不存在或已被删除';
       } else if (ossError.code === 'AccessDenied') {
-        errorMessage = 'OSS访问权限不足，请联系管理�?;
+        errorMessage = 'OSS访问权限不足，请联系管理�?;
       } else if (ossError.message) {
         errorMessage = `OSS错误: ${ossError.message}`;
       }
@@ -1587,19 +1588,19 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
     console.error('CPC文件代理下载失败:', error);
     res.status(500).json({
       code: 1,
-      message: '服务器错�? ' + error.message
+      message: '服务器错误 ' + error.message
     });
   }
 });
 
 
 
-// 亚马逊模板管�?- 通用API
-// 上传亚马逊资料模�?
+// 亚马逊模板管�?- 通用API
+// 上传亚马逊资料模�?
 router.post('/amazon-templates/upload', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('📤 收到亚马逊模板上传请�?);
+    console.log('📤 收到亚马逊模板上传请�?);
     
     if (!req.file) {
       return res.status(400).json({ message: '请选择要上传的文件' });
@@ -1607,7 +1608,7 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
 
     const { country } = req.body;
     if (!country) {
-      return res.status(400).json({ message: '请指定站�? });
+      return res.status(400).json({ message: '请指定站�? });
     }
 
     console.log(`📋 文件信息: ${req.file.originalname}, 大小: ${req.file.size} 字节, 站点: ${country}`);
@@ -1618,14 +1619,14 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     ];
     
     if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx)$/i)) {
-      return res.status(400).json({ message: '请上传有效的Excel文件（仅支持.xlsx格式�? });
+      return res.status(400).json({ message: '请上传有效的Excel文件（仅支持.xlsx格式�? });
     }
 
     // 使用OSS上传模板功能
     const { uploadTemplateToOSS } = require('../utils/oss');
     
     const originalFileName = req.body.originalFileName || req.file.originalname;
-    console.log('📝 使用文件�?', originalFileName);
+    console.log('📝 使用文件�?', originalFileName);
     
     const uploadResult = await uploadTemplateToOSS(
       req.file.buffer, 
@@ -1660,7 +1661,7 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     }
 
     const uploadTime = Date.now() - startTime;
-    console.log(`�?上传完成，耗时: ${uploadTime}ms`);
+    console.log(`�?上传完成，耗时: ${uploadTime}ms`);
 
     // 构建响应数据
     const responseData = {
@@ -1685,13 +1686,13 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
 
   } catch (error) {
     const uploadTime = Date.now() - startTime;
-    console.error(`�?上传亚马逊资料表模板失败 (耗时: ${uploadTime}ms):`, error);
+    console.error(`�?上传亚马逊资料表模板失败 (耗时: ${uploadTime}ms):`, error);
     
     let errorMessage = '上传失败: ' + error.message;
     if (error.code === 'RequestTimeout') {
       errorMessage = '上传超时，请检查网络连接后重试';
     } else if (error.code === 'AccessDenied') {
-      errorMessage = 'OSS访问权限不足，请联系管理�?;
+      errorMessage = 'OSS访问权限不足，请联系管理�?;
     }
     
     res.status(500).json({ 
@@ -1701,7 +1702,7 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
   }
 });
 
-// 获取亚马逊模板列�?
+// 获取亚马逊模板列�?
 router.get('/amazon-templates', async (req, res) => {
   try {
     const { country } = req.query;
@@ -1744,12 +1745,12 @@ router.get('/amazon-templates', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('从数据库获取亚马逊模板列表失�?', error);
+    console.error('从数据库获取亚马逊模板列表失�?', error);
     res.status(500).json({ message: '获取模板列表失败: ' + error.message });
   }
 });
 
-// 下载亚马逊模�?
+// 下载亚马逊模�?
 router.get('/amazon-templates/download/:objectName*', async (req, res) => {
   try {
     const objectName = req.params.objectName + (req.params[0] || '');
@@ -1757,7 +1758,7 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     console.log(`🔽 收到下载请求: ${objectName}`);
     
     if (!objectName) {
-      return res.status(400).json({ message: '缺少文件名参�? });
+      return res.status(400).json({ message: '缺少文件名参�? });
     }
 
     const { downloadTemplateFromOSS } = require('../utils/oss');
@@ -1765,13 +1766,13 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     const result = await downloadTemplateFromOSS(objectName);
     
     if (!result.success) {
-      console.error(`�?下载失败: ${result.message}`);
-      return res.status(404).json({ message: result.message || '模板文件不存�? });
+      console.error(`�?下载失败: ${result.message}`);
+      return res.status(404).json({ message: result.message || '模板文件不存�? });
     }
 
-    console.log(`📤 准备发送文�? ${result.fileName} (${result.size} 字节)`);
+    console.log(`📤 准备发送文�? ${result.fileName} (${result.size} 字节)`);
     
-    // 设置响应�?
+    // 设置响应�?
     res.setHeader('Content-Type', result.contentType);
     const encodedFileName = encodeURIComponent(result.fileName);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
@@ -1779,30 +1780,30 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
     
-    // 发送文件内�?
+    // 发送文件内�?
     if (Buffer.isBuffer(result.content)) {
       res.end(result.content);
     } else {
       res.end(Buffer.from(result.content));
     }
     
-    console.log(`�?文件下载完成: ${result.fileName}`);
+    console.log(`�?文件下载完成: ${result.fileName}`);
 
   } catch (error) {
-    console.error('�?下载亚马逊模板失�?', error);
+    console.error('�?下载亚马逊模板失�?', error);
     res.status(500).json({ message: '下载失败: ' + error.message });
   }
 });
 
-// 删除亚马逊模�?
+// 删除亚马逊模�?
 router.delete('/amazon-templates/:objectName*', async (req, res) => {
   try {
     const objectName = req.params.objectName + (req.params[0] || '');
     
-    console.log(`🗑�?收到删除请求: ${objectName}`);
+    console.log(`🗑�?收到删除请求: ${objectName}`);
     
     if (!objectName) {
-      return res.status(400).json({ message: '缺少文件名参�? });
+      return res.status(400).json({ message: '缺少文件名参�? });
     }
 
     const { deleteTemplateFromOSS, backupTemplate } = require('../utils/oss');
@@ -1810,9 +1811,9 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
     // 删除前先备份
     try {
       await backupTemplate(objectName, 'amazon');
-      console.log('�?模板文件已备�?);
+      console.log('�?模板文件已备�?);
     } catch (backupError) {
-      console.warn('⚠️ 模板文件备份失败，继续删除操�?', backupError.message);
+      console.warn('⚠️ 模板文件备份失败，继续删除操�?', backupError.message);
     }
     
     const result = await deleteTemplateFromOSS(objectName);
@@ -1824,7 +1825,7 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
       });
     }
 
-    // 从数据库中删除模板记�?
+    // 从数据库中删除模板记�?
     try {
       const deletedCount = await TemplateLink.destroy({
         where: {
@@ -1833,7 +1834,7 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
       });
       
       if (deletedCount > 0) {
-        console.log(`📊 已从数据库删�?${deletedCount} 条模板记录`);
+        console.log(`📊 已从数据库删�?${deletedCount} 条模板记录`);
       } else {
         console.warn('⚠️ 数据库中未找到对应的模板记录');
       }
@@ -1845,18 +1846,18 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
     res.json({ message: '模板删除成功' });
 
   } catch (error) {
-    console.error('删除亚马逊模板失�?', error);
+    console.error('删除亚马逊模板失�?', error);
     res.status(500).json({ message: '删除失败: ' + error.message });
   }
 });
 
-// ==================== 生成英国资料表接�?====================
+// ==================== 生成英国资料表接�?====================
 
-// 生成英国资料�?
+// 生成英国资料�?
 router.post('/generate-uk-data-sheet', async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('📋 收到生成英国资料表请�?);
+    console.log('📋 收到生成英国资料表请�?);
     
     const { parentSkus } = req.body;
     
@@ -1879,7 +1880,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     });
     
     if (!ukTemplate) {
-      return res.status(400).json({ message: '未找到英国站点的资料模板，请先上传英国模板文�? });
+      return res.status(400).json({ message: '未找到英国站点的资料模板，请先上传英国模板文�? });
     }
 
     console.log(`📄 使用英国模板: ${ukTemplate.file_name} (ID: ${ukTemplate.id})`);
@@ -1891,14 +1892,14 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     const downloadResult = await downloadTemplateFromOSS(ukTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error('�?下载英国模板失败:', downloadResult.message);
+      console.error('�?下载英国模板失败:', downloadResult.message);
       return res.status(500).json({ 
         message: `下载英国模板失败: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`�?英国模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+    console.log(`�?英国模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤3: 查询sellerinventory_sku表获取子SKU信息
     console.log('🔍 查询子SKU信息...');
@@ -1919,12 +1920,12 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     console.log(`📊 找到 ${inventorySkus.length} 条子SKU记录`);
 
-    // 步骤4: 使用xlsx库处理Excel文件（更高效、更稳定�?
-    console.log('📝 开始使用xlsx库处理Excel文件，高效稳�?..');
+    // 步骤4: 使用xlsx库处理Excel文件（更高效、更稳定�?
+    console.log('📝 开始使用xlsx库处理Excel文件，高效稳�?..');
     const XLSX = require('xlsx');
     
     try {
-      console.log(`📊 开始加载Excel文件，文件大�? ${downloadResult.size} 字节`);
+      console.log(`📊 开始加载Excel文件，文件大�? ${downloadResult.size} 字节`);
       
       // 使用xlsx读取工作簿（更快速、稳定）
       const workbook = XLSX.read(downloadResult.content, { 
@@ -1934,27 +1935,27 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         cellDates: true   // 处理日期
       });
       
-      console.log('�?Excel文件加载完成');
+      console.log('�?Excel文件加载完成');
       
-      // 检查是否有Template工作�?
+      // 检查是否有Template工作�?
       if (!workbook.Sheets['Template']) {
-        return res.status(400).json({ message: '模板文件中未找到Template工作�? });
+        return res.status(400).json({ message: '模板文件中未找到Template工作�? });
       }
 
-      console.log('�?成功加载Template工作�?);
+      console.log('�?成功加载Template工作�?);
       
       const worksheet = workbook.Sheets['Template'];
       
       // 将工作表转换为二维数组，便于操作
       const data = XLSX.utils.sheet_to_json(worksheet, { 
         header: 1, // 使用数组形式
-        defval: '', // 空单元格默认�?
+        defval: '', // 空单元格默认�?
         raw: false  // 保持原始数据格式
       });
       
-      console.log(`📊 工作表数据行�? ${data.length}`);
+      console.log(`📊 工作表数据行�? ${data.length}`);
 
-      // 查找列位置（在第3行查找标题，索引�?�?
+      // 查找列位置（在第3行查找标题，索引�?�?
       let itemSkuCol = -1;
       let colorNameCol = -1;
       let sizeNameCol = -1;
@@ -1973,7 +1974,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let conditionTypeCol = -1;
       let cpsiaCautionaryStatement1Col = -1;
       
-      if (data.length >= 3 && data[2]) { // �?行，索引�?
+      if (data.length >= 3 && data[2]) { // �?行，索引�?
         data[2].forEach((header, colIndex) => {
           if (header) {
             const cellValue = header.toString().toLowerCase();
@@ -2022,10 +2023,10 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         });
       }
 
-      console.log(`📍 找到基础列位�?- item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
-      console.log(`📍 找到扩展列位�?- brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
-      console.log(`📍 找到其他列位�?- model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
-      console.log(`📍 找到关系列位�?- parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
+      console.log(`📍 找到基础列位�?- item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+      console.log(`📍 找到扩展列位�?- brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
+      console.log(`📍 找到其他列位�?- model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
+      console.log(`📍 找到关系列位�?- parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
       console.log(`📍 找到属性列位置 - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}, cpsia_cautionary_statement1: ${cpsiaCautionaryStatement1Col}`);
 
       // 步骤5: 准备填写数据
@@ -2040,9 +2041,9 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         skuGroups[sku.parent_sku].push(sku);
       });
 
-      // 确保数据数组有足够的�?
+      // 确保数据数组有足够的�?
       const totalRowsNeeded = 4 + Object.keys(skuGroups).reduce((total, parentSku) => {
-        return total + 1 + skuGroups[parentSku].length; // 母SKU�?+ 子SKU行数
+        return total + 1 + skuGroups[parentSku].length; // 母SKU�?+ 子SKU行数
       }, 0);
 
       // 扩展数据数组
@@ -2050,11 +2051,11 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         data.push([]);
       }
 
-      // 从第4行开始填写数据（索引�?�?
-      let currentRowIndex = 3; // �?行开始，索引�?
+      // 从第4行开始填写数据（索引�?�?
+      let currentRowIndex = 3; // �?行开始，索引�?
       
       Object.keys(skuGroups).forEach(parentSku => {
-        // 计算需要的最大列�?
+        // 计算需要的最大列�?
         const allColumns = [
           itemSkuCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
           externalProductIdTypeCol, modelCol, quantityCol, ageRangeDescriptionCol,
@@ -2076,7 +2077,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         data[currentRowIndex][colorNameCol] = '';
         data[currentRowIndex][sizeNameCol] = '';
         
-        // 填写母SKU的新增字�?
+        // 填写母SKU的新增字�?
         if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
         if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
         if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // 母SKU留空
@@ -2093,7 +2094,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         
         currentRowIndex++;
         
-        // 填写子SKU�?
+        // 填写子SKU�?
         skuGroups[parentSku].forEach(childSku => {
           if (!data[currentRowIndex]) {
             data[currentRowIndex] = [];
@@ -2106,7 +2107,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           data[currentRowIndex][colorNameCol] = childSku.sellercolorname || '';
           data[currentRowIndex][sizeNameCol] = childSku.sellersizename || '';
           
-          // 填写子SKU的新增字�?
+          // 填写子SKU的新增字�?
           if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
           if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
           if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = 'GCID';
@@ -2126,13 +2127,13 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         });
       });
 
-      console.log(`📊 填写完成，共填写�?${currentRowIndex - 3} 行数据`);
+      console.log(`📊 填写完成，共填写�?${currentRowIndex - 3} 行数据`);
 
-      // 步骤6: 将数据重新转换为工作�?
+      // 步骤6: 将数据重新转换为工作�?
       console.log('💾 生成Excel文件...');
       const newWorksheet = XLSX.utils.aoa_to_sheet(data);
       
-      // 保持原始工作表的列宽等属�?
+      // 保持原始工作表的列宽等属�?
       if (worksheet['!cols']) {
         newWorksheet['!cols'] = worksheet['!cols'];
       }
@@ -2143,7 +2144,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         newWorksheet['!merges'] = worksheet['!merges'];
       }
       
-      // 更新工作�?
+      // 更新工作�?
       workbook.Sheets['Template'] = newWorksheet;
       
       // 生成Excel文件buffer
@@ -2154,9 +2155,9 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
 
       const processingTime = Date.now() - startTime;
-      console.log(`�?英国资料表生成完成，耗时: ${processingTime}ms`);
+      console.log(`�?英国资料表生成完成，耗时: ${processingTime}ms`);
 
-      // 设置响应�?- 使用新的命名格式：UK_母SKU1_母SKU2
+      // 设置响应�?- 使用新的命名格式：UK_母SKU1_母SKU2
       const skuList = parentSkus.join('_');
       const fileName = `UK_${skuList}.xlsx`;
       
@@ -2172,19 +2173,19 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       res.send(excelBuffer);
 
     } catch (error) {
-      console.error('�?Excel文件处理失败:', error.message);
+      console.error('�?Excel文件处理失败:', error.message);
       throw error;
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    console.error(`�?生成英国资料表失�?(耗时: ${processingTime}ms):`, error);
+    console.error(`�?生成英国资料表失�?(耗时: ${processingTime}ms):`, error);
     
     let errorMessage = '生成失败: ' + error.message;
     if (error.code === 'ENOTFOUND') {
-      errorMessage = '网络连接失败，请检查网络设�?;
+      errorMessage = '网络连接失败，请检查网络设�?;
     } else if (error.code === 'AccessDenied') {
-      errorMessage = 'OSS访问权限不足，请联系管理�?;
+      errorMessage = 'OSS访问权限不足，请联系管理�?;
     }
     
     res.status(500).json({ 
@@ -2194,7 +2195,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
   }
 });
 
-// ==================== 生成其他站点资料表接�?====================
+// ==================== 生成其他站点资料表接�?====================
 
 // 检查其他站点模板列差异
 router.post('/check-other-site-template', upload.single('file'), async (req, res) => {
@@ -2215,13 +2216,13 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 3) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行（�?行为标题行）' });
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行（�?行为标题行）' });
     }
 
-    // 获取上传文件的列（第3行是标题行，索引�?�?
+    // 获取上传文件的列（第3行是标题行，索引�?�?
     const uploadedColumns = jsonData[2] ? jsonData[2].filter(col => col && col.toString().trim()) : [];
     
-    // 获取目标国家的模板文�?
+    // 获取目标国家的模板文�?
     const countryTemplate = await TemplateLink.findOne({
       where: {
         template_type: 'amazon',
@@ -2232,10 +2233,10 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `未找�?{country}站点的资料模板，请先上传${country}模板文件` });
+      return res.status(400).json({ message: `未找�?{country}站点的资料模板，请先上传${country}模板文件` });
     }
 
-    // 下载并解析模板文�?
+    // 下载并解析模板文�?
     const { downloadTemplateFromOSS } = require('../utils/oss');
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
@@ -2254,7 +2255,7 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     const templateColumns = templateData.length >= 3 && templateData[2] ? 
       templateData[2].filter(col => col && col.toString().trim()) : [];
 
-    // 检查缺失的�?
+    // 检查缺失的�?
     const missingColumns = uploadedColumns.filter(col => 
       !templateColumns.some(templateCol => 
         templateCol.toString().toLowerCase() === col.toString().toLowerCase()
@@ -2270,32 +2271,32 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     });
 
   } catch (error) {
-    console.error('�?检查模板列差异失败:', error);
+    console.error('�?检查模板列差异失败:', error);
     res.status(500).json({ 
-      message: error.message || '检查模板列差异时发生未知错�?
+      message: error.message || '检查模板列差异时发生未知错�?
     });
   }
 });
 
-// 生成其他站点资料�?
+// 生成其他站点资料�?
 router.post('/generate-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('📋 收到生成其他站点资料表请�?);
+    console.log('📋 收到生成其他站点资料表请�?);
     
     const { country, targetCountry, sourceCountry } = req.body;
     const uploadedFile = req.file;
     
-    // 支持两种参数格式：country �?targetCountry
+    // 支持两种参数格式：country �?targetCountry
     const actualCountry = country || targetCountry;
     
     if (!actualCountry || !uploadedFile) {
       return res.status(400).json({ message: '请提供国家信息和Excel文件' });
     }
 
-    console.log(`📝 处理源国�? ${sourceCountry || '未知'} -> 目标国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
+    console.log(`📝 处理源国�? ${sourceCountry || '未知'} -> 目标国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
 
-    // 处理文本字段的转换规则（基于源国家和目标国家�?
+    // 处理文本字段的转换规则（基于源国家和目标国家�?
     const processTextForUKAUAE = (text, fieldType = 'general') => {
       if (!text) return text;
       
@@ -2317,7 +2318,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         return text;
       }
       
-      // 原有逻辑：生成UK/AU/AE资料表时的处�?
+      // 原有逻辑：生成UK/AU/AE资料表时的处�?
       if (targetIsUKAUAE) {
         // 对于brand_name和manufacturer字段，统一设置为SellerFun
         if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
@@ -2327,7 +2328,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // 对于department_name字段的特殊处�?
+        // 对于department_name字段的特殊处�?
         if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
             if (actualCountry === 'UK' || actualCountry === 'AU') {
@@ -2342,7 +2343,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return text;
     };
 
-    // 处理SKU字段的转换规则（基于源国家和目标国家�?
+    // 处理SKU字段的转换规则（基于源国家和目标国家�?
     const processSkuForUKAUAE = (sku) => {
       if (!sku) return sku;
       
@@ -2356,7 +2357,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         return sku.replace(/^UK/, 'US');
       }
       
-      // 原有逻辑：生成UK/AU/AE资料表时的处�?
+      // 原有逻辑：生成UK/AU/AE资料表时的处�?
       if (targetIsUKAUAE) {
         // SKU前缀改为UK
         return sku.replace(/^[A-Z]{2}/, 'UK');
@@ -2365,7 +2366,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return sku;
     };
 
-    // 处理model字段的转换规则（基于源国家和目标国家�?
+    // 处理model字段的转换规则（基于源国家和目标国家�?
     const processModelForUKAUAE = (model) => {
       if (!model) return model;
       
@@ -2383,7 +2384,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         return 'US' + model;
       }
       
-      // 原有逻辑：生成UK/AU/AE资料表时的处�?
+      // 原有逻辑：生成UK/AU/AE资料表时的处�?
       if (targetIsUKAUAE) {
         // model字段加上UK前缀
         if (model.startsWith('UK')) {
@@ -2395,7 +2396,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return model;
     };
 
-    // 处理图片URL的转换规则（基于源国家和目标国家�?
+    // 处理图片URL的转换规则（基于源国家和目标国家�?
     const processImageUrlForUKAUAE = (url) => {
       if (!url) return url;
       
@@ -2415,7 +2416,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         return processedUrl;
       }
       
-      // 原有逻辑：生成UK/AU/AE资料表时的处�?
+      // 原有逻辑：生成UK/AU/AE资料表时的处�?
       if (targetIsUKAUAE) {
         // 如果域名包含pic.jiayou.ink，改成pic.sellerfun.net
         let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
@@ -2430,7 +2431,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return url;
     };
 
-    // 处理英国站点的单位转�?
+    // 处理英国站点的单位转�?
     const processUnitForUK = (unit) => {
       if (!unit || actualCountry !== 'UK') return unit;
       
@@ -2451,7 +2452,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const processDimensionForUK = (value, unit) => {
       if (!value || actualCountry !== 'UK') return value;
       
-      // 如果单位是Inches，数值需要乘�?.54转换为厘�?
+      // 如果单位是Inches，数值需要乘�?.54转换为厘�?
       if (unit === 'Inches' && !isNaN(parseFloat(value))) {
         return (parseFloat(value) * 2.54).toFixed(2);
       }
@@ -2470,7 +2471,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('�?找到Template工作表，使用Template工作�?);
+      console.log('�?找到Template工作表，使用Template工作�?);
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
@@ -2488,13 +2489,13 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     // 步骤2: 处理数据并保存到数据库，同时准备填写到Excel
     console.log('💾 保存数据到数据库并准备填写到Excel...');
     
-    // 获取标题行（�?行是标题行，索引�?�?
+    // 获取标题行（�?行是标题行，索引�?�?
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
     }
     
-    const headers = jsonData[2]; // �?行是标题�?
-    const dataRows = jsonData.slice(3); // �?行开始是数据�?
+    const headers = jsonData[2]; // �?行是标题�?
+    const dataRows = jsonData.slice(3); // �?行开始是数据�?
     
     const savedRecords = [];
     const processedRecords = []; // 用于Excel填写的干净数据
@@ -2515,10 +2516,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 设置original_parent_sku字段（根据parent_child列判断）
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
-        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
+        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
-        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
         // 兼容处理：如果没有parent_child信息，使用原有逻辑
@@ -2526,7 +2527,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         console.warn(`⚠️ 记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       }
       
-      // 过滤和验证数据，只保留模型中定义的字�?
+      // 过滤和验证数据，只保留模型中定义的字�?
       const filteredData = filterValidFields(rowData);
       
       // 保存到数据库
@@ -2535,18 +2536,18 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         savedRecords.push(savedRecord);
       } catch (error) {
         console.warn(`⚠️ 保存记录失败: ${JSON.stringify(filteredData)}, 错误: ${error.message}`);
-        console.warn(`原始数据字段数量: ${Object.keys(rowData).length}, 过滤后字段数�? ${Object.keys(filteredData).length}`);
+        console.warn(`原始数据字段数量: ${Object.keys(rowData).length}, 过滤后字段数�? ${Object.keys(filteredData).length}`);
       }
       
       // 同时保存一份用于Excel填写
       processedRecords.push(rowData);
     }
 
-    console.log(`�?成功保存 ${savedRecords.length} 条记录到数据库`);
-    console.log(`�?准备�?${processedRecords.length} 条记录用于Excel填写`);
+    console.log(`�?成功保存 ${savedRecords.length} 条记录到数据库`);
+    console.log(`�?准备�?${processedRecords.length} 条记录用于Excel填写`);
 
-    // 步骤3: 获取对应国家的模板文�?
-    console.log(`🔍 查找${actualCountry}站点的模板文�?..`);
+    // 步骤3: 获取对应国家的模板文�?
+    console.log(`🔍 查找${actualCountry}站点的模板文�?..`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
@@ -2558,7 +2559,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `未找�?{actualCountry}站点的资料模板，请先上传${actualCountry}模板文件` });
+      return res.status(400).json({ message: `未找�?{actualCountry}站点的资料模板，请先上传${actualCountry}模板文件` });
     }
 
     console.log(`📄 使用${actualCountry}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
@@ -2570,14 +2571,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`�?下载${actualCountry}模板失败:`, downloadResult.message);
+      console.error(`�?下载${actualCountry}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
         message: `下载${actualCountry}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`�?${actualCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+    console.log(`�?${actualCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
     console.log('📊 开始使用xlsx库处理Excel文件...');
@@ -2590,26 +2591,26 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       cellDates: true   // 处理日期
     });
     
-    // 检查是否有Template工作�?
+    // 检查是否有Template工作�?
     if (!templateWorkbook.Sheets['Template']) {
-      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
+      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
     }
 
-    console.log('�?成功加载Template工作�?);
+    console.log('�?成功加载Template工作�?);
     
     const templateWorksheet = templateWorkbook.Sheets['Template'];
     
     // 将工作表转换为二维数组，便于操作
     const data = xlsx.utils.sheet_to_json(templateWorksheet, { 
       header: 1, // 使用数组形式
-      defval: '', // 空单元格默认�?
+      defval: '', // 空单元格默认�?
       raw: false  // 保持原始数据格式
     });
     
-    console.log(`📊 工作表数据行�? ${data.length}`);
+    console.log(`📊 工作表数据行�? ${data.length}`);
 
-    // 步骤6: 查找列位置（在第3行查找标题，索引�?�?
-    console.log('🔍 查找列位�?..');
+    // 步骤6: 查找列位置（在第3行查找标题，索引�?�?
+    console.log('🔍 查找列位�?..');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -2653,7 +2654,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let conditionTypeCol = -1;
     let departmentNameCol = -1;
     
-    // 加拿大站点新增字段的列变�?
+    // 加拿大站点新增字段的列变�?
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -2674,7 +2675,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let depthHeightFloorToTopUnitOfMeasureCol = -1;
     let manufacturerContactInformationCol = -1;
     
-    if (data.length >= 3 && data[2]) { // �?行，索引�?
+    if (data.length >= 3 && data[2]) { // �?行，索引�?
       data[2].forEach((header, colIndex) => {
         if (header) {
           const cellValue = header.toString().toLowerCase();
@@ -2795,37 +2796,37 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       });
     }
 
-    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
     
-    // 调试：检查第3行标�?
-    console.log('📋 �?行标题内�?', data[2]);
+    // 调试：检查第3行标�?
+    console.log('📋 �?行标题内�?', data[2]);
     
-    // 检查是否找到了关键�?
+    // 检查是否找到了关键�?
     if (itemSkuCol === -1) {
-      console.log('�?警告：未找到item_sku�?');
+      console.log('�?警告：未找到item_sku�?');
     }
     if (itemNameCol === -1) {
-      console.log('�?警告：未找到item_name�?');
+      console.log('�?警告：未找到item_name�?');
     }
 
     // 步骤7: 准备填写数据
     console.log('✍️ 准备填写数据到Excel...');
     
-    // 确保数据数组有足够的�?
-    const totalRowsNeeded = 3 + processedRecords.length; // �?行保�?+ 数据�?
+    // 确保数据数组有足够的�?
+    const totalRowsNeeded = 3 + processedRecords.length; // �?行保�?+ 数据�?
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
-    // 从第4行开始填写数据（索引�?�?
-    let currentRowIndex = 3; // �?行开始，索引�?
+    // 从第4行开始填写数据（索引�?�?
+    let currentRowIndex = 3; // �?行开始，索引�?
     
     processedRecords.forEach((record, index) => {
-      const recordData = record; // processedRecords已经是干净的数据对�?
+      const recordData = record; // processedRecords已经是干净的数据对�?
       
       // 调试：输出第一条记录的填写过程
       if (index === 0) {
-        console.log('📋 填写第一条记�?', {
+        console.log('📋 填写第一条记�?', {
           item_sku: recordData.item_sku,
           item_name: recordData.item_name,
           color_name: recordData.color_name,
@@ -2835,7 +2836,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         console.log(`📍 填写到第${currentRowIndex + 1}行（索引${currentRowIndex}）`);
       }
       
-      // 计算需要的最大列�?
+      // 计算需要的最大列�?
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
@@ -2897,7 +2898,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (sizeMapCol !== -1) data[currentRowIndex][sizeMapCol] = recordData.size_map || '';
       if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
       if (cpsiaCautionaryStatement1Col !== -1) {
-        // 加拿大站点特殊处理：使用特定格式的警告语�?
+        // 加拿大站点特殊处理：使用特定格式的警告语�?
         if (actualCountry === 'CA') {
           data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
         } else {
@@ -2913,7 +2914,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       }
       
-      // 填写加拿大站点新增字段数�?
+      // 填写加拿大站点新增字段数�?
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = recordData.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = recordData.care_instructions || '';
       if (modelCol !== -1) data[currentRowIndex][modelCol] = processModelForUKAUAE(recordData.model || '');
@@ -2955,13 +2956,13 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
         let depthUnit = recordData.depth_front_to_back_unit_of_measure || '';
-        console.log(`🔧 处理depth_front_to_back_unit_of_measure: 原�?"${depthUnit}", 目标国家="${actualCountry}"`);
+        console.log(`🔧 处理depth_front_to_back_unit_of_measure: 原�?"${depthUnit}", 目标国家="${actualCountry}"`);
         // 加拿大站点特殊处理：Inches转换为Centimeters
         if (actualCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
           console.log(`🔧 CA Inches转换: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (actualCountry === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
@@ -3001,7 +3002,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (actualCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (actualCountry === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
@@ -3037,7 +3038,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (actualCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (actualCountry === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
@@ -3081,22 +3082,22 @@ CN
       currentRowIndex++;
     });
 
-    console.log(`📊 填写完成，共填写�?${processedRecords.length} 行数据`);
+    console.log(`📊 填写完成，共填写�?${processedRecords.length} 行数据`);
     
-    // 调试：检查是否有数据被填�?
+    // 调试：检查是否有数据被填�?
     if (processedRecords.length > 0) {
-      console.log('📋 检查数据填写结�?');
-      console.log(`�?行内�?`, data[3]?.slice(0, 5));
-      console.log(`�?行内�?`, data[4]?.slice(0, 5));
+      console.log('📋 检查数据填写结�?');
+      console.log(`�?行内�?`, data[3]?.slice(0, 5));
+      console.log(`�?行内�?`, data[4]?.slice(0, 5));
     } else {
-      console.log('�?警告：processedRecords为空，没有数据可填写!');
+      console.log('�?警告：processedRecords为空，没有数据可填写!');
     }
 
-    // 步骤8: 将数据重新转换为工作�?
+    // 步骤8: 将数据重新转换为工作�?
     console.log('💾 生成Excel文件...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
-    // 保持原始工作表的列宽等属�?
+    // 保持原始工作表的列宽等属�?
       if (templateWorksheet['!cols']) {
         newWorksheet['!cols'] = templateWorksheet['!cols'];
       }
@@ -3107,7 +3108,7 @@ CN
       newWorksheet['!merges'] = templateWorksheet['!merges'];
     }
     
-    // 更新工作�?
+    // 更新工作�?
     templateWorkbook.Sheets['Template'] = newWorksheet;
     
     try {
@@ -3118,7 +3119,7 @@ CN
         cellStyles: true
       });
       
-      console.log(`�?Excel文件生成成功，大�? ${outputBuffer.length} 字节`);
+      console.log(`�?Excel文件生成成功，大�? ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
       console.log('🔍 开始生成文件名...');
@@ -3141,22 +3142,22 @@ CN
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
-      console.log(`�?生成${actualCountry}资料表成�?(耗时: ${processingTime}ms)`);
+      console.log(`�?生成${actualCountry}资料表成�?(耗时: ${processingTime}ms)`);
       
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('�?Excel文件生成失败:', fileError);
+      console.error('�?Excel文件生成失败:', fileError);
       throw new Error('Excel文件生成失败: ' + fileError.message);
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
     const errorMessage = error.message || '生成其他站点资料表时发生未知错误';
-    console.error(`�?生成其他站点资料表失�?(耗时: ${processingTime}ms):`);
+    console.error(`�?生成其他站点资料表失�?(耗时: ${processingTime}ms):`);
     console.error(`🔍 错误详情: ${error.message}`);
     console.error(`📋 错误堆栈:`, error.stack);
-    console.error(`🏷�?错误类型: ${error.name}`);
+    console.error(`🏷�?错误类型: ${error.name}`);
     
           // 输出请求参数以便调试
       console.error(`📋 请求参数: actualCountry=${req.body.country || req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
@@ -3170,14 +3171,14 @@ CN
     }
   });
 
-// 映射数据到模板的辅助函数（基于xlsx库）
+// 映射表数据到模板的辅助函数（基于xlsx库）
 function mapDataToTemplateXlsx(templateData, records, country) {
   try {
-    console.log(`🎯 开始映�?${records.length} 条记录到${country}模板...`);
+    console.log(`🎯 开始映�?${records.length} 条记录到${country}模板...`);
     
     // 验证输入数据
     if (!Array.isArray(templateData) || templateData.length === 0) {
-      throw new Error('模板数据为空或格式错�?);
+      throw new Error('模板数据为空或格式错�?);
     }
     
     if (!Array.isArray(records)) {
@@ -3187,9 +3188,9 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     // 复制模板数据
     const updatedData = templateData.map(row => [...(row || [])]);
     
-    console.log(`📋 模板�?${updatedData.length} 行数据`);
+    console.log(`📋 模板�?${updatedData.length} 行数据`);
 
-    // 查找列位置（在第3行查找标题，索引�?�?
+    // 查找列位置（在第3行查找标题，索引�?�?
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -3232,7 +3233,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let cpsiaCautionaryStatement1Col = -1;
     let conditionTypeCol = -1;
     
-    // 加拿大站点新增字段的列变�?
+    // 加拿大站点新增字段的列变�?
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -3397,7 +3398,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       });
     }
 
-    // 检查缺失的�?
+    // 检查缺失的�?
     const requiredCols = [
       { name: 'item_sku', col: itemSkuCol },
       { name: 'color_name', col: colorNameCol },
@@ -3415,19 +3416,19 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       console.warn(`⚠️ 模板中缺少以下列: ${missingColumns.join(', ')}`);
     }
 
-    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
+    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
 
-    // 判断源文件类型（通过第一条记录的SKU前缀�?
+    // 判断源文件类型（通过第一条记录的SKU前缀�?
     const sourceCountryType = records.length > 0 && records[0].item_sku ? 
       (records[0].item_sku.startsWith('US') ? 'US_CA' : 'OTHER') : 'OTHER';
     
-    console.log(`📍 源文件类�? ${sourceCountryType}, 目标国家: ${country}`);
+    console.log(`📍 源文件类�? ${sourceCountryType}, 目标国家: ${country}`);
 
-    // 处理文本内容，根据源文件和目标国家决定品牌替换规�?
+    // 处理文本内容，根据源文件和目标国家决定品牌替换规�?
     const processTextContent = (text, fieldType = 'general') => {
       if (!text) return text;
       
-      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规�?
+      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规�?
       if (country === 'UK' || country === 'AU' || country === 'AE') {
         // 对于brand_name和manufacturer字段，统一设置为SellerFun
         if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
@@ -3437,7 +3438,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // 对于department_name字段的特殊处�?
+        // 对于department_name字段的特殊处�?
         if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
             if (country === 'UK' || country === 'AU') {
@@ -3447,11 +3448,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             }
           }
         }
-        // 其他文本字段的一般处�?
+        // 其他文本字段的一般处�?
         return text.replace(/JiaYou/g, 'SellerFun');
       }
       
-      // 如果源文件不是美�?加拿大，在生成美�?加拿大资料表时，SellerFun改成JiaYou
+      // 如果源文件不是美�?加拿大，在生成美�?加拿大资料表时，SellerFun改成JiaYou
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
         return text.replace(/SellerFun/g, 'JiaYou');
       }
@@ -3464,11 +3465,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return text;
     };
 
-    // 处理图片URL，根据源文件和目标国家决定替换规�?
+    // 处理图片URL，根据源文件和目标国家决定替换规�?
     const processImageUrl = (url) => {
       if (!url) return url;
       
-      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规�?
+      // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规�?
       if (country === 'UK' || country === 'AU' || country === 'AE') {
         // 如果域名包含pic.jiayou.ink，改成pic.sellerfun.net
         let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
@@ -3480,7 +3481,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         return processedUrl;
       }
       
-      // 如果源文件不是美�?加拿大，在生成美�?加拿大资料表时，JiaYou改成SellerFun
+      // 如果源文件不是美�?加拿大，在生成美�?加拿大资料表时，JiaYou改成SellerFun
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
         return url.replace(/JiaYou/g, 'SellerFun');
       }
@@ -3521,17 +3522,17 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return model;
     };
 
-    // 调试：输出模板前几行的内�?
-    console.log('🔍 模板�?行内�?');
+    // 调试：输出模板前几行的内�?
+    console.log('🔍 模板�?行内�?');
     for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`�?{i + 1}�?`, updatedData[i]?.slice(0, 5) || '空行');
+      console.log(`�?{i + 1}�?`, updatedData[i]?.slice(0, 5) || '空行');
     }
 
-    // 不清空原模板数据，只从第4行开始填写数�?
+    // 不清空原模板数据，只从第4行开始填写数�?
     const headerRowCount = 3;
     const originalLength = updatedData.length;
-    console.log(`📋 保留原模板所有内容，从第${headerRowCount + 1}行开始填�?{records.length}条记录`);
-    console.log(`📊 原模板有${originalLength}行，将从�?行开始填写数据`);
+    console.log(`📋 保留原模板所有内容，从第${headerRowCount + 1}行开始填�?{records.length}条记录`);
+    console.log(`📊 原模板有${originalLength}行，将从�?行开始填写数据`);
 
     // 填写新数据（从第4行开始）
     let addedCount = 0;
@@ -3540,16 +3541,16 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       
       // 调试：输出第一条记录的详细信息
       if (index === 0) {
-        console.log('📋 第一条记录详�?', {
+        console.log('📋 第一条记录详�?', {
           item_sku: record.item_sku || record.dataValues?.item_sku,
           item_name: record.item_name || record.dataValues?.item_name,
           brand_name: record.brand_name || record.dataValues?.brand_name,
           dataValues: record.dataValues ? '有dataValues' : '无dataValues'
         });
-        console.log(`📍 将填写到�?{rowIndex + 1}行（索引${rowIndex}）`);
+        console.log(`📍 将填写到�?{rowIndex + 1}行（索引${rowIndex}）`);
       }
       
-      // 确保行存�?
+      // 确保行存�?
       if (!updatedData[rowIndex]) {
         updatedData[rowIndex] = [];
       }
@@ -3693,7 +3694,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][countryOfOriginCol] = data.country_of_origin || '';
       }
       if (cpsiaCautionaryStatement1Col !== -1) {
-        // 加拿大站点特殊处理：使用特定格式的警告语�?
+        // 加拿大站点特殊处理：使用特定格式的警告语�?
         if (country === 'CA') {
           updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
         } else {
@@ -3709,7 +3710,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         }
       }
       
-      // 填写加拿大站点新增字段数�?
+      // 填写加拿大站点新增字段数�?
       if (closureTypeCol !== -1) {
         updatedData[rowIndex][closureTypeCol] = data.closure_type || '';
       }
@@ -3773,13 +3774,13 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
         let depthUnit = data.depth_front_to_back_unit_of_measure || '';
-        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_front_to_back_unit_of_measure: 原�?"${depthUnit}", 目标国家="${country}"`);
+        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_front_to_back_unit_of_measure: 原�?"${depthUnit}", 目标国家="${country}"`);
         // 加拿大站点特殊处理：Inches转换为Centimeters
         if (country === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
           console.log(`🔧 [mapDataToTemplateXlsx] CA Inches转换: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (country === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
@@ -3815,13 +3816,13 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
         let widthUnit = data.depth_width_side_to_side_unit_of_measure || '';
-        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_width_side_to_side_unit_of_measure: 原�?"${widthUnit}", 目标国家="${country}"`);
+        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_width_side_to_side_unit_of_measure: 原�?"${widthUnit}", 目标国家="${country}"`);
         // 加拿大站点特殊处理：Inches转换为Centimeters
         if (country === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
           console.log(`🔧 [mapDataToTemplateXlsx] CA Inches转换: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (country === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
@@ -3857,13 +3858,13 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
         let heightUnit = data.depth_height_floor_to_top_unit_of_measure || '';
-        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_height_floor_to_top_unit_of_measure: 原�?"${heightUnit}", 目标国家="${country}"`);
+        console.log(`🔧 [mapDataToTemplateXlsx] 处理depth_height_floor_to_top_unit_of_measure: 原�?"${heightUnit}", 目标国家="${country}"`);
         // 加拿大站点特殊处理：Inches转换为Centimeters
         if (country === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
           console.log(`🔧 [mapDataToTemplateXlsx] CA Inches转换: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (country === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
@@ -3908,12 +3909,12 @@ CN
         updatedData[rowIndex][outerMaterialTypeCol] = data.outer_material_type || '';
       }
       
-      // 填写outer_material_type1字段（特别处理字段映射）
+      // 填写outer_material_type1字段（特别处理字段映射表）
       if (outerMaterialType1Col !== -1) {
-        // 字段映射规则�?
-        // - 英国�?澳洲�?阿联酋站等使�?outer_material_type 字段
-        // - 美国�?加拿大站使用 outer_material_type1 字段
-        // 当从英国等站点生成美�?加拿大站资料时，需要将outer_material_type的值映射到outer_material_type1
+        // 字段映射表规则�?
+        // - 英国�?澳洲�?阿联酋站等使�?outer_material_type 字段
+        // - 美国�?加拿大站使用 outer_material_type1 字段
+        // 当从英国等站点生成美�?加拿大站资料时，需要将outer_material_type的值映射表到outer_material_type1
         if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA') && data.outer_material_type) {
           updatedData[rowIndex][outerMaterialType1Col] = data.outer_material_type;
         } else {
@@ -3935,39 +3936,39 @@ CN
       
       // 调试：输出第一条数据填写后的行内容
       if (index === 0 && updatedData[rowIndex]) {
-        console.log('📋 第一条数据填写后的行�?�?', updatedData[rowIndex].slice(0, 5));
+        console.log('📋 第一条数据填写后的行�?�?', updatedData[rowIndex].slice(0, 5));
       }
     });
 
-    console.log(`�?数据映射完成，添加了 ${addedCount} 行数据到${country}模板`);
+    console.log(`�?数据映射表完成，添加了 ${addedCount} 行数据到${country}模板`);
     
-    // 调试：输出最终数据的前几�?
-    console.log('🔍 最终数据前5�?');
+    // 调试：输出最终数据的前几�?
+    console.log('🔍 最终数据前5�?');
     for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`�?{i + 1}�?`, updatedData[i]?.slice(0, 3) || '空行');
+      console.log(`�?{i + 1}�?`, updatedData[i]?.slice(0, 3) || '空行');
     }
     
-    // 验证返回的数据格�?
+    // 验证返回的数据格�?
     if (!Array.isArray(updatedData) || updatedData.length === 0) {
-      throw new Error('映射后的数据为空');
+      throw new Error('映射表后的数据为空');
     }
     
-    // 验证每行数据的完整�?
+    // 验证每行数据的完整�?
     for (let i = 0; i < Math.min(updatedData.length, 5); i++) {
       if (!Array.isArray(updatedData[i])) {
-        throw new Error(`�?{i}行数据格式错误`);
+        throw new Error(`�?{i}行数据格式错误`);
       }
     }
     
-    console.log(`📊 返回映射后的数据: ${updatedData.length} �?x ${updatedData[0] ? updatedData[0].length : 0} 列`);
+    console.log(`📊 返回映射表后的数据: ${updatedData.length} �?x ${updatedData[0] ? updatedData[0].length : 0} 列`);
     
     return updatedData;
     
   } catch (error) {
-    console.error('�?映射数据到模板失�?');
+    console.error('�?映射表数据到模板失�?');
     console.error(`🔍 错误详情: ${error.message}`);
     console.error(`📋 错误堆栈:`, error.stack);
-    console.error(`🏷�?错误类型: ${error.name}`);
+    console.error(`🏷�?错误类型: ${error.name}`);
     console.error(`📊 输入参数: country=${country}, records数量=${Array.isArray(records) ? records.length : 'not array'}, templateData行数=${Array.isArray(templateData) ? templateData.length : 'not array'}`);
     throw error;
   }
@@ -3977,7 +3978,7 @@ CN
 router.post('/generate-batch-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('🔄 收到批量生成其他站点资料表请�?);
+    console.log('🔄 收到批量生成其他站点资料表请�?);
     
     const { sourceCountry, targetCountry } = req.body;
     const uploadedFile = req.file;
@@ -4088,7 +4089,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('�?找到Template工作表，使用Template工作�?);
+      console.log('�?找到Template工作表，使用Template工作�?);
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
@@ -4103,8 +4104,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
     }
 
-    // 步骤2: 获取目标国家的模板文�?
-    console.log(`🔍 查找${targetCountry}站点的模板文�?..`);
+    // 步骤2: 获取目标国家的模板文�?
+    console.log(`🔍 查找${targetCountry}站点的模板文�?..`);
     
     const targetTemplate = await TemplateLink.findOne({
       where: {
@@ -4117,7 +4118,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     
     if (!targetTemplate) {
       return res.status(400).json({ 
-        message: `未找�?{targetCountry}站点的资料模板，请先上传${targetCountry}模板文件` 
+        message: `未找�?{targetCountry}站点的资料模板，请先上传${targetCountry}模板文件` 
       });
     }
 
@@ -4130,26 +4131,26 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     const downloadResult = await downloadTemplateFromOSS(targetTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`�?下载${targetCountry}模板失败:`, downloadResult.message);
+      console.error(`�?下载${targetCountry}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
         message: `下载${targetCountry}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`�?${targetCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+    console.log(`�?${targetCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤4: 处理数据转换
-    console.log('🔄 开始数据转换处�?..');
+    console.log('🔄 开始数据转换处�?..');
     const { ProductInformation } = require('../models');
     
-    // 获取标题行（�?行是标题行，索引�?�?
+    // 获取标题行（�?行是标题行，索引�?�?
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
     }
     
-    const headers = jsonData[2]; // �?行是标题�?
-    const dataRows = jsonData.slice(3); // �?行开始是数据�?
+    const headers = jsonData[2]; // �?行是标题�?
+    const dataRows = jsonData.slice(3); // �?行开始是数据�?
     
     const transformedRecords = [];
     
@@ -4166,10 +4167,10 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       
       // 设置original_parent_sku字段（根据parent_child列判断）
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
-        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
+        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
-        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
         // 兼容处理：如果没有parent_child信息，使用原有逻辑
@@ -4254,7 +4255,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       transformedRecords.push(rowData);
     }
 
-    console.log(`🔄 转换�?${transformedRecords.length} 条记录，SKU�?{sourceCountry}前缀转换�?{targetCountry}前缀`);
+    console.log(`🔄 转换�?${transformedRecords.length} 条记录，SKU�?{sourceCountry}前缀转换�?{targetCountry}前缀`);
 
     // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
     console.log('📊 开始使用xlsx库处理Excel文件...');
@@ -4267,26 +4268,26 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       cellDates: true   // 处理日期
     });
     
-    // 检查是否有Template工作�?
+    // 检查是否有Template工作�?
     if (!templateWorkbook.Sheets['Template']) {
-      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
+      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
     }
 
-    console.log('�?成功加载Template工作�?);
+    console.log('�?成功加载Template工作�?);
     
     const batchTemplateWorksheet = templateWorkbook.Sheets['Template'];
     
     // 将工作表转换为二维数组，便于操作
     const data = xlsx.utils.sheet_to_json(batchTemplateWorksheet, { 
       header: 1, // 使用数组形式
-      defval: '', // 空单元格默认�?
+      defval: '', // 空单元格默认�?
       raw: false  // 保持原始数据格式
     });
     
-    console.log(`📊 工作表数据行�? ${data.length}`);
+    console.log(`📊 工作表数据行�? ${data.length}`);
 
-    // 步骤6: 查找列位置（在第3行查找标题，索引�?�?
-    console.log('🔍 查找列位�?..');
+    // 步骤6: 查找列位置（在第3行查找标题，索引�?�?
+    console.log('🔍 查找列位�?..');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -4306,7 +4307,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
-    // 加拿大站点新增字段的列变�?
+    // 加拿大站点新增字段的列变�?
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -4334,7 +4335,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let liningDescriptionCol = -1;
     let strapTypeCol = -1;
     
-    if (data.length >= 3 && data[2]) { // �?行，索引�?
+    if (data.length >= 3 && data[2]) { // �?行，索引�?
       data[2].forEach((header, colIndex) => {
         if (header) {
           const cellValue = header.toString().toLowerCase();
@@ -4427,22 +4428,22 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       });
     }
 
-    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    console.log(`📍 找到列位�?- item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
     // 步骤7: 准备填写数据
     console.log('✍️ 准备填写数据到Excel...');
     
-    // 确保数据数组有足够的�?
-    const totalRowsNeeded = 3 + transformedRecords.length; // �?行保�?+ 数据�?
+    // 确保数据数组有足够的�?
+    const totalRowsNeeded = 3 + transformedRecords.length; // �?行保�?+ 数据�?
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
-    // 从第4行开始填写数据（索引�?�?
-    let currentRowIndex = 3; // �?行开始，索引�?
+    // 从第4行开始填写数据（索引�?�?
+    let currentRowIndex = 3; // �?行开始，索引�?
     
     transformedRecords.forEach((record, index) => {
-      // 计算需要的最大列�?
+      // 计算需要的最大列�?
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
@@ -4485,7 +4486,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = record.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = record.bullet_point5 || '';
       
-      // 填写加拿大站点新增字段数�?
+      // 填写加拿大站点新增字段数�?
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = record.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = record.care_instructions || '';
       if (modelCol !== -1) data[currentRowIndex][modelCol] = processBatchModel(record.model) || '';
@@ -4531,7 +4532,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         if (targetCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (targetCountry === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
@@ -4567,7 +4568,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         if (targetCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (targetCountry === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
@@ -4603,7 +4604,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         if (targetCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
         }
-        // 英国站点特殊处理：单位转�?
+        // 英国站点特殊处理：单位转�?
         if (targetCountry === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
@@ -4653,12 +4654,12 @@ CN
         data[currentRowIndex][outerMaterialTypeCol] = record.outer_material_type || '';
       }
       
-      // 填写outer_material_type1字段（特别处理字段映射）
+      // 填写outer_material_type1字段（特别处理字段映射表）
       if (outerMaterialType1Col !== -1) {
-        // 字段映射规则�?
-        // - 英国�?澳洲�?阿联酋站等使�?outer_material_type 字段
-        // - 美国�?加拿大站使用 outer_material_type1 字段
-        // 当从英国等站点生成美�?加拿大站资料时，需要将outer_material_type的值映射到outer_material_type1
+        // 字段映射表规则�?
+        // - 英国�?澳洲�?阿联酋站等使�?outer_material_type 字段
+        // - 美国�?加拿大站使用 outer_material_type1 字段
+        // 当从英国等站点生成美�?加拿大站资料时，需要将outer_material_type的值映射表到outer_material_type1
         if (sourceCountry !== 'US' && sourceCountry !== 'CA' && (targetCountry === 'US' || targetCountry === 'CA') && record.outer_material_type) {
           data[currentRowIndex][outerMaterialType1Col] = record.outer_material_type;
         } else {
@@ -4679,13 +4680,13 @@ CN
       currentRowIndex++;
     });
 
-    console.log(`📊 填写完成，共填写�?${transformedRecords.length} 行数据`);
+    console.log(`📊 填写完成，共填写�?${transformedRecords.length} 行数据`);
 
-    // 步骤8: 将数据重新转换为工作�?
+    // 步骤8: 将数据重新转换为工作�?
     console.log('💾 生成Excel文件...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
-    // 保持原始工作表的列宽等属�?
+    // 保持原始工作表的列宽等属�?
     if (batchTemplateWorksheet['!cols']) {
       newWorksheet['!cols'] = batchTemplateWorksheet['!cols'];
     }
@@ -4696,7 +4697,7 @@ CN
       newWorksheet['!merges'] = batchTemplateWorksheet['!merges'];
     }
     
-    // 更新工作�?
+    // 更新工作�?
     templateWorkbook.Sheets['Template'] = newWorksheet;
     
     try {
@@ -4708,7 +4709,7 @@ CN
         cellStyles: true
       });
       
-      console.log(`�?Excel文件生成成功，大�? ${outputBuffer.length} 字节`);
+      console.log(`�?Excel文件生成成功，大�? ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
       const parentSkus = [...new Set(transformedRecords
@@ -4727,22 +4728,22 @@ CN
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
-      console.log(`�?批量生成${sourceCountry}�?{targetCountry}资料表成�?(耗时: ${processingTime}ms)`);
+      console.log(`�?批量生成${sourceCountry}�?{targetCountry}资料表成�?(耗时: ${processingTime}ms)`);
       
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('�?Excel文件生成失败:', fileError);
+      console.error('�?Excel文件生成失败:', fileError);
       throw new Error('Excel文件生成失败: ' + fileError.message);
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
     const errorMessage = error.message || '批量生成其他站点资料表时发生未知错误';
-    console.error(`�?批量生成其他站点资料表失�?(耗时: ${processingTime}ms):`);
+    console.error(`�?批量生成其他站点资料表失�?(耗时: ${processingTime}ms):`);
     console.error(`🔍 错误详情: ${error.message}`);
     console.error(`📋 错误堆栈:`, error.stack);
-    console.error(`🏷�?错误类型: ${error.name}`);
+    console.error(`🏷�?错误类型: ${error.name}`);
     
     // 输出请求参数以便调试
     console.error(`📋 请求参数: sourceCountry=${req.body.sourceCountry}, targetCountry=${req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
@@ -4756,7 +4757,7 @@ CN
   }
 });
 
-// ==================== 3步流�?- 步骤1：上传源数据到数据库 ====================
+// ==================== 3步流�?- 步骤1：上传源数据到数据库 ====================
 router.post('/upload-source-data', upload.single('file'), async (req, res) => {
   try {
     console.log('🔄 开始上传源数据到数据库...');
@@ -4769,7 +4770,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     }
     
     if (!site) {
-      return res.status(400).json({ message: '未指定站�? });
+      return res.status(400).json({ message: '未指定站�? });
     }
     
     console.log(`📄 处理文件: ${file.originalname}, 站点: ${site}`);
@@ -4784,7 +4785,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('�?找到Template工作表，使用Template工作�?);
+      console.log('�?找到Template工作表，使用Template工作�?);
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
@@ -4797,20 +4798,20 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
     
     if (jsonData.length < 2) {
-      return res.status(400).json({ message: 'Excel文件必须包含标题行和至少一行数�? });
+      return res.status(400).json({ message: 'Excel文件必须包含标题行和至少一行数�? });
     }
     
-    // 提取标题行和数据行（�?行是标题行，索引�?�?
+    // 提取标题行和数据行（�?行是标题行，索引�?�?
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据�? });
     }
     
-    const headers = jsonData[2]; // �?行是标题�?
-    const dataRows = jsonData.slice(3); // �?行开始是数据�?
+    const headers = jsonData[2]; // �?行是标题�?
+    const dataRows = jsonData.slice(3); // �?行开始是数据�?
     
     console.log(`📊 文件包含 ${headers.length} 列，${dataRows.length} 行数据`);
     
-    // 预处理标题行，生成字段映�?
+    // 预处理标题行，生成字段映�?
     const fieldMapping = {};
     const processedHeaders = headers.map((header, index) => {
       if (header) {
@@ -4834,7 +4835,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
       
-      // 步骤1: 检查整行是否为�?
+      // 步骤1: 检查整行是否为�?
       const hasAnyValue = row.some(cell => cell !== undefined && cell !== null && cell !== '');
       if (!hasAnyValue) {
         skippedRows++;
@@ -4848,18 +4849,18 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       let hasItemSku = false;
       let hasOtherValues = false;
       
-      // 步骤2: 映射每一列的数据
+      // 步骤2: 映射表每一列的数据
       for (let j = 0; j < headers.length; j++) {
-        const fieldName = processedHeaders[j]; // 使用预处理的字段�?
+        const fieldName = processedHeaders[j]; // 使用预处理的字段�?
         const cellValue = row[j];
         
         if (fieldName && cellValue !== undefined && cellValue !== null && cellValue !== '') {
-          // 特殊处理一些字�?
+          // 特殊处理一些字�?
           if (fieldName === 'item_sku' || fieldName === 'sku') {
             record.item_sku = cellValue.toString(); // 转换为字符串
             hasItemSku = true;
           } else {
-            // 其他字段直接设置（只有当有值时�?
+            // 其他字段直接设置（只有当有值时�?
             record[fieldName] = cellValue;
             hasOtherValues = true;
           }
@@ -4868,10 +4869,10 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       // 步骤2.5: 生成original_parent_sku（根据parent_child列判断）
       if (record.parent_child === 'Parent' && record.item_sku && record.item_sku.length > 2) {
-        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
+        // 当parent_child�?Parent"时，item_sku中的信息为母SKU，去掉前两个字符
         record.original_parent_sku = record.item_sku.substring(2);
       } else if (record.parent_child === 'Child' && record.parent_sku && record.parent_sku.length > 2) {
-        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
+        // 当parent_child�?Child"时，从parent_sku字段获取母SKU信息，去掉前两个字符
         record.original_parent_sku = record.parent_sku.substring(2);
       } else if (record.item_sku && record.item_sku.length > 2) {
         // 兼容处理：如果没有parent_child信息，使用原有逻辑
@@ -4879,11 +4880,11 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         console.warn(`⚠️ 批量处理记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${record.item_sku} -> ${record.original_parent_sku}`);
       }
       
-      // 步骤3: 验证item_sku字段完整�?
+      // 步骤3: 验证item_sku字段完整�?
       if (!hasItemSku && hasOtherValues) {
-        const errorMsg = `�?�?{i + 4}行错误：item_sku字段为空但其他字段有值，item_sku作为主键不能为空`;
+        const errorMsg = `�?�?{i + 4}行错误：item_sku字段为空但其他字段有值，item_sku作为主键不能为空`;
         console.error(errorMsg);
-        console.error(`📋 问题行数�?`, record);
+        console.error(`📋 问题行数�?`, record);
         return res.status(400).json({ 
           message: errorMsg,
           rowNumber: i + 4,
@@ -4892,9 +4893,9 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       }
       
       if (hasItemSku && !hasOtherValues) {
-        const errorMsg = `�?�?{i + 4}行错误：只有item_sku字段有值，其他字段都为空，记录缺少必要信息`;
+        const errorMsg = `�?�?{i + 4}行错误：只有item_sku字段有值，其他字段都为空，记录缺少必要信息`;
         console.error(errorMsg);
-        console.error(`📋 问题行数�?`, record);
+        console.error(`📋 问题行数�?`, record);
         return res.status(400).json({ 
           message: errorMsg,
           rowNumber: i + 4,
@@ -4913,7 +4914,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     
     console.log(`📊 数据处理完成: 有效记录 ${processedRows} 条，跳过 ${skippedRows} 条`);
     
-    console.log(`💾 准备保存 ${records.length} 条记录到product_information�?..`);
+    console.log(`💾 准备保存 ${records.length} 条记录到product_information�?..`);
     
     // 批量保存到数据库 - 适配复合主键
     try {
@@ -4922,7 +4923,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         where: { site: site }
       });
       
-      console.log(`🗑�?已清理站�?${site} 的旧数据`);
+      console.log(`🗑�?已清理站�?${site} 的旧数据`);
       
       // 逐条插入数据（因为复合主键的特殊性，使用upsert更安全）
       let successCount = 0;
@@ -4930,7 +4931,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       for (const record of records) {
         try {
-          // 过滤和验证数据，只保留模型中定义的字�?
+          // 过滤和验证数据，只保留模型中定义的字�?
           const filteredRecord = filterValidFields(record);
           
           await ProductInformation.upsert(filteredRecord, {
@@ -4939,18 +4940,18 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           });
           successCount++;
         } catch (error) {
-          console.error(`�?保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
-          console.error(`原始数据字段数量: ${Object.keys(record).length}, 过滤后字段数�? ${Object.keys(filterValidFields(record)).length}`);
+          console.error(`�?保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+          console.error(`原始数据字段数量: ${Object.keys(record).length}, 过滤后字段数�? ${Object.keys(filterValidFields(record)).length}`);
           errorCount++;
         }
       }
       
-      console.log(`�?成功保存 ${successCount} 条记录到数据�?{errorCount > 0 ? `�?{errorCount}条失败` : ''}`);
+      console.log(`�?成功保存 ${successCount} 条记录到数据�?{errorCount > 0 ? `�?{errorCount}条失败` : ''}`);
       
       // 返回成功响应
       res.json({
         success: true,
-        message: `成功上传 ${successCount} 条记录到数据�?{errorCount > 0 ? `�?{errorCount}条失败` : ''}`,
+        message: `成功上传 ${successCount} 条记录到数据�?{errorCount > 0 ? `�?{errorCount}条失败` : ''}`,
         recordCount: successCount,
         errorCount: errorCount,
         site: site,
@@ -4958,12 +4959,12 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       });
       
     } catch (dbError) {
-      console.error('�?数据库操作失�?', dbError);
-      throw new Error('数据库保存失�? ' + dbError.message);
+      console.error('�?数据库操作失�?', dbError);
+      throw new Error('数据库保存失�? ' + dbError.message);
     }
     
   } catch (error) {
-    console.error('�?上传源数据失�?', error);
+    console.error('�?上传源数据失�?', error);
     res.status(500).json({
       message: '上传失败: ' + error.message,
       error: error.toString()
@@ -4986,12 +4987,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
     }
 
     if (!country) {
-      return res.status(400).json({ message: '请选择生成的国�? });
+      return res.status(400).json({ message: '请选择生成的国�? });
     }
 
-    console.log(`📝 处理 ${parentSkus.length} 个母SKU，生�?{country}资料:`, parentSkus);
+    console.log(`📝 处理 ${parentSkus.length} 个母SKU，生�?{country}资料:`, parentSkus);
 
-    // 步骤1: 从数据库获取对应国家的模板文�?
+    // 步骤1: 从数据库获取对应国家的模板文�?
     console.log(`🔍 从数据库查找${country}模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
@@ -5004,7 +5005,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `未找�?{country}站点的资料模板，请先上传${country}模板文件` });
+      return res.status(400).json({ message: `未找�?{country}站点的资料模板，请先上传${country}模板文件` });
     }
 
     console.log(`📄 使用${country}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
@@ -5016,14 +5017,14 @@ router.post('/generate-fbasku-data', async (req, res) => {
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`�?下载${country}模板失败:`, downloadResult.message);
+      console.error(`�?下载${country}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
         message: `下载${country}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`�?${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
+    console.log(`�?${country}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤3: 批量查询子SKU信息
     console.log('🔍 批量查询子SKU信息...');
@@ -5046,9 +5047,9 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
     console.log(`📊 找到 ${inventorySkus.length} 条子SKU记录`);
 
-    // 步骤4: 批量查询Amazon SKU映射
+    // 步骤4: 批量查询Amazon SKU映射表
     const childSkus = inventorySkus.map(item => item.child_sku);
-    console.log('🔍 批量查询Amazon SKU映射...');
+    console.log('🔍 批量查询Amazon SKU映射表...');
     
     let amzSkuMappings = [];
     if (childSkus.length > 0) {
@@ -5067,10 +5068,10 @@ router.post('/generate-fbasku-data', async (req, res) => {
       });
     }
 
-    console.log(`📊 找到 ${amzSkuMappings.length} 条Amazon SKU映射记录`);
+    console.log(`📊 找到 ${amzSkuMappings.length} 条Amazon SKU映射表记录`);
 
-    // 步骤5: 批量查询listings_sku获取ASIN和价格信�?
-    console.log('🔍 批量查询listings_sku获取ASIN和价格信�?..');
+    // 步骤5: 批量查询listings_sku获取ASIN和价格信�?
+    console.log('🔍 批量查询listings_sku获取ASIN和价格信�?..');
     
     let listingsData = [];
     if (amzSkuMappings.length > 0) {
@@ -5092,7 +5093,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
     console.log(`📊 找到 ${listingsData.length} 条listings_sku记录`);
 
-    // 建立查询映射以提高查询效�?
+    // 建立查询映射表以提高查询效�?
     const amzSkuMap = new Map();
     amzSkuMappings.forEach(mapping => {
       // 使用local_sku作为键，包含amz_sku和site信息
@@ -5100,12 +5101,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
         amz_sku: mapping.amz_sku,
         site: mapping.site
       });
-      console.log(`🔗 SKU映射: ${mapping.local_sku} -> ${mapping.amz_sku} (${mapping.site})`);
+      console.log(`🔗 SKU映射表: ${mapping.local_sku} -> ${mapping.amz_sku} (${mapping.site})`);
     });
 
     const listingsMap = new Map();
     listingsData.forEach(listing => {
-      // 使用seller-sku + site作为复合�?
+      // 使用seller-sku + site作为复合�?
       const compositeKey = `${listing['seller-sku']}_${listing.site}`;
       listingsMap.set(compositeKey, {
         asin: listing.asin1,
@@ -5114,28 +5115,28 @@ router.post('/generate-fbasku-data', async (req, res) => {
       console.log(`📋 Listings数据: ${listing['seller-sku']} (${listing.site}) -> ASIN:${listing.asin1}, Price:${listing.price}`);
     });
     
-    console.log(`📊 映射统计: amzSkuMap�?{amzSkuMap.size}条记录，listingsMap�?{listingsMap.size}条记录`);
+    console.log(`📊 映射表统计: amzSkuMap�?{amzSkuMap.size}条记录，listingsMap�?{listingsMap.size}条记录`);
 
-    // 步骤6: 数据完整性检�?
-    console.log('🔍 检查数据完整�?..');
+    // 步骤6: 数据完整性检�?
+    console.log('🔍 检查数据完整�?..');
     
-    const missingAmzSkuMappings = []; // 缺少Amazon SKU映射的子SKU
+    const missingAmzSkuMappings = []; // 缺少Amazon SKU映射表的子SKU
     const missingListingsData = [];   // 缺少Listings数据的Amazon SKU
     
-    // 检查每个子SKU的数据完整�?
+    // 检查每个子SKU的数据完整�?
     inventorySkus.forEach(inventory => {
       const childSku = inventory.child_sku;
       const amzSkuInfo = amzSkuMap.get(childSku);
       
-      // 检查是否缺少Amazon SKU映射
+      // 检查是否缺少Amazon SKU映射表
       if (!amzSkuInfo) {
         missingAmzSkuMappings.push({
           parentSku: inventory.parent_sku,
           childSku: childSku
         });
-        console.log(`�?缺少Amazon SKU映射: ${childSku}`);
+        console.log(`�?缺少Amazon SKU映射表: ${childSku}`);
       } else {
-        // 如果有Amazon SKU映射，检查是否缺少Listings数据
+        // 如果有Amazon SKU映射表，检查是否缺少Listings数据
         const compositeKey = `${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`;
         const listingInfo = listingsMap.get(compositeKey);
         if (!listingInfo || !listingInfo.asin || !listingInfo.price) {
@@ -5146,12 +5147,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
             hasAsin: listingInfo?.asin ? true : false,
             hasPrice: listingInfo?.price ? true : false
           });
-          console.log(`�?缺少Listings数据: ${amzSku} (对应子SKU: ${childSku})`);
+          console.log(`�?缺少Listings数据: ${amzSku} (对应子SKU: ${childSku})`);
         }
       }
     });
 
-    // 如果存在数据缺失，停止生成并返回详细的错误信�?
+    // 如果存在数据缺失，停止生成并返回详细的错误信�?
     if (missingAmzSkuMappings.length > 0 || missingListingsData.length > 0) {
       const errorInfo = {
         success: false,
@@ -5161,12 +5162,12 @@ router.post('/generate-fbasku-data', async (req, res) => {
         message: '数据不完整，无法生成FBASKU资料'
       };
       
-      console.log('�?数据不完整，停止生成并返回错误信�?', errorInfo);
+      console.log('�?数据不完整，停止生成并返回错误信�?', errorInfo);
       
       return res.status(400).json(errorInfo);
     }
     
-    console.log('�?数据完整性检查通过');
+    console.log('�?数据完整性检查通过');
 
     // 步骤7: 处理Excel模板
     console.log('📝 开始处理Excel模板...');
@@ -5179,18 +5180,18 @@ router.post('/generate-fbasku-data', async (req, res) => {
       cellDates: true
     });
     
-    console.log('�?Excel文件加载完成');
+    console.log('�?Excel文件加载完成');
     
-    // 检查是否有Template工作�?
+    // 检查是否有Template工作�?
     if (!workbook.Sheets['Template']) {
-      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
+      return res.status(400).json({ message: '模板文件中未找到Template工作�? });
     }
 
-    console.log('�?成功加载Template工作�?);
+    console.log('�?成功加载Template工作�?);
     
     const worksheet = workbook.Sheets['Template'];
     
-    // 将工作表转换为二维数�?
+    // 将工作表转换为二维数�?
     const data = XLSX.utils.sheet_to_json(worksheet, { 
       header: 1,
       defval: '',
@@ -5200,13 +5201,13 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.log(`📊 模板数据行数: ${data.length}`);
     
     if (data.length < 3) {
-      return res.status(400).json({ message: '模板格式错误：至少需�?行数据（包括标题行）' });
+      return res.status(400).json({ message: '模板格式错误：至少需�?行数据（包括标题行）' });
     }
 
-    const headerRow = data[2]; // 第三行是标题�?
-    console.log('📋 标题�?', headerRow);
+    const headerRow = data[2]; // 第三行是标题�?
+    console.log('📋 标题�?', headerRow);
 
-    // 找到需要填写的列索�?
+    // 找到需要填写的列索�?
     const columnIndexes = {};
     const requiredColumns = [
       'item_sku', 'update_delete', 'external_product_id', 'external_product_id_type',
@@ -5230,15 +5231,15 @@ router.post('/generate-fbasku-data', async (req, res) => {
     console.log('📋 找到的列索引:', columnIndexes);
 
     // 步骤7: 填写数据
-    console.log('📝 开始填写数�?..');
-    let dataRowIndex = 3; // 从第四行开始填写数�?
+    console.log('📝 开始填写数�?..');
+    let dataRowIndex = 3; // 从第四行开始填写数�?
 
     inventorySkus.forEach((inventory, index) => {
       const childSku = inventory.child_sku;
       const amzSkuInfo = amzSkuMap.get(childSku);
       const listingInfo = amzSkuInfo ? listingsMap.get(`${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`) : null;
 
-      // 确保有足够的�?
+      // 确保有足够的�?
       if (!data[dataRowIndex]) {
         data[dataRowIndex] = new Array(headerRow.length).fill('');
       }
@@ -5251,11 +5252,11 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['update_delete']] = 'PartialUpdate';
       }
       
-      // 增强external_product_id填写逻辑，添加调试信�?
+      // 增强external_product_id填写逻辑，添加调试信�?
       if (columnIndexes['external_product_id'] !== undefined) {
         if (listingInfo && listingInfo.asin) {
           data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin;
-          console.log(`�?填写ASIN: ${childSku} -> ${listingInfo.asin}`);
+          console.log(`�?填写ASIN: ${childSku} -> ${listingInfo.asin}`);
         } else {
           console.log(`⚠️  跳过ASIN填写: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
           // 不填写空值，直接跳过
@@ -5266,11 +5267,11 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['external_product_id_type']] = 'ASIN';
       }
       
-      // 增强standard_price填写逻辑，添加调试信�?
+      // 增强standard_price填写逻辑，添加调试信�?
       if (columnIndexes['standard_price'] !== undefined) {
         if (listingInfo && listingInfo.price) {
           data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price;
-          console.log(`�?填写价格: ${childSku} -> ${listingInfo.price}`);
+          console.log(`�?填写价格: ${childSku} -> ${listingInfo.price}`);
         } else {
           console.log(`⚠️  跳过价格填写: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
           // 不填写空值，直接跳过
@@ -5321,7 +5322,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
       }
       if (columnIndexes['cpsia_cautionary_statement1'] !== undefined) {
-        // 加拿大站点特殊处理：使用特定格式的警告语�?
+        // 加拿大站点特殊处理：使用特定格式的警告语�?
         if (country === 'CA') {
           data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'Choking Hazard - Small Parts';
         } else {
@@ -5331,7 +5332,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
       dataRowIndex++;
       
-      console.log(`�?处理完成�?${index + 1}/${inventorySkus.length} 个SKU: ${inventory.parent_sku} -> ${childSku}`);
+      console.log(`�?处理完成�?${index + 1}/${inventorySkus.length} 个SKU: ${inventory.parent_sku} -> ${childSku}`);
     });
 
     // 步骤8: 生成新的Excel文件
@@ -5340,17 +5341,17 @@ router.post('/generate-fbasku-data', async (req, res) => {
     const newWorksheet = XLSX.utils.aoa_to_sheet(data);
     workbook.Sheets['Template'] = newWorksheet;
     
-    // 生成Excel文件缓冲�?
+    // 生成Excel文件缓冲�?
     const buffer = XLSX.write(workbook, { 
       type: 'buffer', 
       bookType: 'xlsx',
       cellStyles: true
     });
 
-    // 生成文件�?
+    // 生成文件�?
     const fileName = `FBASKU_${country}_${parentSkus.join('_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     
-    console.log(`�?FBASKU资料生成完成！包�?${inventorySkus.length} 条记录`);
+    console.log(`�?FBASKU资料生成完成！包�?${inventorySkus.length} 条记录`);
     console.log(`⏱️  总耗时: ${Date.now() - startTime}ms`);
 
     // 返回生成的Excel文件
@@ -5359,7 +5360,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error('�?生成FBASKU资料失败:', error);
+    console.error('�?生成FBASKU资料失败:', error);
     res.status(500).json({
       message: '生成失败: ' + error.message,
       error: error.toString()
@@ -5367,32 +5368,32 @@ router.post('/generate-fbasku-data', async (req, res) => {
   }
 });
 
-// ==================== 批量添加Amazon SKU映射接口 ====================
+// ==================== 批量添加Amazon SKU映射表接口 ====================
 
-// 批量添加Amazon SKU映射到pbi_amzsku_sku�?
+// 批量添加Amazon SKU映射表到pbi_amzsku_sku�?
 router.post('/batch-add-amz-sku-mapping', async (req, res) => {
   try {
-    console.log('📋 收到批量添加Amazon SKU映射请求');
+    console.log('📋 收到批量添加Amazon SKU映射表请求');
     
     const { mappings } = req.body;
     
     if (!Array.isArray(mappings) || mappings.length === 0) {
-      return res.status(400).json({ message: '请提供要添加的映射数�? });
+      return res.status(400).json({ message: '请提供要添加的映射表数�? });
     }
 
-    console.log(`📝 处理 ${mappings.length} 条映射数�?`, mappings);
+    console.log(`📝 处理 ${mappings.length} 条映射表数�?`, mappings);
 
     // 验证必需字段
     for (const mapping of mappings) {
       if (!mapping.amz_sku || !mapping.site || !mapping.country || !mapping.local_sku) {
         return res.status(400).json({ 
-          message: '映射数据缺少必需字段：amz_sku, site, country, local_sku' 
+          message: '映射表数据缺少必需字段：amz_sku, site, country, local_sku' 
         });
       }
     }
 
     // 批量插入数据
-    console.log('🔍 开始批量插入Amazon SKU映射数据...');
+    console.log('🔍 开始批量插入Amazon SKU映射表数据...');
     
     const insertPromises = mappings.map(async (mapping) => {
       try {
@@ -5405,11 +5406,11 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
         });
 
         if (existing) {
-          console.log(`⚠️  映射已存在，跳过: ${mapping.amz_sku} (${mapping.site})`);
-          return { success: false, reason: '映射已存�?, mapping };
+          console.log(`⚠️  映射表已存在，跳过: ${mapping.amz_sku} (${mapping.site})`);
+          return { success: false, reason: '映射表已存�?, mapping };
         }
 
-        // 插入新记�?
+        // 插入新记�?
         await AmzSkuMapping.create({
           amz_sku: mapping.amz_sku,
           site: mapping.site,
@@ -5419,11 +5420,11 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
           update_time: new Date()
         });
 
-        console.log(`�?成功插入: ${mapping.local_sku} -> ${mapping.amz_sku}`);
+        console.log(`�?成功插入: ${mapping.local_sku} -> ${mapping.amz_sku}`);
         return { success: true, mapping };
         
       } catch (error) {
-        console.error(`�?插入失败: ${mapping.local_sku} -> ${mapping.amz_sku}`, error);
+        console.error(`�?插入失败: ${mapping.local_sku} -> ${mapping.amz_sku}`, error);
         return { success: false, reason: error.message, mapping };
       }
     });
@@ -5433,11 +5434,11 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
     
-    console.log(`📊 批量插入结果: 成功${successCount}�? 失败${failureCount}条`);
+    console.log(`📊 批量插入结果: 成功${successCount}�? 失败${failureCount}条`);
 
     res.json({
       success: true,
-      message: `批量添加Amazon SKU映射完成：成�?{successCount}条，失败${failureCount}条`,
+      message: `批量添加Amazon SKU映射表完成：成�?{successCount}条，失败${failureCount}条`,
       results: {
         successCount,
         failureCount,
@@ -5446,7 +5447,7 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('�?批量添加Amazon SKU映射失败:', error);
+    console.error('�?批量添加Amazon SKU映射表失败:', error);
     res.status(500).json({
       message: '批量添加失败: ' + error.message,
       error: error.toString()
@@ -5454,7 +5455,7 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
   }
 });
 
-// 保存页面源代码（Chrome插件调用�?
+// 保存页面源代码（Chrome插件调用�?
 router.post('/save-page-source', async (req, res) => {
   try {
     const { productId, parentSku, weblink, pageSource, sourceLength } = req.body;
@@ -5472,7 +5473,7 @@ router.post('/save-page-source', async (req, res) => {
     if (!product) {
       return res.status(404).json({
         code: 1,
-        message: '产品记录不存�?
+        message: '产品记录不存�?
       });
     }
 
@@ -5480,14 +5481,14 @@ router.post('/save-page-source', async (req, res) => {
     if (product.parent_sku !== parentSku || product.weblink !== weblink) {
       return res.status(400).json({
         code: 1,
-        message: '产品信息不匹�?
+        message: '产品信息不匹�?
       });
     }
 
-    // 生成源代码摘要（保存�?000个字符）
+    // 生成源代码摘要（保存�?000个字符）
     const sourceSummary = pageSource.substring(0, 1000);
     
-    // 更新产品记录，只更新检查时间，不更新备�?
+    // 更新产品记录，只更新检查时间，不更新备�?
     await ProductWeblink.update({
       check_time: new Date()
     }, {
@@ -5496,11 +5497,11 @@ router.post('/save-page-source', async (req, res) => {
 
     // 这里可以将完整的页面源代码保存到文件系统或专门的存储表中
     // 为了演示，我们只在响应中返回摘要
-    console.log(`产品 ${parentSku} 页面源代码已获取，长�? ${sourceLength} 字符`);
+    console.log(`产品 ${parentSku} 页面源代码已获取，长�? ${sourceLength} 字符`);
 
     res.json({
       code: 0,
-      message: '页面源代码保存成�?,
+      message: '页面源代码保存成�?,
       data: {
         productId,
         parentSku,
@@ -5511,7 +5512,7 @@ router.post('/save-page-source', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('保存页面源代码失�?', error);
+    console.error('保存页面源代码失�?', error);
     res.status(500).json({
       code: 1,
       message: '保存失败: ' + error.message
@@ -5525,13 +5526,13 @@ router.post('/batch-add-purchase-links', async (req, res) => {
     const { links } = req.body;
     
     if (!Array.isArray(links) || links.length === 0) {
-      return res.status(400).json({ message: '请输入产品链�? });
+      return res.status(400).json({ message: '请输入产品链�? });
     }
 
     const processedLinks = [];
     const errors = [];
 
-    // 提取和验证每个链�?
+    // 提取和验证每个链�?
     for (let i = 0; i < links.length; i++) {
       const rawLink = links[i].trim();
       if (!rawLink) continue;
@@ -5546,7 +5547,7 @@ router.post('/batch-add-purchase-links', async (req, res) => {
         errors.push({
           line: i + 1,
           originalLink: rawLink,
-          error: '链接格式错误：未找到https开头到html的有效链接部�?
+          error: '链接格式错误：未找到https开头到html的有效链接部�?
         });
       }
     }
@@ -5554,12 +5555,12 @@ router.post('/batch-add-purchase-links', async (req, res) => {
     // 如果有错误，返回错误信息
     if (errors.length > 0 && processedLinks.length === 0) {
       return res.status(400).json({ 
-        message: '所有链接格式都不正�?,
+        message: '所有链接格式都不正�?,
         errors: errors
       });
     }
 
-    // 检查重复链�?
+    // 检查重复链�?
     const existingLinks = await ProductWeblink.findAll({
       where: {
         weblink: processedLinks
@@ -5584,10 +5585,10 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       }
     });
 
-    // 准备插入数据（只插入不重复的�?
+    // 准备插入数据（只插入不重复的�?
     const insertData = uniqueLinks.map(link => ({
       weblink: link,
-      status: '新品一�?,
+      status: '新品一�?,
       update_time: new Date()
     }));
 
@@ -5599,7 +5600,7 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       });
     }
 
-    // 合并所有错误（格式错误 + 重复错误�?
+    // 合并所有错误（格式错误 + 重复错误�?
     const allErrors = [...errors, ...duplicateLinks];
 
     // 构建响应消息
@@ -5608,15 +5609,15 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       message = `成功添加 ${createdRecords.length} 条采购链接`;
     }
     if (duplicateLinks.length > 0) {
-      if (message) message += `，跳�?${duplicateLinks.length} 条重复链接`;
+      if (message) message += `，跳�?${duplicateLinks.length} 条重复链接`;
       else message = `跳过 ${duplicateLinks.length} 条重复链接`;
     }
     if (errors.length > 0) {
-      if (message) message += `，跳�?${errors.length} 条格式错误的链接`;
+      if (message) message += `，跳�?${errors.length} 条格式错误的链接`;
       else message = `跳过 ${errors.length} 条格式错误的链接`;
     }
     if (!message) {
-      message = '没有添加任何新链�?;
+      message = '没有添加任何新链�?;
     }
 
     res.json({
@@ -5632,7 +5633,7 @@ router.post('/batch-add-purchase-links', async (req, res) => {
     });
   } catch (err) {
     console.error('批量添加采购链接失败:', err);
-    res.status(500).json({ message: '服务器错�? ' + err.message });
+    res.status(500).json({ message: '服务器错误 ' + err.message });
   }
 });
 
@@ -5642,18 +5643,18 @@ router.post('/export-excel', async (req, res) => {
     const { data } = req.body;
     
     if (!Array.isArray(data) || data.length === 0) {
-      return res.status(400).json({ message: '没有数据可导�? });
+      return res.status(400).json({ message: '没有数据可导�? });
     }
 
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('采购链接管理');
 
-    // 设置列标�?
+    // 设置列标�?
     const headers = Object.keys(data[0]);
     worksheet.addRow(headers);
 
-    // 设置标题行样�?
+    // 设置标题行样�?
     const headerRow = worksheet.getRow(1);
     headerRow.font = { bold: true };
     headerRow.fill = {
@@ -5662,7 +5663,7 @@ router.post('/export-excel', async (req, res) => {
       fgColor: { argb: 'FFE6F7FF' }
     };
 
-    // 添加数据�?
+    // 添加数据�?
     data.forEach(item => {
       const row = headers.map(header => item[header] || '');
       worksheet.addRow(row);
@@ -5676,14 +5677,14 @@ router.post('/export-excel', async (req, res) => {
       data.forEach(item => {
         const value = item[header] || '';
         if (value.toString().length > maxLength) {
-          maxLength = Math.min(value.toString().length, 50); // 限制最大宽�?
+          maxLength = Math.min(value.toString().length, 50); // 限制最大宽�?
         }
       });
       
       column.width = Math.max(maxLength + 2, 10);
     });
 
-    // 设置响应�?
+    // 设置响应�?
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="purchase_links_export.xlsx"');
 
@@ -5720,7 +5721,7 @@ router.get('/seller-inventory-sku/:parentSku', async (req, res) => {
       order: [['child_sku', 'ASC']]
     });
 
-    console.log(`查询�?{data.length}条SellerInventorySku记录`);
+    console.log(`查询�?{data.length}条SellerInventorySku记录`);
 
     res.json({
       code: 0,
@@ -5757,7 +5758,7 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: '记录不存�?
+        message: '记录不存�?
       });
     }
 
@@ -5773,7 +5774,7 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
       });
     }
 
-    console.log('SellerInventorySku记录更新成功，影响行�?', affectedRows);
+    console.log('SellerInventorySku记录更新成功，影响行�?', affectedRows);
 
     res.json({
       code: 0,
