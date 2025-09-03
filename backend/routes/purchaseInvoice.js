@@ -1993,13 +1993,31 @@ router.post('/invoices/batch-download', async (req, res) => {
       
       // 添加该发票下的所有订单
       groupOrders.forEach((order, index) => {
+        // 安全处理日期格式
+        const formatDate = (dateValue) => {
+          if (!dateValue) return '';
+          if (dateValue instanceof Date) {
+            return dateValue.toISOString().slice(0, 10);
+          }
+          // 如果是字符串，尝试转换为Date再格式化
+          const date = new Date(dateValue);
+          if (!isNaN(date.getTime())) {
+            return date.toISOString().slice(0, 10);
+          }
+          // 如果已经是YYYY-MM-DD格式的字符串，直接返回
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+            return dateValue.slice(0, 10);
+          }
+          return String(dateValue).slice(0, 10);
+        };
+        
         const rowData = {
           order_number: order.order_number,
-          order_date: order.order_date.toISOString().slice(0, 10),
+          order_date: formatDate(order.order_date),
           seller_name: order.seller_name,
           amount: Number(order.amount),
           invoice_number: order.invoice.invoice_number,
-          invoice_date: order.invoice.invoice_date.toISOString().slice(0, 10),
+          invoice_date: formatDate(order.invoice.invoice_date),
           invoice_amount: Number(order.invoice.total_amount)
         };
         
