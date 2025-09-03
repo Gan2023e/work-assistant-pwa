@@ -1931,11 +1931,122 @@ router.post('/invoices/batch-download', async (req, res) => {
       });
     }
     
+    // 生成Excel文件
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('发票明细');
+    
+    // 设置列标题
+    worksheet.columns = [
+      { header: '订单编号', key: 'order_number', width: 20 },
+      { header: '订单日期', key: 'order_date', width: 15 },
+      { header: '卖家公司名', key: 'seller_name', width: 25 },
+      { header: '实付款(元)', key: 'amount', width: 15 },
+      { header: '发票号', key: 'invoice_number', width: 20 },
+      { header: '开票日期', key: 'invoice_date', width: 15 },
+      { header: '发票金额(元)', key: 'invoice_amount', width: 15 }
+    ];
+    
+    // 设置标题行样式
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.height = 25;
+    
+    // 按发票号分组订单
+    const invoiceGroups = {};
+    orders.forEach(order => {
+      const invoiceNumber = order.invoice.invoice_number;
+      if (!invoiceGroups[invoiceNumber]) {
+        invoiceGroups[invoiceNumber] = [];
+      }
+      invoiceGroups[invoiceNumber].push(order);
+    });
+    
+    // 添加数据行
+    let currentRow = 2;
+    Object.entries(invoiceGroups).forEach(([invoiceNumber, groupOrders]) => {
+      const startRow = currentRow;
+      
+      // 添加该发票下的所有订单
+      groupOrders.forEach((order, index) => {
+        const rowData = {
+          order_number: order.order_number,
+          order_date: order.order_date.toISOString().slice(0, 10),
+          seller_name: order.seller_name,
+          amount: Number(order.amount),
+          invoice_number: order.invoice.invoice_number,
+          invoice_date: order.invoice.invoice_date.toISOString().slice(0, 10),
+          invoice_amount: Number(order.invoice.total_amount)
+        };
+        
+        worksheet.addRow(rowData);
+        
+        // 设置数字格式
+        const row = worksheet.getRow(currentRow);
+        row.getCell('amount').numFmt = '#,##0.00';
+        row.getCell('invoice_amount').numFmt = '#,##0.00';
+        row.alignment = { horizontal: 'center', vertical: 'middle' };
+        row.height = 20;
+        
+        currentRow++;
+      });
+      
+      // 如果同一发票有多个订单，合并发票相关列的单元格
+      if (groupOrders.length > 1) {
+        const endRow = currentRow - 1;
+        
+        // 合并发票号列
+        worksheet.mergeCells(`E${startRow}:E${endRow}`);
+        // 合并开票日期列
+        worksheet.mergeCells(`F${startRow}:F${endRow}`);
+        // 合并发票金额列
+        worksheet.mergeCells(`G${startRow}:G${endRow}`);
+        
+        // 设置合并单元格的样式
+        ['E', 'F', 'G'].forEach(col => {
+          const cell = worksheet.getCell(`${col}${startRow}`);
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      }
+    });
+    
+    // 设置所有数据行的边框
+    for (let row = 2; row < currentRow; row++) {
+      for (let col = 1; col <= 7; col++) {
+        const cell = worksheet.getCell(row, col);
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      }
+    }
+    
+    // 生成Excel文件缓冲区
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    
+    // 将Excel文件添加到ZIP
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const excelFileName = `发票明细_${dateStr}.xlsx`;
+    zip.file(excelFileName, excelBuffer);
+    
     // 生成ZIP文件
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
     
     // 设置响应头
-    const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `采购发票_${dateStr}.zip`;
     
     res.set({
