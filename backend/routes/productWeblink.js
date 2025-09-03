@@ -1,4 +1,4 @@
-ï»¿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const ProductWeblink = require('../models/ProductWeblink');
@@ -14,25 +14,25 @@ const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
 
-// å›½å®¶ä»£ç è½¬æ¢ä¸ºä¸­æ–‡åç§°çš„æ˜ å°„è¡¨
+// ¹ú¼Ò´úÂë×ª»»ÎªÖĞÎÄÃû³ÆµÄÓ³Éä±í
 function convertCountryCodeToChinese(countryCode) {
   const countryMapping = {
-    'US': 'ç¾å›½',
-    'CA': 'åŠ æ‹¿å¤§', 
-    'UK': 'è‹±å›½',
-    'DE': 'å¾·å›½',
-    'FR': 'æ³•å›½',
-    'AE': 'é˜¿è”é…‹',
-    'AU': 'æ¾³å¤§åˆ©äºš'
+    'US': 'ÃÀ¹ú',
+    'CA': '¼ÓÄÃ´ó', 
+    'UK': 'Ó¢¹ú',
+    'DE': 'µÂ¹ú',
+    'FR': '·¨¹ú',
+    'AE': '°¢ÁªÇõ',
+    'AU': '°Ä´óÀûÑÇ'
   };
   return countryMapping[countryCode] || countryCode;
 }
 
-// è¿‡æ»¤å’ŒéªŒè¯ProductInformationæ•°æ®çš„å·¥å…·å‡½æ•°
+// ¹ıÂËºÍÑéÖ¤ProductInformationÊı¾İµÄ¹¤¾ßº¯Êı
 function filterValidFields(data) {
-  // ProductInformationæ¨¡å‹ä¸­å®šä¹‰çš„å­—æ®µåŠå…¶é•¿åº¦é™åˆ¶
+  // ProductInformationÄ£ĞÍÖĞ¶¨ÒåµÄ×Ö¶Î¼°Æä³¤¶ÈÏŞÖÆ
   const validFields = {
-    // åŸæœ‰å­—æ®µ
+    // Ô­ÓĞ×Ö¶Î
     site: { type: 'string', maxLength: 10 },
     item_sku: { type: 'string', maxLength: 30 },
     original_parent_sku: { type: 'string', maxLength: 30 },
@@ -40,7 +40,7 @@ function filterValidFields(data) {
     external_product_id: { type: 'string', maxLength: 30 },
     external_product_id_type: { type: 'string', maxLength: 30 },
     brand_name: { type: 'string', maxLength: 30 },
-    product_description: { type: 'text', maxLength: null }, // TEXTç±»å‹ï¼Œé€šå¸¸æ— é•¿åº¦é™åˆ¶
+    product_description: { type: 'text', maxLength: null }, // TEXTÀàĞÍ£¬Í¨³£ÎŞ³¤¶ÈÏŞÖÆ
     bullet_point1: { type: 'string', maxLength: 500 },
     bullet_point2: { type: 'string', maxLength: 500 },
     bullet_point3: { type: 'string', maxLength: 500 },
@@ -66,7 +66,7 @@ function filterValidFields(data) {
     size_name: { type: 'string', maxLength: 30 },
     size_map: { type: 'string', maxLength: 30 },
     
-    // æ–°å¢å­—æ®µ - äº§å“åŸºç¡€ä¿¡æ¯
+    // ĞÂÔö×Ö¶Î - ²úÆ·»ù´¡ĞÅÏ¢
     feed_product_type: { type: 'string', maxLength: 50 },
     item_type: { type: 'string', maxLength: 100 },
     model: { type: 'string', maxLength: 50 },
@@ -75,7 +75,7 @@ function filterValidFields(data) {
     quantity: { type: 'integer', maxLength: null },
     list_price: { type: 'decimal', maxLength: null },
     
-    // æ–°å¢å­—æ®µ - äº§å“å±æ€§
+    // ĞÂÔö×Ö¶Î - ²úÆ·ÊôĞÔ
     closure_type: { type: 'string', maxLength: 50 },
     outer_material_type1: { type: 'string', maxLength: 50 },
     care_instructions: { type: 'string', maxLength: 100 },
@@ -87,7 +87,7 @@ function filterValidFields(data) {
     water_resistance_level: { type: 'string', maxLength: 50 },
     recommended_uses_for_product: { type: 'string', maxLength: 100 },
     
-    // æ–°å¢å­—æ®µ - å­£èŠ‚å’Œç”Ÿæ´»æ–¹å¼
+    // ĞÂÔö×Ö¶Î - ¼¾½ÚºÍÉú»î·½Ê½
     seasons1: { type: 'string', maxLength: 20 },
     seasons2: { type: 'string', maxLength: 20 },
     seasons3: { type: 'string', maxLength: 20 },
@@ -97,7 +97,7 @@ function filterValidFields(data) {
     lining_description: { type: 'string', maxLength: 100 },
     strap_type: { type: 'string', maxLength: 50 },
     
-    // æ–°å¢å­—æ®µ - å°ºå¯¸å’Œå®¹é‡
+    // ĞÂÔö×Ö¶Î - ³ß´çºÍÈİÁ¿
     storage_volume_unit_of_measure: { type: 'string', maxLength: 20 },
     storage_volume: { type: 'integer', maxLength: null },
     depth_front_to_back: { type: 'decimal', maxLength: null },
@@ -107,7 +107,7 @@ function filterValidFields(data) {
     depth_height_floor_to_top: { type: 'decimal', maxLength: null },
     depth_height_floor_to_top_unit_of_measure: { type: 'string', maxLength: 20 },
     
-    // æ–°å¢å­—æ®µ - åˆè§„ä¿¡æ¯
+    // ĞÂÔö×Ö¶Î - ºÏ¹æĞÅÏ¢
     cpsia_cautionary_statement1: { type: 'string', maxLength: 100 },
     import_designation: { type: 'string', maxLength: 50 },
     country_of_origin: { type: 'string', maxLength: 50 }
@@ -119,23 +119,23 @@ function filterValidFields(data) {
     if (data[fieldName] !== undefined && data[fieldName] !== null && data[fieldName] !== '') {
       let value = data[fieldName];
       
-      // æ ¹æ®å­—æ®µç±»å‹è¿›è¡Œå¤„ç†
+      // ¸ù¾İ×Ö¶ÎÀàĞÍ½øĞĞ´¦Àí
       if (fieldConfig.type === 'string' && fieldConfig.maxLength) {
-        // å­—ç¬¦ä¸²ç±»å‹çš„é•¿åº¦å¤„ç†
+        // ×Ö·û´®ÀàĞÍµÄ³¤¶È´¦Àí
         if (typeof value === 'string' && value.length > fieldConfig.maxLength) {
-          // æˆªæ–­è¿‡é•¿çš„å­—ç¬¦ä¸²ï¼Œå¹¶æ·»åŠ çœç•¥å·
+          // ½Ø¶Ï¹ı³¤µÄ×Ö·û´®£¬²¢Ìí¼ÓÊ¡ÂÔºÅ
           value = value.substring(0, fieldConfig.maxLength - 3) + '...';
-          console.warn(`âš ï¸ å­—æ®µ ${fieldName} é•¿åº¦è¶…é™ï¼Œå·²æˆªæ–­: åŸé•¿åº¦${data[fieldName].length} -> æˆªæ–­å${value.length}`);
+          console.warn(`?? ×Ö¶Î ${fieldName} ³¤¶È³¬ÏŞ£¬ÒÑ½Ø¶Ï: Ô­³¤¶È${data[fieldName].length} -> ½Ø¶Ïºó${value.length}`);
         } else if (typeof value !== 'string') {
-          // éå­—ç¬¦ä¸²è½¬æ¢ä¸ºå­—ç¬¦ä¸²
+          // ·Ç×Ö·û´®×ª»»Îª×Ö·û´®
           value = String(value);
           if (value.length > fieldConfig.maxLength) {
             value = value.substring(0, fieldConfig.maxLength - 3) + '...';
-            console.warn(`âš ï¸ å­—æ®µ ${fieldName} è½¬æ¢ä¸ºå­—ç¬¦ä¸²åé•¿åº¦è¶…é™ï¼Œå·²æˆªæ–­: ${value.length}`);
+            console.warn(`?? ×Ö¶Î ${fieldName} ×ª»»Îª×Ö·û´®ºó³¤¶È³¬ÏŞ£¬ÒÑ½Ø¶Ï: ${value.length}`);
           }
         }
       } else if (fieldConfig.type === 'decimal') {
-        // decimalç±»å‹å¤„ç†
+        // decimalÀàĞÍ´¦Àí
         if (typeof value === 'string') {
           const numValue = parseFloat(value);
           value = isNaN(numValue) ? null : numValue;
@@ -145,7 +145,7 @@ function filterValidFields(data) {
           value = null;
         }
       } else if (fieldConfig.type === 'integer') {
-        // integerç±»å‹å¤„ç†
+        // integerÀàĞÍ´¦Àí
         if (typeof value === 'string') {
           const intValue = parseInt(value, 10);
           value = isNaN(intValue) ? null : intValue;
@@ -155,11 +155,11 @@ function filterValidFields(data) {
           value = null;
         }
       } else if (fieldConfig.type === 'text') {
-        // textç±»å‹æ— é•¿åº¦é™åˆ¶ï¼Œè½¬æ¢ä¸ºå­—ç¬¦ä¸²å³å¯
+        // textÀàĞÍÎŞ³¤¶ÈÏŞÖÆ£¬×ª»»Îª×Ö·û´®¼´¿É
         value = String(value);
       }
       
-      // åªä¿å­˜énullå€¼
+      // Ö»±£´æ·ÇnullÖµ
       if (value !== null) {
         filteredData[fieldName] = value;
       }
@@ -169,15 +169,15 @@ function filterValidFields(data) {
   return filteredData;
 }
 
-// é…ç½®multerç”¨äºæ–‡ä»¶ä¸Šä¼ 
+// ÅäÖÃmulterÓÃÓÚÎÄ¼şÉÏ´«
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MBé™åˆ¶
+    fileSize: 10 * 1024 * 1024 // 10MBÏŞÖÆ
   },
   fileFilter: (req, file, cb) => {
-    // å…è®¸Excelæ–‡ä»¶
+    // ÔÊĞíExcelÎÄ¼ş
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
       'application/vnd.ms-excel' // .xls
@@ -186,33 +186,33 @@ const upload = multer({
     if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls)$/i)) {
       cb(null, true);
     } else {
-      cb(new Error(`ä¸æ”¯æŒçš„æ–‡ä»¶ç±»å‹: ${file.mimetype}ï¼Œè¯·ä¸Šä¼ Excelæ–‡ä»¶(.xlsxæˆ–.xls)`));
+      cb(new Error(`²»Ö§³ÖµÄÎÄ¼şÀàĞÍ: ${file.mimetype}£¬ÇëÉÏ´«ExcelÎÄ¼ş(.xlsx»ò.xls)`));
     }
   }
 });
 
-// é…ç½®CPCæ–‡ä»¶ä¸Šä¼ ä¸­é—´ä»¶
+// ÅäÖÃCPCÎÄ¼şÉÏ´«ÖĞ¼ä¼ş
 const cpcStorage = multer.memoryStorage();
 const cpcUpload = multer({
   storage: cpcStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MBé™åˆ¶
+    fileSize: 10 * 1024 * 1024 // 10MBÏŞÖÆ
   },
   fileFilter: (req, file, cb) => {
-    // å…è®¸PDFæ–‡ä»¶
+    // ÔÊĞíPDFÎÄ¼ş
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
     } else {
-      cb(new Error('åªå…è®¸ä¸Šä¼ PDFæ–‡ä»¶'));
+      cb(new Error('Ö»ÔÊĞíÉÏ´«PDFÎÄ¼ş'));
     }
   }
 });
 
-// æœç´¢åŠŸèƒ½ï¼ˆä¼˜åŒ–åï¼‰
+// ËÑË÷¹¦ÄÜ£¨ÓÅ»¯ºó£©
 router.post('/search', async (req, res) => {
   try {
     const { keywords, searchType = 'auto', isFuzzy = true } = req.body;
-    console.log('ğŸ” åç«¯æ”¶åˆ°æœç´¢è¯·æ±‚:', { keywords, searchType, isFuzzy });
+    console.log('?? ºó¶ËÊÕµ½ËÑË÷ÇëÇó:', { keywords, searchType, isFuzzy });
     
     if (!Array.isArray(keywords) || keywords.length === 0) {
       return res.json({ data: [] });
@@ -220,27 +220,27 @@ router.post('/search', async (req, res) => {
 
     let orConditions = [];
 
-    // æ ¹æ®æœç´¢ç±»å‹æ„å»ºä¸åŒçš„æŸ¥è¯¢æ¡ä»¶
+    // ¸ù¾İËÑË÷ÀàĞÍ¹¹½¨²»Í¬µÄ²éÑ¯Ìõ¼ş
     if (searchType === 'sku') {
-      // æœç´¢SKU
+      // ËÑË÷SKU
       orConditions = keywords.map(keyword => {
         if (isFuzzy) {
-          // æ¨¡ç³Šæœç´¢
-          console.log(`ğŸ” æ„å»ºæ¨¡ç³Šæœç´¢æ¡ä»¶: parent_sku LIKE %${keyword}%`);
+          // Ä£ºıËÑË÷
+          console.log(`?? ¹¹½¨Ä£ºıËÑË÷Ìõ¼ş: parent_sku LIKE %${keyword}%`);
           return { parent_sku: { [Op.like]: `%${keyword}%` } };
         } else {
-          // ç²¾ç¡®æœç´¢
-          console.log(`ğŸ” æ„å»ºç²¾ç¡®æœç´¢æ¡ä»¶: parent_sku = ${keyword}`);
+          // ¾«È·ËÑË÷
+          console.log(`?? ¹¹½¨¾«È·ËÑË÷Ìõ¼ş: parent_sku = ${keyword}`);
           return { parent_sku: keyword };
         }
       });
     } else if (searchType === 'weblink') {
-      // æœç´¢äº§å“é“¾æ¥/ID - åªæ”¯æŒæ¨¡ç³Šæœç´¢
+      // ËÑË÷²úÆ·Á´½Ó/ID - Ö»Ö§³ÖÄ£ºıËÑË÷
       orConditions = keywords.map(keyword => ({
         weblink: { [Op.like]: `%${keyword}%` }
       }));
     } else {
-      // é»˜è®¤æ¨¡å¼ï¼ˆautoï¼‰- åŒæ—¶æœç´¢SKUå’Œäº§å“é“¾æ¥
+      // Ä¬ÈÏÄ£Ê½£¨auto£©- Í¬Ê±ËÑË÷SKUºÍ²úÆ·Á´½Ó
       orConditions = keywords.map(keyword => ({
         [Op.or]: [
           { parent_sku: { [Op.like]: `%${keyword}%` } },
@@ -249,7 +249,7 @@ router.post('/search', async (req, res) => {
       }));
     }
     
-    console.log('ğŸ” æœ€ç»ˆæŸ¥è¯¢æ¡ä»¶:', JSON.stringify(orConditions, null, 2));
+    console.log('?? ×îÖÕ²éÑ¯Ìõ¼ş:', JSON.stringify(orConditions, null, 2));
 
     const result = await ProductWeblink.findAll({
       where: {
@@ -279,16 +279,16 @@ router.post('/search', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// æ‰¹é‡æ›´æ–°çŠ¶æ€
+// ÅúÁ¿¸üĞÂ×´Ì¬
 router.post('/batch-update-status', async (req, res) => {
   try {
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©è¦æ›´æ–°çš„è®°å½•' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÒª¸üĞÂµÄ¼ÇÂ¼' });
     }
 
     await ProductWeblink.update(
@@ -300,24 +300,24 @@ router.post('/batch-update-status', async (req, res) => {
       }
     );
 
-    res.json({ message: 'æ‰¹é‡æ›´æ–°æˆåŠŸ' });
+    res.json({ message: 'ÅúÁ¿¸üĞÂ³É¹¦' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// æ‰¹é‡å‘é€CPCæµ‹è¯•ç”³è¯·
+// ÅúÁ¿·¢ËÍCPC²âÊÔÉêÇë
 router.post('/batch-send-cpc-test', async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©è¦ç”³è¯·æµ‹è¯•çš„è®°å½•' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÒªÉêÇë²âÊÔµÄ¼ÇÂ¼' });
     }
 
-    // æ›´æ–°é€‰ä¸­è®°å½•çš„CPCæµ‹è¯•çŠ¶æ€ä¸º"ç”³è¯·æµ‹è¯•"
+    // ¸üĞÂÑ¡ÖĞ¼ÇÂ¼µÄCPC²âÊÔ×´Ì¬Îª"ÉêÇë²âÊÔ"
     await ProductWeblink.update(
-      { cpc_status: 'ç”³è¯·æµ‹è¯•' },
+      { cpc_status: 'ÉêÇë²âÊÔ' },
       {
         where: {
           id: { [Op.in]: ids }
@@ -325,31 +325,31 @@ router.post('/batch-send-cpc-test', async (req, res) => {
       }
     );
 
-    // å‘é€é’‰é’‰é€šçŸ¥
+    // ·¢ËÍ¶¤¶¤Í¨Öª
     try {
       await sendCpcTestNotification(ids.length);
     } catch (notificationError) {
-      console.error('é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥ï¼Œä½†ä¸å½±å“æ•°æ®æ›´æ–°:', notificationError.message);
+      console.error('¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü£¬µ«²»Ó°ÏìÊı¾İ¸üĞÂ:', notificationError.message);
     }
 
-    res.json({ message: `æˆåŠŸæäº¤ ${ids.length} æ¡CPCæµ‹è¯•ç”³è¯·` });
+    res.json({ message: `³É¹¦Ìá½» ${ids.length} ÌõCPC²âÊÔÉêÇë` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// æ‰¹é‡æ ‡è®°CPCæ ·å“å·²å‘
+// ÅúÁ¿±ê¼ÇCPCÑùÆ·ÒÑ·¢
 router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©è¦æ ‡è®°çš„è®°å½•' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÒª±ê¼ÇµÄ¼ÇÂ¼' });
     }
 
-    // æ›´æ–°é€‰ä¸­è®°å½•çš„CPCæµ‹è¯•çŠ¶æ€ä¸º"æ ·å“å·²å‘"
+    // ¸üĞÂÑ¡ÖĞ¼ÇÂ¼µÄCPC²âÊÔ×´Ì¬Îª"ÑùÆ·ÒÑ·¢"
     await ProductWeblink.update(
-      { cpc_status: 'æ ·å“å·²å‘' },
+      { cpc_status: 'ÑùÆ·ÒÑ·¢' },
       {
         where: {
           id: { [Op.in]: ids }
@@ -357,26 +357,26 @@ router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
       }
     );
 
-    // å‘é€é’‰é’‰é€šçŸ¥
+    // ·¢ËÍ¶¤¶¤Í¨Öª
     try {
       await sendCpcSampleSentNotification(ids.length);
     } catch (notificationError) {
-      console.error('é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥ï¼Œä½†ä¸å½±å“æ•°æ®æ›´æ–°:', notificationError.message);
+      console.error('¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü£¬µ«²»Ó°ÏìÊı¾İ¸üĞÂ:', notificationError.message);
     }
 
-    res.json({ message: `æˆåŠŸæ ‡è®° ${ids.length} æ¡CPCæ ·å“å·²å‘` });
+    res.json({ message: `³É¹¦±ê¼Ç ${ids.length} ÌõCPCÑùÆ·ÒÑ·¢` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// æ‰¹é‡åˆ é™¤
+// ÅúÁ¿É¾³ı
 router.post('/batch-delete', async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©è¦åˆ é™¤çš„è®°å½•' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÒªÉ¾³ıµÄ¼ÇÂ¼' });
     }
 
     await ProductWeblink.destroy({
@@ -385,14 +385,14 @@ router.post('/batch-delete', async (req, res) => {
       }
     });
 
-    res.json({ message: 'æ‰¹é‡åˆ é™¤æˆåŠŸ' });
+    res.json({ message: 'ÅúÁ¿É¾³ı³É¹¦' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// æ›´æ–°å•ä¸ªè®°å½•
+// ¸üĞÂµ¥¸ö¼ÇÂ¼
 router.put('/update/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -402,14 +402,14 @@ router.put('/update/:id', async (req, res) => {
       where: { id }
     });
 
-    res.json({ message: 'æ›´æ–°æˆåŠŸ' });
+    res.json({ message: '¸üĞÂ³É¹¦' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯' });
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó' });
   }
 });
 
-// é’‰é’‰é€šçŸ¥å‡½æ•°
+// ¶¤¶¤Í¨Öªº¯Êı
 async function sendDingTalkNotification(newProductCount) {
   try {
     const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
@@ -417,11 +417,11 @@ async function sendDingTalkNotification(newProductCount) {
     const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
     
     if (!DINGTALK_WEBHOOK) {
-      console.log('é’‰é’‰Webhookæœªé…ç½®ï¼Œè·³è¿‡é€šçŸ¥');
+      console.log('¶¤¶¤WebhookÎ´ÅäÖÃ£¬Ìø¹ıÍ¨Öª');
       return;
     }
 
-    // å¦‚æœæœ‰SECRET_KEYï¼Œè®¡ç®—ç­¾å
+    // Èç¹ûÓĞSECRET_KEY£¬¼ÆËãÇ©Ãû
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -430,20 +430,20 @@ async function sendDingTalkNotification(newProductCount) {
                         .update(stringToSign)
                         .digest('base64');
       
-      // æ·»åŠ æ—¶é—´æˆ³å’Œç­¾åå‚æ•°
+      // Ìí¼ÓÊ±¼ä´ÁºÍÇ©Ãû²ÎÊı
       const urlObj = new URL(DINGTALK_WEBHOOK);
       urlObj.searchParams.append('timestamp', timestamp.toString());
       urlObj.searchParams.append('sign', encodeURIComponent(sign));
       webhookUrl = urlObj.toString();
     }
 
-    // ä½¿ç”¨é…ç½®çš„æ‰‹æœºå·ï¼Œå¦‚æœæ²¡æœ‰é…ç½®åˆ™ä½¿ç”¨é»˜è®¤å€¼
+    // Ê¹ÓÃÅäÖÃµÄÊÖ»úºÅ£¬Èç¹ûÃ»ÓĞÅäÖÃÔòÊ¹ÓÃÄ¬ÈÏÖµ
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `æœ‰${newProductCount}æ¬¾æ–°å“ä¸Šä¼ æ•°æ®åº“ï¼Œéœ€è¦å…ˆå®¡æ ¸å†æ‰¹å›¾ï¼@${mobileNumber}`
+        content: `ÓĞ${newProductCount}¿îĞÂÆ·ÉÏ´«Êı¾İ¿â£¬ĞèÒªÏÈÉóºËÔÙÅúÍ¼£¡@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -459,16 +459,16 @@ async function sendDingTalkNotification(newProductCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('é’‰é’‰é€šçŸ¥å‘é€æˆåŠŸ');
+      console.log('¶¤¶¤Í¨Öª·¢ËÍ³É¹¦');
     } else {
-      console.error('é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥:', response.data);
+      console.error('¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü:', response.data);
     }
   } catch (error) {
-    console.error('å‘é€é’‰é’‰é€šçŸ¥æ—¶å‡ºé”™:', error.message);
+    console.error('·¢ËÍ¶¤¶¤Í¨ÖªÊ±³ö´í:', error.message);
   }
 }
 
-// CPCæµ‹è¯•ç”³è¯·é’‰é’‰é€šçŸ¥å‡½æ•°
+// CPC²âÊÔÉêÇë¶¤¶¤Í¨Öªº¯Êı
 async function sendCpcTestNotification(cpcTestCount) {
   try {
     const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
@@ -476,11 +476,11 @@ async function sendCpcTestNotification(cpcTestCount) {
     const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
     
     if (!DINGTALK_WEBHOOK) {
-      console.log('é’‰é’‰Webhookæœªé…ç½®ï¼Œè·³è¿‡é€šçŸ¥');
+      console.log('¶¤¶¤WebhookÎ´ÅäÖÃ£¬Ìø¹ıÍ¨Öª');
       return;
     }
 
-    // å¦‚æœæœ‰SECRET_KEYï¼Œè®¡ç®—ç­¾å
+    // Èç¹ûÓĞSECRET_KEY£¬¼ÆËãÇ©Ãû
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -489,20 +489,20 @@ async function sendCpcTestNotification(cpcTestCount) {
                         .update(stringToSign)
                         .digest('base64');
       
-      // æ·»åŠ æ—¶é—´æˆ³å’Œç­¾åå‚æ•°
+      // Ìí¼ÓÊ±¼ä´ÁºÍÇ©Ãû²ÎÊı
       const urlObj = new URL(DINGTALK_WEBHOOK);
       urlObj.searchParams.append('timestamp', timestamp.toString());
       urlObj.searchParams.append('sign', encodeURIComponent(sign));
       webhookUrl = urlObj.toString();
     }
 
-    // ä½¿ç”¨é…ç½®çš„æ‰‹æœºå·ï¼Œå¦‚æœæ²¡æœ‰é…ç½®åˆ™ä½¿ç”¨é»˜è®¤å€¼
+    // Ê¹ÓÃÅäÖÃµÄÊÖ»úºÅ£¬Èç¹ûÃ»ÓĞÅäÖÃÔòÊ¹ÓÃÄ¬ÈÏÖµ
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `æœ‰${cpcTestCount}æ¬¾äº§å“ç”³è¯·CPCæµ‹è¯•ï¼Œè¯·åŠæ—¶å¤„ç†ï¼@${mobileNumber}`
+        content: `ÓĞ${cpcTestCount}¿î²úÆ·ÉêÇëCPC²âÊÔ£¬Çë¼°Ê±´¦Àí£¡@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -518,16 +518,16 @@ async function sendCpcTestNotification(cpcTestCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('CPCæµ‹è¯•ç”³è¯·é’‰é’‰é€šçŸ¥å‘é€æˆåŠŸ');
+      console.log('CPC²âÊÔÉêÇë¶¤¶¤Í¨Öª·¢ËÍ³É¹¦');
     } else {
-      console.error('CPCæµ‹è¯•ç”³è¯·é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥:', response.data);
+      console.error('CPC²âÊÔÉêÇë¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü:', response.data);
     }
   } catch (error) {
-    console.error('å‘é€CPCæµ‹è¯•ç”³è¯·é’‰é’‰é€šçŸ¥æ—¶å‡ºé”™:', error.message);
+    console.error('·¢ËÍCPC²âÊÔÉêÇë¶¤¶¤Í¨ÖªÊ±³ö´í:', error.message);
   }
 }
 
-// CPCæ ·å“å·²å‘é’‰é’‰é€šçŸ¥å‡½æ•°
+// CPCÑùÆ·ÒÑ·¢¶¤¶¤Í¨Öªº¯Êı
 async function sendCpcSampleSentNotification(sampleCount) {
   try {
     const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
@@ -535,11 +535,11 @@ async function sendCpcSampleSentNotification(sampleCount) {
     const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
     
     if (!DINGTALK_WEBHOOK) {
-      console.log('é’‰é’‰Webhookæœªé…ç½®ï¼Œè·³è¿‡é€šçŸ¥');
+      console.log('¶¤¶¤WebhookÎ´ÅäÖÃ£¬Ìø¹ıÍ¨Öª');
       return;
     }
 
-    // å¦‚æœæœ‰SECRET_KEYï¼Œè®¡ç®—ç­¾å
+    // Èç¹ûÓĞSECRET_KEY£¬¼ÆËãÇ©Ãû
     let webhookUrl = DINGTALK_WEBHOOK;
     if (SECRET_KEY) {
       const timestamp = Date.now();
@@ -548,20 +548,20 @@ async function sendCpcSampleSentNotification(sampleCount) {
                         .update(stringToSign)
                         .digest('base64');
       
-      // æ·»åŠ æ—¶é—´æˆ³å’Œç­¾åå‚æ•°
+      // Ìí¼ÓÊ±¼ä´ÁºÍÇ©Ãû²ÎÊı
       const urlObj = new URL(DINGTALK_WEBHOOK);
       urlObj.searchParams.append('timestamp', timestamp.toString());
       urlObj.searchParams.append('sign', encodeURIComponent(sign));
       webhookUrl = urlObj.toString();
     }
 
-    // ä½¿ç”¨é…ç½®çš„æ‰‹æœºå·ï¼Œå¦‚æœæ²¡æœ‰é…ç½®åˆ™ä½¿ç”¨é»˜è®¤å€¼
+    // Ê¹ÓÃÅäÖÃµÄÊÖ»úºÅ£¬Èç¹ûÃ»ÓĞÅäÖÃÔòÊ¹ÓÃÄ¬ÈÏÖµ
     const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
 
     const message = {
       msgtype: 'text',
       text: {
-        content: `å·²æ ‡è®°${sampleCount}æ¬¾äº§å“CPCæ ·å“å·²å‘ï¼Œè¯·åŠæ—¶è·Ÿè¿›æµ‹è¯•è¿›åº¦ï¼@${mobileNumber}`
+        content: `ÒÑ±ê¼Ç${sampleCount}¿î²úÆ·CPCÑùÆ·ÒÑ·¢£¬Çë¼°Ê±¸ú½ø²âÊÔ½ø¶È£¡@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -577,26 +577,26 @@ async function sendCpcSampleSentNotification(sampleCount) {
     });
 
     if (response.data.errcode === 0) {
-      console.log('CPCæ ·å“å·²å‘é’‰é’‰é€šçŸ¥å‘é€æˆåŠŸ');
+      console.log('CPCÑùÆ·ÒÑ·¢¶¤¶¤Í¨Öª·¢ËÍ³É¹¦');
     } else {
-      console.error('CPCæ ·å“å·²å‘é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥:', response.data);
+      console.error('CPCÑùÆ·ÒÑ·¢¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü:', response.data);
     }
   } catch (error) {
-    console.error('å‘é€CPCæ ·å“å·²å‘é’‰é’‰é€šçŸ¥æ—¶å‡ºé”™:', error.message);
+    console.error('·¢ËÍCPCÑùÆ·ÒÑ·¢¶¤¶¤Í¨ÖªÊ±³ö´í:', error.message);
   }
 }
 
-// ç”ŸæˆSKUçš„å‡½æ•°
+// Éú³ÉSKUµÄº¯Êı
 function generateSKU() {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
   
   let sku = '';
-  // å‰3ä¸ªå­—ç¬¦æ˜¯å­—æ¯
+  // Ç°3¸ö×Ö·ûÊÇ×ÖÄ¸
   for (let i = 0; i < 3; i++) {
     sku += letters.charAt(Math.floor(Math.random() * letters.length));
   }
-  // å3ä¸ªå­—ç¬¦æ˜¯æ•°å­—
+  // ºó3¸ö×Ö·ûÊÇÊı×Ö
   for (let i = 0; i < 3; i++) {
     sku += numbers.charAt(Math.floor(Math.random() * numbers.length));
   }
@@ -604,11 +604,11 @@ function generateSKU() {
   return sku;
 }
 
-// Excelæ–‡ä»¶ä¸Šä¼ ï¼ˆåŸæœ‰çš„ï¼‰
+// ExcelÎÄ¼şÉÏ´«£¨Ô­ÓĞµÄ£©
 router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©Excelæ–‡ä»¶' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñExcelÎÄ¼ş' });
     }
 
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
@@ -618,13 +618,13 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 
     const newRecords = [];
     
-    // è·³è¿‡è¡¨å¤´ï¼Œä»ç¬¬äºŒè¡Œå¼€å§‹å¤„ç†
+    // Ìø¹ı±íÍ·£¬´ÓµÚ¶şĞĞ¿ªÊ¼´¦Àí
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      if (row[0] && row[0].trim()) { // Aåˆ—æœ‰äº§å“é“¾æ¥
+      if (row[0] && row[0].trim()) { // AÁĞÓĞ²úÆ·Á´½Ó
         const weblink = row[0].trim();
         
-        // æ£€æŸ¥æ˜¯å¦å·²å­˜åœ¨
+        // ¼ì²éÊÇ·ñÒÑ´æÔÚ
         const existing = await ProductWeblink.findOne({
           where: { weblink }
         });
@@ -633,7 +633,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
           let parent_sku;
           do {
             parent_sku = generateSKU();
-            // ç¡®ä¿ç”Ÿæˆçš„SKUä¸é‡å¤
+            // È·±£Éú³ÉµÄSKU²»ÖØ¸´
             const skuExists = await ProductWeblink.findOne({
               where: { parent_sku }
             });
@@ -644,7 +644,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
             parent_sku,
             weblink,
             update_time: new Date(),
-            status: 'å¾…å¤„ç†'
+            status: '´ı´¦Àí'
           });
         }
       }
@@ -653,42 +653,42 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
     if (newRecords.length > 0) {
       await ProductWeblink.bulkCreate(newRecords);
       res.json({ 
-        message: `æˆåŠŸä¸Šä¼  ${newRecords.length} æ¡æ–°è®°å½•`,
+        message: `³É¹¦ÉÏ´« ${newRecords.length} ÌõĞÂ¼ÇÂ¼`,
         count: newRecords.length 
       });
     } else {
       res.json({ 
-        message: 'æ²¡æœ‰æ‰¾åˆ°æ–°çš„äº§å“é“¾æ¥',
+        message: 'Ã»ÓĞÕÒµ½ĞÂµÄ²úÆ·Á´½Ó',
         count: 0 
       });
     }
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'æ–‡ä»¶ä¸Šä¼ å¤±è´¥: ' + err.message });
+    res.status(500).json({ message: 'ÎÄ¼şÉÏ´«Ê§°Ü: ' + err.message });
   }
 });
 
-// æ–°çš„Excelä¸Šä¼ ï¼ˆæ”¯æŒSKU, é“¾æ¥, å¤‡æ³¨ï¼‰
+// ĞÂµÄExcelÉÏ´«£¨Ö§³ÖSKU, Á´½Ó, ±¸×¢£©
 router.post('/upload-excel-new', (req, res) => {
-  // ä½¿ç”¨multerä¸­é—´ä»¶ï¼Œå¹¶å¤„ç†å¯èƒ½çš„é”™è¯¯
+  // Ê¹ÓÃmulterÖĞ¼ä¼ş£¬²¢´¦Àí¿ÉÄÜµÄ´íÎó
   upload.single('file')(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: 'æ–‡ä»¶å¤ªå¤§ï¼Œè¯·é€‰æ‹©å°äº10MBçš„æ–‡ä»¶' });
-      } else if (err.message.includes('ä¸æ”¯æŒçš„æ–‡ä»¶ç±»å‹')) {
+        return res.status(400).json({ message: 'ÎÄ¼şÌ«´ó£¬ÇëÑ¡ÔñĞ¡ÓÚ10MBµÄÎÄ¼ş' });
+      } else if (err.message.includes('²»Ö§³ÖµÄÎÄ¼şÀàĞÍ')) {
         return res.status(400).json({ message: err.message });
       } else {
-        return res.status(400).json({ message: 'æ–‡ä»¶ä¸Šä¼ å¤±è´¥: ' + err.message });
+        return res.status(400).json({ message: 'ÎÄ¼şÉÏ´«Ê§°Ü: ' + err.message });
       }
     }
     
     try {
       if (!req.file) {
-        return res.status(400).json({ message: 'è¯·é€‰æ‹©Excelæ–‡ä»¶' });
+        return res.status(400).json({ message: 'ÇëÑ¡ÔñExcelÎÄ¼ş' });
       }
 
-          // è·å–é’‰é’‰æ¨é€å¼€å…³çŠ¶æ€
+          // »ñÈ¡¶¤¶¤ÍÆËÍ¿ª¹Ø×´Ì¬
       const enableDingTalkNotification = req.body.enableDingTalkNotification === 'true';
 
       let workbook, data;
@@ -696,71 +696,71 @@ router.post('/upload-excel-new', (req, res) => {
         workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         
         if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          return res.status(400).json({ message: 'Excelæ–‡ä»¶æ— æœ‰æ•ˆå·¥ä½œè¡¨ï¼Œè¯·æ£€æŸ¥æ–‡ä»¶æ ¼å¼' });
+          return res.status(400).json({ message: 'ExcelÎÄ¼şÎŞÓĞĞ§¹¤×÷±í£¬Çë¼ì²éÎÄ¼ş¸ñÊ½' });
         }
         
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
         if (!worksheet) {
-          return res.status(400).json({ message: 'Excelæ–‡ä»¶å·¥ä½œè¡¨ä¸ºç©ºï¼Œè¯·æ·»åŠ æ•°æ®åé‡æ–°ä¸Šä¼ ' });
+          return res.status(400).json({ message: 'ExcelÎÄ¼ş¹¤×÷±íÎª¿Õ£¬ÇëÌí¼ÓÊı¾İºóÖØĞÂÉÏ´«' });
         }
         
         data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
       } catch (excelError) {
-        return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè¯·ç¡®ä¿ä¸Šä¼ æ­£ç¡®çš„.xlsxæˆ–.xlsæ–‡ä»¶' });
+        return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÇëÈ·±£ÉÏ´«ÕıÈ·µÄ.xlsx»ò.xlsÎÄ¼ş' });
       }
 
-          // ä¼˜åŒ–ç©ºè¡¨æ£€æŸ¥ - å¿«é€Ÿå¤±è´¥
+          // ÓÅ»¯¿Õ±í¼ì²é - ¿ìËÙÊ§°Ü
       if (!data || data.length === 0) {
-        return res.status(400).json({ message: 'Excelæ–‡ä»¶ä¸ºç©ºï¼Œè¯·æ·»åŠ æ•°æ®åé‡æ–°ä¸Šä¼ ' });
+        return res.status(400).json({ message: 'ExcelÎÄ¼şÎª¿Õ£¬ÇëÌí¼ÓÊı¾İºóÖØĞÂÉÏ´«' });
       }
 
-      // æ£€æŸ¥æ˜¯å¦æœ‰ä»»ä½•éç©ºè¡Œ
+      // ¼ì²éÊÇ·ñÓĞÈÎºÎ·Ç¿ÕĞĞ
       const hasValidData = data.some(row => row && row[0] && row[0].toString().trim());
       if (!hasValidData) {
-        return res.status(400).json({ message: 'Excelæ–‡ä»¶ä¸­æ²¡æœ‰æ‰¾åˆ°æœ‰æ•ˆçš„æ•°æ®è¡Œã€‚è¯·ç¡®ä¿Aåˆ—å¡«å†™äº†SKUä¿¡æ¯ã€‚' });
+        return res.status(400).json({ message: 'ExcelÎÄ¼şÖĞÃ»ÓĞÕÒµ½ÓĞĞ§µÄÊı¾İĞĞ¡£ÇëÈ·±£AÁĞÌîĞ´ÁËSKUĞÅÏ¢¡£' });
       }
     const newRecords = [];
     const skippedRecords = [];
     const errors = [];
     
-    // äº§å“IDæå–å‡½æ•°
+    // ²úÆ·IDÌáÈ¡º¯Êı
     const extractProductId = (url) => {
       if (!url || typeof url !== 'string') return null;
       
-      // 1688.com é“¾æ¥æ ¼å¼: https://detail.1688.com/offer/959653322543.html
+      // 1688.com Á´½Ó¸ñÊ½: https://detail.1688.com/offer/959653322543.html
       const match1688 = url.match(/1688\.com\/offer\/(\d+)/);
       if (match1688) return match1688[1];
       
-      // æ·˜å®é“¾æ¥æ ¼å¼: https://detail.tmall.com/item.htm?id=123456789
+      // ÌÔ±¦Á´½Ó¸ñÊ½: https://detail.tmall.com/item.htm?id=123456789
       const matchTaobao = url.match(/[?&]id=(\d+)/);
       if (matchTaobao) return matchTaobao[1];
       
-      // Amazoné“¾æ¥æ ¼å¼: https://www.amazon.com/dp/B08N5WRWNW
+      // AmazonÁ´½Ó¸ñÊ½: https://www.amazon.com/dp/B08N5WRWNW
       const matchAmazon = url.match(/\/dp\/([A-Z0-9]{10})/);
       if (matchAmazon) return matchAmazon[1];
       
-      // å…¶ä»–å¯èƒ½çš„äº§å“IDæ ¼å¼
+      // ÆäËû¿ÉÄÜµÄ²úÆ·ID¸ñÊ½
       const matchGeneral = url.match(/\/(\d{8,})/);
       if (matchGeneral) return matchGeneral[1];
       
       return null;
     };
     
-    // ä»ç¬¬ä¸€è¡Œå¼€å§‹å¤„ç†ï¼ˆæ— è¡¨å¤´ï¼‰
+    // ´ÓµÚÒ»ĞĞ¿ªÊ¼´¦Àí£¨ÎŞ±íÍ·£©
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      if (row[0] && row[0].toString().trim()) { // Aåˆ—æœ‰SKU
+      if (row[0] && row[0].toString().trim()) { // AÁĞÓĞSKU
         const parent_sku = row[0].toString().trim();
         const weblink = row[1] ? row[1].toString().trim() : '';
         const notice = row[2] ? row[2].toString().trim() : '';
         
-        // 1. ä¼˜å…ˆæ£€æŸ¥äº§å“IDé‡å¤ï¼ˆä»é“¾æ¥ä¸­æå–äº§å“IDï¼‰
+        // 1. ÓÅÏÈ¼ì²é²úÆ·IDÖØ¸´£¨´ÓÁ´½ÓÖĞÌáÈ¡²úÆ·ID£©
         if (weblink) {
           const productId = extractProductId(weblink);
           if (productId) {
-            // æŸ¥æ‰¾æ•°æ®åº“ä¸­æ˜¯å¦å·²æœ‰åŒ…å«ç›¸åŒäº§å“IDçš„é“¾æ¥
+            // ²éÕÒÊı¾İ¿âÖĞÊÇ·ñÒÑÓĞ°üº¬ÏàÍ¬²úÆ·IDµÄÁ´½Ó
             const existingProductId = await ProductWeblink.findOne({
               where: {
                 weblink: {
@@ -770,8 +770,8 @@ router.post('/upload-excel-new', (req, res) => {
             });
             
             if (existingProductId) {
-              const skipReason = 'äº§å“é“¾æ¥å·²ç»å­˜åœ¨';
-              errors.push(`ç¬¬${i+1}è¡Œï¼šäº§å“ID ${productId} å·²å­˜åœ¨äºSKU ${existingProductId.parent_sku}`);
+              const skipReason = '²úÆ·Á´½ÓÒÑ¾­´æÔÚ';
+              errors.push(`µÚ${i+1}ĞĞ£º²úÆ·ID ${productId} ÒÑ´æÔÚÓÚSKU ${existingProductId.parent_sku}`);
               skippedRecords.push({
                 row: i + 1,
                 sku: parent_sku,
@@ -783,14 +783,14 @@ router.post('/upload-excel-new', (req, res) => {
           }
         }
 
-        // 2. æ£€æŸ¥SKUæ˜¯å¦å·²å­˜åœ¨
+        // 2. ¼ì²éSKUÊÇ·ñÒÑ´æÔÚ
         const existing = await ProductWeblink.findOne({
           where: { parent_sku }
         });
         
         if (existing) {
-          const skipReason = 'SKUå·²å­˜åœ¨';
-          errors.push(`ç¬¬${i+1}è¡Œï¼šSKU ${parent_sku} å·²å­˜åœ¨`);
+          const skipReason = 'SKUÒÑ´æÔÚ';
+          errors.push(`µÚ${i+1}ĞĞ£ºSKU ${parent_sku} ÒÑ´æÔÚ`);
           skippedRecords.push({
             row: i + 1,
             sku: parent_sku,
@@ -805,7 +805,7 @@ router.post('/upload-excel-new', (req, res) => {
           weblink,
           notice,
           update_time: new Date(),
-          status: 'å¾…å®¡æ ¸'
+          status: '´ıÉóºË'
         });
       }
     }
@@ -813,21 +813,21 @@ router.post('/upload-excel-new', (req, res) => {
           let resultMessage = '';
       if (newRecords.length > 0) {
         await ProductWeblink.bulkCreate(newRecords);
-        resultMessage = `æˆåŠŸä¸Šä¼  ${newRecords.length} æ¡æ–°è®°å½•`;
+        resultMessage = `³É¹¦ÉÏ´« ${newRecords.length} ÌõĞÂ¼ÇÂ¼`;
         
-        // æ ¹æ®å¼€å…³çŠ¶æ€å†³å®šæ˜¯å¦å‘é€é’‰é’‰é€šçŸ¥
+        // ¸ù¾İ¿ª¹Ø×´Ì¬¾ö¶¨ÊÇ·ñ·¢ËÍ¶¤¶¤Í¨Öª
         if (enableDingTalkNotification) {
           try {
             await sendDingTalkNotification(newRecords.length);
           } catch (notificationError) {
-            // é’‰é’‰é€šçŸ¥å‘é€å¤±è´¥ä¸å½±å“æ•°æ®ä¿å­˜
+            // ¶¤¶¤Í¨Öª·¢ËÍÊ§°Ü²»Ó°ÏìÊı¾İ±£´æ
           }
         }
       } else {
-        // å¦‚æœæ²¡æœ‰æ‰¾åˆ°ä»»ä½•æœ‰æ•ˆæ•°æ®ï¼Œè¿”å›ç»Ÿä¸€æ ¼å¼
+        // Èç¹ûÃ»ÓĞÕÒµ½ÈÎºÎÓĞĞ§Êı¾İ£¬·µ»ØÍ³Ò»¸ñÊ½
         const errorMsg = errors.length > 0 
-          ? `æ²¡æœ‰æ‰¾åˆ°æœ‰æ•ˆçš„æ•°æ®è¡Œã€‚æ‰€æœ‰è¡Œéƒ½è¢«è·³è¿‡`
-          : 'Excelæ–‡ä»¶ä¸­æ²¡æœ‰æ‰¾åˆ°æœ‰æ•ˆçš„æ•°æ®è¡Œã€‚è¯·ç¡®ä¿Aåˆ—å¡«å†™äº†SKUä¿¡æ¯ã€‚';
+          ? `Ã»ÓĞÕÒµ½ÓĞĞ§µÄÊı¾İĞĞ¡£ËùÓĞĞĞ¶¼±»Ìø¹ı`
+          : 'ExcelÎÄ¼şÖĞÃ»ÓĞÕÒµ½ÓĞĞ§µÄÊı¾İĞĞ¡£ÇëÈ·±£AÁĞÌîĞ´ÁËSKUĞÅÏ¢¡£';
         return res.status(400).json({ 
           message: errorMsg,
           success: false,
@@ -842,7 +842,7 @@ router.post('/upload-excel-new', (req, res) => {
       }
 
       if (errors.length > 0) {
-        resultMessage += `\nè·³è¿‡çš„è®°å½•ï¼š\n${errors.join('\n')}`;
+        resultMessage += `\nÌø¹ıµÄ¼ÇÂ¼£º\n${errors.join('\n')}`;
       }
 
       res.json({ 
@@ -858,17 +858,17 @@ router.post('/upload-excel-new', (req, res) => {
       });
 
     } catch (err) {
-      res.status(500).json({ message: 'æ–‡ä»¶ä¸Šä¼ å¤±è´¥: ' + err.message });
+      res.status(500).json({ message: 'ÎÄ¼şÉÏ´«Ê§°Ü: ' + err.message });
     }
   });
 });
 
-// ç­›é€‰æ•°æ®æ¥å£
+// É¸Ñ¡Êı¾İ½Ó¿Ú
 router.post('/filter', async (req, res) => {
   try {
     const { status, cpc_status, cpc_submit, seller_name, dateRange } = req.body;
     
-    // æ„å»ºæŸ¥è¯¢æ¡ä»¶
+    // ¹¹½¨²éÑ¯Ìõ¼ş
     const whereConditions = {};
     if (status) {
       whereConditions.status = status;
@@ -878,7 +878,7 @@ router.post('/filter', async (req, res) => {
     }
     if (cpc_submit !== undefined) {
       if (cpc_submit === '') {
-        // ç­›é€‰ç©ºçš„CPCæäº¤æƒ…å†µ
+        // É¸Ñ¡¿ÕµÄCPCÌá½»Çé¿ö
         whereConditions.cpc_submit = { [Op.or]: [null, ''] };
       } else {
         whereConditions.cpc_submit = cpc_submit;
@@ -888,7 +888,7 @@ router.post('/filter', async (req, res) => {
       whereConditions.seller_name = { [Op.like]: `%${seller_name}%` };
     }
     
-    // æ·»åŠ æ—¶é—´èŒƒå›´ç­›é€‰
+    // Ìí¼ÓÊ±¼ä·¶Î§É¸Ñ¡
     if (dateRange && dateRange.length === 2) {
       const [startDate, endDate] = dateRange;
       whereConditions.update_time = {
@@ -923,20 +923,20 @@ router.post('/filter', async (req, res) => {
 
     res.json({ data: result });
   } catch (err) {
-    console.error('ç­›é€‰æ•°æ®å¤±è´¥:', err);
+    console.error('É¸Ñ¡Êı¾İÊ§°Ü:', err);
     res.status(500).json({ 
-      message: 'ç­›é€‰å¤±è´¥: ' + (err.message || 'æœªçŸ¥é”™è¯¯'),
+      message: 'É¸Ñ¡Ê§°Ü: ' + (err.message || 'Î´Öª´íÎó'),
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 });
 
-// CPCå¾…ä¸Šæ¶äº§å“ç­›é€‰æ¥å£ï¼ˆæµ‹è¯•å®Œæˆä¸”CPCæäº¤æƒ…å†µä¸ºç©ºï¼‰
+// CPC´ıÉÏ¼Ü²úÆ·É¸Ñ¡½Ó¿Ú£¨²âÊÔÍê³ÉÇÒCPCÌá½»Çé¿öÎª¿Õ£©
 router.post('/filter-cpc-pending-listing', async (req, res) => {
   try {
     const result = await ProductWeblink.findAll({
       where: {
-        cpc_status: 'æµ‹è¯•å®Œæˆ',
+        cpc_status: '²âÊÔÍê³É',
         [Op.or]: [
           { cpc_submit: null },
           { cpc_submit: '' }
@@ -965,17 +965,17 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'ç­›é€‰CPCå¾…ä¸Šæ¶äº§å“å¤±è´¥' });
+    res.status(500).json({ message: 'É¸Ñ¡CPC´ıÉÏ¼Ü²úÆ·Ê§°Ü' });
   }
 });
 
-// å¯æ•´ç†èµ„æ–™äº§å“ç­›é€‰æ¥å£ï¼ˆå¾…På›¾å’Œå¾…ä¸Šä¼ ï¼‰
+// ¿ÉÕûÀí×ÊÁÏ²úÆ·É¸Ñ¡½Ó¿Ú£¨´ıPÍ¼ºÍ´ıÉÏ´«£©
 router.post('/filter-can-organize-data', async (req, res) => {
   try {
     const result = await ProductWeblink.findAll({
       where: {
         status: {
-          [Op.in]: ['å¾…På›¾', 'å¾…ä¸Šä¼ ']
+          [Op.in]: ['´ıPÍ¼', '´ıÉÏ´«']
         }
       },
       attributes: [
@@ -1002,14 +1002,14 @@ router.post('/filter-can-organize-data', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'ç­›é€‰å¯æ•´ç†èµ„æ–™äº§å“å¤±è´¥' });
+    res.status(500).json({ message: 'É¸Ñ¡¿ÉÕûÀí×ÊÁÏ²úÆ·Ê§°Ü' });
   }
 });
 
-// è·å–å…¨éƒ¨æ•°æ®ç»Ÿè®¡ä¿¡æ¯
+// »ñÈ¡È«²¿Êı¾İÍ³¼ÆĞÅÏ¢
 router.get('/statistics', async (req, res) => {
   try {
-    // è·å–çŠ¶æ€ç»Ÿè®¡
+    // »ñÈ¡×´Ì¬Í³¼Æ
     const statusStats = await ProductWeblink.findAll({
       attributes: [
         'status',
@@ -1025,7 +1025,7 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
-    // è·å–CPCçŠ¶æ€ç»Ÿè®¡
+    // »ñÈ¡CPC×´Ì¬Í³¼Æ
     const cpcStatusStats = await ProductWeblink.findAll({
       attributes: [
         'cpc_status',
@@ -1041,7 +1041,7 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
-    // è·å–CPCæäº¤æƒ…å†µç»Ÿè®¡
+    // »ñÈ¡CPCÌá½»Çé¿öÍ³¼Æ
     const cpcSubmitStats = await ProductWeblink.findAll({
       attributes: [
         'cpc_submit',
@@ -1062,9 +1062,9 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
-    console.log('ğŸ“Š CPCæäº¤æƒ…å†µç»Ÿè®¡æŸ¥è¯¢ç»“æœ:', cpcSubmitStats);
+    console.log('?? CPCÌá½»Çé¿öÍ³¼Æ²éÑ¯½á¹û:', cpcSubmitStats);
 
-    // è·å–ä¾›åº”å•†ç»Ÿè®¡
+    // »ñÈ¡¹©Ó¦ÉÌÍ³¼Æ
     const supplierStats = await ProductWeblink.findAll({
       attributes: [
         'seller_name',
@@ -1080,42 +1080,42 @@ router.get('/statistics', async (req, res) => {
       raw: true
     });
 
-    // è®¡ç®—ç‰¹å®šçŠ¶æ€çš„äº§å“æ•°é‡
+    // ¼ÆËãÌØ¶¨×´Ì¬µÄ²úÆ·ÊıÁ¿
     const newProductFirstReviewCount = await ProductWeblink.count({
-      where: { status: 'æ–°å“ä¸€å®¡' }
+      where: { status: 'ĞÂÆ·Ò»Éó' }
     });
 
     const infringementSecondReviewCount = await ProductWeblink.count({
-      where: { status: 'å¾…å®¡æ ¸' }
+      where: { status: '´ıÉóºË' }
     });
 
     const waitingPImageCount = await ProductWeblink.count({
-      where: { status: 'å¾…På›¾' }
+      where: { status: '´ıPÍ¼' }
     });
 
     const waitingUploadCount = await ProductWeblink.count({
-      where: { status: 'å¾…ä¸Šä¼ ' }
+      where: { status: '´ıÉÏ´«' }
     });
 
-    // è®¡ç®—CPCæµ‹è¯•å¾…å®¡æ ¸çš„äº§å“æ•°é‡ï¼ˆç”³è¯·æµ‹è¯•çŠ¶æ€ï¼‰
+    // ¼ÆËãCPC²âÊÔ´ıÉóºËµÄ²úÆ·ÊıÁ¿£¨ÉêÇë²âÊÔ×´Ì¬£©
     const cpcTestPendingCount = await ProductWeblink.count({
-      where: { cpc_status: 'ç”³è¯·æµ‹è¯•' }
+      where: { cpc_status: 'ÉêÇë²âÊÔ' }
     });
 
-    // è®¡ç®—CPCæ£€æµ‹ä¸­çš„äº§å“æ•°é‡
+    // ¼ÆËãCPC¼ì²âÖĞµÄ²úÆ·ÊıÁ¿
     const cpcTestingCount = await ProductWeblink.count({
-      where: { cpc_status: 'æµ‹è¯•ä¸­' }
+      where: { cpc_status: '²âÊÔÖĞ' }
     });
 
-    // è®¡ç®—CPCå·²å‘æ ·å“æ•°é‡
+    // ¼ÆËãCPCÒÑ·¢ÑùÆ·ÊıÁ¿
     const cpcSampleSentCount = await ProductWeblink.count({
-      where: { cpc_status: 'æ ·å“å·²å‘' }
+      where: { cpc_status: 'ÑùÆ·ÒÑ·¢' }
     });
 
-    // è®¡ç®—CPCå¾…ä¸Šæ¶äº§å“æ•°é‡ï¼ˆæµ‹è¯•å®Œæˆä¸”CPCæäº¤æƒ…å†µä¸ºç©ºï¼‰
+    // ¼ÆËãCPC´ıÉÏ¼Ü²úÆ·ÊıÁ¿£¨²âÊÔÍê³ÉÇÒCPCÌá½»Çé¿öÎª¿Õ£©
     const cpcPendingListingCount = await ProductWeblink.count({
       where: {
-        cpc_status: 'æµ‹è¯•å®Œæˆ',
+        cpc_status: '²âÊÔÍê³É',
         [Op.or]: [
           { cpc_submit: null },
           { cpc_submit: '' }
@@ -1123,11 +1123,11 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
-    // è®¡ç®—å¯æ•´ç†èµ„æ–™çš„äº§å“æ•°é‡ï¼ˆå¾…På›¾å’Œå¾…ä¸Šä¼ ï¼‰
+    // ¼ÆËã¿ÉÕûÀí×ÊÁÏµÄ²úÆ·ÊıÁ¿£¨´ıPÍ¼ºÍ´ıÉÏ´«£©
     const canOrganizeDataCount = await ProductWeblink.count({
       where: {
         status: {
-          [Op.in]: ['å¾…På›¾', 'å¾…ä¸Šä¼ ']
+          [Op.in]: ['´ıPÍ¼', '´ıÉÏ´«']
         }
       }
     });
@@ -1153,12 +1153,12 @@ router.get('/statistics', async (req, res) => {
         count: parseInt(item.count)
       })),
       cpcSubmitStats: cpcSubmitStats
-        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // è¿‡æ»¤ç©ºå€¼
+        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // ¹ıÂË¿ÕÖµ
         .map(item => ({
           value: item.cpc_submit,
           count: parseInt(item.count) || 0
         }))
-        .filter(item => item.count > 0), // ç¡®ä¿countå¤§äº0
+        .filter(item => item.count > 0), // È·±£count´óÓÚ0
       supplierStats: supplierStats.map(item => ({
         value: item.seller_name,
         count: parseInt(item.count)
@@ -1167,34 +1167,34 @@ router.get('/statistics', async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'è·å–ç»Ÿè®¡ä¿¡æ¯å¤±è´¥: ' + err.message });
+    res.status(500).json({ message: '»ñÈ¡Í³¼ÆĞÅÏ¢Ê§°Ü: ' + err.message });
   }
 });
 
 
 
-// æµ‹è¯•ç«¯ç‚¹ - æ£€æŸ¥SellerInventorySkuè¡¨
+// ²âÊÔ¶Ëµã - ¼ì²éSellerInventorySku±í
 router.get('/test-seller-sku', async (req, res) => {
   try {
     const count = await SellerInventorySku.count();
     const sample = await SellerInventorySku.findAll({ limit: 3 });
     res.json({ 
-      message: 'æ•°æ®åº“è¡¨è®¿é—®æˆåŠŸ',
+      message: 'Êı¾İ¿â±í·ÃÎÊ³É¹¦',
       count: count,
       sample: sample
     });
   } catch (err) {
     res.status(500).json({ 
-      message: 'æ•°æ®åº“è¡¨è®¿é—®å¤±è´¥',
+      message: 'Êı¾İ¿â±í·ÃÎÊÊ§°Ü',
       error: err.message,
       name: err.name
     });
   }
 });
 
-// ==================== CPCæ–‡ä»¶ä¸Šä¼ ç›¸å…³æ¥å£ ====================
+// ==================== CPCÎÄ¼şÉÏ´«Ïà¹Ø½Ó¿Ú ====================
 
-// CPCæ–‡ä»¶ä¸Šä¼ æ¥å£
+// CPCÎÄ¼şÉÏ´«½Ó¿Ú
 router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1202,43 +1202,43 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
     if (!req.file) {
       return res.status(400).json({
         code: 1,
-        message: 'è¯·é€‰æ‹©CPCæ–‡ä»¶'
+        message: 'ÇëÑ¡ÔñCPCÎÄ¼ş'
       });
     }
 
-    // æ£€æŸ¥è®°å½•æ˜¯å¦å­˜åœ¨
+    // ¼ì²é¼ÇÂ¼ÊÇ·ñ´æÔÚ
     const record = await ProductWeblink.findByPk(id);
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: 'è®°å½•ä¸å­˜åœ¨'
+        message: '¼ÇÂ¼²»´æÔÚ'
       });
     }
 
     try {
-      // ä¸Šä¼ æ–‡ä»¶åˆ°OSS
+      // ÉÏ´«ÎÄ¼şµ½OSS
       const uploadResult = await uploadToOSS(req.file.buffer, req.file.originalname, 'cpc-files');
       
       if (!uploadResult.success) {
         return res.status(500).json({
           code: 1,
-          message: 'æ–‡ä»¶ä¸Šä¼ å¤±è´¥'
+          message: 'ÎÄ¼şÉÏ´«Ê§°Ü'
         });
       }
 
-      // è§£æPDFæ–‡ä»¶è·å–Style Numberå’Œæ¨èå¹´é¾„
+      // ½âÎöPDFÎÄ¼ş»ñÈ¡Style NumberºÍÍÆ¼öÄêÁä
       let extractedData = { styleNumber: '', recommendAge: '' };
       try {
         const pdfData = await pdf(req.file.buffer);
         extractedData = await extractCpcInfo(pdfData.text);
       } catch (parseError) {
-        console.warn('PDFè§£æå¤±è´¥ï¼Œè·³è¿‡è‡ªåŠ¨æå–:', parseError.message);
+        console.warn('PDF½âÎöÊ§°Ü£¬Ìø¹ı×Ô¶¯ÌáÈ¡:', parseError.message);
       }
 
-      // å‡†å¤‡æ–‡ä»¶ä¿¡æ¯ï¼Œå¤„ç†ä¸­æ–‡æ–‡ä»¶å
+      // ×¼±¸ÎÄ¼şĞÅÏ¢£¬´¦ÀíÖĞÎÄÎÄ¼şÃû
       const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
       const fileInfo = {
-        uid: Date.now() + '-' + Math.random().toString(36).substr(2, 9), // æ›´å”¯ä¸€çš„ID
+        uid: Date.now() + '-' + Math.random().toString(36).substr(2, 9), // ¸üÎ¨Ò»µÄID
         name: originalName,
         url: uploadResult.url,
         objectName: uploadResult.name,
@@ -1247,7 +1247,7 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         extractedData: extractedData
       };
 
-      // è·å–ç°æœ‰çš„CPCæ–‡ä»¶åˆ—è¡¨
+      // »ñÈ¡ÏÖÓĞµÄCPCÎÄ¼şÁĞ±í
       let existingFiles = [];
       if (record.cpc_files) {
         try {
@@ -1260,37 +1260,37 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         }
       }
 
-      // æ·»åŠ æ–°æ–‡ä»¶
+      // Ìí¼ÓĞÂÎÄ¼ş
       existingFiles.push(fileInfo);
 
-      // æ›´æ–°æ•°æ®åº“è®°å½•
+      // ¸üĞÂÊı¾İ¿â¼ÇÂ¼
       const updateData = {
         cpc_files: JSON.stringify(existingFiles)
       };
 
-      // æ£€æŸ¥æ˜¯å¦å·²ç»æœ‰æå–è¿‡çš„ä¿¡æ¯ï¼ˆé¿å…é‡å¤æå–ï¼‰
+      // ¼ì²éÊÇ·ñÒÑ¾­ÓĞÌáÈ¡¹ıµÄĞÅÏ¢£¨±ÜÃâÖØ¸´ÌáÈ¡£©
       const hasExistingExtractedData = existingFiles.some(file => 
         file.extractedData && (file.extractedData.styleNumber || file.extractedData.recommendAge)
       );
 
-      // ä¸å†è‡ªåŠ¨æ›´æ–°æ•°æ®åº“å­—æ®µï¼Œæ”¹ä¸ºè¿”å›æå–ä¿¡æ¯è®©å‰ç«¯ç¡®è®¤
-      // åªåœ¨æ§åˆ¶å°è®°å½•æå–ç»“æœ
+      // ²»ÔÙ×Ô¶¯¸üĞÂÊı¾İ¿â×Ö¶Î£¬¸ÄÎª·µ»ØÌáÈ¡ĞÅÏ¢ÈÃÇ°¶ËÈ·ÈÏ
+      // Ö»ÔÚ¿ØÖÆÌ¨¼ÇÂ¼ÌáÈ¡½á¹û
       if (!hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
-        console.log(`ğŸ“ ä»CPCæ–‡ä»¶ä¸­æå–ä¿¡æ¯ (SKU: ${record.parent_sku}):`);
+        console.log(`?? ´ÓCPCÎÄ¼şÖĞÌáÈ¡ĞÅÏ¢ (SKU: ${record.parent_sku}):`);
         if (extractedData.styleNumber) {
           console.log(`  - Style Number: ${extractedData.styleNumber}`);
         }
         if (extractedData.recommendAge) {
-          console.log(`  - æ¨èå¹´é¾„: ${extractedData.recommendAge}`);
+          console.log(`  - ÍÆ¼öÄêÁä: ${extractedData.recommendAge}`);
         }
       } else if (hasExistingExtractedData && (extractedData.styleNumber || extractedData.recommendAge)) {
-        console.log(`â„¹ï¸ SKU ${record.parent_sku} å·²æœ‰æå–ä¿¡æ¯ï¼Œè·³è¿‡é‡å¤æå–`);
+        console.log(`?? SKU ${record.parent_sku} ÒÑÓĞÌáÈ¡ĞÅÏ¢£¬Ìø¹ıÖØ¸´ÌáÈ¡`);
       }
 
-      // å¦‚æœCPCæ–‡ä»¶æ•°é‡è¾¾åˆ°2ä¸ªæˆ–ä»¥ä¸Šï¼Œè‡ªåŠ¨æ›´æ–°CPCæµ‹è¯•æƒ…å†µä¸º"å·²æµ‹è¯•"
+      // Èç¹ûCPCÎÄ¼şÊıÁ¿´ïµ½2¸ö»òÒÔÉÏ£¬×Ô¶¯¸üĞÂCPC²âÊÔÇé¿öÎª"ÒÑ²âÊÔ"
       if (existingFiles.length >= 2) {
-        updateData.cpc_status = 'å·²æµ‹è¯•';
-        console.log(`ğŸ“‹ SKU ${record.parent_sku} çš„CPCæ–‡ä»¶æ•°é‡è¾¾åˆ°${existingFiles.length}ä¸ªï¼Œè‡ªåŠ¨æ›´æ–°CPCæµ‹è¯•æƒ…å†µä¸º"å·²æµ‹è¯•"`);
+        updateData.cpc_status = 'ÒÑ²âÊÔ';
+        console.log(`?? SKU ${record.parent_sku} µÄCPCÎÄ¼şÊıÁ¿´ïµ½${existingFiles.length}¸ö£¬×Ô¶¯¸üĞÂCPC²âÊÔÇé¿öÎª"ÒÑ²âÊÔ"`);
       }
 
       await ProductWeblink.update(updateData, {
@@ -1299,7 +1299,7 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
 
       res.json({
         code: 0,
-        message: 'CPCæ–‡ä»¶ä¸Šä¼ æˆåŠŸ',
+        message: 'CPCÎÄ¼şÉÏ´«³É¹¦',
         data: {
           fileInfo: fileInfo,
           extractedData: extractedData,
@@ -1316,23 +1316,23 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
       });
 
     } catch (uploadError) {
-      console.error('æ–‡ä»¶ä¸Šä¼ å¤±è´¥:', uploadError);
+      console.error('ÎÄ¼şÉÏ´«Ê§°Ü:', uploadError);
       res.status(500).json({
         code: 1,
-        message: 'æ–‡ä»¶ä¸Šä¼ å¤±è´¥: ' + uploadError.message
+        message: 'ÎÄ¼şÉÏ´«Ê§°Ü: ' + uploadError.message
       });
     }
 
   } catch (error) {
-    console.error('CPCæ–‡ä»¶ä¸Šä¼ å¤„ç†å¤±è´¥:', error);
+    console.error('CPCÎÄ¼şÉÏ´«´¦ÀíÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æœåŠ¡å™¨é”™è¯¯: ' + error.message
+      message: '·şÎñÆ÷´íÎó: ' + error.message
     });
   }
 });
 
-// è·å–CPCæ–‡ä»¶åˆ—è¡¨
+// »ñÈ¡CPCÎÄ¼şÁĞ±í
 router.get('/cpc-files/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1341,7 +1341,7 @@ router.get('/cpc-files/:id', async (req, res) => {
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: 'è®°å½•ä¸å­˜åœ¨'
+        message: '¼ÇÂ¼²»´æÔÚ'
       });
     }
 
@@ -1359,20 +1359,20 @@ router.get('/cpc-files/:id', async (req, res) => {
 
     res.json({
       code: 0,
-      message: 'è·å–æˆåŠŸ',
+      message: '»ñÈ¡³É¹¦',
       data: cpcFiles
     });
 
   } catch (error) {
-    console.error('è·å–CPCæ–‡ä»¶åˆ—è¡¨å¤±è´¥:', error);
+    console.error('»ñÈ¡CPCÎÄ¼şÁĞ±íÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æœåŠ¡å™¨é”™è¯¯: ' + error.message
+      message: '·şÎñÆ÷´íÎó: ' + error.message
     });
   }
 });
 
-// åˆ é™¤CPCæ–‡ä»¶
+// É¾³ıCPCÎÄ¼ş
 router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
   try {
     const { id, fileUid } = req.params;
@@ -1381,7 +1381,7 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: 'è®°å½•ä¸å­˜åœ¨'
+        message: '¼ÇÂ¼²»´æÔÚ'
       });
     }
 
@@ -1397,32 +1397,32 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
       }
     }
 
-    // æ‰¾åˆ°è¦åˆ é™¤çš„æ–‡ä»¶
+    // ÕÒµ½ÒªÉ¾³ıµÄÎÄ¼ş
     const fileIndex = cpcFiles.findIndex(file => file.uid === fileUid);
     if (fileIndex === -1) {
       return res.status(404).json({
         code: 1,
-        message: 'æ–‡ä»¶ä¸å­˜åœ¨'
+        message: 'ÎÄ¼ş²»´æÔÚ'
       });
     }
 
     const fileToDelete = cpcFiles[fileIndex];
     
-    // ä»OSSä¸­åˆ é™¤æ–‡ä»¶ï¼ˆå¦‚æœæœ‰objectNameï¼‰
+    // ´ÓOSSÖĞÉ¾³ıÎÄ¼ş£¨Èç¹ûÓĞobjectName£©
     if (fileToDelete.objectName) {
       try {
         await deleteFromOSS(fileToDelete.objectName);
-        console.log(`âœ… å·²ä»OSSåˆ é™¤æ–‡ä»¶: ${fileToDelete.objectName}`);
+        console.log(`? ÒÑ´ÓOSSÉ¾³ıÎÄ¼ş: ${fileToDelete.objectName}`);
       } catch (ossError) {
-        console.warn(`âš ï¸ OSSæ–‡ä»¶åˆ é™¤å¤±è´¥: ${fileToDelete.objectName}`, ossError.message);
-        // ç»§ç»­æ‰§è¡Œæ•°æ®åº“åˆ é™¤ï¼Œå³ä½¿OSSåˆ é™¤å¤±è´¥
+        console.warn(`?? OSSÎÄ¼şÉ¾³ıÊ§°Ü: ${fileToDelete.objectName}`, ossError.message);
+        // ¼ÌĞøÖ´ĞĞÊı¾İ¿âÉ¾³ı£¬¼´Ê¹OSSÉ¾³ıÊ§°Ü
       }
     }
 
-    // ä»æ•°ç»„ä¸­ç§»é™¤æ–‡ä»¶
+    // ´ÓÊı×éÖĞÒÆ³ıÎÄ¼ş
     cpcFiles.splice(fileIndex, 1);
 
-    // æ›´æ–°æ•°æ®åº“
+    // ¸üĞÂÊı¾İ¿â
     await ProductWeblink.update(
       { cpc_files: JSON.stringify(cpcFiles) },
       { where: { id: id } }
@@ -1430,71 +1430,71 @@ router.delete('/cpc-file/:id/:fileUid', async (req, res) => {
 
     res.json({
       code: 0,
-      message: 'æ–‡ä»¶åˆ é™¤æˆåŠŸ'
+      message: 'ÎÄ¼şÉ¾³ı³É¹¦'
     });
 
   } catch (error) {
-    console.error('åˆ é™¤CPCæ–‡ä»¶å¤±è´¥:', error);
+    console.error('É¾³ıCPCÎÄ¼şÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æœåŠ¡å™¨é”™è¯¯: ' + error.message
+      message: '·şÎñÆ÷´íÎó: ' + error.message
     });
   }
 });
 
-// CPCä¿¡æ¯æå–å‡½æ•°
+// CPCĞÅÏ¢ÌáÈ¡º¯Êı
 async function extractCpcInfo(pdfText) {
   try {
     const result = { styleNumber: '', recommendAge: '' };
     
-    // é¦–å…ˆæ£€æŸ¥æ˜¯å¦ä¸ºCHILDREN'S PRODUCT CERTIFICATEæ–‡ä»¶
+    // Ê×ÏÈ¼ì²éÊÇ·ñÎªCHILDREN'S PRODUCT CERTIFICATEÎÄ¼ş
     const isCpcCertificate = pdfText.includes("CHILDREN'S PRODUCT CERTIFICATE") || 
                            pdfText.includes("CHILDREN'S PRODUCT CERTIFICATE") ||
                            pdfText.includes("CHILDRENS PRODUCT CERTIFICATE");
     
     if (!isCpcCertificate) {
-      console.log("ğŸ“„ éCHILDREN'S PRODUCT CERTIFICATEæ–‡ä»¶ï¼Œè·³è¿‡ä¿¡æ¯æå–");
-      return result; // è¿”å›ç©ºç»“æœ
+      console.log("?? ·ÇCHILDREN'S PRODUCT CERTIFICATEÎÄ¼ş£¬Ìø¹ıĞÅÏ¢ÌáÈ¡");
+      return result; // ·µ»Ø¿Õ½á¹û
     }
     
-    console.log("ğŸ“‹ æ£€æµ‹åˆ°CHILDREN'S PRODUCT CERTIFICATEæ–‡ä»¶ï¼Œå¼€å§‹æå–ä¿¡æ¯...");
+    console.log("?? ¼ì²âµ½CHILDREN'S PRODUCT CERTIFICATEÎÄ¼ş£¬¿ªÊ¼ÌáÈ¡ĞÅÏ¢...");
     
-    // æå–Style Numberï¼ˆåœ¨"Model"åé¢ï¼‰
+    // ÌáÈ¡Style Number£¨ÔÚ"Model"ºóÃæ£©
     const modelMatch = pdfText.match(/Model[:\s]*([A-Z0-9]+)/i);
     if (modelMatch) {
       result.styleNumber = modelMatch[1].trim();
     }
     
-    // æå–æ¨èå¹´é¾„ï¼ˆåœ¨"Age grading"åé¢ï¼‰
+    // ÌáÈ¡ÍÆ¼öÄêÁä£¨ÔÚ"Age grading"ºóÃæ£©
     const ageMatch = pdfText.match(/Age\s+grading[:\s]*([^\n\r]+)/i);
     if (ageMatch) {
       result.recommendAge = ageMatch[1].trim();
     }
     
-    console.log('ğŸ” CPCè¯ä¹¦ä¿¡æ¯æå–ç»“æœ:', result);
+    console.log('?? CPCÖ¤ÊéĞÅÏ¢ÌáÈ¡½á¹û:', result);
     return result;
     
   } catch (error) {
-    console.error('CPCä¿¡æ¯æå–å¤±è´¥:', error);
+    console.error('CPCĞÅÏ¢ÌáÈ¡Ê§°Ü:', error);
     return { styleNumber: '', recommendAge: '' };
   }
 }
 
-// CPCæ–‡ä»¶ä»£ç†ä¸‹è½½æ¥å£
+// CPCÎÄ¼ş´úÀíÏÂÔØ½Ó¿Ú
 router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
   try {
     const { recordId, fileUid } = req.params;
     
-    // æ£€æŸ¥è®°å½•æ˜¯å¦å­˜åœ¨
+    // ¼ì²é¼ÇÂ¼ÊÇ·ñ´æÔÚ
     const record = await ProductWeblink.findByPk(recordId);
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: 'è®°å½•ä¸å­˜åœ¨'
+        message: '¼ÇÂ¼²»´æÔÚ'
       });
     }
 
-    // è·å–CPCæ–‡ä»¶åˆ—è¡¨
+    // »ñÈ¡CPCÎÄ¼şÁĞ±í
     let cpcFiles = [];
     if (record.cpc_files) {
       try {
@@ -1507,17 +1507,17 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
       }
     }
 
-    // æ‰¾åˆ°è¦ä¸‹è½½çš„æ–‡ä»¶
+    // ÕÒµ½ÒªÏÂÔØµÄÎÄ¼ş
     const file = cpcFiles.find(f => f.uid === fileUid);
     if (!file || !file.objectName) {
       return res.status(404).json({
         code: 1,
-        message: 'æ–‡ä»¶ä¸å­˜åœ¨'
+        message: 'ÎÄ¼ş²»´æÔÚ'
       });
     }
 
     try {
-      // ç›´æ¥ä½¿ç”¨OSSå®¢æˆ·ç«¯è·å–æ–‡ä»¶
+      // Ö±½ÓÊ¹ÓÃOSS¿Í»§¶Ë»ñÈ¡ÎÄ¼ş
       const OSS = require('ali-oss');
       const client = new OSS({
         region: process.env.OSS_REGION,
@@ -1527,24 +1527,24 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
         endpoint: process.env.OSS_ENDPOINT
       });
       
-      console.log('æ­£åœ¨è·å–OSSæ–‡ä»¶:', file.objectName);
+      console.log('ÕıÔÚ»ñÈ¡OSSÎÄ¼ş:', file.objectName);
       
-      // ç›´æ¥è·å–æ–‡ä»¶å†…å®¹
+      // Ö±½Ó»ñÈ¡ÎÄ¼şÄÚÈİ
       const result = await client.get(file.objectName);
       
-      // è®¾ç½®å“åº”å¤´ - å®‰å…¨å¤„ç†æ–‡ä»¶å
-      const rawFileName = file.name || 'CPCæ–‡ä»¶.pdf';
-      // æ¸…ç†æ–‡ä»¶åï¼Œç§»é™¤æ‰€æœ‰å¯èƒ½å¯¼è‡´HTTPå¤´éƒ¨é—®é¢˜çš„å­—ç¬¦
+      // ÉèÖÃÏìÓ¦Í· - °²È«´¦ÀíÎÄ¼şÃû
+      const rawFileName = file.name || 'CPCÎÄ¼ş.pdf';
+      // ÇåÀíÎÄ¼şÃû£¬ÒÆ³ıËùÓĞ¿ÉÄÜµ¼ÖÂHTTPÍ·²¿ÎÊÌâµÄ×Ö·û
       const cleanFileName = rawFileName
-        .replace(/[\r\n\t]/g, '') // ç§»é™¤å›è½¦ã€æ¢è¡Œã€åˆ¶è¡¨ç¬¦
-        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // åªä¿ç•™å¯æ‰“å°ASCIIå­—ç¬¦å’Œä¸­æ–‡å­—ç¬¦
+        .replace(/[\r\n\t]/g, '') // ÒÆ³ı»Ø³µ¡¢»»ĞĞ¡¢ÖÆ±í·û
+        .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '') // Ö»±£Áô¿É´òÓ¡ASCII×Ö·ûºÍÖĞÎÄ×Ö·û
         .trim();
       
       const safeFileName = cleanFileName || `cpc_${fileUid}.pdf`;
       const encodedFileName = encodeURIComponent(safeFileName);
       
-      // è®¾ç½®å®‰å…¨çš„å“åº”å¤´
-      // æ£€æŸ¥æ˜¯å¦ä¸ºä¸‹è½½è¯·æ±‚ï¼ˆé€šè¿‡æŸ¥è¯¢å‚æ•°åˆ¤æ–­ï¼‰
+      // ÉèÖÃ°²È«µÄÏìÓ¦Í·
+      // ¼ì²éÊÇ·ñÎªÏÂÔØÇëÇó£¨Í¨¹ı²éÑ¯²ÎÊıÅĞ¶Ï£©
       const isDownload = req.query.download === 'true';
       
       res.set({
@@ -1561,20 +1561,20 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
         'X-XSS-Protection': '1; mode=block'
       });
       
-      // è¿”å›æ–‡ä»¶å†…å®¹
+      // ·µ»ØÎÄ¼şÄÚÈİ
       res.send(result.content);
-      console.log(`âœ… CPCæ–‡ä»¶ä»£ç†ä¸‹è½½æˆåŠŸ: ${file.name}`);
+      console.log(`? CPCÎÄ¼ş´úÀíÏÂÔØ³É¹¦: ${file.name}`);
       
     } catch (ossError) {
-      console.error('OSSä¸‹è½½é”™è¯¯:', ossError);
-      // æ ¹æ®é”™è¯¯ç±»å‹æä¾›æ›´è¯¦ç»†çš„é”™è¯¯ä¿¡æ¯
-      let errorMessage = 'OSSè®¿é—®å¤±è´¥';
+      console.error('OSSÏÂÔØ´íÎó:', ossError);
+      // ¸ù¾İ´íÎóÀàĞÍÌá¹©¸üÏêÏ¸µÄ´íÎóĞÅÏ¢
+      let errorMessage = 'OSS·ÃÎÊÊ§°Ü';
       if (ossError.code === 'NoSuchKey') {
-        errorMessage = 'æ–‡ä»¶ä¸å­˜åœ¨æˆ–å·²è¢«åˆ é™¤';
+        errorMessage = 'ÎÄ¼ş²»´æÔÚ»òÒÑ±»É¾³ı';
       } else if (ossError.code === 'AccessDenied') {
-        errorMessage = 'OSSè®¿é—®æƒé™ä¸è¶³ï¼Œè¯·è”ç³»ç®¡ç†å‘˜';
+        errorMessage = 'OSS·ÃÎÊÈ¨ÏŞ²»×ã£¬ÇëÁªÏµ¹ÜÀíÔ±';
       } else if (ossError.message) {
-        errorMessage = `OSSé”™è¯¯: ${ossError.message}`;
+        errorMessage = `OSS´íÎó: ${ossError.message}`;
       }
       
       res.status(500).json({
@@ -1584,48 +1584,48 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
     }
 
   } catch (error) {
-    console.error('CPCæ–‡ä»¶ä»£ç†ä¸‹è½½å¤±è´¥:', error);
+    console.error('CPCÎÄ¼ş´úÀíÏÂÔØÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æœåŠ¡å™¨é”™è¯¯: ' + error.message
+      message: '·şÎñÆ÷´íÎó: ' + error.message
     });
   }
 });
 
 
 
-// äºšé©¬é€Šæ¨¡æ¿ç®¡ç† - é€šç”¨API
-// ä¸Šä¼ äºšé©¬é€Šèµ„æ–™æ¨¡æ¿
+// ÑÇÂíÑ·Ä£°å¹ÜÀí - Í¨ÓÃAPI
+// ÉÏ´«ÑÇÂíÑ·×ÊÁÏÄ£°å
 router.post('/amazon-templates/upload', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('ğŸ“¤ æ”¶åˆ°äºšé©¬é€Šæ¨¡æ¿ä¸Šä¼ è¯·æ±‚');
+    console.log('?? ÊÕµ½ÑÇÂíÑ·Ä£°åÉÏ´«ÇëÇó');
     
     if (!req.file) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©è¦ä¸Šä¼ çš„æ–‡ä»¶' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÒªÉÏ´«µÄÎÄ¼ş' });
     }
 
     const { country } = req.body;
     if (!country) {
-      return res.status(400).json({ message: 'è¯·æŒ‡å®šç«™ç‚¹' });
+      return res.status(400).json({ message: 'ÇëÖ¸¶¨Õ¾µã' });
     }
 
-    console.log(`ğŸ“‹ æ–‡ä»¶ä¿¡æ¯: ${req.file.originalname}, å¤§å°: ${req.file.size} å­—èŠ‚, ç«™ç‚¹: ${country}`);
+    console.log(`?? ÎÄ¼şĞÅÏ¢: ${req.file.originalname}, ´óĞ¡: ${req.file.size} ×Ö½Ú, Õ¾µã: ${country}`);
 
-    // éªŒè¯æ–‡ä»¶ç±»å‹
+    // ÑéÖ¤ÎÄ¼şÀàĞÍ
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ];
     
     if (!validTypes.includes(req.file.mimetype) && !req.file.originalname.match(/\.(xlsx)$/i)) {
-      return res.status(400).json({ message: 'è¯·ä¸Šä¼ æœ‰æ•ˆçš„Excelæ–‡ä»¶ï¼ˆä»…æ”¯æŒ.xlsxæ ¼å¼ï¼‰' });
+      return res.status(400).json({ message: 'ÇëÉÏ´«ÓĞĞ§µÄExcelÎÄ¼ş£¨½öÖ§³Ö.xlsx¸ñÊ½£©' });
     }
 
-    // ä½¿ç”¨OSSä¸Šä¼ æ¨¡æ¿åŠŸèƒ½
+    // Ê¹ÓÃOSSÉÏ´«Ä£°å¹¦ÄÜ
     const { uploadTemplateToOSS } = require('../utils/oss');
     
     const originalFileName = req.body.originalFileName || req.file.originalname;
-    console.log('ğŸ“ ä½¿ç”¨æ–‡ä»¶å:', originalFileName);
+    console.log('?? Ê¹ÓÃÎÄ¼şÃû:', originalFileName);
     
     const uploadResult = await uploadTemplateToOSS(
       req.file.buffer, 
@@ -1636,10 +1636,10 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     );
 
     if (!uploadResult.success) {
-      return res.status(500).json({ message: 'æ¨¡æ¿æ–‡ä»¶ä¸Šä¼ å¤±è´¥' });
+      return res.status(500).json({ message: 'Ä£°åÎÄ¼şÉÏ´«Ê§°Ü' });
     }
 
-    // ä¿å­˜æ¨¡æ¿ä¿¡æ¯åˆ°æ•°æ®åº“
+    // ±£´æÄ£°åĞÅÏ¢µ½Êı¾İ¿â
     let templateLink = null;
     try {
       templateLink = await TemplateLink.create({
@@ -1653,16 +1653,16 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
         is_active: true
       });
       
-      console.log(`ğŸ“Š æ¨¡æ¿ä¿¡æ¯å·²ä¿å­˜åˆ°æ•°æ®åº“ï¼ŒID: ${templateLink.id}`);
+      console.log(`?? Ä£°åĞÅÏ¢ÒÑ±£´æµ½Êı¾İ¿â£¬ID: ${templateLink.id}`);
     } catch (dbError) {
-      console.warn('âš ï¸ ä¿å­˜æ¨¡æ¿ä¿¡æ¯åˆ°æ•°æ®åº“å¤±è´¥:', dbError.message);
-      // ä¸é˜»æ–­ä¸Šä¼ æµç¨‹ï¼Œåªæ˜¯è­¦å‘Š
+      console.warn('?? ±£´æÄ£°åĞÅÏ¢µ½Êı¾İ¿âÊ§°Ü:', dbError.message);
+      // ²»×è¶ÏÉÏ´«Á÷³Ì£¬Ö»ÊÇ¾¯¸æ
     }
 
     const uploadTime = Date.now() - startTime;
-    console.log(`âœ… ä¸Šä¼ å®Œæˆï¼Œè€—æ—¶: ${uploadTime}ms`);
+    console.log(`? ÉÏ´«Íê³É£¬ºÄÊ±: ${uploadTime}ms`);
 
-    // æ„å»ºå“åº”æ•°æ®
+    // ¹¹½¨ÏìÓ¦Êı¾İ
     const responseData = {
       fileName: uploadResult.originalName,
       url: uploadResult.url,
@@ -1673,25 +1673,25 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
       processingTime: uploadTime
     };
 
-    // åªæœ‰å½“æ¨¡æ¿ä¿¡æ¯æˆåŠŸä¿å­˜åˆ°æ•°æ®åº“æ—¶æ‰è¿”å›templateId
+    // Ö»ÓĞµ±Ä£°åĞÅÏ¢³É¹¦±£´æµ½Êı¾İ¿âÊ±²Å·µ»ØtemplateId
     if (templateLink && templateLink.id) {
       responseData.templateId = templateLink.id;
     }
 
     res.json({
-      message: `${country}ç«™ç‚¹èµ„æ–™è¡¨æ¨¡æ¿ä¸Šä¼ æˆåŠŸ`,
+      message: `${country}Õ¾µã×ÊÁÏ±íÄ£°åÉÏ´«³É¹¦`,
       data: responseData
     });
 
   } catch (error) {
     const uploadTime = Date.now() - startTime;
-    console.error(`âŒ ä¸Šä¼ äºšé©¬é€Šèµ„æ–™è¡¨æ¨¡æ¿å¤±è´¥ (è€—æ—¶: ${uploadTime}ms):`, error);
+    console.error(`? ÉÏ´«ÑÇÂíÑ·×ÊÁÏ±íÄ£°åÊ§°Ü (ºÄÊ±: ${uploadTime}ms):`, error);
     
-    let errorMessage = 'ä¸Šä¼ å¤±è´¥: ' + error.message;
+    let errorMessage = 'ÉÏ´«Ê§°Ü: ' + error.message;
     if (error.code === 'RequestTimeout') {
-      errorMessage = 'ä¸Šä¼ è¶…æ—¶ï¼Œè¯·æ£€æŸ¥ç½‘ç»œè¿æ¥åé‡è¯•';
+      errorMessage = 'ÉÏ´«³¬Ê±£¬Çë¼ì²éÍøÂçÁ¬½ÓºóÖØÊÔ';
     } else if (error.code === 'AccessDenied') {
-      errorMessage = 'OSSè®¿é—®æƒé™ä¸è¶³ï¼Œè¯·è”ç³»ç®¡ç†å‘˜';
+      errorMessage = 'OSS·ÃÎÊÈ¨ÏŞ²»×ã£¬ÇëÁªÏµ¹ÜÀíÔ±';
     }
     
     res.status(500).json({ 
@@ -1701,14 +1701,14 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
   }
 });
 
-// è·å–äºšé©¬é€Šæ¨¡æ¿åˆ—è¡¨
+// »ñÈ¡ÑÇÂíÑ·Ä£°åÁĞ±í
 router.get('/amazon-templates', async (req, res) => {
   try {
     const { country } = req.query;
     
-    console.log(`ğŸ“‹ ä»æ•°æ®åº“è·å–äºšé©¬é€Šæ¨¡æ¿åˆ—è¡¨ï¼Œç«™ç‚¹: ${country || 'å…¨éƒ¨'}`);
+    console.log(`?? ´ÓÊı¾İ¿â»ñÈ¡ÑÇÂíÑ·Ä£°åÁĞ±í£¬Õ¾µã: ${country || 'È«²¿'}`);
     
-    // æ„å»ºæŸ¥è¯¢æ¡ä»¶
+    // ¹¹½¨²éÑ¯Ìõ¼ş
     const whereConditions = {
       template_type: 'amazon',
       is_active: true
@@ -1718,13 +1718,13 @@ router.get('/amazon-templates', async (req, res) => {
       whereConditions.country = country;
     }
     
-    // ä»æ•°æ®åº“æŸ¥è¯¢æ¨¡æ¿åˆ—è¡¨
+    // ´ÓÊı¾İ¿â²éÑ¯Ä£°åÁĞ±í
     const templateLinks = await TemplateLink.findAll({
       where: whereConditions,
       order: [['upload_time', 'DESC']]
     });
 
-    // è½¬æ¢ä¸ºå‰ç«¯éœ€è¦çš„æ ¼å¼
+    // ×ª»»ÎªÇ°¶ËĞèÒªµÄ¸ñÊ½
     const files = templateLinks.map(template => ({
       name: template.oss_object_name,
       fileName: template.file_name,
@@ -1735,29 +1735,29 @@ router.get('/amazon-templates', async (req, res) => {
       id: template.id
     }));
 
-    console.log(`ğŸ“Š ä»æ•°æ®åº“æ‰¾åˆ° ${files.length} ä¸ªæ¨¡æ¿æ–‡ä»¶`);
+    console.log(`?? ´ÓÊı¾İ¿âÕÒµ½ ${files.length} ¸öÄ£°åÎÄ¼ş`);
 
     res.json({
-      message: 'è·å–æˆåŠŸ',
+      message: '»ñÈ¡³É¹¦',
       data: files,
       count: files.length
     });
 
   } catch (error) {
-    console.error('ä»æ•°æ®åº“è·å–äºšé©¬é€Šæ¨¡æ¿åˆ—è¡¨å¤±è´¥:', error);
-    res.status(500).json({ message: 'è·å–æ¨¡æ¿åˆ—è¡¨å¤±è´¥: ' + error.message });
+    console.error('´ÓÊı¾İ¿â»ñÈ¡ÑÇÂíÑ·Ä£°åÁĞ±íÊ§°Ü:', error);
+    res.status(500).json({ message: '»ñÈ¡Ä£°åÁĞ±íÊ§°Ü: ' + error.message });
   }
 });
 
-// ä¸‹è½½äºšé©¬é€Šæ¨¡æ¿
+// ÏÂÔØÑÇÂíÑ·Ä£°å
 router.get('/amazon-templates/download/:objectName*', async (req, res) => {
   try {
     const objectName = req.params.objectName + (req.params[0] || '');
     
-    console.log(`ğŸ”½ æ”¶åˆ°ä¸‹è½½è¯·æ±‚: ${objectName}`);
+    console.log(`?? ÊÕµ½ÏÂÔØÇëÇó: ${objectName}`);
     
     if (!objectName) {
-      return res.status(400).json({ message: 'ç¼ºå°‘æ–‡ä»¶åå‚æ•°' });
+      return res.status(400).json({ message: 'È±ÉÙÎÄ¼şÃû²ÎÊı' });
     }
 
     const { downloadTemplateFromOSS } = require('../utils/oss');
@@ -1765,13 +1765,13 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     const result = await downloadTemplateFromOSS(objectName);
     
     if (!result.success) {
-      console.error(`âŒ ä¸‹è½½å¤±è´¥: ${result.message}`);
-      return res.status(404).json({ message: result.message || 'æ¨¡æ¿æ–‡ä»¶ä¸å­˜åœ¨' });
+      console.error(`? ÏÂÔØÊ§°Ü: ${result.message}`);
+      return res.status(404).json({ message: result.message || 'Ä£°åÎÄ¼ş²»´æÔÚ' });
     }
 
-    console.log(`ğŸ“¤ å‡†å¤‡å‘é€æ–‡ä»¶: ${result.fileName} (${result.size} å­—èŠ‚)`);
+    console.log(`?? ×¼±¸·¢ËÍÎÄ¼ş: ${result.fileName} (${result.size} ×Ö½Ú)`);
     
-    // è®¾ç½®å“åº”å¤´
+    // ÉèÖÃÏìÓ¦Í·
     res.setHeader('Content-Type', result.contentType);
     const encodedFileName = encodeURIComponent(result.fileName);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
@@ -1779,52 +1779,52 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
     
-    // å‘é€æ–‡ä»¶å†…å®¹
+    // ·¢ËÍÎÄ¼şÄÚÈİ
     if (Buffer.isBuffer(result.content)) {
       res.end(result.content);
     } else {
       res.end(Buffer.from(result.content));
     }
     
-    console.log(`âœ… æ–‡ä»¶ä¸‹è½½å®Œæˆ: ${result.fileName}`);
+    console.log(`? ÎÄ¼şÏÂÔØÍê³É: ${result.fileName}`);
 
   } catch (error) {
-    console.error('âŒ ä¸‹è½½äºšé©¬é€Šæ¨¡æ¿å¤±è´¥:', error);
-    res.status(500).json({ message: 'ä¸‹è½½å¤±è´¥: ' + error.message });
+    console.error('? ÏÂÔØÑÇÂíÑ·Ä£°åÊ§°Ü:', error);
+    res.status(500).json({ message: 'ÏÂÔØÊ§°Ü: ' + error.message });
   }
 });
 
-// åˆ é™¤äºšé©¬é€Šæ¨¡æ¿
+// É¾³ıÑÇÂíÑ·Ä£°å
 router.delete('/amazon-templates/:objectName*', async (req, res) => {
   try {
     const objectName = req.params.objectName + (req.params[0] || '');
     
-    console.log(`ğŸ—‘ï¸ æ”¶åˆ°åˆ é™¤è¯·æ±‚: ${objectName}`);
+    console.log(`??? ÊÕµ½É¾³ıÇëÇó: ${objectName}`);
     
     if (!objectName) {
-      return res.status(400).json({ message: 'ç¼ºå°‘æ–‡ä»¶åå‚æ•°' });
+      return res.status(400).json({ message: 'È±ÉÙÎÄ¼şÃû²ÎÊı' });
     }
 
     const { deleteTemplateFromOSS, backupTemplate } = require('../utils/oss');
     
-    // åˆ é™¤å‰å…ˆå¤‡ä»½
+    // É¾³ıÇ°ÏÈ±¸·İ
     try {
       await backupTemplate(objectName, 'amazon');
-      console.log('âœ… æ¨¡æ¿æ–‡ä»¶å·²å¤‡ä»½');
+      console.log('? Ä£°åÎÄ¼şÒÑ±¸·İ');
     } catch (backupError) {
-      console.warn('âš ï¸ æ¨¡æ¿æ–‡ä»¶å¤‡ä»½å¤±è´¥ï¼Œç»§ç»­åˆ é™¤æ“ä½œ:', backupError.message);
+      console.warn('?? Ä£°åÎÄ¼ş±¸·İÊ§°Ü£¬¼ÌĞøÉ¾³ı²Ù×÷:', backupError.message);
     }
     
     const result = await deleteTemplateFromOSS(objectName);
     
     if (!result.success) {
       return res.status(500).json({ 
-        message: result.message || 'åˆ é™¤å¤±è´¥',
+        message: result.message || 'É¾³ıÊ§°Ü',
         error: result.error 
       });
     }
 
-    // ä»æ•°æ®åº“ä¸­åˆ é™¤æ¨¡æ¿è®°å½•
+    // ´ÓÊı¾İ¿âÖĞÉ¾³ıÄ£°å¼ÇÂ¼
     try {
       const deletedCount = await TemplateLink.destroy({
         where: {
@@ -1833,41 +1833,41 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
       });
       
       if (deletedCount > 0) {
-        console.log(`ğŸ“Š å·²ä»æ•°æ®åº“åˆ é™¤ ${deletedCount} æ¡æ¨¡æ¿è®°å½•`);
+        console.log(`?? ÒÑ´ÓÊı¾İ¿âÉ¾³ı ${deletedCount} ÌõÄ£°å¼ÇÂ¼`);
       } else {
-        console.warn('âš ï¸ æ•°æ®åº“ä¸­æœªæ‰¾åˆ°å¯¹åº”çš„æ¨¡æ¿è®°å½•');
+        console.warn('?? Êı¾İ¿âÖĞÎ´ÕÒµ½¶ÔÓ¦µÄÄ£°å¼ÇÂ¼');
       }
     } catch (dbError) {
-      console.warn('âš ï¸ ä»æ•°æ®åº“åˆ é™¤æ¨¡æ¿è®°å½•å¤±è´¥:', dbError.message);
-      // ä¸é˜»æ–­åˆ é™¤æµç¨‹ï¼Œåªæ˜¯è­¦å‘Š
+      console.warn('?? ´ÓÊı¾İ¿âÉ¾³ıÄ£°å¼ÇÂ¼Ê§°Ü:', dbError.message);
+      // ²»×è¶ÏÉ¾³ıÁ÷³Ì£¬Ö»ÊÇ¾¯¸æ
     }
 
-    res.json({ message: 'æ¨¡æ¿åˆ é™¤æˆåŠŸ' });
+    res.json({ message: 'Ä£°åÉ¾³ı³É¹¦' });
 
   } catch (error) {
-    console.error('åˆ é™¤äºšé©¬é€Šæ¨¡æ¿å¤±è´¥:', error);
-    res.status(500).json({ message: 'åˆ é™¤å¤±è´¥: ' + error.message });
+    console.error('É¾³ıÑÇÂíÑ·Ä£°åÊ§°Ü:', error);
+    res.status(500).json({ message: 'É¾³ıÊ§°Ü: ' + error.message });
   }
 });
 
-// ==================== ç”Ÿæˆè‹±å›½èµ„æ–™è¡¨æ¥å£ ====================
+// ==================== Éú³ÉÓ¢¹ú×ÊÁÏ±í½Ó¿Ú ====================
 
-// ç”Ÿæˆè‹±å›½èµ„æ–™è¡¨
+// Éú³ÉÓ¢¹ú×ÊÁÏ±í
 router.post('/generate-uk-data-sheet', async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('ğŸ“‹ æ”¶åˆ°ç”Ÿæˆè‹±å›½èµ„æ–™è¡¨è¯·æ±‚');
+    console.log('?? ÊÕµ½Éú³ÉÓ¢¹ú×ÊÁÏ±íÇëÇó');
     
     const { parentSkus } = req.body;
     
     if (!Array.isArray(parentSkus) || parentSkus.length === 0) {
-      return res.status(400).json({ message: 'è¯·æä¾›è¦ç”Ÿæˆèµ„æ–™è¡¨çš„æ¯SKUåˆ—è¡¨' });
+      return res.status(400).json({ message: 'ÇëÌá¹©ÒªÉú³É×ÊÁÏ±íµÄÄ¸SKUÁĞ±í' });
     }
 
-    console.log(`ğŸ“ å¤„ç† ${parentSkus.length} ä¸ªæ¯SKU:`, parentSkus);
+    console.log(`?? ´¦Àí ${parentSkus.length} ¸öÄ¸SKU:`, parentSkus);
 
-    // æ­¥éª¤1: ä»æ•°æ®åº“è·å–è‹±å›½æ¨¡æ¿æ–‡ä»¶
-    console.log('ğŸ” ä»æ•°æ®åº“æŸ¥æ‰¾è‹±å›½æ¨¡æ¿æ–‡ä»¶...');
+    // ²½Öè1: ´ÓÊı¾İ¿â»ñÈ¡Ó¢¹úÄ£°åÎÄ¼ş
+    console.log('?? ´ÓÊı¾İ¿â²éÕÒÓ¢¹úÄ£°åÎÄ¼ş...');
     
     const ukTemplate = await TemplateLink.findOne({
       where: {
@@ -1879,29 +1879,29 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
     });
     
     if (!ukTemplate) {
-      return res.status(400).json({ message: 'æœªæ‰¾åˆ°è‹±å›½ç«™ç‚¹çš„èµ„æ–™æ¨¡æ¿ï¼Œè¯·å…ˆä¸Šä¼ è‹±å›½æ¨¡æ¿æ–‡ä»¶' });
+      return res.status(400).json({ message: 'Î´ÕÒµ½Ó¢¹úÕ¾µãµÄ×ÊÁÏÄ£°å£¬ÇëÏÈÉÏ´«Ó¢¹úÄ£°åÎÄ¼ş' });
     }
 
-    console.log(`ğŸ“„ ä½¿ç”¨è‹±å›½æ¨¡æ¿: ${ukTemplate.file_name} (ID: ${ukTemplate.id})`);
+    console.log(`?? Ê¹ÓÃÓ¢¹úÄ£°å: ${ukTemplate.file_name} (ID: ${ukTemplate.id})`);
 
-    // æ­¥éª¤2: ä¸‹è½½æ¨¡æ¿æ–‡ä»¶
-    console.log('ğŸ“¥ ä¸‹è½½è‹±å›½æ¨¡æ¿æ–‡ä»¶...');
+    // ²½Öè2: ÏÂÔØÄ£°åÎÄ¼ş
+    console.log('?? ÏÂÔØÓ¢¹úÄ£°åÎÄ¼ş...');
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(ukTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error('âŒ ä¸‹è½½è‹±å›½æ¨¡æ¿å¤±è´¥:', downloadResult.message);
+      console.error('? ÏÂÔØÓ¢¹úÄ£°åÊ§°Ü:', downloadResult.message);
       return res.status(500).json({ 
-        message: `ä¸‹è½½è‹±å›½æ¨¡æ¿å¤±è´¥: ${downloadResult.message}`,
+        message: `ÏÂÔØÓ¢¹úÄ£°åÊ§°Ü: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`âœ… è‹±å›½æ¨¡æ¿ä¸‹è½½æˆåŠŸ: ${downloadResult.fileName} (${downloadResult.size} å­—èŠ‚)`);
+    console.log(`? Ó¢¹úÄ£°åÏÂÔØ³É¹¦: ${downloadResult.fileName} (${downloadResult.size} ×Ö½Ú)`);
 
-    // æ­¥éª¤3: æŸ¥è¯¢sellerinventory_skuè¡¨è·å–å­SKUä¿¡æ¯
-    console.log('ğŸ” æŸ¥è¯¢å­SKUä¿¡æ¯...');
+    // ²½Öè3: ²éÑ¯sellerinventory_sku±í»ñÈ¡×ÓSKUĞÅÏ¢
+    console.log('?? ²éÑ¯×ÓSKUĞÅÏ¢...');
     const inventorySkus = await SellerInventorySku.findAll({
       where: {
         parent_sku: {
@@ -1913,48 +1913,48 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
     if (inventorySkus.length === 0) {
       return res.status(404).json({ 
-        message: 'åœ¨æ•°æ®åº“ä¸­æœªæ‰¾åˆ°è¿™äº›æ¯SKUå¯¹åº”çš„å­SKUä¿¡æ¯' 
+        message: 'ÔÚÊı¾İ¿âÖĞÎ´ÕÒµ½ÕâĞ©Ä¸SKU¶ÔÓ¦µÄ×ÓSKUĞÅÏ¢' 
       });
     }
 
-    console.log(`ğŸ“Š æ‰¾åˆ° ${inventorySkus.length} æ¡å­SKUè®°å½•`);
+    console.log(`?? ÕÒµ½ ${inventorySkus.length} Ìõ×ÓSKU¼ÇÂ¼`);
 
-    // æ­¥éª¤4: ä½¿ç”¨xlsxåº“å¤„ç†Excelæ–‡ä»¶ï¼ˆæ›´é«˜æ•ˆã€æ›´ç¨³å®šï¼‰
-    console.log('ğŸ“ å¼€å§‹ä½¿ç”¨xlsxåº“å¤„ç†Excelæ–‡ä»¶ï¼Œé«˜æ•ˆç¨³å®š...');
+    // ²½Öè4: Ê¹ÓÃxlsx¿â´¦ÀíExcelÎÄ¼ş£¨¸ü¸ßĞ§¡¢¸üÎÈ¶¨£©
+    console.log('?? ¿ªÊ¼Ê¹ÓÃxlsx¿â´¦ÀíExcelÎÄ¼ş£¬¸ßĞ§ÎÈ¶¨...');
     const XLSX = require('xlsx');
     
     try {
-      console.log(`ğŸ“Š å¼€å§‹åŠ è½½Excelæ–‡ä»¶ï¼Œæ–‡ä»¶å¤§å°: ${downloadResult.size} å­—èŠ‚`);
+      console.log(`?? ¿ªÊ¼¼ÓÔØExcelÎÄ¼ş£¬ÎÄ¼ş´óĞ¡: ${downloadResult.size} ×Ö½Ú`);
       
-      // ä½¿ç”¨xlsxè¯»å–å·¥ä½œç°¿ï¼ˆæ›´å¿«é€Ÿã€ç¨³å®šï¼‰
+      // Ê¹ÓÃxlsx¶ÁÈ¡¹¤×÷²¾£¨¸ü¿ìËÙ¡¢ÎÈ¶¨£©
       const workbook = XLSX.read(downloadResult.content, { 
         type: 'buffer',
-        cellStyles: true, // ä¿æŒæ ·å¼
-        cellNF: true,     // ä¿æŒæ•°å­—æ ¼å¼
-        cellDates: true   // å¤„ç†æ—¥æœŸ
+        cellStyles: true, // ±£³ÖÑùÊ½
+        cellNF: true,     // ±£³ÖÊı×Ö¸ñÊ½
+        cellDates: true   // ´¦ÀíÈÕÆÚ
       });
       
-      console.log('âœ… Excelæ–‡ä»¶åŠ è½½å®Œæˆ');
+      console.log('? ExcelÎÄ¼ş¼ÓÔØÍê³É');
       
-      // æ£€æŸ¥æ˜¯å¦æœ‰Templateå·¥ä½œè¡¨
+      // ¼ì²éÊÇ·ñÓĞTemplate¹¤×÷±í
       if (!workbook.Sheets['Template']) {
-        return res.status(400).json({ message: 'æ¨¡æ¿æ–‡ä»¶ä¸­æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨' });
+        return res.status(400).json({ message: 'Ä£°åÎÄ¼şÖĞÎ´ÕÒµ½Template¹¤×÷±í' });
       }
 
-      console.log('âœ… æˆåŠŸåŠ è½½Templateå·¥ä½œè¡¨');
+      console.log('? ³É¹¦¼ÓÔØTemplate¹¤×÷±í');
       
       const worksheet = workbook.Sheets['Template'];
       
-      // å°†å·¥ä½œè¡¨è½¬æ¢ä¸ºäºŒç»´æ•°ç»„ï¼Œä¾¿äºæ“ä½œ
+      // ½«¹¤×÷±í×ª»»Îª¶şÎ¬Êı×é£¬±ãÓÚ²Ù×÷
       const data = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1, // ä½¿ç”¨æ•°ç»„å½¢å¼
-        defval: '', // ç©ºå•å…ƒæ ¼é»˜è®¤å€¼
-        raw: false  // ä¿æŒåŸå§‹æ•°æ®æ ¼å¼
+        header: 1, // Ê¹ÓÃÊı×éĞÎÊ½
+        defval: '', // ¿Õµ¥Ôª¸ñÄ¬ÈÏÖµ
+        raw: false  // ±£³ÖÔ­Ê¼Êı¾İ¸ñÊ½
       });
       
-      console.log(`ğŸ“Š å·¥ä½œè¡¨æ•°æ®è¡Œæ•°: ${data.length}`);
+      console.log(`?? ¹¤×÷±íÊı¾İĞĞÊı: ${data.length}`);
 
-      // æŸ¥æ‰¾åˆ—ä½ç½®ï¼ˆåœ¨ç¬¬3è¡ŒæŸ¥æ‰¾æ ‡é¢˜ï¼Œç´¢å¼•ä¸º2ï¼‰
+      // ²éÕÒÁĞÎ»ÖÃ£¨ÔÚµÚ3ĞĞ²éÕÒ±êÌâ£¬Ë÷ÒıÎª2£©
       let itemSkuCol = -1;
       let colorNameCol = -1;
       let sizeNameCol = -1;
@@ -1970,10 +1970,11 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let variationThemeCol = -1;
       let countryOfOriginCol = -1;
       let areBatteriesIncludedCol = -1;
+    let importDesignationCol = -1;
       let conditionTypeCol = -1;
       let cpsiaCautionaryStatement1Col = -1;
       
-      if (data.length >= 3 && data[2]) { // ç¬¬3è¡Œï¼Œç´¢å¼•ä¸º2
+      if (data.length >= 3 && data[2]) { // µÚ3ĞĞ£¬Ë÷ÒıÎª2
         data[2].forEach((header, colIndex) => {
           if (header) {
             const cellValue = header.toString().toLowerCase();
@@ -2007,6 +2008,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
               countryOfOriginCol = colIndex;
             } else if (cellValue === 'are_batteries_included') {
               areBatteriesIncludedCol = colIndex;
+            } else if (cellValue === 'import_designation') {
+              importDesignationCol = colIndex;
             } else if (cellValue === 'condition_type') {
               conditionTypeCol = colIndex;
             } else if (cellValue === 'cpsia_cautionary_statement1' || cellValue === 'cpsia_cautionary_statement') {
@@ -2018,20 +2021,20 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
 
       if (itemSkuCol === -1 || colorNameCol === -1 || sizeNameCol === -1) {
         return res.status(400).json({ 
-          message: 'åœ¨æ¨¡æ¿ç¬¬3è¡Œä¸­æœªæ‰¾åˆ°å¿…éœ€çš„åˆ—ï¼šitem_skuã€color_nameã€size_name' 
+          message: 'ÔÚÄ£°åµÚ3ĞĞÖĞÎ´ÕÒµ½±ØĞèµÄÁĞ£ºitem_sku¡¢color_name¡¢size_name' 
         });
       }
 
-      console.log(`ğŸ“ æ‰¾åˆ°åŸºç¡€åˆ—ä½ç½® - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
-      console.log(`ğŸ“ æ‰¾åˆ°æ‰©å±•åˆ—ä½ç½® - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
-      console.log(`ğŸ“ æ‰¾åˆ°å…¶ä»–åˆ—ä½ç½® - model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
-      console.log(`ğŸ“ æ‰¾åˆ°å…³ç³»åˆ—ä½ç½® - parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
-      console.log(`ğŸ“ æ‰¾åˆ°å±æ€§åˆ—ä½ç½® - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}, cpsia_cautionary_statement1: ${cpsiaCautionaryStatement1Col}`);
+      console.log(`?? ÕÒµ½»ù´¡ÁĞÎ»ÖÃ - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+      console.log(`?? ÕÒµ½À©Õ¹ÁĞÎ»ÖÃ - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
+      console.log(`?? ÕÒµ½ÆäËûÁĞÎ»ÖÃ - model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
+      console.log(`?? ÕÒµ½¹ØÏµÁĞÎ»ÖÃ - parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
+      console.log(`?? ÕÒµ½ÊôĞÔÁĞÎ»ÖÃ - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}, cpsia_cautionary_statement1: ${cpsiaCautionaryStatement1Col}`);
 
-      // æ­¥éª¤5: å‡†å¤‡å¡«å†™æ•°æ®
-      console.log('âœï¸ å‡†å¤‡å¡«å†™æ•°æ®åˆ°Excel...');
+      // ²½Öè5: ×¼±¸ÌîĞ´Êı¾İ
+      console.log('?? ×¼±¸ÌîĞ´Êı¾İµ½Excel...');
       
-      // æŒ‰æ¯SKUåˆ†ç»„
+      // °´Ä¸SKU·Ö×é
       const skuGroups = {};
       inventorySkus.forEach(sku => {
         if (!skuGroups[sku.parent_sku]) {
@@ -2040,21 +2043,21 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         skuGroups[sku.parent_sku].push(sku);
       });
 
-      // ç¡®ä¿æ•°æ®æ•°ç»„æœ‰è¶³å¤Ÿçš„è¡Œ
+      // È·±£Êı¾İÊı×éÓĞ×ã¹»µÄĞĞ
       const totalRowsNeeded = 4 + Object.keys(skuGroups).reduce((total, parentSku) => {
-        return total + 1 + skuGroups[parentSku].length; // æ¯SKUè¡Œ + å­SKUè¡Œæ•°
+        return total + 1 + skuGroups[parentSku].length; // Ä¸SKUĞĞ + ×ÓSKUĞĞÊı
       }, 0);
 
-      // æ‰©å±•æ•°æ®æ•°ç»„
+      // À©Õ¹Êı¾İÊı×é
       while (data.length < totalRowsNeeded) {
         data.push([]);
       }
 
-      // ä»ç¬¬4è¡Œå¼€å§‹å¡«å†™æ•°æ®ï¼ˆç´¢å¼•ä¸º3ï¼‰
-      let currentRowIndex = 3; // ç¬¬4è¡Œå¼€å§‹ï¼Œç´¢å¼•ä¸º3
+      // ´ÓµÚ4ĞĞ¿ªÊ¼ÌîĞ´Êı¾İ£¨Ë÷ÒıÎª3£©
+      let currentRowIndex = 3; // µÚ4ĞĞ¿ªÊ¼£¬Ë÷ÒıÎª3
       
       Object.keys(skuGroups).forEach(parentSku => {
-        // è®¡ç®—éœ€è¦çš„æœ€å¤§åˆ—æ•°
+        // ¼ÆËãĞèÒªµÄ×î´óÁĞÊı
         const allColumns = [
           itemSkuCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
           externalProductIdTypeCol, modelCol, quantityCol, ageRangeDescriptionCol,
@@ -2063,7 +2066,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         ].filter(col => col !== -1);
         const maxCol = Math.max(...allColumns);
         
-        // ç¡®ä¿å½“å‰è¡Œæœ‰è¶³å¤Ÿçš„åˆ—
+        // È·±£µ±Ç°ĞĞÓĞ×ã¹»µÄÁĞ
         if (!data[currentRowIndex]) {
           data[currentRowIndex] = [];
         }
@@ -2071,29 +2074,30 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           data[currentRowIndex].push('');
         }
         
-        // å¡«å†™æ¯SKUä¿¡æ¯
+        // ÌîĞ´Ä¸SKUĞÅÏ¢
         data[currentRowIndex][itemSkuCol] = `UK${parentSku}`;
         data[currentRowIndex][colorNameCol] = '';
         data[currentRowIndex][sizeNameCol] = '';
         
-        // å¡«å†™æ¯SKUçš„æ–°å¢å­—æ®µ
+        // ÌîĞ´Ä¸SKUµÄĞÂÔö×Ö¶Î
         if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
         if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
-        if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // æ¯SKUç•™ç©º
+        if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // Ä¸SKUÁô¿Õ
         if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
-        if (quantityCol !== -1) data[currentRowIndex][quantityCol] = ''; // æ¯SKUç•™ç©º
+        if (quantityCol !== -1) data[currentRowIndex][quantityCol] = ''; // Ä¸SKUÁô¿Õ
         if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = 'Child';
         if (parentChildCol !== -1) data[currentRowIndex][parentChildCol] = 'Parent';
-        if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = ''; // æ¯SKUç•™ç©º
-        if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = ''; // æ¯SKUç•™ç©º
-        if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = 'SizeName-ColorName'; // æ¯SKUä¹Ÿå¡«å†™SizeName-ColorName
+        if (parentSkuCol !== -1) data[currentRowIndex][parentSkuCol] = ''; // Ä¸SKUÁô¿Õ
+        if (relationshipTypeCol !== -1) data[currentRowIndex][relationshipTypeCol] = ''; // Ä¸SKUÁô¿Õ
+        if (variationThemeCol !== -1) data[currentRowIndex][variationThemeCol] = 'SizeName-ColorName'; // Ä¸SKUÒ²ÌîĞ´SizeName-ColorName
         if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = 'China';
         if (areBatteriesIncludedCol !== -1) data[currentRowIndex][areBatteriesIncludedCol] = 'No';
+        if (importDesignationCol !== -1) data[currentRowIndex][importDesignationCol] = 'Imported';
         if (conditionTypeCol !== -1) data[currentRowIndex][conditionTypeCol] = 'New';
         
         currentRowIndex++;
         
-        // å¡«å†™å­SKUè¡Œ
+        // ÌîĞ´×ÓSKUĞĞ
         skuGroups[parentSku].forEach(childSku => {
           if (!data[currentRowIndex]) {
             data[currentRowIndex] = [];
@@ -2106,7 +2110,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           data[currentRowIndex][colorNameCol] = childSku.sellercolorname || '';
           data[currentRowIndex][sizeNameCol] = childSku.sellersizename || '';
           
-          // å¡«å†™å­SKUçš„æ–°å¢å­—æ®µ
+          // ÌîĞ´×ÓSKUµÄĞÂÔö×Ö¶Î
           if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
           if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
           if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = 'GCID';
@@ -2126,13 +2130,13 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         });
       });
 
-      console.log(`ğŸ“Š å¡«å†™å®Œæˆï¼Œå…±å¡«å†™äº† ${currentRowIndex - 3} è¡Œæ•°æ®`);
+      console.log(`?? ÌîĞ´Íê³É£¬¹²ÌîĞ´ÁË ${currentRowIndex - 3} ĞĞÊı¾İ`);
 
-      // æ­¥éª¤6: å°†æ•°æ®é‡æ–°è½¬æ¢ä¸ºå·¥ä½œè¡¨
-      console.log('ğŸ’¾ ç”ŸæˆExcelæ–‡ä»¶...');
+      // ²½Öè6: ½«Êı¾İÖØĞÂ×ª»»Îª¹¤×÷±í
+      console.log('?? Éú³ÉExcelÎÄ¼ş...');
       const newWorksheet = XLSX.utils.aoa_to_sheet(data);
       
-      // ä¿æŒåŸå§‹å·¥ä½œè¡¨çš„åˆ—å®½ç­‰å±æ€§
+      // ±£³ÖÔ­Ê¼¹¤×÷±íµÄÁĞ¿íµÈÊôĞÔ
       if (worksheet['!cols']) {
         newWorksheet['!cols'] = worksheet['!cols'];
       }
@@ -2143,10 +2147,10 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         newWorksheet['!merges'] = worksheet['!merges'];
       }
       
-      // æ›´æ–°å·¥ä½œç°¿
+      // ¸üĞÂ¹¤×÷²¾
       workbook.Sheets['Template'] = newWorksheet;
       
-      // ç”ŸæˆExcelæ–‡ä»¶buffer
+      // Éú³ÉExcelÎÄ¼şbuffer
       const excelBuffer = XLSX.write(workbook, { 
         type: 'buffer', 
         bookType: 'xlsx',
@@ -2154,37 +2158,37 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       });
 
       const processingTime = Date.now() - startTime;
-      console.log(`âœ… è‹±å›½èµ„æ–™è¡¨ç”Ÿæˆå®Œæˆï¼Œè€—æ—¶: ${processingTime}ms`);
+      console.log(`? Ó¢¹ú×ÊÁÏ±íÉú³ÉÍê³É£¬ºÄÊ±: ${processingTime}ms`);
 
-      // è®¾ç½®å“åº”å¤´ - ä½¿ç”¨æ–°çš„å‘½åæ ¼å¼ï¼šUK_æ¯SKU1_æ¯SKU2
+      // ÉèÖÃÏìÓ¦Í· - Ê¹ÓÃĞÂµÄÃüÃû¸ñÊ½£ºUK_Ä¸SKU1_Ä¸SKU2
       const skuList = parentSkus.join('_');
       const fileName = `UK_${skuList}.xlsx`;
       
-      console.log(`ğŸ“ ç”Ÿæˆçš„æ–‡ä»¶å: ${fileName}`);
-      console.log(`ğŸ“‹ æ¯SKUåˆ—è¡¨: ${JSON.stringify(parentSkus)}`);
+      console.log(`?? Éú³ÉµÄÎÄ¼şÃû: ${fileName}`);
+      console.log(`?? Ä¸SKUÁĞ±í: ${JSON.stringify(parentSkus)}`);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.setHeader('Content-Length', excelBuffer.length);
       
-      console.log(`ğŸŒ è®¾ç½®çš„Content-Disposition: attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+      console.log(`?? ÉèÖÃµÄContent-Disposition: attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       
       res.send(excelBuffer);
 
     } catch (error) {
-      console.error('âŒ Excelæ–‡ä»¶å¤„ç†å¤±è´¥:', error.message);
+      console.error('? ExcelÎÄ¼ş´¦ÀíÊ§°Ü:', error.message);
       throw error;
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    console.error(`âŒ ç”Ÿæˆè‹±å›½èµ„æ–™è¡¨å¤±è´¥ (è€—æ—¶: ${processingTime}ms):`, error);
+    console.error(`? Éú³ÉÓ¢¹ú×ÊÁÏ±íÊ§°Ü (ºÄÊ±: ${processingTime}ms):`, error);
     
-    let errorMessage = 'ç”Ÿæˆå¤±è´¥: ' + error.message;
+    let errorMessage = 'Éú³ÉÊ§°Ü: ' + error.message;
     if (error.code === 'ENOTFOUND') {
-      errorMessage = 'ç½‘ç»œè¿æ¥å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œè®¾ç½®';
+      errorMessage = 'ÍøÂçÁ¬½ÓÊ§°Ü£¬Çë¼ì²éÍøÂçÉèÖÃ';
     } else if (error.code === 'AccessDenied') {
-      errorMessage = 'OSSè®¿é—®æƒé™ä¸è¶³ï¼Œè¯·è”ç³»ç®¡ç†å‘˜';
+      errorMessage = 'OSS·ÃÎÊÈ¨ÏŞ²»×ã£¬ÇëÁªÏµ¹ÜÀíÔ±';
     }
     
     res.status(500).json({ 
@@ -2194,34 +2198,34 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
   }
 });
 
-// ==================== ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨æ¥å£ ====================
+// ==================== Éú³ÉÆäËûÕ¾µã×ÊÁÏ±í½Ó¿Ú ====================
 
-// æ£€æŸ¥å…¶ä»–ç«™ç‚¹æ¨¡æ¿åˆ—å·®å¼‚
+// ¼ì²éÆäËûÕ¾µãÄ£°åÁĞ²îÒì
 router.post('/check-other-site-template', upload.single('file'), async (req, res) => {
   try {
-    console.log('ğŸ” æ”¶åˆ°æ£€æŸ¥å…¶ä»–ç«™ç‚¹æ¨¡æ¿åˆ—å·®å¼‚è¯·æ±‚');
+    console.log('?? ÊÕµ½¼ì²éÆäËûÕ¾µãÄ£°åÁĞ²îÒìÇëÇó');
     
     const { country } = req.body;
     const uploadedFile = req.file;
     
     if (!country || !uploadedFile) {
-      return res.status(400).json({ message: 'è¯·æä¾›å›½å®¶ä¿¡æ¯å’ŒExcelæ–‡ä»¶' });
+      return res.status(400).json({ message: 'ÇëÌá¹©¹ú¼ÒĞÅÏ¢ºÍExcelÎÄ¼ş' });
     }
 
-    // è§£æä¸Šä¼ çš„Excelæ–‡ä»¶
+    // ½âÎöÉÏ´«µÄExcelÎÄ¼ş
     const workbook = xlsx.read(uploadedFile.buffer);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 3) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«å‰3è¡Œï¼ˆç¬¬3è¡Œä¸ºæ ‡é¢˜è¡Œï¼‰' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬Ç°3ĞĞ£¨µÚ3ĞĞÎª±êÌâĞĞ£©' });
     }
 
-    // è·å–ä¸Šä¼ æ–‡ä»¶çš„åˆ—ï¼ˆç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œï¼Œç´¢å¼•ä¸º2ï¼‰
+    // »ñÈ¡ÉÏ´«ÎÄ¼şµÄÁĞ£¨µÚ3ĞĞÊÇ±êÌâĞĞ£¬Ë÷ÒıÎª2£©
     const uploadedColumns = jsonData[2] ? jsonData[2].filter(col => col && col.toString().trim()) : [];
     
-    // è·å–ç›®æ ‡å›½å®¶çš„æ¨¡æ¿æ–‡ä»¶
+    // »ñÈ¡Ä¿±ê¹ú¼ÒµÄÄ£°åÎÄ¼ş
     const countryTemplate = await TemplateLink.findOne({
       where: {
         template_type: 'amazon',
@@ -2232,20 +2236,20 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `æœªæ‰¾åˆ°${country}ç«™ç‚¹çš„èµ„æ–™æ¨¡æ¿ï¼Œè¯·å…ˆä¸Šä¼ ${country}æ¨¡æ¿æ–‡ä»¶` });
+      return res.status(400).json({ message: `Î´ÕÒµ½${country}Õ¾µãµÄ×ÊÁÏÄ£°å£¬ÇëÏÈÉÏ´«${country}Ä£°åÎÄ¼ş` });
     }
 
-    // ä¸‹è½½å¹¶è§£ææ¨¡æ¿æ–‡ä»¶
+    // ÏÂÔØ²¢½âÎöÄ£°åÎÄ¼ş
     const { downloadTemplateFromOSS } = require('../utils/oss');
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
       return res.status(500).json({ 
-        message: `ä¸‹è½½${country}æ¨¡æ¿å¤±è´¥: ${downloadResult.message}`
+        message: `ÏÂÔØ${country}Ä£°åÊ§°Ü: ${downloadResult.message}`
       });
     }
 
-    // è§£ææ¨¡æ¿æ–‡ä»¶çš„åˆ—ï¼ˆç¬¬3è¡Œï¼‰
+    // ½âÎöÄ£°åÎÄ¼şµÄÁĞ£¨µÚ3ĞĞ£©
     const templateWorkbook = xlsx.read(downloadResult.content);
     const templateSheetName = templateWorkbook.SheetNames[0];
     const templateWorksheet = templateWorkbook.Sheets[templateSheetName];
@@ -2254,7 +2258,7 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     const templateColumns = templateData.length >= 3 && templateData[2] ? 
       templateData[2].filter(col => col && col.toString().trim()) : [];
 
-    // æ£€æŸ¥ç¼ºå¤±çš„åˆ—
+    // ¼ì²éÈ±Ê§µÄÁĞ
     const missingColumns = uploadedColumns.filter(col => 
       !templateColumns.some(templateCol => 
         templateCol.toString().toLowerCase() === col.toString().toLowerCase()
@@ -2270,32 +2274,32 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
     });
 
   } catch (error) {
-    console.error('âŒ æ£€æŸ¥æ¨¡æ¿åˆ—å·®å¼‚å¤±è´¥:', error);
+    console.error('? ¼ì²éÄ£°åÁĞ²îÒìÊ§°Ü:', error);
     res.status(500).json({ 
-      message: error.message || 'æ£€æŸ¥æ¨¡æ¿åˆ—å·®å¼‚æ—¶å‘ç”ŸæœªçŸ¥é”™è¯¯'
+      message: error.message || '¼ì²éÄ£°åÁĞ²îÒìÊ±·¢ÉúÎ´Öª´íÎó'
     });
   }
 });
 
-// ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨
+// Éú³ÉÆäËûÕ¾µã×ÊÁÏ±í
 router.post('/generate-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('ğŸ“‹ æ”¶åˆ°ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨è¯·æ±‚');
+    console.log('?? ÊÕµ½Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÇëÇó');
     
     const { country, targetCountry, sourceCountry } = req.body;
     const uploadedFile = req.file;
     
-    // æ”¯æŒä¸¤ç§å‚æ•°æ ¼å¼ï¼šcountry æˆ– targetCountry
+    // Ö§³ÖÁ½ÖÖ²ÎÊı¸ñÊ½£ºcountry »ò targetCountry
     const actualCountry = country || targetCountry;
     
     if (!actualCountry || !uploadedFile) {
-      return res.status(400).json({ message: 'è¯·æä¾›å›½å®¶ä¿¡æ¯å’ŒExcelæ–‡ä»¶' });
+      return res.status(400).json({ message: 'ÇëÌá¹©¹ú¼ÒĞÅÏ¢ºÍExcelÎÄ¼ş' });
     }
 
-    console.log(`ğŸ“ å¤„ç†æºå›½å®¶: ${sourceCountry || 'æœªçŸ¥'} -> ç›®æ ‡å›½å®¶: ${actualCountry}, æ–‡ä»¶: ${uploadedFile.originalname}`);
+    console.log(`?? ´¦ÀíÔ´¹ú¼Ò: ${sourceCountry || 'Î´Öª'} -> Ä¿±ê¹ú¼Ò: ${actualCountry}, ÎÄ¼ş: ${uploadedFile.originalname}`);
 
-    // å¤„ç†æ–‡æœ¬å­—æ®µçš„è½¬æ¢è§„åˆ™ï¼ˆåŸºäºæºå›½å®¶å’Œç›®æ ‡å›½å®¶ï¼‰
+    // ´¦ÀíÎÄ±¾×Ö¶ÎµÄ×ª»»¹æÔò£¨»ùÓÚÔ´¹ú¼ÒºÍÄ¿±ê¹ú¼Ò£©
     const processTextForUKAUAE = (text, fieldType = 'general') => {
       if (!text) return text;
       
@@ -2303,7 +2307,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
       const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
         if (fieldType === 'brand_name') {
           return 'JiaYou';  // SellerFun -> JiaYou
@@ -2317,17 +2321,17 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         return text;
       }
       
-      // åŸæœ‰é€»è¾‘ï¼šç”ŸæˆUK/AU/AEèµ„æ–™è¡¨æ—¶çš„å¤„ç†
+      // Ô­ÓĞÂß¼­£ºÉú³ÉUK/AU/AE×ÊÁÏ±íÊ±µÄ´¦Àí
       if (targetIsUKAUAE) {
-        // å¯¹äºbrand_nameå’Œmanufacturerå­—æ®µï¼Œç»Ÿä¸€è®¾ç½®ä¸ºSellerFun
+        // ¶ÔÓÚbrand_nameºÍmanufacturer×Ö¶Î£¬Í³Ò»ÉèÖÃÎªSellerFun
         if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
           return 'SellerFun';
         }
-        // å¯¹äºitem_nameå­—æ®µï¼Œå¦‚æœå¼€å¤´æ˜¯JiaYouè¦æ›¿æ¢æˆSellerFun
+        // ¶ÔÓÚitem_name×Ö¶Î£¬Èç¹û¿ªÍ·ÊÇJiaYouÒªÌæ»»³ÉSellerFun
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // å¯¹äºdepartment_nameå­—æ®µçš„ç‰¹æ®Šå¤„ç†
+        // ¶ÔÓÚdepartment_name×Ö¶ÎµÄÌØÊâ´¦Àí
         if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
             if (actualCountry === 'UK' || actualCountry === 'AU') {
@@ -2342,7 +2346,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return text;
     };
 
-    // å¤„ç†SKUå­—æ®µçš„è½¬æ¢è§„åˆ™ï¼ˆåŸºäºæºå›½å®¶å’Œç›®æ ‡å›½å®¶ï¼‰
+    // ´¦ÀíSKU×Ö¶ÎµÄ×ª»»¹æÔò£¨»ùÓÚÔ´¹ú¼ÒºÍÄ¿±ê¹ú¼Ò£©
     const processSkuForUKAUAE = (sku) => {
       if (!sku) return sku;
       
@@ -2350,22 +2354,22 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
       const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // UKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+        // UKÇ°×º¸ÄÎªUSÇ°×º
         return sku.replace(/^UK/, 'US');
       }
       
-      // åŸæœ‰é€»è¾‘ï¼šç”ŸæˆUK/AU/AEèµ„æ–™è¡¨æ—¶çš„å¤„ç†
+      // Ô­ÓĞÂß¼­£ºÉú³ÉUK/AU/AE×ÊÁÏ±íÊ±µÄ´¦Àí
       if (targetIsUKAUAE) {
-        // SKUå‰ç¼€æ”¹ä¸ºUK
+        // SKUÇ°×º¸ÄÎªUK
         return sku.replace(/^[A-Z]{2}/, 'UK');
       }
       
       return sku;
     };
 
-    // å¤„ç†modelå­—æ®µçš„è½¬æ¢è§„åˆ™ï¼ˆåŸºäºæºå›½å®¶å’Œç›®æ ‡å›½å®¶ï¼‰
+    // ´¦Àímodel×Ö¶ÎµÄ×ª»»¹æÔò£¨»ùÓÚÔ´¹ú¼ÒºÍÄ¿±ê¹ú¼Ò£©
     const processModelForUKAUAE = (model) => {
       if (!model) return model;
       
@@ -2373,19 +2377,19 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
       const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // UKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+        // UKÇ°×º¸ÄÎªUSÇ°×º
         if (model.startsWith('UK')) {
           return model.replace(/^UK/, 'US');
         }
-        // å¦‚æœæ²¡æœ‰å‰ç¼€ï¼Œæ·»åŠ USå‰ç¼€
+        // Èç¹ûÃ»ÓĞÇ°×º£¬Ìí¼ÓUSÇ°×º
         return 'US' + model;
       }
       
-      // åŸæœ‰é€»è¾‘ï¼šç”ŸæˆUK/AU/AEèµ„æ–™è¡¨æ—¶çš„å¤„ç†
+      // Ô­ÓĞÂß¼­£ºÉú³ÉUK/AU/AE×ÊÁÏ±íÊ±µÄ´¦Àí
       if (targetIsUKAUAE) {
-        // modelå­—æ®µåŠ ä¸ŠUKå‰ç¼€
+        // model×Ö¶Î¼ÓÉÏUKÇ°×º
         if (model.startsWith('UK')) {
           return model;
         }
@@ -2395,7 +2399,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return model;
     };
 
-    // å¤„ç†å›¾ç‰‡URLçš„è½¬æ¢è§„åˆ™ï¼ˆåŸºäºæºå›½å®¶å’Œç›®æ ‡å›½å®¶ï¼‰
+    // ´¦ÀíÍ¼Æ¬URLµÄ×ª»»¹æÔò£¨»ùÓÚÔ´¹ú¼ÒºÍÄ¿±ê¹ú¼Ò£©
     const processImageUrlForUKAUAE = (url) => {
       if (!url) return url;
       
@@ -2403,24 +2407,24 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
       const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // åŸŸåï¼špic.sellerfun.net -> pic.jiayou.ink
+        // ÓòÃû£ºpic.sellerfun.net -> pic.jiayou.ink
         let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
         
-        // SKUå‰ç¼€æ”¹æˆUS (ä¾‹å¦‚ï¼šUKXBC188 -> USXBC188)
+        // SKUÇ°×º¸Ä³ÉUS (ÀıÈç£ºUKXBC188 -> USXBC188)
         processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
         processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
         
         return processedUrl;
       }
       
-      // åŸæœ‰é€»è¾‘ï¼šç”ŸæˆUK/AU/AEèµ„æ–™è¡¨æ—¶çš„å¤„ç†
+      // Ô­ÓĞÂß¼­£ºÉú³ÉUK/AU/AE×ÊÁÏ±íÊ±µÄ´¦Àí
       if (targetIsUKAUAE) {
-        // å¦‚æœåŸŸååŒ…å«pic.jiayou.inkï¼Œæ”¹æˆpic.sellerfun.net
+        // Èç¹ûÓòÃû°üº¬pic.jiayou.ink£¬¸Ä³Épic.sellerfun.net
         let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
         
-        // SKUå‰ç¼€æ”¹æˆUK (ä¾‹å¦‚ï¼šUSXBC188 -> UKXBC188)
+        // SKUÇ°×º¸Ä³ÉUK (ÀıÈç£ºUSXBC188 -> UKXBC188)
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\./g, '/UK$1.');
         
@@ -2430,16 +2434,16 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return url;
     };
 
-    // å¤„ç†è‹±å›½ç«™ç‚¹çš„å•ä½è½¬æ¢
+    // ´¦ÀíÓ¢¹úÕ¾µãµÄµ¥Î»×ª»»
     const processUnitForUK = (unit) => {
       if (!unit || actualCountry !== 'UK') return unit;
       
-      // Litersæ”¹ä¸ºliter
+      // Liters¸ÄÎªliter
       if (unit === 'Liters') {
         return 'liter';
       }
       
-      // Centimetersæ”¹ä¸ºCentimetres
+      // Centimeters¸ÄÎªCentimetres
       if (unit === 'Centimeters') {
         return 'Centimetres';
       }
@@ -2447,11 +2451,11 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return unit;
     };
 
-    // å¤„ç†è‹±å›½ç«™ç‚¹çš„å°ºå¯¸æ•°å€¼è½¬æ¢ï¼ˆè‹±å¯¸è½¬å˜ç±³ï¼‰
+    // ´¦ÀíÓ¢¹úÕ¾µãµÄ³ß´çÊıÖµ×ª»»£¨Ó¢´ç×ªÀåÃ×£©
     const processDimensionForUK = (value, unit) => {
       if (!value || actualCountry !== 'UK') return value;
       
-      // å¦‚æœå•ä½æ˜¯Inchesï¼Œæ•°å€¼éœ€è¦ä¹˜ä»¥2.54è½¬æ¢ä¸ºå˜ç±³
+      // Èç¹ûµ¥Î»ÊÇInches£¬ÊıÖµĞèÒª³ËÒÔ2.54×ª»»ÎªÀåÃ×
       if (unit === 'Inches' && !isNaN(parseFloat(value))) {
         return (parseFloat(value) * 2.54).toFixed(2);
       }
@@ -2459,50 +2463,50 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return value;
     };
 
-    // æ­¥éª¤1: è§£æä¸Šä¼ çš„Excelæ–‡ä»¶
-    console.log('ğŸ“– è§£æä¸Šä¼ çš„Excelæ–‡ä»¶...');
+    // ²½Öè1: ½âÎöÉÏ´«µÄExcelÎÄ¼ş
+    console.log('?? ½âÎöÉÏ´«µÄExcelÎÄ¼ş...');
     const workbook = xlsx.read(uploadedFile.buffer);
     
-    // ä¼˜å…ˆå¯»æ‰¾Templateå·¥ä½œè¡¨ï¼Œå¦‚æœæ²¡æœ‰åˆ™ä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨
+    // ÓÅÏÈÑ°ÕÒTemplate¹¤×÷±í£¬Èç¹ûÃ»ÓĞÔòÊ¹ÓÃµÚÒ»¸ö¹¤×÷±í
     let sheetName;
     let worksheet;
     
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('âœ… æ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨Templateå·¥ä½œè¡¨');
+      console.log('? ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃTemplate¹¤×÷±í');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`âš ï¸ æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨: ${sheetName}`);
+      console.log(`?? Î´ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃµÚÒ»¸ö¹¤×÷±í: ${sheetName}`);
     }
     
-    console.log(`ğŸ“‹ å½“å‰ä½¿ç”¨çš„å·¥ä½œè¡¨: ${sheetName}`);
+    console.log(`?? µ±Ç°Ê¹ÓÃµÄ¹¤×÷±í: ${sheetName}`);
     
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 2) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«æ ‡é¢˜è¡Œå’Œæ•°æ®è¡Œ' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬±êÌâĞĞºÍÊı¾İĞĞ' });
     }
 
-    // æ­¥éª¤2: å¤„ç†æ•°æ®å¹¶ä¿å­˜åˆ°æ•°æ®åº“ï¼ŒåŒæ—¶å‡†å¤‡å¡«å†™åˆ°Excel
-    console.log('ğŸ’¾ ä¿å­˜æ•°æ®åˆ°æ•°æ®åº“å¹¶å‡†å¤‡å¡«å†™åˆ°Excel...');
+    // ²½Öè2: ´¦ÀíÊı¾İ²¢±£´æµ½Êı¾İ¿â£¬Í¬Ê±×¼±¸ÌîĞ´µ½Excel
+    console.log('?? ±£´æÊı¾İµ½Êı¾İ¿â²¢×¼±¸ÌîĞ´µ½Excel...');
     
-    // è·å–æ ‡é¢˜è¡Œï¼ˆç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œï¼Œç´¢å¼•ä¸º2ï¼‰
+    // »ñÈ¡±êÌâĞĞ£¨µÚ3ĞĞÊÇ±êÌâĞĞ£¬Ë÷ÒıÎª2£©
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«å‰3è¡Œæ ‡é¢˜è¯´æ˜å’Œæ•°æ®è¡Œ' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬Ç°3ĞĞ±êÌâËµÃ÷ºÍÊı¾İĞĞ' });
     }
     
-    const headers = jsonData[2]; // ç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œ
-    const dataRows = jsonData.slice(3); // ç¬¬4è¡Œå¼€å§‹æ˜¯æ•°æ®è¡Œ
+    const headers = jsonData[2]; // µÚ3ĞĞÊÇ±êÌâĞĞ
+    const dataRows = jsonData.slice(3); // µÚ4ĞĞ¿ªÊ¼ÊÇÊı¾İĞĞ
     
     const savedRecords = [];
-    const processedRecords = []; // ç”¨äºExcelå¡«å†™çš„å¹²å‡€æ•°æ®
+    const processedRecords = []; // ÓÃÓÚExcelÌîĞ´µÄ¸É¾»Êı¾İ
     
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
       
-      // åˆ›å»ºæ•°æ®å¯¹è±¡
+      // ´´½¨Êı¾İ¶ÔÏó
       const rowData = {};
       headers.forEach((header, index) => {
         if (header && row[index] !== undefined) {
@@ -2510,43 +2514,43 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       });
       
-      // è®¾ç½®siteå­—æ®µä¸ºé€‰æ‹©çš„å›½å®¶ï¼ˆè½¬æ¢ä¸ºä¸­æ–‡åç§°ï¼‰
+      // ÉèÖÃsite×Ö¶ÎÎªÑ¡ÔñµÄ¹ú¼Ò£¨×ª»»ÎªÖĞÎÄÃû³Æ£©
       rowData.site = convertCountryCodeToChinese(actualCountry);
       
-      // è®¾ç½®original_parent_skuå­—æ®µï¼ˆæ ¹æ®parent_childåˆ—åˆ¤æ–­ï¼‰
+      // ÉèÖÃoriginal_parent_sku×Ö¶Î£¨¸ù¾İparent_childÁĞÅĞ¶Ï£©
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
-        // å½“parent_childä¸º"Parent"æ—¶ï¼Œitem_skuä¸­çš„ä¿¡æ¯ä¸ºæ¯SKUï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Parent"Ê±£¬item_skuÖĞµÄĞÅÏ¢ÎªÄ¸SKU£¬È¥µôÇ°Á½¸ö×Ö·û
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
-        // å½“parent_childä¸º"Child"æ—¶ï¼Œä»parent_skuå­—æ®µè·å–æ¯SKUä¿¡æ¯ï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Child"Ê±£¬´Óparent_sku×Ö¶Î»ñÈ¡Ä¸SKUĞÅÏ¢£¬È¥µôÇ°Á½¸ö×Ö·û
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
-        // å…¼å®¹å¤„ç†ï¼šå¦‚æœæ²¡æœ‰parent_childä¿¡æ¯ï¼Œä½¿ç”¨åŸæœ‰é€»è¾‘
+        // ¼æÈİ´¦Àí£ºÈç¹ûÃ»ÓĞparent_childĞÅÏ¢£¬Ê¹ÓÃÔ­ÓĞÂß¼­
         rowData.original_parent_sku = rowData.item_sku.substring(2);
-        console.warn(`âš ï¸ è®°å½•ç¼ºå°‘parent_childä¿¡æ¯ï¼Œä½¿ç”¨item_skuç”Ÿæˆoriginal_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
+        console.warn(`?? ¼ÇÂ¼È±ÉÙparent_childĞÅÏ¢£¬Ê¹ÓÃitem_skuÉú³Éoriginal_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       }
       
-      // è¿‡æ»¤å’ŒéªŒè¯æ•°æ®ï¼Œåªä¿ç•™æ¨¡å‹ä¸­å®šä¹‰çš„å­—æ®µ
+      // ¹ıÂËºÍÑéÖ¤Êı¾İ£¬Ö»±£ÁôÄ£ĞÍÖĞ¶¨ÒåµÄ×Ö¶Î
       const filteredData = filterValidFields(rowData);
       
-      // ä¿å­˜åˆ°æ•°æ®åº“
+      // ±£´æµ½Êı¾İ¿â
       try {
         const savedRecord = await ProductInformation.create(filteredData);
         savedRecords.push(savedRecord);
       } catch (error) {
-        console.warn(`âš ï¸ ä¿å­˜è®°å½•å¤±è´¥: ${JSON.stringify(filteredData)}, é”™è¯¯: ${error.message}`);
-        console.warn(`åŸå§‹æ•°æ®å­—æ®µæ•°é‡: ${Object.keys(rowData).length}, è¿‡æ»¤åå­—æ®µæ•°é‡: ${Object.keys(filteredData).length}`);
+        console.warn(`?? ±£´æ¼ÇÂ¼Ê§°Ü: ${JSON.stringify(filteredData)}, ´íÎó: ${error.message}`);
+        console.warn(`Ô­Ê¼Êı¾İ×Ö¶ÎÊıÁ¿: ${Object.keys(rowData).length}, ¹ıÂËºó×Ö¶ÎÊıÁ¿: ${Object.keys(filteredData).length}`);
       }
       
-      // åŒæ—¶ä¿å­˜ä¸€ä»½ç”¨äºExcelå¡«å†™
+      // Í¬Ê±±£´æÒ»·İÓÃÓÚExcelÌîĞ´
       processedRecords.push(rowData);
     }
 
-    console.log(`âœ… æˆåŠŸä¿å­˜ ${savedRecords.length} æ¡è®°å½•åˆ°æ•°æ®åº“`);
-    console.log(`âœ… å‡†å¤‡äº† ${processedRecords.length} æ¡è®°å½•ç”¨äºExcelå¡«å†™`);
+    console.log(`? ³É¹¦±£´æ ${savedRecords.length} Ìõ¼ÇÂ¼µ½Êı¾İ¿â`);
+    console.log(`? ×¼±¸ÁË ${processedRecords.length} Ìõ¼ÇÂ¼ÓÃÓÚExcelÌîĞ´`);
 
-    // æ­¥éª¤3: è·å–å¯¹åº”å›½å®¶çš„æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ” æŸ¥æ‰¾${actualCountry}ç«™ç‚¹çš„æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè3: »ñÈ¡¶ÔÓ¦¹ú¼ÒµÄÄ£°åÎÄ¼ş
+    console.log(`?? ²éÕÒ${actualCountry}Õ¾µãµÄÄ£°åÎÄ¼ş...`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
@@ -2558,58 +2562,58 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `æœªæ‰¾åˆ°${actualCountry}ç«™ç‚¹çš„èµ„æ–™æ¨¡æ¿ï¼Œè¯·å…ˆä¸Šä¼ ${actualCountry}æ¨¡æ¿æ–‡ä»¶` });
+      return res.status(400).json({ message: `Î´ÕÒµ½${actualCountry}Õ¾µãµÄ×ÊÁÏÄ£°å£¬ÇëÏÈÉÏ´«${actualCountry}Ä£°åÎÄ¼ş` });
     }
 
-    console.log(`ğŸ“„ ä½¿ç”¨${actualCountry}æ¨¡æ¿: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
+    console.log(`?? Ê¹ÓÃ${actualCountry}Ä£°å: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
 
-    // æ­¥éª¤4: ä¸‹è½½æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ“¥ ä¸‹è½½${actualCountry}æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè4: ÏÂÔØÄ£°åÎÄ¼ş
+    console.log(`?? ÏÂÔØ${actualCountry}Ä£°åÎÄ¼ş...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`âŒ ä¸‹è½½${actualCountry}æ¨¡æ¿å¤±è´¥:`, downloadResult.message);
+      console.error(`? ÏÂÔØ${actualCountry}Ä£°åÊ§°Ü:`, downloadResult.message);
       return res.status(500).json({ 
-        message: `ä¸‹è½½${actualCountry}æ¨¡æ¿å¤±è´¥: ${downloadResult.message}`,
+        message: `ÏÂÔØ${actualCountry}Ä£°åÊ§°Ü: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`âœ… ${actualCountry}æ¨¡æ¿ä¸‹è½½æˆåŠŸ: ${downloadResult.fileName} (${downloadResult.size} å­—èŠ‚)`);
+    console.log(`? ${actualCountry}Ä£°åÏÂÔØ³É¹¦: ${downloadResult.fileName} (${downloadResult.size} ×Ö½Ú)`);
 
-    // æ­¥éª¤5: ä½¿ç”¨xlsxåº“å¤„ç†æ¨¡æ¿æ–‡ä»¶ï¼ˆå‚è€ƒè‹±å›½èµ„æ–™è¡¨çš„æ­£ç¡®å®ç°ï¼‰
-    console.log('ğŸ“Š å¼€å§‹ä½¿ç”¨xlsxåº“å¤„ç†Excelæ–‡ä»¶...');
+    // ²½Öè5: Ê¹ÓÃxlsx¿â´¦ÀíÄ£°åÎÄ¼ş£¨²Î¿¼Ó¢¹ú×ÊÁÏ±íµÄÕıÈ·ÊµÏÖ£©
+    console.log('?? ¿ªÊ¼Ê¹ÓÃxlsx¿â´¦ÀíExcelÎÄ¼ş...');
     
-    // è§£ææ¨¡æ¿æ–‡ä»¶
+    // ½âÎöÄ£°åÎÄ¼ş
     const templateWorkbook = xlsx.read(downloadResult.content, { 
       type: 'buffer',
-      cellStyles: true, // ä¿æŒæ ·å¼
-      cellNF: true,     // ä¿æŒæ•°å­—æ ¼å¼
-      cellDates: true   // å¤„ç†æ—¥æœŸ
+      cellStyles: true, // ±£³ÖÑùÊ½
+      cellNF: true,     // ±£³ÖÊı×Ö¸ñÊ½
+      cellDates: true   // ´¦ÀíÈÕÆÚ
     });
     
-    // æ£€æŸ¥æ˜¯å¦æœ‰Templateå·¥ä½œè¡¨
+    // ¼ì²éÊÇ·ñÓĞTemplate¹¤×÷±í
     if (!templateWorkbook.Sheets['Template']) {
-      return res.status(400).json({ message: 'æ¨¡æ¿æ–‡ä»¶ä¸­æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨' });
+      return res.status(400).json({ message: 'Ä£°åÎÄ¼şÖĞÎ´ÕÒµ½Template¹¤×÷±í' });
     }
 
-    console.log('âœ… æˆåŠŸåŠ è½½Templateå·¥ä½œè¡¨');
+    console.log('? ³É¹¦¼ÓÔØTemplate¹¤×÷±í');
     
     const templateWorksheet = templateWorkbook.Sheets['Template'];
     
-    // å°†å·¥ä½œè¡¨è½¬æ¢ä¸ºäºŒç»´æ•°ç»„ï¼Œä¾¿äºæ“ä½œ
+    // ½«¹¤×÷±í×ª»»Îª¶şÎ¬Êı×é£¬±ãÓÚ²Ù×÷
     const data = xlsx.utils.sheet_to_json(templateWorksheet, { 
-      header: 1, // ä½¿ç”¨æ•°ç»„å½¢å¼
-      defval: '', // ç©ºå•å…ƒæ ¼é»˜è®¤å€¼
-      raw: false  // ä¿æŒåŸå§‹æ•°æ®æ ¼å¼
+      header: 1, // Ê¹ÓÃÊı×éĞÎÊ½
+      defval: '', // ¿Õµ¥Ôª¸ñÄ¬ÈÏÖµ
+      raw: false  // ±£³ÖÔ­Ê¼Êı¾İ¸ñÊ½
     });
     
-    console.log(`ğŸ“Š å·¥ä½œè¡¨æ•°æ®è¡Œæ•°: ${data.length}`);
+    console.log(`?? ¹¤×÷±íÊı¾İĞĞÊı: ${data.length}`);
 
-    // æ­¥éª¤6: æŸ¥æ‰¾åˆ—ä½ç½®ï¼ˆåœ¨ç¬¬3è¡ŒæŸ¥æ‰¾æ ‡é¢˜ï¼Œç´¢å¼•ä¸º2ï¼‰
-    console.log('ğŸ” æŸ¥æ‰¾åˆ—ä½ç½®...');
+    // ²½Öè6: ²éÕÒÁĞÎ»ÖÃ£¨ÔÚµÚ3ĞĞ²éÕÒ±êÌâ£¬Ë÷ÒıÎª2£©
+    console.log('?? ²éÕÒÁĞÎ»ÖÃ...');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -2632,7 +2636,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
-    // æ–°å¢ç¼ºå¤±å­—æ®µçš„åˆ—å˜é‡
+    // ĞÂÔöÈ±Ê§×Ö¶ÎµÄÁĞ±äÁ¿
     let feedProductTypeCol = -1;
     let externalProductIdTypeCol = -1;
     let quantityCol = -1;
@@ -2653,7 +2657,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let conditionTypeCol = -1;
     let departmentNameCol = -1;
     
-    // åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µçš„åˆ—å˜é‡
+    // ¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎµÄÁĞ±äÁ¿
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -2674,7 +2678,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let depthHeightFloorToTopUnitOfMeasureCol = -1;
     let manufacturerContactInformationCol = -1;
     
-    if (data.length >= 3 && data[2]) { // ç¬¬3è¡Œï¼Œç´¢å¼•ä¸º2
+    if (data.length >= 3 && data[2]) { // µÚ3ĞĞ£¬Ë÷ÒıÎª2
       data[2].forEach((header, colIndex) => {
         if (header) {
           const cellValue = header.toString().toLowerCase();
@@ -2795,47 +2799,47 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       });
     }
 
-    console.log(`ğŸ“ æ‰¾åˆ°åˆ—ä½ç½® - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    console.log(`?? ÕÒµ½ÁĞÎ»ÖÃ - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
     
-    // è°ƒè¯•ï¼šæ£€æŸ¥ç¬¬3è¡Œæ ‡é¢˜
-    console.log('ğŸ“‹ ç¬¬3è¡Œæ ‡é¢˜å†…å®¹:', data[2]);
+    // µ÷ÊÔ£º¼ì²éµÚ3ĞĞ±êÌâ
+    console.log('?? µÚ3ĞĞ±êÌâÄÚÈİ:', data[2]);
     
-    // æ£€æŸ¥æ˜¯å¦æ‰¾åˆ°äº†å…³é”®åˆ—
+    // ¼ì²éÊÇ·ñÕÒµ½ÁË¹Ø¼üÁĞ
     if (itemSkuCol === -1) {
-      console.log('âŒ è­¦å‘Šï¼šæœªæ‰¾åˆ°item_skuåˆ—!');
+      console.log('? ¾¯¸æ£ºÎ´ÕÒµ½item_skuÁĞ!');
     }
     if (itemNameCol === -1) {
-      console.log('âŒ è­¦å‘Šï¼šæœªæ‰¾åˆ°item_nameåˆ—!');
+      console.log('? ¾¯¸æ£ºÎ´ÕÒµ½item_nameÁĞ!');
     }
 
-    // æ­¥éª¤7: å‡†å¤‡å¡«å†™æ•°æ®
-    console.log('âœï¸ å‡†å¤‡å¡«å†™æ•°æ®åˆ°Excel...');
+    // ²½Öè7: ×¼±¸ÌîĞ´Êı¾İ
+    console.log('?? ×¼±¸ÌîĞ´Êı¾İµ½Excel...');
     
-    // ç¡®ä¿æ•°æ®æ•°ç»„æœ‰è¶³å¤Ÿçš„è¡Œ
-    const totalRowsNeeded = 3 + processedRecords.length; // å‰3è¡Œä¿ç•™ + æ•°æ®è¡Œ
+    // È·±£Êı¾İÊı×éÓĞ×ã¹»µÄĞĞ
+    const totalRowsNeeded = 3 + processedRecords.length; // Ç°3ĞĞ±£Áô + Êı¾İĞĞ
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
-    // ä»ç¬¬4è¡Œå¼€å§‹å¡«å†™æ•°æ®ï¼ˆç´¢å¼•ä¸º3ï¼‰
-    let currentRowIndex = 3; // ç¬¬4è¡Œå¼€å§‹ï¼Œç´¢å¼•ä¸º3
+    // ´ÓµÚ4ĞĞ¿ªÊ¼ÌîĞ´Êı¾İ£¨Ë÷ÒıÎª3£©
+    let currentRowIndex = 3; // µÚ4ĞĞ¿ªÊ¼£¬Ë÷ÒıÎª3
     
     processedRecords.forEach((record, index) => {
-      const recordData = record; // processedRecordså·²ç»æ˜¯å¹²å‡€çš„æ•°æ®å¯¹è±¡
+      const recordData = record; // processedRecordsÒÑ¾­ÊÇ¸É¾»µÄÊı¾İ¶ÔÏó
       
-      // è°ƒè¯•ï¼šè¾“å‡ºç¬¬ä¸€æ¡è®°å½•çš„å¡«å†™è¿‡ç¨‹
+      // µ÷ÊÔ£ºÊä³öµÚÒ»Ìõ¼ÇÂ¼µÄÌîĞ´¹ı³Ì
       if (index === 0) {
-        console.log('ğŸ“‹ å¡«å†™ç¬¬ä¸€æ¡è®°å½•:', {
+        console.log('?? ÌîĞ´µÚÒ»Ìõ¼ÇÂ¼:', {
           item_sku: recordData.item_sku,
           item_name: recordData.item_name,
           color_name: recordData.color_name,
           size_name: recordData.size_name,
           brand_name: recordData.brand_name
         });
-        console.log(`ğŸ“ å¡«å†™åˆ°ç¬¬${currentRowIndex + 1}è¡Œï¼ˆç´¢å¼•${currentRowIndex}ï¼‰`);
+        console.log(`?? ÌîĞ´µ½µÚ${currentRowIndex + 1}ĞĞ£¨Ë÷Òı${currentRowIndex}£©`);
       }
       
-      // è®¡ç®—éœ€è¦çš„æœ€å¤§åˆ—æ•°
+      // ¼ÆËãĞèÒªµÄ×î´óÁĞÊı
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
@@ -2848,7 +2852,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
-      // ç¡®ä¿å½“å‰è¡Œæœ‰è¶³å¤Ÿçš„åˆ—
+      // È·±£µ±Ç°ĞĞÓĞ×ã¹»µÄÁĞ
       if (!data[currentRowIndex]) {
         data[currentRowIndex] = [];
       }
@@ -2856,7 +2860,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         data[currentRowIndex].push('');
       }
       
-      // å¡«å†™æ•°æ®
+      // ÌîĞ´Êı¾İ
       if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = processSkuForUKAUAE(recordData.item_sku || '');
       if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = processTextForUKAUAE(recordData.item_name || '', 'item_name');
       if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = recordData.color_name || '';
@@ -2879,7 +2883,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = recordData.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = recordData.bullet_point5 || '';
       
-      // å¡«å†™æ–°å¢å­—æ®µæ•°æ®
+      // ÌîĞ´ĞÂÔö×Ö¶ÎÊı¾İ
       if (feedProductTypeCol !== -1) data[currentRowIndex][feedProductTypeCol] = recordData.feed_product_type || '';
       if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = recordData.external_product_id_type || '';
       if (quantityCol !== -1) data[currentRowIndex][quantityCol] = recordData.quantity || '';
@@ -2897,7 +2901,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (sizeMapCol !== -1) data[currentRowIndex][sizeMapCol] = recordData.size_map || '';
       if (countryOfOriginCol !== -1) data[currentRowIndex][countryOfOriginCol] = recordData.country_of_origin || '';
       if (cpsiaCautionaryStatement1Col !== -1) {
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šä½¿ç”¨ç‰¹å®šæ ¼å¼çš„è­¦å‘Šè¯­å¥
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÊ¹ÓÃÌØ¶¨¸ñÊ½µÄ¾¯¸æÓï¾ä
         if (actualCountry === 'CA') {
           data[currentRowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
         } else {
@@ -2905,7 +2909,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       }
       if (conditionTypeCol !== -1) {
-        // é˜¿è”é…‹ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šç»Ÿä¸€å¡«å†™ "new, new"
+        // °¢ÁªÇõÕ¾µãÌØÊâ´¦Àí£ºÍ³Ò»ÌîĞ´ "new, new"
         if (actualCountry === 'AE') {
           data[currentRowIndex][conditionTypeCol] = 'new, new';
         } else {
@@ -2913,7 +2917,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       }
       
-      // å¡«å†™åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µæ•°æ®
+      // ÌîĞ´¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎÊı¾İ
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = recordData.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = recordData.care_instructions || '';
       if (modelCol !== -1) data[currentRowIndex][modelCol] = processModelForUKAUAE(recordData.model || '');
@@ -2926,11 +2930,11 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (lifestyle1Col !== -1) data[currentRowIndex][lifestyle1Col] = recordData.lifestyle1 || '';
       if (storageVolumeUnitOfMeasureCol !== -1) {
         let storageVolumeUnit = recordData.storage_volume_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šliterè½¬æ¢ä¸ºLiters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºliter×ª»»ÎªLiters
         if (actualCountry === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
           storageVolumeUnit = 'Liters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šLitersè½¬æ¢ä¸ºliter
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºLiters×ª»»Îªliter
         if (actualCountry === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
         }
@@ -2939,13 +2943,13 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = recordData.storage_volume || '';
       if (depthFrontToBackCol !== -1) {
         let depthValue = recordData.depth_front_to_back || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'CA' && recordData.depth_front_to_back_unit_of_measure && 
             recordData.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
           depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'UK' && recordData.depth_front_to_back_unit_of_measure && 
             recordData.depth_front_to_back_unit_of_measure === 'Inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
@@ -2955,39 +2959,39 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
         let depthUnit = recordData.depth_front_to_back_unit_of_measure || '';
-        console.log(`ğŸ”§ å¤„ç†depth_front_to_back_unit_of_measure: åŸå€¼="${depthUnit}", ç›®æ ‡å›½å®¶="${actualCountry}"`);
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        console.log(`?? ´¦Àídepth_front_to_back_unit_of_measure: Ô­Öµ="${depthUnit}", Ä¿±ê¹ú¼Ò="${actualCountry}"`);
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (actualCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
-          console.log(`ğŸ”§ CA Inchesè½¬æ¢: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+          console.log(`?? CA Inches×ª»»: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (actualCountry === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
-            console.log(`ğŸ”§ UK Inchesè½¬æ¢: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+            console.log(`?? UK Inches×ª»»: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
           } else if (depthUnit === 'Centimeters') {
             depthUnit = 'Centimetres';
-            console.log(`ğŸ”§ UK Centimetersè½¬æ¢: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+            console.log(`?? UK Centimeters×ª»»: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && depthUnit.trim().toLowerCase() === 'centimetres') {
           depthUnit = 'Centimeters';
-          console.log(`ğŸ”§ ${actualCountry} Centimetresè½¬æ¢: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+          console.log(`?? ${actualCountry} Centimetres×ª»»: "${recordData.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        console.log(`ğŸ”§ æœ€ç»ˆå¡«å†™depth_front_to_back_unit_of_measure: "${depthUnit}"`);
+        console.log(`?? ×îÖÕÌîĞ´depth_front_to_back_unit_of_measure: "${depthUnit}"`);
         data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
                     if (depthWidthSideToSideCol !== -1) {
         let widthValue = recordData.depth_width_side_to_side || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'CA' && recordData.depth_width_side_to_side_unit_of_measure && 
             recordData.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
           widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'UK' && recordData.depth_width_side_to_side_unit_of_measure && 
             recordData.depth_width_side_to_side_unit_of_measure === 'Inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
@@ -2997,11 +3001,11 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
         let widthUnit = recordData.depth_width_side_to_side_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (actualCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (actualCountry === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
@@ -3009,7 +3013,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             widthUnit = 'Centimetres';
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && widthUnit.trim().toLowerCase() === 'centimetres') {
           widthUnit = 'Centimeters';
         }
@@ -3017,13 +3021,13 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
                     if (depthHeightFloorToTopCol !== -1) {
         let heightValue = recordData.depth_height_floor_to_top || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'CA' && recordData.depth_height_floor_to_top_unit_of_measure && 
             recordData.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
           heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (actualCountry === 'UK' && recordData.depth_height_floor_to_top_unit_of_measure && 
             recordData.depth_height_floor_to_top_unit_of_measure === 'Inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
@@ -3033,11 +3037,11 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       }
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
         let heightUnit = recordData.depth_height_floor_to_top_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (actualCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (actualCountry === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
@@ -3045,17 +3049,17 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             heightUnit = 'Centimetres';
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && heightUnit.trim().toLowerCase() === 'centimetres') {
           heightUnit = 'Centimeters';
         }
         data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
-      // åŠ æ‹¿å¤§ç«™ç‚¹manufacturer_contact_informationå­—æ®µç‰¹æ®Šå¤„ç†
+      // ¼ÓÄÃ´óÕ¾µãmanufacturer_contact_information×Ö¶ÎÌØÊâ´¦Àí
       if (manufacturerContactInformationCol !== -1) {
         if (actualCountry === 'CA') {
-          // å¯¹äºåŠ æ‹¿å¤§ç«™ç‚¹ï¼Œç»Ÿä¸€å¡«å†™æŒ‡å®šçš„åˆ¶é€ å•†è”ç³»ä¿¡æ¯
+          // ¶ÔÓÚ¼ÓÄÃ´óÕ¾µã£¬Í³Ò»ÌîĞ´Ö¸¶¨µÄÖÆÔìÉÌÁªÏµĞÅÏ¢
           data[currentRowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
 Room 825, Building C, Part C
 Qinghu Tech Park
@@ -3063,40 +3067,40 @@ Shenzhen, Longhua, Guangdong 518000
 CN
 8618123615703`;
         } else {
-          // å…¶ä»–ç«™ç‚¹ä¿æŒåŸæœ‰é€»è¾‘
+          // ÆäËûÕ¾µã±£³ÖÔ­ÓĞÂß¼­
           data[currentRowIndex][manufacturerContactInformationCol] = recordData.manufacturer_contact_information || '';
         }
       }
 
-      // å¡«å†™department_nameå­—æ®µ
+      // ÌîĞ´department_name×Ö¶Î
       if (departmentNameCol !== -1) {
         data[currentRowIndex][departmentNameCol] = processTextForUKAUAE(recordData.department_name || '', 'department_name');
       }
       
-      // è°ƒè¯•ï¼šè¾“å‡ºç¬¬ä¸€æ¡è®°å½•å¡«å†™åçš„è¡Œå†…å®¹
+      // µ÷ÊÔ£ºÊä³öµÚÒ»Ìõ¼ÇÂ¼ÌîĞ´ºóµÄĞĞÄÚÈİ
       if (index === 0) {
-        console.log('ğŸ“‹ ç¬¬ä¸€æ¡è®°å½•å¡«å†™åçš„è¡Œå†…å®¹:', data[currentRowIndex]);
+        console.log('?? µÚÒ»Ìõ¼ÇÂ¼ÌîĞ´ºóµÄĞĞÄÚÈİ:', data[currentRowIndex]);
       }
       
       currentRowIndex++;
     });
 
-    console.log(`ğŸ“Š å¡«å†™å®Œæˆï¼Œå…±å¡«å†™äº† ${processedRecords.length} è¡Œæ•°æ®`);
+    console.log(`?? ÌîĞ´Íê³É£¬¹²ÌîĞ´ÁË ${processedRecords.length} ĞĞÊı¾İ`);
     
-    // è°ƒè¯•ï¼šæ£€æŸ¥æ˜¯å¦æœ‰æ•°æ®è¢«å¡«å†™
+    // µ÷ÊÔ£º¼ì²éÊÇ·ñÓĞÊı¾İ±»ÌîĞ´
     if (processedRecords.length > 0) {
-      console.log('ğŸ“‹ æ£€æŸ¥æ•°æ®å¡«å†™ç»“æœ:');
-      console.log(`ç¬¬4è¡Œå†…å®¹:`, data[3]?.slice(0, 5));
-      console.log(`ç¬¬5è¡Œå†…å®¹:`, data[4]?.slice(0, 5));
+      console.log('?? ¼ì²éÊı¾İÌîĞ´½á¹û:');
+      console.log(`µÚ4ĞĞÄÚÈİ:`, data[3]?.slice(0, 5));
+      console.log(`µÚ5ĞĞÄÚÈİ:`, data[4]?.slice(0, 5));
     } else {
-      console.log('âŒ è­¦å‘Šï¼šprocessedRecordsä¸ºç©ºï¼Œæ²¡æœ‰æ•°æ®å¯å¡«å†™!');
+      console.log('? ¾¯¸æ£ºprocessedRecordsÎª¿Õ£¬Ã»ÓĞÊı¾İ¿ÉÌîĞ´!');
     }
 
-    // æ­¥éª¤8: å°†æ•°æ®é‡æ–°è½¬æ¢ä¸ºå·¥ä½œè¡¨
-    console.log('ğŸ’¾ ç”ŸæˆExcelæ–‡ä»¶...');
+    // ²½Öè8: ½«Êı¾İÖØĞÂ×ª»»Îª¹¤×÷±í
+    console.log('?? Éú³ÉExcelÎÄ¼ş...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
-    // ä¿æŒåŸå§‹å·¥ä½œè¡¨çš„åˆ—å®½ç­‰å±æ€§
+    // ±£³ÖÔ­Ê¼¹¤×÷±íµÄÁĞ¿íµÈÊôĞÔ
       if (templateWorksheet['!cols']) {
         newWorksheet['!cols'] = templateWorksheet['!cols'];
       }
@@ -3107,22 +3111,22 @@ CN
       newWorksheet['!merges'] = templateWorksheet['!merges'];
     }
     
-    // æ›´æ–°å·¥ä½œç°¿
+    // ¸üĞÂ¹¤×÷²¾
     templateWorkbook.Sheets['Template'] = newWorksheet;
     
     try {
-      // ç”ŸæˆExcelæ–‡ä»¶buffer
+      // Éú³ÉExcelÎÄ¼şbuffer
       const outputBuffer = xlsx.write(templateWorkbook, { 
         type: 'buffer', 
         bookType: 'xlsx',
         cellStyles: true
       });
       
-      console.log(`âœ… Excelæ–‡ä»¶ç”ŸæˆæˆåŠŸï¼Œå¤§å°: ${outputBuffer.length} å­—èŠ‚`);
+      console.log(`? ExcelÎÄ¼şÉú³É³É¹¦£¬´óĞ¡: ${outputBuffer.length} ×Ö½Ú`);
       
-      // ç”Ÿæˆæ–‡ä»¶åï¼šå›½å®¶ä»£ç +æ¯SKUæ ¼å¼
-      console.log('ğŸ” å¼€å§‹ç”Ÿæˆæ–‡ä»¶å...');
-      console.log(`ğŸ“Š processedRecordsæ•°é‡: ${processedRecords.length}`);
+      // Éú³ÉÎÄ¼şÃû£º¹ú¼Ò´úÂë+Ä¸SKU¸ñÊ½
+      console.log('?? ¿ªÊ¼Éú³ÉÎÄ¼şÃû...');
+      console.log(`?? processedRecordsÊıÁ¿: ${processedRecords.length}`);
       
       const parentSkus = [...new Set(processedRecords
         .map(record => {
@@ -3134,32 +3138,32 @@ CN
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;
-      console.log('ğŸ“„ ç”Ÿæˆçš„æ–‡ä»¶å:', fileName);
+      console.log('?? Éú³ÉµÄÎÄ¼şÃû:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
-      console.log(`âœ… ç”Ÿæˆ${actualCountry}èµ„æ–™è¡¨æˆåŠŸ (è€—æ—¶: ${processingTime}ms)`);
+      console.log(`? Éú³É${actualCountry}×ÊÁÏ±í³É¹¦ (ºÄÊ±: ${processingTime}ms)`);
       
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('âŒ Excelæ–‡ä»¶ç”Ÿæˆå¤±è´¥:', fileError);
-      throw new Error('Excelæ–‡ä»¶ç”Ÿæˆå¤±è´¥: ' + fileError.message);
+      console.error('? ExcelÎÄ¼şÉú³ÉÊ§°Ü:', fileError);
+      throw new Error('ExcelÎÄ¼şÉú³ÉÊ§°Ü: ' + fileError.message);
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    const errorMessage = error.message || 'ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨æ—¶å‘ç”ŸæœªçŸ¥é”™è¯¯';
-    console.error(`âŒ ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨å¤±è´¥ (è€—æ—¶: ${processingTime}ms):`);
-    console.error(`ğŸ” é”™è¯¯è¯¦æƒ…: ${error.message}`);
-    console.error(`ğŸ“‹ é”™è¯¯å †æ ˆ:`, error.stack);
-    console.error(`ğŸ·ï¸ é”™è¯¯ç±»å‹: ${error.name}`);
+    const errorMessage = error.message || 'Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÊ±·¢ÉúÎ´Öª´íÎó';
+    console.error(`? Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÊ§°Ü (ºÄÊ±: ${processingTime}ms):`);
+    console.error(`?? ´íÎóÏêÇé: ${error.message}`);
+    console.error(`?? ´íÎó¶ÑÕ»:`, error.stack);
+    console.error(`??? ´íÎóÀàĞÍ: ${error.name}`);
     
-          // è¾“å‡ºè¯·æ±‚å‚æ•°ä»¥ä¾¿è°ƒè¯•
-      console.error(`ğŸ“‹ è¯·æ±‚å‚æ•°: actualCountry=${req.body.country || req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
+          // Êä³öÇëÇó²ÎÊıÒÔ±ãµ÷ÊÔ
+      console.error(`?? ÇëÇó²ÎÊı: actualCountry=${req.body.country || req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
       
       res.status(500).json({ 
         message: errorMessage,
@@ -3170,26 +3174,26 @@ CN
     }
   });
 
-// æ˜ å°„æ•°æ®åˆ°æ¨¡æ¿çš„è¾…åŠ©å‡½æ•°ï¼ˆåŸºäºxlsxåº“ï¼‰
+// Ó³ÉäÊı¾İµ½Ä£°åµÄ¸¨Öúº¯Êı£¨»ùÓÚxlsx¿â£©
 function mapDataToTemplateXlsx(templateData, records, country) {
   try {
-    console.log(`ğŸ¯ å¼€å§‹æ˜ å°„ ${records.length} æ¡è®°å½•åˆ°${country}æ¨¡æ¿...`);
+    console.log(`?? ¿ªÊ¼Ó³Éä ${records.length} Ìõ¼ÇÂ¼µ½${country}Ä£°å...`);
     
-    // éªŒè¯è¾“å…¥æ•°æ®
+    // ÑéÖ¤ÊäÈëÊı¾İ
     if (!Array.isArray(templateData) || templateData.length === 0) {
-      throw new Error('æ¨¡æ¿æ•°æ®ä¸ºç©ºæˆ–æ ¼å¼é”™è¯¯');
+      throw new Error('Ä£°åÊı¾İÎª¿Õ»ò¸ñÊ½´íÎó');
     }
     
     if (!Array.isArray(records)) {
-      throw new Error('è®°å½•æ•°æ®æ ¼å¼é”™è¯¯');
+      throw new Error('¼ÇÂ¼Êı¾İ¸ñÊ½´íÎó');
     }
     
-    // å¤åˆ¶æ¨¡æ¿æ•°æ®
+    // ¸´ÖÆÄ£°åÊı¾İ
     const updatedData = templateData.map(row => [...(row || [])]);
     
-    console.log(`ğŸ“‹ æ¨¡æ¿æœ‰ ${updatedData.length} è¡Œæ•°æ®`);
+    console.log(`?? Ä£°åÓĞ ${updatedData.length} ĞĞÊı¾İ`);
 
-    // æŸ¥æ‰¾åˆ—ä½ç½®ï¼ˆåœ¨ç¬¬3è¡ŒæŸ¥æ‰¾æ ‡é¢˜ï¼Œç´¢å¼•ä¸º2ï¼‰
+    // ²éÕÒÁĞÎ»ÖÃ£¨ÔÚµÚ3ĞĞ²éÕÒ±êÌâ£¬Ë÷ÒıÎª2£©
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -3212,7 +3216,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
-    // æ–°å¢ç¼ºå¤±å­—æ®µçš„åˆ—å˜é‡
+    // ĞÂÔöÈ±Ê§×Ö¶ÎµÄÁĞ±äÁ¿
     let feedProductTypeCol = -1;
     let externalProductIdTypeCol = -1;
     let quantityCol = -1;
@@ -3232,7 +3236,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let cpsiaCautionaryStatement1Col = -1;
     let conditionTypeCol = -1;
     
-    // åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µçš„åˆ—å˜é‡
+    // ¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎµÄÁĞ±äÁ¿
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -3254,7 +3258,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let manufacturerContactInformationCol = -1;
     let departmentNameCol = -1;
     
-    // æ–°å¢ç¼ºå¤±å­—æ®µçš„åˆ—å˜é‡
+    // ĞÂÔöÈ±Ê§×Ö¶ÎµÄÁĞ±äÁ¿
     let outerMaterialTypeCol = -1;
     let outerMaterialType1Col = -1;
     let liningDescriptionCol = -1;
@@ -3397,7 +3401,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       });
     }
 
-    // æ£€æŸ¥ç¼ºå¤±çš„åˆ—
+    // ¼ì²éÈ±Ê§µÄÁĞ
     const requiredCols = [
       { name: 'item_sku', col: itemSkuCol },
       { name: 'color_name', col: colorNameCol },
@@ -3412,32 +3416,32 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     });
     
     if (missingColumns.length > 0) {
-      console.warn(`âš ï¸ æ¨¡æ¿ä¸­ç¼ºå°‘ä»¥ä¸‹åˆ—: ${missingColumns.join(', ')}`);
+      console.warn(`?? Ä£°åÖĞÈ±ÉÙÒÔÏÂÁĞ: ${missingColumns.join(', ')}`);
     }
 
-    console.log(`ğŸ“ æ‰¾åˆ°åˆ—ä½ç½® - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
+    console.log(`?? ÕÒµ½ÁĞÎ»ÖÃ - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
 
-    // åˆ¤æ–­æºæ–‡ä»¶ç±»å‹ï¼ˆé€šè¿‡ç¬¬ä¸€æ¡è®°å½•çš„SKUå‰ç¼€ï¼‰
+    // ÅĞ¶ÏÔ´ÎÄ¼şÀàĞÍ£¨Í¨¹ıµÚÒ»Ìõ¼ÇÂ¼µÄSKUÇ°×º£©
     const sourceCountryType = records.length > 0 && records[0].item_sku ? 
       (records[0].item_sku.startsWith('US') ? 'US_CA' : 'OTHER') : 'OTHER';
     
-    console.log(`ğŸ“ æºæ–‡ä»¶ç±»å‹: ${sourceCountryType}, ç›®æ ‡å›½å®¶: ${country}`);
+    console.log(`?? Ô´ÎÄ¼şÀàĞÍ: ${sourceCountryType}, Ä¿±ê¹ú¼Ò: ${country}`);
 
-    // å¤„ç†æ–‡æœ¬å†…å®¹ï¼Œæ ¹æ®æºæ–‡ä»¶å’Œç›®æ ‡å›½å®¶å†³å®šå“ç‰Œæ›¿æ¢è§„åˆ™
+    // ´¦ÀíÎÄ±¾ÄÚÈİ£¬¸ù¾İÔ´ÎÄ¼şºÍÄ¿±ê¹ú¼Ò¾ö¶¨Æ·ÅÆÌæ»»¹æÔò
     const processTextContent = (text, fieldType = 'general') => {
       if (!text) return text;
       
-      // å¦‚æœç›®æ ‡å›½å®¶æ˜¯è‹±å›½ã€æ¾³å¤§åˆ©äºšã€é˜¿è”é…‹ï¼Œåº”ç”¨ç‰¹æ®Šå¤„ç†è§„åˆ™
+      // Èç¹ûÄ¿±ê¹ú¼ÒÊÇÓ¢¹ú¡¢°Ä´óÀûÑÇ¡¢°¢ÁªÇõ£¬Ó¦ÓÃÌØÊâ´¦Àí¹æÔò
       if (country === 'UK' || country === 'AU' || country === 'AE') {
-        // å¯¹äºbrand_nameå’Œmanufacturerå­—æ®µï¼Œç»Ÿä¸€è®¾ç½®ä¸ºSellerFun
+        // ¶ÔÓÚbrand_nameºÍmanufacturer×Ö¶Î£¬Í³Ò»ÉèÖÃÎªSellerFun
         if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
           return 'SellerFun';
         }
-        // å¯¹äºitem_nameå­—æ®µï¼Œå¦‚æœå¼€å¤´æ˜¯JiaYouè¦æ›¿æ¢æˆSellerFun
+        // ¶ÔÓÚitem_name×Ö¶Î£¬Èç¹û¿ªÍ·ÊÇJiaYouÒªÌæ»»³ÉSellerFun
         if (fieldType === 'item_name') {
           return text.replace(/^JiaYou/g, 'SellerFun');
         }
-        // å¯¹äºdepartment_nameå­—æ®µçš„ç‰¹æ®Šå¤„ç†
+        // ¶ÔÓÚdepartment_name×Ö¶ÎµÄÌØÊâ´¦Àí
         if (fieldType === 'department_name') {
           if (text.trim() === 'Unisex Child') {
             if (country === 'UK' || country === 'AU') {
@@ -3447,16 +3451,16 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             }
           }
         }
-        // å…¶ä»–æ–‡æœ¬å­—æ®µçš„ä¸€èˆ¬å¤„ç†
+        // ÆäËûÎÄ±¾×Ö¶ÎµÄÒ»°ã´¦Àí
         return text.replace(/JiaYou/g, 'SellerFun');
       }
       
-      // å¦‚æœæºæ–‡ä»¶ä¸æ˜¯ç¾å›½/åŠ æ‹¿å¤§ï¼Œåœ¨ç”Ÿæˆç¾å›½/åŠ æ‹¿å¤§èµ„æ–™è¡¨æ—¶ï¼ŒSellerFunæ”¹æˆJiaYou
+      // Èç¹ûÔ´ÎÄ¼ş²»ÊÇÃÀ¹ú/¼ÓÄÃ´ó£¬ÔÚÉú³ÉÃÀ¹ú/¼ÓÄÃ´ó×ÊÁÏ±íÊ±£¬SellerFun¸Ä³ÉJiaYou
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
         return text.replace(/SellerFun/g, 'JiaYou');
       }
       
-      // å¦‚æœæºæ–‡ä»¶æ˜¯ç¾å›½/åŠ æ‹¿å¤§ï¼Œåœ¨ç”Ÿæˆéç¾å›½/åŠ æ‹¿å¤§èµ„æ–™è¡¨æ—¶ï¼ŒJiaYouæ”¹æˆSellerFun
+      // Èç¹ûÔ´ÎÄ¼şÊÇÃÀ¹ú/¼ÓÄÃ´ó£¬ÔÚÉú³É·ÇÃÀ¹ú/¼ÓÄÃ´ó×ÊÁÏ±íÊ±£¬JiaYou¸Ä³ÉSellerFun
       if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA') {
         return text.replace(/JiaYou/g, 'SellerFun');
       }
@@ -3464,28 +3468,28 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return text;
     };
 
-    // å¤„ç†å›¾ç‰‡URLï¼Œæ ¹æ®æºæ–‡ä»¶å’Œç›®æ ‡å›½å®¶å†³å®šæ›¿æ¢è§„åˆ™
+    // ´¦ÀíÍ¼Æ¬URL£¬¸ù¾İÔ´ÎÄ¼şºÍÄ¿±ê¹ú¼Ò¾ö¶¨Ìæ»»¹æÔò
     const processImageUrl = (url) => {
       if (!url) return url;
       
-      // å¦‚æœç›®æ ‡å›½å®¶æ˜¯è‹±å›½ã€æ¾³å¤§åˆ©äºšã€é˜¿è”é…‹ï¼Œåº”ç”¨ç‰¹æ®Šå¤„ç†è§„åˆ™
+      // Èç¹ûÄ¿±ê¹ú¼ÒÊÇÓ¢¹ú¡¢°Ä´óÀûÑÇ¡¢°¢ÁªÇõ£¬Ó¦ÓÃÌØÊâ´¦Àí¹æÔò
       if (country === 'UK' || country === 'AU' || country === 'AE') {
-        // å¦‚æœåŸŸååŒ…å«pic.jiayou.inkï¼Œæ”¹æˆpic.sellerfun.net
+        // Èç¹ûÓòÃû°üº¬pic.jiayou.ink£¬¸Ä³Épic.sellerfun.net
         let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
         
-        // SKUå‰ç¼€æ”¹æˆUK (ä¾‹å¦‚ï¼šUSXBC188 -> UKXBC188)
+        // SKUÇ°×º¸Ä³ÉUK (ÀıÈç£ºUSXBC188 -> UKXBC188)
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\//g, '/UK$1/');
         processedUrl = processedUrl.replace(/\/US([A-Z0-9]+)\./g, '/UK$1.');
         
         return processedUrl;
       }
       
-      // å¦‚æœæºæ–‡ä»¶ä¸æ˜¯ç¾å›½/åŠ æ‹¿å¤§ï¼Œåœ¨ç”Ÿæˆç¾å›½/åŠ æ‹¿å¤§èµ„æ–™è¡¨æ—¶ï¼ŒJiaYouæ”¹æˆSellerFun
+      // Èç¹ûÔ´ÎÄ¼ş²»ÊÇÃÀ¹ú/¼ÓÄÃ´ó£¬ÔÚÉú³ÉÃÀ¹ú/¼ÓÄÃ´ó×ÊÁÏ±íÊ±£¬JiaYou¸Ä³ÉSellerFun
       if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA')) {
         return url.replace(/JiaYou/g, 'SellerFun');
       }
       
-      // å¦‚æœæºæ–‡ä»¶æ˜¯ç¾å›½/åŠ æ‹¿å¤§ï¼Œåœ¨ç”Ÿæˆéç¾å›½/åŠ æ‹¿å¤§èµ„æ–™è¡¨æ—¶ï¼ŒSellerFunæ”¹æˆJiaYou
+      // Èç¹ûÔ´ÎÄ¼şÊÇÃÀ¹ú/¼ÓÄÃ´ó£¬ÔÚÉú³É·ÇÃÀ¹ú/¼ÓÄÃ´ó×ÊÁÏ±íÊ±£¬SellerFun¸Ä³ÉJiaYou
       if (sourceCountryType === 'US_CA' && country !== 'US' && country !== 'CA') {
         return url.replace(/SellerFun/g, 'JiaYou');
       }
@@ -3493,11 +3497,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return url;
     };
 
-    // å¤„ç†SKUå­—æ®µï¼Œæ ¹æ®ç›®æ ‡å›½å®¶å†³å®šå‰ç¼€
+    // ´¦ÀíSKU×Ö¶Î£¬¸ù¾İÄ¿±ê¹ú¼Ò¾ö¶¨Ç°×º
     const processSkuField = (sku) => {
       if (!sku) return sku;
       
-      // å¦‚æœç›®æ ‡å›½å®¶æ˜¯è‹±å›½ã€æ¾³å¤§åˆ©äºšã€é˜¿è”é…‹ï¼ŒSKUå‰ç¼€æ”¹ä¸ºUK
+      // Èç¹ûÄ¿±ê¹ú¼ÒÊÇÓ¢¹ú¡¢°Ä´óÀûÑÇ¡¢°¢ÁªÇõ£¬SKUÇ°×º¸ÄÎªUK
       if (country === 'UK' || country === 'AU' || country === 'AE') {
         return sku.replace(/^[A-Z]{2}/, 'UK');
       }
@@ -3505,13 +3509,13 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return sku;
     };
 
-    // å¤„ç†modelå­—æ®µï¼Œæ ¹æ®ç›®æ ‡å›½å®¶å†³å®šå‰ç¼€
+    // ´¦Àímodel×Ö¶Î£¬¸ù¾İÄ¿±ê¹ú¼Ò¾ö¶¨Ç°×º
     const processModelField = (model) => {
       if (!model) return model;
       
-      // å¦‚æœç›®æ ‡å›½å®¶æ˜¯è‹±å›½ã€æ¾³å¤§åˆ©äºšã€é˜¿è”é…‹ï¼Œmodelå­—æ®µåŠ ä¸ŠUKå‰ç¼€
+      // Èç¹ûÄ¿±ê¹ú¼ÒÊÇÓ¢¹ú¡¢°Ä´óÀûÑÇ¡¢°¢ÁªÇõ£¬model×Ö¶Î¼ÓÉÏUKÇ°×º
       if (country === 'UK' || country === 'AU' || country === 'AE') {
-        // å¦‚æœå·²ç»æœ‰UKå‰ç¼€å°±ä¸é‡å¤æ·»åŠ 
+        // Èç¹ûÒÑ¾­ÓĞUKÇ°×º¾Í²»ÖØ¸´Ìí¼Ó
         if (model.startsWith('UK')) {
           return model;
         }
@@ -3521,40 +3525,40 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       return model;
     };
 
-    // è°ƒè¯•ï¼šè¾“å‡ºæ¨¡æ¿å‰å‡ è¡Œçš„å†…å®¹
-    console.log('ğŸ” æ¨¡æ¿å‰5è¡Œå†…å®¹:');
+    // µ÷ÊÔ£ºÊä³öÄ£°åÇ°¼¸ĞĞµÄÄÚÈİ
+    console.log('?? Ä£°åÇ°5ĞĞÄÚÈİ:');
     for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`ç¬¬${i + 1}è¡Œ:`, updatedData[i]?.slice(0, 5) || 'ç©ºè¡Œ');
+      console.log(`µÚ${i + 1}ĞĞ:`, updatedData[i]?.slice(0, 5) || '¿ÕĞĞ');
     }
 
-    // ä¸æ¸…ç©ºåŸæ¨¡æ¿æ•°æ®ï¼Œåªä»ç¬¬4è¡Œå¼€å§‹å¡«å†™æ•°æ®
+    // ²»Çå¿ÕÔ­Ä£°åÊı¾İ£¬Ö»´ÓµÚ4ĞĞ¿ªÊ¼ÌîĞ´Êı¾İ
     const headerRowCount = 3;
     const originalLength = updatedData.length;
-    console.log(`ğŸ“‹ ä¿ç•™åŸæ¨¡æ¿æ‰€æœ‰å†…å®¹ï¼Œä»ç¬¬${headerRowCount + 1}è¡Œå¼€å§‹å¡«å†™${records.length}æ¡è®°å½•`);
-    console.log(`ğŸ“Š åŸæ¨¡æ¿æœ‰${originalLength}è¡Œï¼Œå°†ä»ç¬¬4è¡Œå¼€å§‹å¡«å†™æ•°æ®`);
+    console.log(`?? ±£ÁôÔ­Ä£°åËùÓĞÄÚÈİ£¬´ÓµÚ${headerRowCount + 1}ĞĞ¿ªÊ¼ÌîĞ´${records.length}Ìõ¼ÇÂ¼`);
+    console.log(`?? Ô­Ä£°åÓĞ${originalLength}ĞĞ£¬½«´ÓµÚ4ĞĞ¿ªÊ¼ÌîĞ´Êı¾İ`);
 
-    // å¡«å†™æ–°æ•°æ®ï¼ˆä»ç¬¬4è¡Œå¼€å§‹ï¼‰
+    // ÌîĞ´ĞÂÊı¾İ£¨´ÓµÚ4ĞĞ¿ªÊ¼£©
     let addedCount = 0;
     records.forEach((record, index) => {
       const rowIndex = headerRowCount + index;
       
-      // è°ƒè¯•ï¼šè¾“å‡ºç¬¬ä¸€æ¡è®°å½•çš„è¯¦ç»†ä¿¡æ¯
+      // µ÷ÊÔ£ºÊä³öµÚÒ»Ìõ¼ÇÂ¼µÄÏêÏ¸ĞÅÏ¢
       if (index === 0) {
-        console.log('ğŸ“‹ ç¬¬ä¸€æ¡è®°å½•è¯¦æƒ…:', {
+        console.log('?? µÚÒ»Ìõ¼ÇÂ¼ÏêÇé:', {
           item_sku: record.item_sku || record.dataValues?.item_sku,
           item_name: record.item_name || record.dataValues?.item_name,
           brand_name: record.brand_name || record.dataValues?.brand_name,
-          dataValues: record.dataValues ? 'æœ‰dataValues' : 'æ— dataValues'
+          dataValues: record.dataValues ? 'ÓĞdataValues' : 'ÎŞdataValues'
         });
-        console.log(`ğŸ“ å°†å¡«å†™åˆ°ç¬¬${rowIndex + 1}è¡Œï¼ˆç´¢å¼•${rowIndex}ï¼‰`);
+        console.log(`?? ½«ÌîĞ´µ½µÚ${rowIndex + 1}ĞĞ£¨Ë÷Òı${rowIndex}£©`);
       }
       
-      // ç¡®ä¿è¡Œå­˜åœ¨
+      // È·±£ĞĞ´æÔÚ
       if (!updatedData[rowIndex]) {
         updatedData[rowIndex] = [];
       }
       
-      // ç¡®ä¿è¡Œæœ‰è¶³å¤Ÿçš„åˆ—
+      // È·±£ĞĞÓĞ×ã¹»µÄÁĞ
       const maxCol = Math.max(
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
@@ -3576,7 +3580,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][i] = '';
       }
 
-      // å¡«å……æ•°æ® - æ”¯æŒSequelizeæ¨¡å‹æ•°æ®è®¿é—®
+      // Ìî³äÊı¾İ - Ö§³ÖSequelizeÄ£ĞÍÊı¾İ·ÃÎÊ
       const data = record.dataValues || record;
       
       if (itemSkuCol !== -1) {
@@ -3643,7 +3647,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][bulletPoint5Col] = processTextContent(data.bullet_point5) || '';
       }
       
-      // å¡«å†™æ–°å¢å­—æ®µæ•°æ®
+      // ÌîĞ´ĞÂÔö×Ö¶ÎÊı¾İ
       if (feedProductTypeCol !== -1) {
         updatedData[rowIndex][feedProductTypeCol] = data.feed_product_type || '';
       }
@@ -3693,7 +3697,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         updatedData[rowIndex][countryOfOriginCol] = data.country_of_origin || '';
       }
       if (cpsiaCautionaryStatement1Col !== -1) {
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šä½¿ç”¨ç‰¹å®šæ ¼å¼çš„è­¦å‘Šè¯­å¥
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÊ¹ÓÃÌØ¶¨¸ñÊ½µÄ¾¯¸æÓï¾ä
         if (country === 'CA') {
           updatedData[rowIndex][cpsiaCautionaryStatement1Col] = 'Choking Hazard - Small Parts';
         } else {
@@ -3701,7 +3705,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         }
       }
       if (conditionTypeCol !== -1) {
-        // é˜¿è”é…‹ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šç»Ÿä¸€å¡«å†™ "new, new"
+        // °¢ÁªÇõÕ¾µãÌØÊâ´¦Àí£ºÍ³Ò»ÌîĞ´ "new, new"
         if (country === 'AE') {
           updatedData[rowIndex][conditionTypeCol] = 'new, new';
         } else {
@@ -3709,7 +3713,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         }
       }
       
-      // å¡«å†™åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µæ•°æ®
+      // ÌîĞ´¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎÊı¾İ
       if (closureTypeCol !== -1) {
         updatedData[rowIndex][closureTypeCol] = data.closure_type || '';
       }
@@ -3742,11 +3746,11 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (storageVolumeUnitOfMeasureCol !== -1) {
         let storageVolumeUnit = data.storage_volume_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šliterè½¬æ¢ä¸ºLiters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºliter×ª»»ÎªLiters
         if (country === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
           storageVolumeUnit = 'Liters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šLitersè½¬æ¢ä¸ºliter
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºLiters×ª»»Îªliter
         if (country === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
         }
@@ -3757,13 +3761,13 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthFrontToBackCol !== -1) {
         let depthValue = data.depth_front_to_back || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'CA' && data.depth_front_to_back_unit_of_measure && 
             data.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
           depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'UK' && data.depth_front_to_back_unit_of_measure && 
             data.depth_front_to_back_unit_of_measure === 'Inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
@@ -3773,39 +3777,39 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
         let depthUnit = data.depth_front_to_back_unit_of_measure || '';
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] å¤„ç†depth_front_to_back_unit_of_measure: åŸå€¼="${depthUnit}", ç›®æ ‡å›½å®¶="${country}"`);
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        console.log(`?? [mapDataToTemplateXlsx] ´¦Àídepth_front_to_back_unit_of_measure: Ô­Öµ="${depthUnit}", Ä¿±ê¹ú¼Ò="${country}"`);
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (country === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] CA Inchesè½¬æ¢: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] CA Inches×ª»»: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (country === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Inchesè½¬æ¢: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Inches×ª»»: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
           } else if (depthUnit === 'Centimeters') {
             depthUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Centimetersè½¬æ¢: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Centimeters×ª»»: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((country === 'CA' || country === 'AE' || country === 'AU') && depthUnit.trim().toLowerCase() === 'centimetres') {
           depthUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] ${country} Centimetresè½¬æ¢: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] ${country} Centimetres×ª»»: "${data.depth_front_to_back_unit_of_measure}" -> "${depthUnit}"`);
         }
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] æœ€ç»ˆå¡«å†™depth_front_to_back_unit_of_measure: "${depthUnit}"`);
+        console.log(`?? [mapDataToTemplateXlsx] ×îÖÕÌîĞ´depth_front_to_back_unit_of_measure: "${depthUnit}"`);
         updatedData[rowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
       if (depthWidthSideToSideCol !== -1) {
         let widthValue = data.depth_width_side_to_side || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'CA' && data.depth_width_side_to_side_unit_of_measure && 
             data.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
           widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'UK' && data.depth_width_side_to_side_unit_of_measure && 
             data.depth_width_side_to_side_unit_of_measure === 'Inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
@@ -3815,39 +3819,39 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
         let widthUnit = data.depth_width_side_to_side_unit_of_measure || '';
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] å¤„ç†depth_width_side_to_side_unit_of_measure: åŸå€¼="${widthUnit}", ç›®æ ‡å›½å®¶="${country}"`);
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        console.log(`?? [mapDataToTemplateXlsx] ´¦Àídepth_width_side_to_side_unit_of_measure: Ô­Öµ="${widthUnit}", Ä¿±ê¹ú¼Ò="${country}"`);
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (country === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] CA Inchesè½¬æ¢: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] CA Inches×ª»»: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (country === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Inchesè½¬æ¢: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Inches×ª»»: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
           } else if (widthUnit === 'Centimeters') {
             widthUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Centimetersè½¬æ¢: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Centimeters×ª»»: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((country === 'CA' || country === 'AE' || country === 'AU') && widthUnit.trim().toLowerCase() === 'centimetres') {
           widthUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] ${country} Centimetresè½¬æ¢: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] ${country} Centimetres×ª»»: "${data.depth_width_side_to_side_unit_of_measure}" -> "${widthUnit}"`);
         }
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] æœ€ç»ˆå¡«å†™depth_width_side_to_side_unit_of_measure: "${widthUnit}"`);
+        console.log(`?? [mapDataToTemplateXlsx] ×îÖÕÌîĞ´depth_width_side_to_side_unit_of_measure: "${widthUnit}"`);
         updatedData[rowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
       }
       if (depthHeightFloorToTopCol !== -1) {
         let heightValue = data.depth_height_floor_to_top || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'CA' && data.depth_height_floor_to_top_unit_of_measure && 
             data.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
           heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (country === 'UK' && data.depth_height_floor_to_top_unit_of_measure && 
             data.depth_height_floor_to_top_unit_of_measure === 'Inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
@@ -3857,35 +3861,35 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       }
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
         let heightUnit = data.depth_height_floor_to_top_unit_of_measure || '';
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] å¤„ç†depth_height_floor_to_top_unit_of_measure: åŸå€¼="${heightUnit}", ç›®æ ‡å›½å®¶="${country}"`);
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        console.log(`?? [mapDataToTemplateXlsx] ´¦Àídepth_height_floor_to_top_unit_of_measure: Ô­Öµ="${heightUnit}", Ä¿±ê¹ú¼Ò="${country}"`);
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (country === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] CA Inchesè½¬æ¢: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] CA Inches×ª»»: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (country === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Inchesè½¬æ¢: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Inches×ª»»: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
           } else if (heightUnit === 'Centimeters') {
             heightUnit = 'Centimetres';
-            console.log(`ğŸ”§ [mapDataToTemplateXlsx] UK Centimetersè½¬æ¢: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
+            console.log(`?? [mapDataToTemplateXlsx] UK Centimeters×ª»»: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((country === 'CA' || country === 'AE' || country === 'AU') && heightUnit.trim().toLowerCase() === 'centimetres') {
           heightUnit = 'Centimeters';
-          console.log(`ğŸ”§ [mapDataToTemplateXlsx] ${country} Centimetresè½¬æ¢: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
+          console.log(`?? [mapDataToTemplateXlsx] ${country} Centimetres×ª»»: "${data.depth_height_floor_to_top_unit_of_measure}" -> "${heightUnit}"`);
         }
-        console.log(`ğŸ”§ [mapDataToTemplateXlsx] æœ€ç»ˆå¡«å†™depth_height_floor_to_top_unit_of_measure: "${heightUnit}"`);
+        console.log(`?? [mapDataToTemplateXlsx] ×îÖÕÌîĞ´depth_height_floor_to_top_unit_of_measure: "${heightUnit}"`);
         updatedData[rowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
-      // åŠ æ‹¿å¤§ç«™ç‚¹manufacturer_contact_informationå­—æ®µç‰¹æ®Šå¤„ç†
+      // ¼ÓÄÃ´óÕ¾µãmanufacturer_contact_information×Ö¶ÎÌØÊâ´¦Àí
       if (manufacturerContactInformationCol !== -1) {
         if (country === 'CA') {
-          // å¯¹äºåŠ æ‹¿å¤§ç«™ç‚¹ï¼Œç»Ÿä¸€å¡«å†™æŒ‡å®šçš„åˆ¶é€ å•†è”ç³»ä¿¡æ¯
+          // ¶ÔÓÚ¼ÓÄÃ´óÕ¾µã£¬Í³Ò»ÌîĞ´Ö¸¶¨µÄÖÆÔìÉÌÁªÏµĞÅÏ¢
           updatedData[rowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
 Room 825, Building C, Part C
 Qinghu Tech Park
@@ -3893,27 +3897,27 @@ Shenzhen, Longhua, Guangdong 518000
 CN
 8618123615703`;
         } else {
-          // å…¶ä»–ç«™ç‚¹ä¿æŒåŸæœ‰é€»è¾‘
+          // ÆäËûÕ¾µã±£³ÖÔ­ÓĞÂß¼­
           updatedData[rowIndex][manufacturerContactInformationCol] = data.manufacturer_contact_information || '';
         }
       }
 
-      // å¡«å†™department_nameå­—æ®µ
+      // ÌîĞ´department_name×Ö¶Î
       if (departmentNameCol !== -1) {
         updatedData[rowIndex][departmentNameCol] = processTextContent(data.department_name || '', 'department_name');
       }
 
-      // å¡«å†™outer_material_typeå­—æ®µ
+      // ÌîĞ´outer_material_type×Ö¶Î
       if (outerMaterialTypeCol !== -1) {
         updatedData[rowIndex][outerMaterialTypeCol] = data.outer_material_type || '';
       }
       
-      // å¡«å†™outer_material_type1å­—æ®µï¼ˆç‰¹åˆ«å¤„ç†å­—æ®µæ˜ å°„ï¼‰
+      // ÌîĞ´outer_material_type1×Ö¶Î£¨ÌØ±ğ´¦Àí×Ö¶ÎÓ³Éä£©
       if (outerMaterialType1Col !== -1) {
-        // å­—æ®µæ˜ å°„è§„åˆ™ï¼š
-        // - è‹±å›½ç«™/æ¾³æ´²ç«™/é˜¿è”é…‹ç«™ç­‰ä½¿ç”¨ outer_material_type å­—æ®µ
-        // - ç¾å›½ç«™/åŠ æ‹¿å¤§ç«™ä½¿ç”¨ outer_material_type1 å­—æ®µ
-        // å½“ä»è‹±å›½ç­‰ç«™ç‚¹ç”Ÿæˆç¾å›½/åŠ æ‹¿å¤§ç«™èµ„æ–™æ—¶ï¼Œéœ€è¦å°†outer_material_typeçš„å€¼æ˜ å°„åˆ°outer_material_type1
+        // ×Ö¶ÎÓ³Éä¹æÔò£º
+        // - Ó¢¹úÕ¾/°ÄÖŞÕ¾/°¢ÁªÇõÕ¾µÈÊ¹ÓÃ outer_material_type ×Ö¶Î
+        // - ÃÀ¹úÕ¾/¼ÓÄÃ´óÕ¾Ê¹ÓÃ outer_material_type1 ×Ö¶Î
+        // µ±´ÓÓ¢¹úµÈÕ¾µãÉú³ÉÃÀ¹ú/¼ÓÄÃ´óÕ¾×ÊÁÏÊ±£¬ĞèÒª½«outer_material_typeµÄÖµÓ³Éäµ½outer_material_type1
         if (sourceCountryType !== 'US_CA' && (country === 'US' || country === 'CA') && data.outer_material_type) {
           updatedData[rowIndex][outerMaterialType1Col] = data.outer_material_type;
         } else {
@@ -3921,82 +3925,82 @@ CN
         }
       }
 
-      // å¡«å†™lining_descriptionå­—æ®µ
+      // ÌîĞ´lining_description×Ö¶Î
       if (liningDescriptionCol !== -1) {
         updatedData[rowIndex][liningDescriptionCol] = data.lining_description || '';
       }
 
-      // å¡«å†™strap_typeå­—æ®µ
+      // ÌîĞ´strap_type×Ö¶Î
       if (strapTypeCol !== -1) {
         updatedData[rowIndex][strapTypeCol] = data.strap_type || '';
       }
 
       addedCount++;
       
-      // è°ƒè¯•ï¼šè¾“å‡ºç¬¬ä¸€æ¡æ•°æ®å¡«å†™åçš„è¡Œå†…å®¹
+      // µ÷ÊÔ£ºÊä³öµÚÒ»ÌõÊı¾İÌîĞ´ºóµÄĞĞÄÚÈİ
       if (index === 0 && updatedData[rowIndex]) {
-        console.log('ğŸ“‹ ç¬¬ä¸€æ¡æ•°æ®å¡«å†™åçš„è¡Œå‰5åˆ—:', updatedData[rowIndex].slice(0, 5));
+        console.log('?? µÚÒ»ÌõÊı¾İÌîĞ´ºóµÄĞĞÇ°5ÁĞ:', updatedData[rowIndex].slice(0, 5));
       }
     });
 
-    console.log(`âœ… æ•°æ®æ˜ å°„å®Œæˆï¼Œæ·»åŠ äº† ${addedCount} è¡Œæ•°æ®åˆ°${country}æ¨¡æ¿`);
+    console.log(`? Êı¾İÓ³ÉäÍê³É£¬Ìí¼ÓÁË ${addedCount} ĞĞÊı¾İµ½${country}Ä£°å`);
     
-    // è°ƒè¯•ï¼šè¾“å‡ºæœ€ç»ˆæ•°æ®çš„å‰å‡ è¡Œ
-    console.log('ğŸ” æœ€ç»ˆæ•°æ®å‰5è¡Œ:');
+    // µ÷ÊÔ£ºÊä³ö×îÖÕÊı¾İµÄÇ°¼¸ĞĞ
+    console.log('?? ×îÖÕÊı¾İÇ°5ĞĞ:');
     for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`ç¬¬${i + 1}è¡Œ:`, updatedData[i]?.slice(0, 3) || 'ç©ºè¡Œ');
+      console.log(`µÚ${i + 1}ĞĞ:`, updatedData[i]?.slice(0, 3) || '¿ÕĞĞ');
     }
     
-    // éªŒè¯è¿”å›çš„æ•°æ®æ ¼å¼
+    // ÑéÖ¤·µ»ØµÄÊı¾İ¸ñÊ½
     if (!Array.isArray(updatedData) || updatedData.length === 0) {
-      throw new Error('æ˜ å°„åçš„æ•°æ®ä¸ºç©º');
+      throw new Error('Ó³ÉäºóµÄÊı¾İÎª¿Õ');
     }
     
-    // éªŒè¯æ¯è¡Œæ•°æ®çš„å®Œæ•´æ€§
+    // ÑéÖ¤Ã¿ĞĞÊı¾İµÄÍêÕûĞÔ
     for (let i = 0; i < Math.min(updatedData.length, 5); i++) {
       if (!Array.isArray(updatedData[i])) {
-        throw new Error(`ç¬¬${i}è¡Œæ•°æ®æ ¼å¼é”™è¯¯`);
+        throw new Error(`µÚ${i}ĞĞÊı¾İ¸ñÊ½´íÎó`);
       }
     }
     
-    console.log(`ğŸ“Š è¿”å›æ˜ å°„åçš„æ•°æ®: ${updatedData.length} è¡Œ x ${updatedData[0] ? updatedData[0].length : 0} åˆ—`);
+    console.log(`?? ·µ»ØÓ³ÉäºóµÄÊı¾İ: ${updatedData.length} ĞĞ x ${updatedData[0] ? updatedData[0].length : 0} ÁĞ`);
     
     return updatedData;
     
   } catch (error) {
-    console.error('âŒ æ˜ å°„æ•°æ®åˆ°æ¨¡æ¿å¤±è´¥:');
-    console.error(`ğŸ” é”™è¯¯è¯¦æƒ…: ${error.message}`);
-    console.error(`ğŸ“‹ é”™è¯¯å †æ ˆ:`, error.stack);
-    console.error(`ğŸ·ï¸ é”™è¯¯ç±»å‹: ${error.name}`);
-    console.error(`ğŸ“Š è¾“å…¥å‚æ•°: country=${country}, recordsæ•°é‡=${Array.isArray(records) ? records.length : 'not array'}, templateDataè¡Œæ•°=${Array.isArray(templateData) ? templateData.length : 'not array'}`);
+    console.error('? Ó³ÉäÊı¾İµ½Ä£°åÊ§°Ü:');
+    console.error(`?? ´íÎóÏêÇé: ${error.message}`);
+    console.error(`?? ´íÎó¶ÑÕ»:`, error.stack);
+    console.error(`??? ´íÎóÀàĞÍ: ${error.name}`);
+    console.error(`?? ÊäÈë²ÎÊı: country=${country}, recordsÊıÁ¿=${Array.isArray(records) ? records.length : 'not array'}, templateDataĞĞÊı=${Array.isArray(templateData) ? templateData.length : 'not array'}`);
     throw error;
   }
 }
 
-// æ‰¹é‡ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨ï¼ˆåŸºäºæºç«™ç‚¹æ•°æ®ï¼‰
+// ÅúÁ¿Éú³ÉÆäËûÕ¾µã×ÊÁÏ±í£¨»ùÓÚÔ´Õ¾µãÊı¾İ£©
 router.post('/generate-batch-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('ğŸ”„ æ”¶åˆ°æ‰¹é‡ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨è¯·æ±‚');
+    console.log('?? ÊÕµ½ÅúÁ¿Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÇëÇó');
     
     const { sourceCountry, targetCountry } = req.body;
     const uploadedFile = req.file;
     
     if (!sourceCountry || !targetCountry || !uploadedFile) {
       return res.status(400).json({ 
-        message: 'è¯·æä¾›æºç«™ç‚¹ã€ç›®æ ‡ç«™ç‚¹ä¿¡æ¯å’ŒExcelæ–‡ä»¶' 
+        message: 'ÇëÌá¹©Ô´Õ¾µã¡¢Ä¿±êÕ¾µãĞÅÏ¢ºÍExcelÎÄ¼ş' 
       });
     }
     
     if (sourceCountry === targetCountry) {
       return res.status(400).json({ 
-        message: 'æºç«™ç‚¹å’Œç›®æ ‡ç«™ç‚¹ä¸èƒ½ç›¸åŒ' 
+        message: 'Ô´Õ¾µãºÍÄ¿±êÕ¾µã²»ÄÜÏàÍ¬' 
       });
     }
 
-    console.log(`ğŸ“ å¤„ç†æ‰¹é‡ç”Ÿæˆ: ${sourceCountry} -> ${targetCountry}, æ–‡ä»¶: ${uploadedFile.originalname}`);
+    console.log(`?? ´¦ÀíÅúÁ¿Éú³É: ${sourceCountry} -> ${targetCountry}, ÎÄ¼ş: ${uploadedFile.originalname}`);
 
-    // å®šä¹‰å¤„ç†å‡½æ•°ï¼ˆä¸å•ä¸ªç”Ÿæˆå‡½æ•°ä¿æŒä¸€è‡´ï¼‰
+    // ¶¨Òå´¦Àíº¯Êı£¨Óëµ¥¸öÉú³Éº¯Êı±£³ÖÒ»ÖÂ£©
     const processBatchText = (text, fieldType = 'general') => {
       if (!text) return text;
       
@@ -4004,7 +4008,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
       const targetIsUKAUAE = targetCountry === 'UK' || targetCountry === 'AU' || targetCountry === 'AE';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
         if (fieldType === 'brand_name') {
           return 'JiaYou';  // SellerFun -> JiaYou
@@ -4018,7 +4022,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         return text;
       }
       
-      // å…¶ä»–è½¬æ¢é€»è¾‘ä¿æŒåŸæœ‰
+      // ÆäËû×ª»»Âß¼­±£³ÖÔ­ÓĞ
       return text;
     };
 
@@ -4028,9 +4032,9 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
       const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // UKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+        // UKÇ°×º¸ÄÎªUSÇ°×º
         return sku.replace(/^UK/, 'US');
       }
       
@@ -4043,13 +4047,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
       const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // UKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+        // UKÇ°×º¸ÄÎªUSÇ°×º
         if (model.startsWith('UK')) {
           return model.replace(/^UK/, 'US');
         }
-        // å¦‚æœæ²¡æœ‰å‰ç¼€ï¼Œæ·»åŠ USå‰ç¼€
+        // Èç¹ûÃ»ÓĞÇ°×º£¬Ìí¼ÓUSÇ°×º
         return 'US' + model;
       }
       
@@ -4062,12 +4066,12 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
       const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
       
-      // ä»UK/AU/AEç”ŸæˆUS/CAçš„è½¬æ¢é€»è¾‘
+      // ´ÓUK/AU/AEÉú³ÉUS/CAµÄ×ª»»Âß¼­
       if (sourceIsUKAUAE && targetIsUSCA) {
-        // åŸŸåï¼špic.sellerfun.net -> pic.jiayou.ink
+        // ÓòÃû£ºpic.sellerfun.net -> pic.jiayou.ink
         let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
         
-        // SKUå‰ç¼€æ”¹æˆUS (ä¾‹å¦‚ï¼šUKXBC188 -> USXBC188)
+        // SKUÇ°×º¸Ä³ÉUS (ÀıÈç£ºUKXBC188 -> USXBC188)
         processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
         processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
         
@@ -4077,34 +4081,34 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       return url;
     };
 
-    // æ­¥éª¤1: è§£æä¸Šä¼ çš„Excelæ–‡ä»¶
-    console.log('ğŸ“– è§£æä¸Šä¼ çš„Excelæ–‡ä»¶...');
+    // ²½Öè1: ½âÎöÉÏ´«µÄExcelÎÄ¼ş
+    console.log('?? ½âÎöÉÏ´«µÄExcelÎÄ¼ş...');
     const workbook = xlsx.read(uploadedFile.buffer);
     
-    // ä¼˜å…ˆå¯»æ‰¾Templateå·¥ä½œè¡¨ï¼Œå¦‚æœæ²¡æœ‰åˆ™ä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨
+    // ÓÅÏÈÑ°ÕÒTemplate¹¤×÷±í£¬Èç¹ûÃ»ÓĞÔòÊ¹ÓÃµÚÒ»¸ö¹¤×÷±í
     let sheetName;
     let worksheet;
     
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('âœ… æ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨Templateå·¥ä½œè¡¨');
+      console.log('? ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃTemplate¹¤×÷±í');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`âš ï¸ æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨: ${sheetName}`);
+      console.log(`?? Î´ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃµÚÒ»¸ö¹¤×÷±í: ${sheetName}`);
     }
     
-    console.log(`ğŸ“‹ å½“å‰ä½¿ç”¨çš„å·¥ä½œè¡¨: ${sheetName}`);
+    console.log(`?? µ±Ç°Ê¹ÓÃµÄ¹¤×÷±í: ${sheetName}`);
     
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
     if (jsonData.length < 2) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«æ ‡é¢˜è¡Œå’Œæ•°æ®è¡Œ' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬±êÌâĞĞºÍÊı¾İĞĞ' });
     }
 
-    // æ­¥éª¤2: è·å–ç›®æ ‡å›½å®¶çš„æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ” æŸ¥æ‰¾${targetCountry}ç«™ç‚¹çš„æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè2: »ñÈ¡Ä¿±ê¹ú¼ÒµÄÄ£°åÎÄ¼ş
+    console.log(`?? ²éÕÒ${targetCountry}Õ¾µãµÄÄ£°åÎÄ¼ş...`);
     
     const targetTemplate = await TemplateLink.findOne({
       where: {
@@ -4117,46 +4121,46 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     
     if (!targetTemplate) {
       return res.status(400).json({ 
-        message: `æœªæ‰¾åˆ°${targetCountry}ç«™ç‚¹çš„èµ„æ–™æ¨¡æ¿ï¼Œè¯·å…ˆä¸Šä¼ ${targetCountry}æ¨¡æ¿æ–‡ä»¶` 
+        message: `Î´ÕÒµ½${targetCountry}Õ¾µãµÄ×ÊÁÏÄ£°å£¬ÇëÏÈÉÏ´«${targetCountry}Ä£°åÎÄ¼ş` 
       });
     }
 
-    console.log(`ğŸ“„ ä½¿ç”¨${targetCountry}æ¨¡æ¿: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
+    console.log(`?? Ê¹ÓÃ${targetCountry}Ä£°å: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
 
-    // æ­¥éª¤3: ä¸‹è½½ç›®æ ‡æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ“¥ ä¸‹è½½${targetCountry}æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè3: ÏÂÔØÄ¿±êÄ£°åÎÄ¼ş
+    console.log(`?? ÏÂÔØ${targetCountry}Ä£°åÎÄ¼ş...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(targetTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`âŒ ä¸‹è½½${targetCountry}æ¨¡æ¿å¤±è´¥:`, downloadResult.message);
+      console.error(`? ÏÂÔØ${targetCountry}Ä£°åÊ§°Ü:`, downloadResult.message);
       return res.status(500).json({ 
-        message: `ä¸‹è½½${targetCountry}æ¨¡æ¿å¤±è´¥: ${downloadResult.message}`,
+        message: `ÏÂÔØ${targetCountry}Ä£°åÊ§°Ü: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`âœ… ${targetCountry}æ¨¡æ¿ä¸‹è½½æˆåŠŸ: ${downloadResult.fileName} (${downloadResult.size} å­—èŠ‚)`);
+    console.log(`? ${targetCountry}Ä£°åÏÂÔØ³É¹¦: ${downloadResult.fileName} (${downloadResult.size} ×Ö½Ú)`);
 
-    // æ­¥éª¤4: å¤„ç†æ•°æ®è½¬æ¢
-    console.log('ğŸ”„ å¼€å§‹æ•°æ®è½¬æ¢å¤„ç†...');
+    // ²½Öè4: ´¦ÀíÊı¾İ×ª»»
+    console.log('?? ¿ªÊ¼Êı¾İ×ª»»´¦Àí...');
     const { ProductInformation } = require('../models');
     
-    // è·å–æ ‡é¢˜è¡Œï¼ˆç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œï¼Œç´¢å¼•ä¸º2ï¼‰
+    // »ñÈ¡±êÌâĞĞ£¨µÚ3ĞĞÊÇ±êÌâĞĞ£¬Ë÷ÒıÎª2£©
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«å‰3è¡Œæ ‡é¢˜è¯´æ˜å’Œæ•°æ®è¡Œ' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬Ç°3ĞĞ±êÌâËµÃ÷ºÍÊı¾İĞĞ' });
     }
     
-    const headers = jsonData[2]; // ç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œ
-    const dataRows = jsonData.slice(3); // ç¬¬4è¡Œå¼€å§‹æ˜¯æ•°æ®è¡Œ
+    const headers = jsonData[2]; // µÚ3ĞĞÊÇ±êÌâĞĞ
+    const dataRows = jsonData.slice(3); // µÚ4ĞĞ¿ªÊ¼ÊÇÊı¾İĞĞ
     
     const transformedRecords = [];
     
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
       
-      // åˆ›å»ºæ•°æ®å¯¹è±¡
+      // ´´½¨Êı¾İ¶ÔÏó
       const rowData = {};
       headers.forEach((header, index) => {
         if (header && row[index] !== undefined) {
@@ -4164,49 +4168,49 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         }
       });
       
-      // è®¾ç½®original_parent_skuå­—æ®µï¼ˆæ ¹æ®parent_childåˆ—åˆ¤æ–­ï¼‰
+      // ÉèÖÃoriginal_parent_sku×Ö¶Î£¨¸ù¾İparent_childÁĞÅĞ¶Ï£©
       if (rowData.parent_child === 'Parent' && rowData.item_sku && rowData.item_sku.length > 2) {
-        // å½“parent_childä¸º"Parent"æ—¶ï¼Œitem_skuä¸­çš„ä¿¡æ¯ä¸ºæ¯SKUï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Parent"Ê±£¬item_skuÖĞµÄĞÅÏ¢ÎªÄ¸SKU£¬È¥µôÇ°Á½¸ö×Ö·û
         rowData.original_parent_sku = rowData.item_sku.substring(2);
       } else if (rowData.parent_child === 'Child' && rowData.parent_sku && rowData.parent_sku.length > 2) {
-        // å½“parent_childä¸º"Child"æ—¶ï¼Œä»parent_skuå­—æ®µè·å–æ¯SKUä¿¡æ¯ï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Child"Ê±£¬´Óparent_sku×Ö¶Î»ñÈ¡Ä¸SKUĞÅÏ¢£¬È¥µôÇ°Á½¸ö×Ö·û
         rowData.original_parent_sku = rowData.parent_sku.substring(2);
       } else if (rowData.item_sku && rowData.item_sku.length > 2) {
-        // å…¼å®¹å¤„ç†ï¼šå¦‚æœæ²¡æœ‰parent_childä¿¡æ¯ï¼Œä½¿ç”¨åŸæœ‰é€»è¾‘
+        // ¼æÈİ´¦Àí£ºÈç¹ûÃ»ÓĞparent_childĞÅÏ¢£¬Ê¹ÓÃÔ­ÓĞÂß¼­
         rowData.original_parent_sku = rowData.item_sku.substring(2);
-        console.warn(`âš ï¸ æ‰¹é‡è®°å½•ç¼ºå°‘parent_childä¿¡æ¯ï¼Œä½¿ç”¨item_skuç”Ÿæˆoriginal_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
+        console.warn(`?? ÅúÁ¿¼ÇÂ¼È±ÉÙparent_childĞÅÏ¢£¬Ê¹ÓÃitem_skuÉú³Éoriginal_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       }
       
-      // å…³é”®è½¬æ¢ï¼šå°†æºç«™ç‚¹çš„æ•°æ®è½¬æ¢ä¸ºç›®æ ‡ç«™ç‚¹çš„æ•°æ®
+      // ¹Ø¼ü×ª»»£º½«Ô´Õ¾µãµÄÊı¾İ×ª»»ÎªÄ¿±êÕ¾µãµÄÊı¾İ
       const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
       const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
       
-      // SKUå­—æ®µè½¬æ¢
+      // SKU×Ö¶Î×ª»»
       if (rowData.item_sku && rowData.item_sku.length > 2) {
         if (sourceIsUKAUAE && targetIsUSCA) {
-          // ä»UK/AU/AEç”ŸæˆUS/CAï¼šUKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+          // ´ÓUK/AU/AEÉú³ÉUS/CA£ºUKÇ°×º¸ÄÎªUSÇ°×º
           rowData.item_sku = rowData.item_sku.replace(/^UK/, 'US');
         } else {
-          // åŸæœ‰é€»è¾‘ï¼šç›®æ ‡ç«™ç‚¹å‰ç¼€ + åŸå§‹SKUçš„åéƒ¨åˆ†
+          // Ô­ÓĞÂß¼­£ºÄ¿±êÕ¾µãÇ°×º + Ô­Ê¼SKUµÄºó²¿·Ö
           rowData.item_sku = targetCountry + rowData.item_sku.substring(2);
         }
       }
       
-      // parent_skuå­—æ®µè½¬æ¢
+      // parent_sku×Ö¶Î×ª»»
       if (rowData.parent_sku && rowData.parent_sku.length > 2) {
         if (sourceIsUKAUAE && targetIsUSCA) {
-          // ä»UK/AU/AEç”ŸæˆUS/CAï¼šUKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+          // ´ÓUK/AU/AEÉú³ÉUS/CA£ºUKÇ°×º¸ÄÎªUSÇ°×º
           rowData.parent_sku = rowData.parent_sku.replace(/^UK/, 'US');
         } else {
-          // åŸæœ‰é€»è¾‘ï¼šç›®æ ‡ç«™ç‚¹å‰ç¼€ + åŸå§‹SKUçš„åéƒ¨åˆ†
+          // Ô­ÓĞÂß¼­£ºÄ¿±êÕ¾µãÇ°×º + Ô­Ê¼SKUµÄºó²¿·Ö
           rowData.parent_sku = targetCountry + rowData.parent_sku.substring(2);
         }
       }
       
-      // modelå­—æ®µè½¬æ¢
+      // model×Ö¶Î×ª»»
       if (rowData.model) {
         if (sourceIsUKAUAE && targetIsUSCA) {
-          // ä»UK/AU/AEç”ŸæˆUS/CAï¼šUKå‰ç¼€æ”¹ä¸ºUSå‰ç¼€
+          // ´ÓUK/AU/AEÉú³ÉUS/CA£ºUKÇ°×º¸ÄÎªUSÇ°×º
           if (rowData.model.startsWith('UK')) {
             rowData.model = rowData.model.replace(/^UK/, 'US');
           } else {
@@ -4215,7 +4219,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         }
       }
       
-      // å“ç‰Œåç§°è½¬æ¢
+      // Æ·ÅÆÃû³Æ×ª»»
       if (sourceIsUKAUAE && targetIsUSCA) {
         if (rowData.brand_name) {
           rowData.brand_name = 'JiaYou';  // SellerFun -> JiaYou
@@ -4228,7 +4232,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         }
       }
       
-      // å›¾ç‰‡URLè½¬æ¢
+      // Í¼Æ¬URL×ª»»
       if (sourceIsUKAUAE && targetIsUSCA) {
         const imageFields = [
           'main_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3', 
@@ -4238,55 +4242,55 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         
         imageFields.forEach(field => {
           if (rowData[field]) {
-            // åŸŸåï¼špic.sellerfun.net -> pic.jiayou.ink
+            // ÓòÃû£ºpic.sellerfun.net -> pic.jiayou.ink
             rowData[field] = rowData[field].replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
             
-            // SKUå‰ç¼€ï¼šUK -> US
+            // SKUÇ°×º£ºUK -> US
             rowData[field] = rowData[field].replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
             rowData[field] = rowData[field].replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
           }
         });
       }
       
-      // è®¾ç½®siteå­—æ®µä¸ºç›®æ ‡å›½å®¶ï¼ˆè½¬æ¢ä¸ºä¸­æ–‡åç§°ï¼‰
+      // ÉèÖÃsite×Ö¶ÎÎªÄ¿±ê¹ú¼Ò£¨×ª»»ÎªÖĞÎÄÃû³Æ£©
       rowData.site = convertCountryCodeToChinese(targetCountry);
       
       transformedRecords.push(rowData);
     }
 
-    console.log(`ğŸ”„ è½¬æ¢äº† ${transformedRecords.length} æ¡è®°å½•ï¼ŒSKUä»${sourceCountry}å‰ç¼€è½¬æ¢ä¸º${targetCountry}å‰ç¼€`);
+    console.log(`?? ×ª»»ÁË ${transformedRecords.length} Ìõ¼ÇÂ¼£¬SKU´Ó${sourceCountry}Ç°×º×ª»»Îª${targetCountry}Ç°×º`);
 
-    // æ­¥éª¤5: ä½¿ç”¨xlsxåº“å¤„ç†æ¨¡æ¿æ–‡ä»¶ï¼ˆå‚è€ƒè‹±å›½èµ„æ–™è¡¨çš„æ­£ç¡®å®ç°ï¼‰
-    console.log('ğŸ“Š å¼€å§‹ä½¿ç”¨xlsxåº“å¤„ç†Excelæ–‡ä»¶...');
+    // ²½Öè5: Ê¹ÓÃxlsx¿â´¦ÀíÄ£°åÎÄ¼ş£¨²Î¿¼Ó¢¹ú×ÊÁÏ±íµÄÕıÈ·ÊµÏÖ£©
+    console.log('?? ¿ªÊ¼Ê¹ÓÃxlsx¿â´¦ÀíExcelÎÄ¼ş...');
     
-    // è§£ææ¨¡æ¿æ–‡ä»¶
+    // ½âÎöÄ£°åÎÄ¼ş
     const templateWorkbook = xlsx.read(downloadResult.content, { 
       type: 'buffer',
-      cellStyles: true, // ä¿æŒæ ·å¼
-      cellNF: true,     // ä¿æŒæ•°å­—æ ¼å¼
-      cellDates: true   // å¤„ç†æ—¥æœŸ
+      cellStyles: true, // ±£³ÖÑùÊ½
+      cellNF: true,     // ±£³ÖÊı×Ö¸ñÊ½
+      cellDates: true   // ´¦ÀíÈÕÆÚ
     });
     
-    // æ£€æŸ¥æ˜¯å¦æœ‰Templateå·¥ä½œè¡¨
+    // ¼ì²éÊÇ·ñÓĞTemplate¹¤×÷±í
     if (!templateWorkbook.Sheets['Template']) {
-      return res.status(400).json({ message: 'æ¨¡æ¿æ–‡ä»¶ä¸­æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨' });
+      return res.status(400).json({ message: 'Ä£°åÎÄ¼şÖĞÎ´ÕÒµ½Template¹¤×÷±í' });
     }
 
-    console.log('âœ… æˆåŠŸåŠ è½½Templateå·¥ä½œè¡¨');
+    console.log('? ³É¹¦¼ÓÔØTemplate¹¤×÷±í');
     
     const batchTemplateWorksheet = templateWorkbook.Sheets['Template'];
     
-    // å°†å·¥ä½œè¡¨è½¬æ¢ä¸ºäºŒç»´æ•°ç»„ï¼Œä¾¿äºæ“ä½œ
+    // ½«¹¤×÷±í×ª»»Îª¶şÎ¬Êı×é£¬±ãÓÚ²Ù×÷
     const data = xlsx.utils.sheet_to_json(batchTemplateWorksheet, { 
-      header: 1, // ä½¿ç”¨æ•°ç»„å½¢å¼
-      defval: '', // ç©ºå•å…ƒæ ¼é»˜è®¤å€¼
-      raw: false  // ä¿æŒåŸå§‹æ•°æ®æ ¼å¼
+      header: 1, // Ê¹ÓÃÊı×éĞÎÊ½
+      defval: '', // ¿Õµ¥Ôª¸ñÄ¬ÈÏÖµ
+      raw: false  // ±£³ÖÔ­Ê¼Êı¾İ¸ñÊ½
     });
     
-    console.log(`ğŸ“Š å·¥ä½œè¡¨æ•°æ®è¡Œæ•°: ${data.length}`);
+    console.log(`?? ¹¤×÷±íÊı¾İĞĞÊı: ${data.length}`);
 
-    // æ­¥éª¤6: æŸ¥æ‰¾åˆ—ä½ç½®ï¼ˆåœ¨ç¬¬3è¡ŒæŸ¥æ‰¾æ ‡é¢˜ï¼Œç´¢å¼•ä¸º2ï¼‰
-    console.log('ğŸ” æŸ¥æ‰¾åˆ—ä½ç½®...');
+    // ²½Öè6: ²éÕÒÁĞÎ»ÖÃ£¨ÔÚµÚ3ĞĞ²éÕÒ±êÌâ£¬Ë÷ÒıÎª2£©
+    console.log('?? ²éÕÒÁĞÎ»ÖÃ...');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -4306,7 +4310,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let bulletPoint4Col = -1;
     let bulletPoint5Col = -1;
     
-    // åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µçš„åˆ—å˜é‡
+    // ¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎµÄÁĞ±äÁ¿
     let closureTypeCol = -1;
     let careInstructionsCol = -1;
     let modelCol = -1;
@@ -4328,13 +4332,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let manufacturerContactInformationCol = -1;
     let departmentNameCol = -1;
     
-    // æ·»åŠ ç¼ºå¤±å­—æ®µçš„åˆ—å˜é‡
+    // Ìí¼ÓÈ±Ê§×Ö¶ÎµÄÁĞ±äÁ¿
     let outerMaterialTypeCol = -1;
     let outerMaterialType1Col = -1;
     let liningDescriptionCol = -1;
     let strapTypeCol = -1;
     
-    if (data.length >= 3 && data[2]) { // ç¬¬3è¡Œï¼Œç´¢å¼•ä¸º2
+    if (data.length >= 3 && data[2]) { // µÚ3ĞĞ£¬Ë÷ÒıÎª2
       data[2].forEach((header, colIndex) => {
         if (header) {
           const cellValue = header.toString().toLowerCase();
@@ -4427,22 +4431,22 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       });
     }
 
-    console.log(`ğŸ“ æ‰¾åˆ°åˆ—ä½ç½® - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    console.log(`?? ÕÒµ½ÁĞÎ»ÖÃ - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
-    // æ­¥éª¤7: å‡†å¤‡å¡«å†™æ•°æ®
-    console.log('âœï¸ å‡†å¤‡å¡«å†™æ•°æ®åˆ°Excel...');
+    // ²½Öè7: ×¼±¸ÌîĞ´Êı¾İ
+    console.log('?? ×¼±¸ÌîĞ´Êı¾İµ½Excel...');
     
-    // ç¡®ä¿æ•°æ®æ•°ç»„æœ‰è¶³å¤Ÿçš„è¡Œ
-    const totalRowsNeeded = 3 + transformedRecords.length; // å‰3è¡Œä¿ç•™ + æ•°æ®è¡Œ
+    // È·±£Êı¾İÊı×éÓĞ×ã¹»µÄĞĞ
+    const totalRowsNeeded = 3 + transformedRecords.length; // Ç°3ĞĞ±£Áô + Êı¾İĞĞ
     while (data.length < totalRowsNeeded) {
       data.push([]);
     }
 
-    // ä»ç¬¬4è¡Œå¼€å§‹å¡«å†™æ•°æ®ï¼ˆç´¢å¼•ä¸º3ï¼‰
-    let currentRowIndex = 3; // ç¬¬4è¡Œå¼€å§‹ï¼Œç´¢å¼•ä¸º3
+    // ´ÓµÚ4ĞĞ¿ªÊ¼ÌîĞ´Êı¾İ£¨Ë÷ÒıÎª3£©
+    let currentRowIndex = 3; // µÚ4ĞĞ¿ªÊ¼£¬Ë÷ÒıÎª3
     
     transformedRecords.forEach((record, index) => {
-      // è®¡ç®—éœ€è¦çš„æœ€å¤§åˆ—æ•°
+      // ¼ÆËãĞèÒªµÄ×î´óÁĞÊı
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
@@ -4457,7 +4461,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       ].filter(col => col !== -1);
       const maxCol = Math.max(...allColumns);
       
-      // ç¡®ä¿å½“å‰è¡Œæœ‰è¶³å¤Ÿçš„åˆ—
+      // È·±£µ±Ç°ĞĞÓĞ×ã¹»µÄÁĞ
       if (!data[currentRowIndex]) {
         data[currentRowIndex] = [];
       }
@@ -4465,7 +4469,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         data[currentRowIndex].push('');
       }
       
-      // å¡«å†™æ•°æ®ï¼ˆåº”ç”¨è½¬æ¢å‡½æ•°ï¼‰
+      // ÌîĞ´Êı¾İ£¨Ó¦ÓÃ×ª»»º¯Êı£©
       if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = processBatchSku(record.item_sku) || '';
       if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = processBatchText(record.item_name, 'item_name') || '';
       if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = record.color_name || '';
@@ -4485,7 +4489,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (bulletPoint4Col !== -1) data[currentRowIndex][bulletPoint4Col] = record.bullet_point4 || '';
       if (bulletPoint5Col !== -1) data[currentRowIndex][bulletPoint5Col] = record.bullet_point5 || '';
       
-      // å¡«å†™åŠ æ‹¿å¤§ç«™ç‚¹æ–°å¢å­—æ®µæ•°æ®
+      // ÌîĞ´¼ÓÄÃ´óÕ¾µãĞÂÔö×Ö¶ÎÊı¾İ
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = record.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = record.care_instructions || '';
       if (modelCol !== -1) data[currentRowIndex][modelCol] = processBatchModel(record.model) || '';
@@ -4498,11 +4502,11 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (lifestyle1Col !== -1) data[currentRowIndex][lifestyle1Col] = record.lifestyle1 || '';
                    if (storageVolumeUnitOfMeasureCol !== -1) {
         let storageVolumeUnit = record.storage_volume_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šliterè½¬æ¢ä¸ºLiters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºliter×ª»»ÎªLiters
         if (targetCountry === 'CA' && storageVolumeUnit.toLowerCase() === 'liter') {
           storageVolumeUnit = 'Liters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šLitersè½¬æ¢ä¸ºliter
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºLiters×ª»»Îªliter
         if (targetCountry === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
         }
@@ -4511,13 +4515,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = record.storage_volume || '';
       if (depthFrontToBackCol !== -1) {
         let depthValue = record.depth_front_to_back || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'CA' && record.depth_front_to_back_unit_of_measure && 
             record.depth_front_to_back_unit_of_measure.toLowerCase() === 'inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
           depthValue = (parseFloat(depthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'UK' && record.depth_front_to_back_unit_of_measure && 
             record.depth_front_to_back_unit_of_measure === 'Inches' && 
             depthValue && !isNaN(parseFloat(depthValue))) {
@@ -4527,11 +4531,11 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
       if (depthFrontToBackUnitOfMeasureCol !== -1) {
         let depthUnit = record.depth_front_to_back_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (targetCountry === 'CA' && depthUnit.toLowerCase() === 'inches') {
           depthUnit = 'Centimeters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (targetCountry === 'UK') {
           if (depthUnit === 'Inches') {
             depthUnit = 'Centimetres';
@@ -4539,7 +4543,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             depthUnit = 'Centimetres';
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && depthUnit.trim().toLowerCase() === 'centimetres') {
           depthUnit = 'Centimeters';
         }
@@ -4547,13 +4551,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
       if (depthWidthSideToSideCol !== -1) {
         let widthValue = record.depth_width_side_to_side || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'CA' && record.depth_width_side_to_side_unit_of_measure && 
             record.depth_width_side_to_side_unit_of_measure.toLowerCase() === 'inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
           widthValue = (parseFloat(widthValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'UK' && record.depth_width_side_to_side_unit_of_measure && 
             record.depth_width_side_to_side_unit_of_measure === 'Inches' && 
             widthValue && !isNaN(parseFloat(widthValue))) {
@@ -4563,11 +4567,11 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
       if (depthWidthSideToSideUnitOfMeasureCol !== -1) {
         let widthUnit = record.depth_width_side_to_side_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (targetCountry === 'CA' && widthUnit.toLowerCase() === 'inches') {
           widthUnit = 'Centimeters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (targetCountry === 'UK') {
           if (widthUnit === 'Inches') {
             widthUnit = 'Centimetres';
@@ -4575,7 +4579,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             widthUnit = 'Centimetres';
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && widthUnit.trim().toLowerCase() === 'centimetres') {
           widthUnit = 'Centimeters';
         }
@@ -4583,13 +4587,13 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
       if (depthHeightFloorToTopCol !== -1) {
         let heightValue = record.depth_height_floor_to_top || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'CA' && record.depth_height_floor_to_top_unit_of_measure && 
             record.depth_height_floor_to_top_unit_of_measure.toLowerCase() === 'inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
           heightValue = (parseFloat(heightValue) * 2.54).toFixed(2);
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå¦‚æœå•ä½æ˜¯Inchesï¼Œè½¬æ¢ä¸ºå˜ç±³
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºÈç¹ûµ¥Î»ÊÇInches£¬×ª»»ÎªÀåÃ×
         if (targetCountry === 'UK' && record.depth_height_floor_to_top_unit_of_measure && 
             record.depth_height_floor_to_top_unit_of_measure === 'Inches' && 
             heightValue && !isNaN(parseFloat(heightValue))) {
@@ -4599,11 +4603,11 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
       if (depthHeightFloorToTopUnitOfMeasureCol !== -1) {
         let heightUnit = record.depth_height_floor_to_top_unit_of_measure || '';
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šInchesè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºInches×ª»»ÎªCentimeters
         if (targetCountry === 'CA' && heightUnit.toLowerCase() === 'inches') {
           heightUnit = 'Centimeters';
         }
-        // è‹±å›½ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šå•ä½è½¬æ¢
+        // Ó¢¹úÕ¾µãÌØÊâ´¦Àí£ºµ¥Î»×ª»»
         if (targetCountry === 'UK') {
           if (heightUnit === 'Inches') {
             heightUnit = 'Centimetres';
@@ -4611,17 +4615,17 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             heightUnit = 'Centimetres';
           }
         }
-        // åŠ æ‹¿å¤§ã€é˜¿è”é…‹ã€æ¾³å¤§åˆ©äºšç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šCentimetresè½¬æ¢ä¸ºCentimeters
+        // ¼ÓÄÃ´ó¡¢°¢ÁªÇõ¡¢°Ä´óÀûÑÇÕ¾µãÌØÊâ´¦Àí£ºCentimetres×ª»»ÎªCentimeters
         if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && heightUnit.trim().toLowerCase() === 'centimetres') {
           heightUnit = 'Centimeters';
         }
         data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
       
-      // åŠ æ‹¿å¤§ç«™ç‚¹manufacturer_contact_informationå­—æ®µç‰¹æ®Šå¤„ç†
+      // ¼ÓÄÃ´óÕ¾µãmanufacturer_contact_information×Ö¶ÎÌØÊâ´¦Àí
       if (manufacturerContactInformationCol !== -1) {
         if (targetCountry === 'CA') {
-          // å¯¹äºåŠ æ‹¿å¤§ç«™ç‚¹ï¼Œç»Ÿä¸€å¡«å†™æŒ‡å®šçš„åˆ¶é€ å•†è”ç³»ä¿¡æ¯
+          // ¶ÔÓÚ¼ÓÄÃ´óÕ¾µã£¬Í³Ò»ÌîĞ´Ö¸¶¨µÄÖÆÔìÉÌÁªÏµĞÅÏ¢
           data[currentRowIndex][manufacturerContactInformationCol] = `Shenzhen Xinrong Electronic Commerce Co., LTD
 Room 825, Building C, Part C
 Qinghu Tech Park
@@ -4629,15 +4633,15 @@ Shenzhen, Longhua, Guangdong 518000
 CN
 8618123615703`;
         } else {
-          // å…¶ä»–ç«™ç‚¹ä¿æŒåŸæœ‰é€»è¾‘
+          // ÆäËûÕ¾µã±£³ÖÔ­ÓĞÂß¼­
           data[currentRowIndex][manufacturerContactInformationCol] = record.manufacturer_contact_information || '';
         }
       }
 
-      // å¡«å†™department_nameå­—æ®µ
+      // ÌîĞ´department_name×Ö¶Î
       if (departmentNameCol !== -1) {
         let departmentNameValue = record.department_name || '';
-        // ç‰¹æ®Šå¤„ç†ï¼šæ ¹æ®ç›®æ ‡ç«™ç‚¹è½¬æ¢department_nameå­—æ®µ
+        // ÌØÊâ´¦Àí£º¸ù¾İÄ¿±êÕ¾µã×ª»»department_name×Ö¶Î
         if (departmentNameValue.trim() === 'Unisex Child') {
           if (targetCountry === 'UK' || targetCountry === 'AU') {
             departmentNameValue = 'Unisex Kids';
@@ -4648,17 +4652,17 @@ CN
         data[currentRowIndex][departmentNameCol] = departmentNameValue;
       }
 
-      // å¡«å†™outer_material_typeå­—æ®µ
+      // ÌîĞ´outer_material_type×Ö¶Î
       if (outerMaterialTypeCol !== -1) {
         data[currentRowIndex][outerMaterialTypeCol] = record.outer_material_type || '';
       }
       
-      // å¡«å†™outer_material_type1å­—æ®µï¼ˆç‰¹åˆ«å¤„ç†å­—æ®µæ˜ å°„ï¼‰
+      // ÌîĞ´outer_material_type1×Ö¶Î£¨ÌØ±ğ´¦Àí×Ö¶ÎÓ³Éä£©
       if (outerMaterialType1Col !== -1) {
-        // å­—æ®µæ˜ å°„è§„åˆ™ï¼š
-        // - è‹±å›½ç«™/æ¾³æ´²ç«™/é˜¿è”é…‹ç«™ç­‰ä½¿ç”¨ outer_material_type å­—æ®µ
-        // - ç¾å›½ç«™/åŠ æ‹¿å¤§ç«™ä½¿ç”¨ outer_material_type1 å­—æ®µ
-        // å½“ä»è‹±å›½ç­‰ç«™ç‚¹ç”Ÿæˆç¾å›½/åŠ æ‹¿å¤§ç«™èµ„æ–™æ—¶ï¼Œéœ€è¦å°†outer_material_typeçš„å€¼æ˜ å°„åˆ°outer_material_type1
+        // ×Ö¶ÎÓ³Éä¹æÔò£º
+        // - Ó¢¹úÕ¾/°ÄÖŞÕ¾/°¢ÁªÇõÕ¾µÈÊ¹ÓÃ outer_material_type ×Ö¶Î
+        // - ÃÀ¹úÕ¾/¼ÓÄÃ´óÕ¾Ê¹ÓÃ outer_material_type1 ×Ö¶Î
+        // µ±´ÓÓ¢¹úµÈÕ¾µãÉú³ÉÃÀ¹ú/¼ÓÄÃ´óÕ¾×ÊÁÏÊ±£¬ĞèÒª½«outer_material_typeµÄÖµÓ³Éäµ½outer_material_type1
         if (sourceCountry !== 'US' && sourceCountry !== 'CA' && (targetCountry === 'US' || targetCountry === 'CA') && record.outer_material_type) {
           data[currentRowIndex][outerMaterialType1Col] = record.outer_material_type;
         } else {
@@ -4666,12 +4670,12 @@ CN
         }
       }
 
-      // å¡«å†™lining_descriptionå­—æ®µ
+      // ÌîĞ´lining_description×Ö¶Î
       if (liningDescriptionCol !== -1) {
         data[currentRowIndex][liningDescriptionCol] = record.lining_description || '';
       }
 
-      // å¡«å†™strap_typeå­—æ®µ
+      // ÌîĞ´strap_type×Ö¶Î
       if (strapTypeCol !== -1) {
         data[currentRowIndex][strapTypeCol] = record.strap_type || '';
       }
@@ -4679,13 +4683,13 @@ CN
       currentRowIndex++;
     });
 
-    console.log(`ğŸ“Š å¡«å†™å®Œæˆï¼Œå…±å¡«å†™äº† ${transformedRecords.length} è¡Œæ•°æ®`);
+    console.log(`?? ÌîĞ´Íê³É£¬¹²ÌîĞ´ÁË ${transformedRecords.length} ĞĞÊı¾İ`);
 
-    // æ­¥éª¤8: å°†æ•°æ®é‡æ–°è½¬æ¢ä¸ºå·¥ä½œè¡¨
-    console.log('ğŸ’¾ ç”ŸæˆExcelæ–‡ä»¶...');
+    // ²½Öè8: ½«Êı¾İÖØĞÂ×ª»»Îª¹¤×÷±í
+    console.log('?? Éú³ÉExcelÎÄ¼ş...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
-    // ä¿æŒåŸå§‹å·¥ä½œè¡¨çš„åˆ—å®½ç­‰å±æ€§
+    // ±£³ÖÔ­Ê¼¹¤×÷±íµÄÁĞ¿íµÈÊôĞÔ
     if (batchTemplateWorksheet['!cols']) {
       newWorksheet['!cols'] = batchTemplateWorksheet['!cols'];
     }
@@ -4696,21 +4700,21 @@ CN
       newWorksheet['!merges'] = batchTemplateWorksheet['!merges'];
     }
     
-    // æ›´æ–°å·¥ä½œç°¿
+    // ¸üĞÂ¹¤×÷²¾
     templateWorkbook.Sheets['Template'] = newWorksheet;
     
     try {
       
-      // ç”ŸæˆExcelæ–‡ä»¶buffer
+      // Éú³ÉExcelÎÄ¼şbuffer
       const outputBuffer = xlsx.write(templateWorkbook, { 
         type: 'buffer', 
         bookType: 'xlsx',
         cellStyles: true
       });
       
-      console.log(`âœ… Excelæ–‡ä»¶ç”ŸæˆæˆåŠŸï¼Œå¤§å°: ${outputBuffer.length} å­—èŠ‚`);
+      console.log(`? ExcelÎÄ¼şÉú³É³É¹¦£¬´óĞ¡: ${outputBuffer.length} ×Ö½Ú`);
       
-      // ç”Ÿæˆæ–‡ä»¶åï¼šå›½å®¶ä»£ç +æ¯SKUæ ¼å¼
+      // Éú³ÉÎÄ¼şÃû£º¹ú¼Ò´úÂë+Ä¸SKU¸ñÊ½
       const parentSkus = [...new Set(transformedRecords
         .map(record => {
           const parentSku = record.original_parent_sku || (record.item_sku ? record.item_sku.substring(2) : null);
@@ -4727,25 +4731,25 @@ CN
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
-      console.log(`âœ… æ‰¹é‡ç”Ÿæˆ${sourceCountry}åˆ°${targetCountry}èµ„æ–™è¡¨æˆåŠŸ (è€—æ—¶: ${processingTime}ms)`);
+      console.log(`? ÅúÁ¿Éú³É${sourceCountry}µ½${targetCountry}×ÊÁÏ±í³É¹¦ (ºÄÊ±: ${processingTime}ms)`);
       
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('âŒ Excelæ–‡ä»¶ç”Ÿæˆå¤±è´¥:', fileError);
-      throw new Error('Excelæ–‡ä»¶ç”Ÿæˆå¤±è´¥: ' + fileError.message);
+      console.error('? ExcelÎÄ¼şÉú³ÉÊ§°Ü:', fileError);
+      throw new Error('ExcelÎÄ¼şÉú³ÉÊ§°Ü: ' + fileError.message);
     }
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    const errorMessage = error.message || 'æ‰¹é‡ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨æ—¶å‘ç”ŸæœªçŸ¥é”™è¯¯';
-    console.error(`âŒ æ‰¹é‡ç”Ÿæˆå…¶ä»–ç«™ç‚¹èµ„æ–™è¡¨å¤±è´¥ (è€—æ—¶: ${processingTime}ms):`);
-    console.error(`ğŸ” é”™è¯¯è¯¦æƒ…: ${error.message}`);
-    console.error(`ğŸ“‹ é”™è¯¯å †æ ˆ:`, error.stack);
-    console.error(`ğŸ·ï¸ é”™è¯¯ç±»å‹: ${error.name}`);
+    const errorMessage = error.message || 'ÅúÁ¿Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÊ±·¢ÉúÎ´Öª´íÎó';
+    console.error(`? ÅúÁ¿Éú³ÉÆäËûÕ¾µã×ÊÁÏ±íÊ§°Ü (ºÄÊ±: ${processingTime}ms):`);
+    console.error(`?? ´íÎóÏêÇé: ${error.message}`);
+    console.error(`?? ´íÎó¶ÑÕ»:`, error.stack);
+    console.error(`??? ´íÎóÀàĞÍ: ${error.name}`);
     
-    // è¾“å‡ºè¯·æ±‚å‚æ•°ä»¥ä¾¿è°ƒè¯•
-    console.error(`ğŸ“‹ è¯·æ±‚å‚æ•°: sourceCountry=${req.body.sourceCountry}, targetCountry=${req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
+    // Êä³öÇëÇó²ÎÊıÒÔ±ãµ÷ÊÔ
+    console.error(`?? ÇëÇó²ÎÊı: sourceCountry=${req.body.sourceCountry}, targetCountry=${req.body.targetCountry}, file=${req.file ? req.file.originalname : 'no file'}`);
     
     res.status(500).json({ 
       message: errorMessage,
@@ -4756,61 +4760,61 @@ CN
   }
 });
 
-// ==================== 3æ­¥æµç¨‹ - æ­¥éª¤1ï¼šä¸Šä¼ æºæ•°æ®åˆ°æ•°æ®åº“ ====================
+// ==================== 3²½Á÷³Ì - ²½Öè1£ºÉÏ´«Ô´Êı¾İµ½Êı¾İ¿â ====================
 router.post('/upload-source-data', upload.single('file'), async (req, res) => {
   try {
-    console.log('ğŸ”„ å¼€å§‹ä¸Šä¼ æºæ•°æ®åˆ°æ•°æ®åº“...');
+    console.log('?? ¿ªÊ¼ÉÏ´«Ô´Êı¾İµ½Êı¾İ¿â...');
     
     const { site } = req.body;
     const file = req.file;
     
     if (!file) {
-      return res.status(400).json({ message: 'æœªæ¥æ”¶åˆ°æ–‡ä»¶' });
+      return res.status(400).json({ message: 'Î´½ÓÊÕµ½ÎÄ¼ş' });
     }
     
     if (!site) {
-      return res.status(400).json({ message: 'æœªæŒ‡å®šç«™ç‚¹' });
+      return res.status(400).json({ message: 'Î´Ö¸¶¨Õ¾µã' });
     }
     
-    console.log(`ğŸ“„ å¤„ç†æ–‡ä»¶: ${file.originalname}, ç«™ç‚¹: ${site}`);
+    console.log(`?? ´¦ÀíÎÄ¼ş: ${file.originalname}, Õ¾µã: ${site}`);
     
-    // è¯»å–Excelæ–‡ä»¶
+    // ¶ÁÈ¡ExcelÎÄ¼ş
     const workbook = xlsx.read(file.buffer, { type: 'buffer' });
     
-    // ä¼˜å…ˆå¯»æ‰¾Templateå·¥ä½œè¡¨ï¼Œå¦‚æœæ²¡æœ‰åˆ™ä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨
+    // ÓÅÏÈÑ°ÕÒTemplate¹¤×÷±í£¬Èç¹ûÃ»ÓĞÔòÊ¹ÓÃµÚÒ»¸ö¹¤×÷±í
     let sheetName;
     let worksheet;
     
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('âœ… æ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨Templateå·¥ä½œè¡¨');
+      console.log('? ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃTemplate¹¤×÷±í');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`âš ï¸ æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨ï¼Œä½¿ç”¨ç¬¬ä¸€ä¸ªå·¥ä½œè¡¨: ${sheetName}`);
+      console.log(`?? Î´ÕÒµ½Template¹¤×÷±í£¬Ê¹ÓÃµÚÒ»¸ö¹¤×÷±í: ${sheetName}`);
     }
     
-    console.log(`ğŸ“‹ å½“å‰ä½¿ç”¨çš„å·¥ä½œè¡¨: ${sheetName}`);
+    console.log(`?? µ±Ç°Ê¹ÓÃµÄ¹¤×÷±í: ${sheetName}`);
     
-    // è½¬æ¢ä¸ºJSON
+    // ×ª»»ÎªJSON
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
     
     if (jsonData.length < 2) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶å¿…é¡»åŒ…å«æ ‡é¢˜è¡Œå’Œè‡³å°‘ä¸€è¡Œæ•°æ®' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş±ØĞë°üº¬±êÌâĞĞºÍÖÁÉÙÒ»ĞĞÊı¾İ' });
     }
     
-    // æå–æ ‡é¢˜è¡Œå’Œæ•°æ®è¡Œï¼ˆç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œï¼Œç´¢å¼•ä¸º2ï¼‰
+    // ÌáÈ¡±êÌâĞĞºÍÊı¾İĞĞ£¨µÚ3ĞĞÊÇ±êÌâĞĞ£¬Ë÷ÒıÎª2£©
     if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excelæ–‡ä»¶æ ¼å¼é”™è¯¯ï¼Œè‡³å°‘éœ€è¦åŒ…å«å‰3è¡Œæ ‡é¢˜è¯´æ˜å’Œæ•°æ®è¡Œ' });
+      return res.status(400).json({ message: 'ExcelÎÄ¼ş¸ñÊ½´íÎó£¬ÖÁÉÙĞèÒª°üº¬Ç°3ĞĞ±êÌâËµÃ÷ºÍÊı¾İĞĞ' });
     }
     
-    const headers = jsonData[2]; // ç¬¬3è¡Œæ˜¯æ ‡é¢˜è¡Œ
-    const dataRows = jsonData.slice(3); // ç¬¬4è¡Œå¼€å§‹æ˜¯æ•°æ®è¡Œ
+    const headers = jsonData[2]; // µÚ3ĞĞÊÇ±êÌâĞĞ
+    const dataRows = jsonData.slice(3); // µÚ4ĞĞ¿ªÊ¼ÊÇÊı¾İĞĞ
     
-    console.log(`ğŸ“Š æ–‡ä»¶åŒ…å« ${headers.length} åˆ—ï¼Œ${dataRows.length} è¡Œæ•°æ®`);
+    console.log(`?? ÎÄ¼ş°üº¬ ${headers.length} ÁĞ£¬${dataRows.length} ĞĞÊı¾İ`);
     
-    // é¢„å¤„ç†æ ‡é¢˜è¡Œï¼Œç”Ÿæˆå­—æ®µæ˜ å°„
+    // Ô¤´¦Àí±êÌâĞĞ£¬Éú³É×Ö¶ÎÓ³Éä
     const fieldMapping = {};
     const processedHeaders = headers.map((header, index) => {
       if (header) {
@@ -4824,9 +4828,9 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       return null;
     });
     
-    console.log(`ğŸ” æ‰¾åˆ° ${processedHeaders.filter(h => h).length} ä¸ªæœ‰æ•ˆåˆ—æ ‡é¢˜`);
+    console.log(`?? ÕÒµ½ ${processedHeaders.filter(h => h).length} ¸öÓĞĞ§ÁĞ±êÌâ`);
     
-    // è½¬æ¢æ•°æ®æ ¼å¼
+    // ×ª»»Êı¾İ¸ñÊ½
     const records = [];
     let processedRows = 0;
     let skippedRows = 0;
@@ -4834,7 +4838,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
       
-      // æ­¥éª¤1: æ£€æŸ¥æ•´è¡Œæ˜¯å¦ä¸ºç©º
+      // ²½Öè1: ¼ì²éÕûĞĞÊÇ·ñÎª¿Õ
       const hasAnyValue = row.some(cell => cell !== undefined && cell !== null && cell !== '');
       if (!hasAnyValue) {
         skippedRows++;
@@ -4842,48 +4846,48 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       }
       
       const record = {
-        site: convertCountryCodeToChinese(site) // è®¾ç½®ç«™ç‚¹ä¸ºä¸­æ–‡åç§°ï¼Œä¸æ·»åŠ created_atå’Œupdated_atå­—æ®µ
+        site: convertCountryCodeToChinese(site) // ÉèÖÃÕ¾µãÎªÖĞÎÄÃû³Æ£¬²»Ìí¼Ócreated_atºÍupdated_at×Ö¶Î
       };
       
       let hasItemSku = false;
       let hasOtherValues = false;
       
-      // æ­¥éª¤2: æ˜ å°„æ¯ä¸€åˆ—çš„æ•°æ®
+      // ²½Öè2: Ó³ÉäÃ¿Ò»ÁĞµÄÊı¾İ
       for (let j = 0; j < headers.length; j++) {
-        const fieldName = processedHeaders[j]; // ä½¿ç”¨é¢„å¤„ç†çš„å­—æ®µå
+        const fieldName = processedHeaders[j]; // Ê¹ÓÃÔ¤´¦ÀíµÄ×Ö¶ÎÃû
         const cellValue = row[j];
         
         if (fieldName && cellValue !== undefined && cellValue !== null && cellValue !== '') {
-          // ç‰¹æ®Šå¤„ç†ä¸€äº›å­—æ®µ
+          // ÌØÊâ´¦ÀíÒ»Ğ©×Ö¶Î
           if (fieldName === 'item_sku' || fieldName === 'sku') {
-            record.item_sku = cellValue.toString(); // è½¬æ¢ä¸ºå­—ç¬¦ä¸²
+            record.item_sku = cellValue.toString(); // ×ª»»Îª×Ö·û´®
             hasItemSku = true;
           } else {
-            // å…¶ä»–å­—æ®µç›´æ¥è®¾ç½®ï¼ˆåªæœ‰å½“æœ‰å€¼æ—¶ï¼‰
+            // ÆäËû×Ö¶ÎÖ±½ÓÉèÖÃ£¨Ö»ÓĞµ±ÓĞÖµÊ±£©
             record[fieldName] = cellValue;
             hasOtherValues = true;
           }
         }
       }
       
-      // æ­¥éª¤2.5: ç”Ÿæˆoriginal_parent_skuï¼ˆæ ¹æ®parent_childåˆ—åˆ¤æ–­ï¼‰
+      // ²½Öè2.5: Éú³Éoriginal_parent_sku£¨¸ù¾İparent_childÁĞÅĞ¶Ï£©
       if (record.parent_child === 'Parent' && record.item_sku && record.item_sku.length > 2) {
-        // å½“parent_childä¸º"Parent"æ—¶ï¼Œitem_skuä¸­çš„ä¿¡æ¯ä¸ºæ¯SKUï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Parent"Ê±£¬item_skuÖĞµÄĞÅÏ¢ÎªÄ¸SKU£¬È¥µôÇ°Á½¸ö×Ö·û
         record.original_parent_sku = record.item_sku.substring(2);
       } else if (record.parent_child === 'Child' && record.parent_sku && record.parent_sku.length > 2) {
-        // å½“parent_childä¸º"Child"æ—¶ï¼Œä»parent_skuå­—æ®µè·å–æ¯SKUä¿¡æ¯ï¼Œå»æ‰å‰ä¸¤ä¸ªå­—ç¬¦
+        // µ±parent_childÎª"Child"Ê±£¬´Óparent_sku×Ö¶Î»ñÈ¡Ä¸SKUĞÅÏ¢£¬È¥µôÇ°Á½¸ö×Ö·û
         record.original_parent_sku = record.parent_sku.substring(2);
       } else if (record.item_sku && record.item_sku.length > 2) {
-        // å…¼å®¹å¤„ç†ï¼šå¦‚æœæ²¡æœ‰parent_childä¿¡æ¯ï¼Œä½¿ç”¨åŸæœ‰é€»è¾‘
+        // ¼æÈİ´¦Àí£ºÈç¹ûÃ»ÓĞparent_childĞÅÏ¢£¬Ê¹ÓÃÔ­ÓĞÂß¼­
         record.original_parent_sku = record.item_sku.substring(2);
-        console.warn(`âš ï¸ æ‰¹é‡å¤„ç†è®°å½•ç¼ºå°‘parent_childä¿¡æ¯ï¼Œä½¿ç”¨item_skuç”Ÿæˆoriginal_parent_sku: ${record.item_sku} -> ${record.original_parent_sku}`);
+        console.warn(`?? ÅúÁ¿´¦Àí¼ÇÂ¼È±ÉÙparent_childĞÅÏ¢£¬Ê¹ÓÃitem_skuÉú³Éoriginal_parent_sku: ${record.item_sku} -> ${record.original_parent_sku}`);
       }
       
-      // æ­¥éª¤3: éªŒè¯item_skuå­—æ®µå®Œæ•´æ€§
+      // ²½Öè3: ÑéÖ¤item_sku×Ö¶ÎÍêÕûĞÔ
       if (!hasItemSku && hasOtherValues) {
-        const errorMsg = `âŒ ç¬¬${i + 4}è¡Œé”™è¯¯ï¼šitem_skuå­—æ®µä¸ºç©ºä½†å…¶ä»–å­—æ®µæœ‰å€¼ï¼Œitem_skuä½œä¸ºä¸»é”®ä¸èƒ½ä¸ºç©º`;
+        const errorMsg = `? µÚ${i + 4}ĞĞ´íÎó£ºitem_sku×Ö¶ÎÎª¿Õµ«ÆäËû×Ö¶ÎÓĞÖµ£¬item_sku×÷ÎªÖ÷¼ü²»ÄÜÎª¿Õ`;
         console.error(errorMsg);
-        console.error(`ğŸ“‹ é—®é¢˜è¡Œæ•°æ®:`, record);
+        console.error(`?? ÎÊÌâĞĞÊı¾İ:`, record);
         return res.status(400).json({ 
           message: errorMsg,
           rowNumber: i + 4,
@@ -4892,9 +4896,9 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       }
       
       if (hasItemSku && !hasOtherValues) {
-        const errorMsg = `âŒ ç¬¬${i + 4}è¡Œé”™è¯¯ï¼šåªæœ‰item_skuå­—æ®µæœ‰å€¼ï¼Œå…¶ä»–å­—æ®µéƒ½ä¸ºç©ºï¼Œè®°å½•ç¼ºå°‘å¿…è¦ä¿¡æ¯`;
+        const errorMsg = `? µÚ${i + 4}ĞĞ´íÎó£ºÖ»ÓĞitem_sku×Ö¶ÎÓĞÖµ£¬ÆäËû×Ö¶Î¶¼Îª¿Õ£¬¼ÇÂ¼È±ÉÙ±ØÒªĞÅÏ¢`;
         console.error(errorMsg);
-        console.error(`ğŸ“‹ é—®é¢˜è¡Œæ•°æ®:`, record);
+        console.error(`?? ÎÊÌâĞĞÊı¾İ:`, record);
         return res.status(400).json({ 
           message: errorMsg,
           rowNumber: i + 4,
@@ -4911,46 +4915,46 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       processedRows++;
     }
     
-    console.log(`ğŸ“Š æ•°æ®å¤„ç†å®Œæˆ: æœ‰æ•ˆè®°å½• ${processedRows} æ¡ï¼Œè·³è¿‡ ${skippedRows} æ¡`);
+    console.log(`?? Êı¾İ´¦ÀíÍê³É: ÓĞĞ§¼ÇÂ¼ ${processedRows} Ìõ£¬Ìø¹ı ${skippedRows} Ìõ`);
     
-    console.log(`ğŸ’¾ å‡†å¤‡ä¿å­˜ ${records.length} æ¡è®°å½•åˆ°product_informationè¡¨...`);
+    console.log(`?? ×¼±¸±£´æ ${records.length} Ìõ¼ÇÂ¼µ½product_information±í...`);
     
-    // æ‰¹é‡ä¿å­˜åˆ°æ•°æ®åº“ - é€‚é…å¤åˆä¸»é”®
+    // ÅúÁ¿±£´æµ½Êı¾İ¿â - ÊÊÅä¸´ºÏÖ÷¼ü
     try {
-      // é¦–å…ˆåˆ é™¤ç›¸åŒç«™ç‚¹çš„æ—§æ•°æ®
+      // Ê×ÏÈÉ¾³ıÏàÍ¬Õ¾µãµÄ¾ÉÊı¾İ
       await ProductInformation.destroy({
         where: { site: site }
       });
       
-      console.log(`ğŸ—‘ï¸ å·²æ¸…ç†ç«™ç‚¹ ${site} çš„æ—§æ•°æ®`);
+      console.log(`??? ÒÑÇåÀíÕ¾µã ${site} µÄ¾ÉÊı¾İ`);
       
-      // é€æ¡æ’å…¥æ•°æ®ï¼ˆå› ä¸ºå¤åˆä¸»é”®çš„ç‰¹æ®Šæ€§ï¼Œä½¿ç”¨upsertæ›´å®‰å…¨ï¼‰
+      // ÖğÌõ²åÈëÊı¾İ£¨ÒòÎª¸´ºÏÖ÷¼üµÄÌØÊâĞÔ£¬Ê¹ÓÃupsert¸ü°²È«£©
       let successCount = 0;
       let errorCount = 0;
       
       for (const record of records) {
         try {
-          // è¿‡æ»¤å’ŒéªŒè¯æ•°æ®ï¼Œåªä¿ç•™æ¨¡å‹ä¸­å®šä¹‰çš„å­—æ®µ
+          // ¹ıÂËºÍÑéÖ¤Êı¾İ£¬Ö»±£ÁôÄ£ĞÍÖĞ¶¨ÒåµÄ×Ö¶Î
           const filteredRecord = filterValidFields(record);
           
           await ProductInformation.upsert(filteredRecord, {
-            returning: false, // æé«˜æ€§èƒ½
-            validate: true // å¯ç”¨éªŒè¯
+            returning: false, // Ìá¸ßĞÔÄÜ
+            validate: true // ÆôÓÃÑéÖ¤
           });
           successCount++;
         } catch (error) {
-          console.error(`âŒ ä¿å­˜è®°å½•å¤±è´¥: site=${record.site}, item_sku=${record.item_sku}, é”™è¯¯: ${error.message}`);
-          console.error(`åŸå§‹æ•°æ®å­—æ®µæ•°é‡: ${Object.keys(record).length}, è¿‡æ»¤åå­—æ®µæ•°é‡: ${Object.keys(filterValidFields(record)).length}`);
+          console.error(`? ±£´æ¼ÇÂ¼Ê§°Ü: site=${record.site}, item_sku=${record.item_sku}, ´íÎó: ${error.message}`);
+          console.error(`Ô­Ê¼Êı¾İ×Ö¶ÎÊıÁ¿: ${Object.keys(record).length}, ¹ıÂËºó×Ö¶ÎÊıÁ¿: ${Object.keys(filterValidFields(record)).length}`);
           errorCount++;
         }
       }
       
-      console.log(`âœ… æˆåŠŸä¿å­˜ ${successCount} æ¡è®°å½•åˆ°æ•°æ®åº“${errorCount > 0 ? `ï¼Œ${errorCount}æ¡å¤±è´¥` : ''}`);
+      console.log(`? ³É¹¦±£´æ ${successCount} Ìõ¼ÇÂ¼µ½Êı¾İ¿â${errorCount > 0 ? `£¬${errorCount}ÌõÊ§°Ü` : ''}`);
       
-      // è¿”å›æˆåŠŸå“åº”
+      // ·µ»Ø³É¹¦ÏìÓ¦
       res.json({
         success: true,
-        message: `æˆåŠŸä¸Šä¼  ${successCount} æ¡è®°å½•åˆ°æ•°æ®åº“${errorCount > 0 ? `ï¼Œ${errorCount}æ¡å¤±è´¥` : ''}`,
+        message: `³É¹¦ÉÏ´« ${successCount} Ìõ¼ÇÂ¼µ½Êı¾İ¿â${errorCount > 0 ? `£¬${errorCount}ÌõÊ§°Ü` : ''}`,
         recordCount: successCount,
         errorCount: errorCount,
         site: site,
@@ -4958,41 +4962,41 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       });
       
     } catch (dbError) {
-      console.error('âŒ æ•°æ®åº“æ“ä½œå¤±è´¥:', dbError);
-      throw new Error('æ•°æ®åº“ä¿å­˜å¤±è´¥: ' + dbError.message);
+      console.error('? Êı¾İ¿â²Ù×÷Ê§°Ü:', dbError);
+      throw new Error('Êı¾İ¿â±£´æÊ§°Ü: ' + dbError.message);
     }
     
   } catch (error) {
-    console.error('âŒ ä¸Šä¼ æºæ•°æ®å¤±è´¥:', error);
+    console.error('? ÉÏ´«Ô´Êı¾İÊ§°Ü:', error);
     res.status(500).json({
-      message: 'ä¸Šä¼ å¤±è´¥: ' + error.message,
+      message: 'ÉÏ´«Ê§°Ü: ' + error.message,
       error: error.toString()
     });
   }
 });
 
-// ==================== ç”ŸæˆFBASKUèµ„æ–™æ¥å£ ====================
+// ==================== Éú³ÉFBASKU×ÊÁÏ½Ó¿Ú ====================
 
-// ç”ŸæˆFBASKUèµ„æ–™
+// Éú³ÉFBASKU×ÊÁÏ
 router.post('/generate-fbasku-data', async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('ğŸ“‹ æ”¶åˆ°ç”ŸæˆFBASKUèµ„æ–™è¯·æ±‚');
+    console.log('?? ÊÕµ½Éú³ÉFBASKU×ÊÁÏÇëÇó');
     
     const { parentSkus, country } = req.body;
     
     if (!Array.isArray(parentSkus) || parentSkus.length === 0) {
-      return res.status(400).json({ message: 'è¯·æä¾›è¦ç”Ÿæˆèµ„æ–™çš„æ¯SKUåˆ—è¡¨' });
+      return res.status(400).json({ message: 'ÇëÌá¹©ÒªÉú³É×ÊÁÏµÄÄ¸SKUÁĞ±í' });
     }
 
     if (!country) {
-      return res.status(400).json({ message: 'è¯·é€‰æ‹©ç”Ÿæˆçš„å›½å®¶' });
+      return res.status(400).json({ message: 'ÇëÑ¡ÔñÉú³ÉµÄ¹ú¼Ò' });
     }
 
-    console.log(`ğŸ“ å¤„ç† ${parentSkus.length} ä¸ªæ¯SKUï¼Œç”Ÿæˆ${country}èµ„æ–™:`, parentSkus);
+    console.log(`?? ´¦Àí ${parentSkus.length} ¸öÄ¸SKU£¬Éú³É${country}×ÊÁÏ:`, parentSkus);
 
-    // æ­¥éª¤1: ä»æ•°æ®åº“è·å–å¯¹åº”å›½å®¶çš„æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ” ä»æ•°æ®åº“æŸ¥æ‰¾${country}æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè1: ´ÓÊı¾İ¿â»ñÈ¡¶ÔÓ¦¹ú¼ÒµÄÄ£°åÎÄ¼ş
+    console.log(`?? ´ÓÊı¾İ¿â²éÕÒ${country}Ä£°åÎÄ¼ş...`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
@@ -5004,29 +5008,29 @@ router.post('/generate-fbasku-data', async (req, res) => {
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `æœªæ‰¾åˆ°${country}ç«™ç‚¹çš„èµ„æ–™æ¨¡æ¿ï¼Œè¯·å…ˆä¸Šä¼ ${country}æ¨¡æ¿æ–‡ä»¶` });
+      return res.status(400).json({ message: `Î´ÕÒµ½${country}Õ¾µãµÄ×ÊÁÏÄ£°å£¬ÇëÏÈÉÏ´«${country}Ä£°åÎÄ¼ş` });
     }
 
-    console.log(`ğŸ“„ ä½¿ç”¨${country}æ¨¡æ¿: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
+    console.log(`?? Ê¹ÓÃ${country}Ä£°å: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
 
-    // æ­¥éª¤2: ä¸‹è½½æ¨¡æ¿æ–‡ä»¶
-    console.log(`ğŸ“¥ ä¸‹è½½${country}æ¨¡æ¿æ–‡ä»¶...`);
+    // ²½Öè2: ÏÂÔØÄ£°åÎÄ¼ş
+    console.log(`?? ÏÂÔØ${country}Ä£°åÎÄ¼ş...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`âŒ ä¸‹è½½${country}æ¨¡æ¿å¤±è´¥:`, downloadResult.message);
+      console.error(`? ÏÂÔØ${country}Ä£°åÊ§°Ü:`, downloadResult.message);
       return res.status(500).json({ 
-        message: `ä¸‹è½½${country}æ¨¡æ¿å¤±è´¥: ${downloadResult.message}`,
+        message: `ÏÂÔØ${country}Ä£°åÊ§°Ü: ${downloadResult.message}`,
         details: downloadResult.error
       });
     }
 
-    console.log(`âœ… ${country}æ¨¡æ¿ä¸‹è½½æˆåŠŸ: ${downloadResult.fileName} (${downloadResult.size} å­—èŠ‚)`);
+    console.log(`? ${country}Ä£°åÏÂÔØ³É¹¦: ${downloadResult.fileName} (${downloadResult.size} ×Ö½Ú)`);
 
-    // æ­¥éª¤3: æ‰¹é‡æŸ¥è¯¢å­SKUä¿¡æ¯
-    console.log('ğŸ” æ‰¹é‡æŸ¥è¯¢å­SKUä¿¡æ¯...');
+    // ²½Öè3: ÅúÁ¿²éÑ¯×ÓSKUĞÅÏ¢
+    console.log('?? ÅúÁ¿²éÑ¯×ÓSKUĞÅÏ¢...');
     const { sequelize } = require('../models/database');
     
     const inventorySkus = await SellerInventorySku.findAll({
@@ -5040,15 +5044,15 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
     if (inventorySkus.length === 0) {
       return res.status(404).json({ 
-        message: 'åœ¨æ•°æ®åº“ä¸­æœªæ‰¾åˆ°è¿™äº›æ¯SKUå¯¹åº”çš„å­SKUä¿¡æ¯' 
+        message: 'ÔÚÊı¾İ¿âÖĞÎ´ÕÒµ½ÕâĞ©Ä¸SKU¶ÔÓ¦µÄ×ÓSKUĞÅÏ¢' 
       });
     }
 
-    console.log(`ğŸ“Š æ‰¾åˆ° ${inventorySkus.length} æ¡å­SKUè®°å½•`);
+    console.log(`?? ÕÒµ½ ${inventorySkus.length} Ìõ×ÓSKU¼ÇÂ¼`);
 
-    // æ­¥éª¤4: æ‰¹é‡æŸ¥è¯¢Amazon SKUæ˜ å°„
+    // ²½Öè4: ÅúÁ¿²éÑ¯Amazon SKUÓ³Éä
     const childSkus = inventorySkus.map(item => item.child_sku);
-    console.log('ğŸ” æ‰¹é‡æŸ¥è¯¢Amazon SKUæ˜ å°„...');
+    console.log('?? ÅúÁ¿²éÑ¯Amazon SKUÓ³Éä...');
     
     let amzSkuMappings = [];
     if (childSkus.length > 0) {
@@ -5061,25 +5065,25 @@ router.post('/generate-fbasku-data', async (req, res) => {
       `, {
         replacements: { 
           childSkus: childSkus,
-          country: country === 'US' ? 'ç¾å›½' : country
+          country: country === 'US' ? 'ÃÀ¹ú' : country
         },
         type: sequelize.QueryTypes.SELECT
       });
     }
 
-    console.log(`ğŸ“Š æ‰¾åˆ° ${amzSkuMappings.length} æ¡Amazon SKUæ˜ å°„è®°å½•`);
+    console.log(`?? ÕÒµ½ ${amzSkuMappings.length} ÌõAmazon SKUÓ³Éä¼ÇÂ¼`);
 
-    // æ­¥éª¤5: æ‰¹é‡æŸ¥è¯¢listings_skuè·å–ASINå’Œä»·æ ¼ä¿¡æ¯
-    console.log('ğŸ” æ‰¹é‡æŸ¥è¯¢listings_skuè·å–ASINå’Œä»·æ ¼ä¿¡æ¯...');
+    // ²½Öè5: ÅúÁ¿²éÑ¯listings_sku»ñÈ¡ASINºÍ¼Û¸ñĞÅÏ¢
+    console.log('?? ÅúÁ¿²éÑ¯listings_sku»ñÈ¡ASINºÍ¼Û¸ñĞÅÏ¢...');
     
     let listingsData = [];
     if (amzSkuMappings.length > 0) {
-      // æ„å»ºæŸ¥è¯¢æ¡ä»¶ï¼Œéœ€è¦åŒ¹é…amz_skuå’Œsite
+      // ¹¹½¨²éÑ¯Ìõ¼ş£¬ĞèÒªÆ¥Åäamz_skuºÍsite
       const conditions = amzSkuMappings.map(mapping => 
         `(\`seller-sku\` = '${mapping.amz_sku}' AND site = '${mapping.site}')`
       ).join(' OR ');
       
-      console.log(`ğŸ” æŸ¥è¯¢æ¡ä»¶: ${conditions.length > 200 ? conditions.substring(0, 200) + '...' : conditions}`);
+      console.log(`?? ²éÑ¯Ìõ¼ş: ${conditions.length > 200 ? conditions.substring(0, 200) + '...' : conditions}`);
       
       listingsData = await sequelize.query(`
         SELECT \`seller-sku\`, asin1, price, site 
@@ -5090,52 +5094,52 @@ router.post('/generate-fbasku-data', async (req, res) => {
       });
     }
 
-    console.log(`ğŸ“Š æ‰¾åˆ° ${listingsData.length} æ¡listings_skuè®°å½•`);
+    console.log(`?? ÕÒµ½ ${listingsData.length} Ìõlistings_sku¼ÇÂ¼`);
 
-    // å»ºç«‹æŸ¥è¯¢æ˜ å°„ä»¥æé«˜æŸ¥è¯¢æ•ˆç‡
+    // ½¨Á¢²éÑ¯Ó³ÉäÒÔÌá¸ß²éÑ¯Ğ§ÂÊ
     const amzSkuMap = new Map();
     amzSkuMappings.forEach(mapping => {
-      // ä½¿ç”¨local_skuä½œä¸ºé”®ï¼ŒåŒ…å«amz_skuå’Œsiteä¿¡æ¯
+      // Ê¹ÓÃlocal_sku×÷Îª¼ü£¬°üº¬amz_skuºÍsiteĞÅÏ¢
       amzSkuMap.set(mapping.local_sku, {
         amz_sku: mapping.amz_sku,
         site: mapping.site
       });
-      console.log(`ğŸ”— SKUæ˜ å°„: ${mapping.local_sku} -> ${mapping.amz_sku} (${mapping.site})`);
+      console.log(`?? SKUÓ³Éä: ${mapping.local_sku} -> ${mapping.amz_sku} (${mapping.site})`);
     });
 
     const listingsMap = new Map();
     listingsData.forEach(listing => {
-      // ä½¿ç”¨seller-sku + siteä½œä¸ºå¤åˆé”®
+      // Ê¹ÓÃseller-sku + site×÷Îª¸´ºÏ¼ü
       const compositeKey = `${listing['seller-sku']}_${listing.site}`;
       listingsMap.set(compositeKey, {
         asin: listing.asin1,
         price: listing.price
       });
-      console.log(`ğŸ“‹ Listingsæ•°æ®: ${listing['seller-sku']} (${listing.site}) -> ASIN:${listing.asin1}, Price:${listing.price}`);
+      console.log(`?? ListingsÊı¾İ: ${listing['seller-sku']} (${listing.site}) -> ASIN:${listing.asin1}, Price:${listing.price}`);
     });
     
-    console.log(`ğŸ“Š æ˜ å°„ç»Ÿè®¡: amzSkuMapæœ‰${amzSkuMap.size}æ¡è®°å½•ï¼ŒlistingsMapæœ‰${listingsMap.size}æ¡è®°å½•`);
+    console.log(`?? Ó³ÉäÍ³¼Æ: amzSkuMapÓĞ${amzSkuMap.size}Ìõ¼ÇÂ¼£¬listingsMapÓĞ${listingsMap.size}Ìõ¼ÇÂ¼`);
 
-    // æ­¥éª¤6: æ•°æ®å®Œæ•´æ€§æ£€æŸ¥
-    console.log('ğŸ” æ£€æŸ¥æ•°æ®å®Œæ•´æ€§...');
+    // ²½Öè6: Êı¾İÍêÕûĞÔ¼ì²é
+    console.log('?? ¼ì²éÊı¾İÍêÕûĞÔ...');
     
-    const missingAmzSkuMappings = []; // ç¼ºå°‘Amazon SKUæ˜ å°„çš„å­SKU
-    const missingListingsData = [];   // ç¼ºå°‘Listingsæ•°æ®çš„Amazon SKU
+    const missingAmzSkuMappings = []; // È±ÉÙAmazon SKUÓ³ÉäµÄ×ÓSKU
+    const missingListingsData = [];   // È±ÉÙListingsÊı¾İµÄAmazon SKU
     
-    // æ£€æŸ¥æ¯ä¸ªå­SKUçš„æ•°æ®å®Œæ•´æ€§
+    // ¼ì²éÃ¿¸ö×ÓSKUµÄÊı¾İÍêÕûĞÔ
     inventorySkus.forEach(inventory => {
       const childSku = inventory.child_sku;
       const amzSkuInfo = amzSkuMap.get(childSku);
       
-      // æ£€æŸ¥æ˜¯å¦ç¼ºå°‘Amazon SKUæ˜ å°„
+      // ¼ì²éÊÇ·ñÈ±ÉÙAmazon SKUÓ³Éä
       if (!amzSkuInfo) {
         missingAmzSkuMappings.push({
           parentSku: inventory.parent_sku,
           childSku: childSku
         });
-        console.log(`âŒ ç¼ºå°‘Amazon SKUæ˜ å°„: ${childSku}`);
+        console.log(`? È±ÉÙAmazon SKUÓ³Éä: ${childSku}`);
       } else {
-        // å¦‚æœæœ‰Amazon SKUæ˜ å°„ï¼Œæ£€æŸ¥æ˜¯å¦ç¼ºå°‘Listingsæ•°æ®
+        // Èç¹ûÓĞAmazon SKUÓ³Éä£¬¼ì²éÊÇ·ñÈ±ÉÙListingsÊı¾İ
         const compositeKey = `${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`;
         const listingInfo = listingsMap.get(compositeKey);
         if (!listingInfo || !listingInfo.asin || !listingInfo.price) {
@@ -5146,30 +5150,30 @@ router.post('/generate-fbasku-data', async (req, res) => {
             hasAsin: listingInfo?.asin ? true : false,
             hasPrice: listingInfo?.price ? true : false
           });
-          console.log(`âŒ ç¼ºå°‘Listingsæ•°æ®: ${amzSku} (å¯¹åº”å­SKU: ${childSku})`);
+          console.log(`? È±ÉÙListingsÊı¾İ: ${amzSku} (¶ÔÓ¦×ÓSKU: ${childSku})`);
         }
       }
     });
 
-    // å¦‚æœå­˜åœ¨æ•°æ®ç¼ºå¤±ï¼Œåœæ­¢ç”Ÿæˆå¹¶è¿”å›è¯¦ç»†çš„é”™è¯¯ä¿¡æ¯
+    // Èç¹û´æÔÚÊı¾İÈ±Ê§£¬Í£Ö¹Éú³É²¢·µ»ØÏêÏ¸µÄ´íÎóĞÅÏ¢
     if (missingAmzSkuMappings.length > 0 || missingListingsData.length > 0) {
       const errorInfo = {
         success: false,
         errorType: 'DATA_MISSING',
         missingAmzSkuMappings: missingAmzSkuMappings,
         missingListingsData: missingListingsData,
-        message: 'æ•°æ®ä¸å®Œæ•´ï¼Œæ— æ³•ç”ŸæˆFBASKUèµ„æ–™'
+        message: 'Êı¾İ²»ÍêÕû£¬ÎŞ·¨Éú³ÉFBASKU×ÊÁÏ'
       };
       
-      console.log('âŒ æ•°æ®ä¸å®Œæ•´ï¼Œåœæ­¢ç”Ÿæˆå¹¶è¿”å›é”™è¯¯ä¿¡æ¯:', errorInfo);
+      console.log('? Êı¾İ²»ÍêÕû£¬Í£Ö¹Éú³É²¢·µ»Ø´íÎóĞÅÏ¢:', errorInfo);
       
       return res.status(400).json(errorInfo);
     }
     
-    console.log('âœ… æ•°æ®å®Œæ•´æ€§æ£€æŸ¥é€šè¿‡');
+    console.log('? Êı¾İÍêÕûĞÔ¼ì²éÍ¨¹ı');
 
-    // æ­¥éª¤7: å¤„ç†Excelæ¨¡æ¿
-    console.log('ğŸ“ å¼€å§‹å¤„ç†Excelæ¨¡æ¿...');
+    // ²½Öè7: ´¦ÀíExcelÄ£°å
+    console.log('?? ¿ªÊ¼´¦ÀíExcelÄ£°å...');
     const XLSX = require('xlsx');
     
     const workbook = XLSX.read(downloadResult.content, { 
@@ -5179,34 +5183,34 @@ router.post('/generate-fbasku-data', async (req, res) => {
       cellDates: true
     });
     
-    console.log('âœ… Excelæ–‡ä»¶åŠ è½½å®Œæˆ');
+    console.log('? ExcelÎÄ¼ş¼ÓÔØÍê³É');
     
-    // æ£€æŸ¥æ˜¯å¦æœ‰Templateå·¥ä½œè¡¨
+    // ¼ì²éÊÇ·ñÓĞTemplate¹¤×÷±í
     if (!workbook.Sheets['Template']) {
-      return res.status(400).json({ message: 'æ¨¡æ¿æ–‡ä»¶ä¸­æœªæ‰¾åˆ°Templateå·¥ä½œè¡¨' });
+      return res.status(400).json({ message: 'Ä£°åÎÄ¼şÖĞÎ´ÕÒµ½Template¹¤×÷±í' });
     }
 
-    console.log('âœ… æˆåŠŸåŠ è½½Templateå·¥ä½œè¡¨');
+    console.log('? ³É¹¦¼ÓÔØTemplate¹¤×÷±í');
     
     const worksheet = workbook.Sheets['Template'];
     
-    // å°†å·¥ä½œè¡¨è½¬æ¢ä¸ºäºŒç»´æ•°ç»„
+    // ½«¹¤×÷±í×ª»»Îª¶şÎ¬Êı×é
     const data = XLSX.utils.sheet_to_json(worksheet, { 
       header: 1,
       defval: '',
       raw: false
     });
 
-    console.log(`ğŸ“Š æ¨¡æ¿æ•°æ®è¡Œæ•°: ${data.length}`);
+    console.log(`?? Ä£°åÊı¾İĞĞÊı: ${data.length}`);
     
     if (data.length < 3) {
-      return res.status(400).json({ message: 'æ¨¡æ¿æ ¼å¼é”™è¯¯ï¼šè‡³å°‘éœ€è¦3è¡Œæ•°æ®ï¼ˆåŒ…æ‹¬æ ‡é¢˜è¡Œï¼‰' });
+      return res.status(400).json({ message: 'Ä£°å¸ñÊ½´íÎó£ºÖÁÉÙĞèÒª3ĞĞÊı¾İ£¨°üÀ¨±êÌâĞĞ£©' });
     }
 
-    const headerRow = data[2]; // ç¬¬ä¸‰è¡Œæ˜¯æ ‡é¢˜è¡Œ
-    console.log('ğŸ“‹ æ ‡é¢˜è¡Œ:', headerRow);
+    const headerRow = data[2]; // µÚÈıĞĞÊÇ±êÌâĞĞ
+    console.log('?? ±êÌâĞĞ:', headerRow);
 
-    // æ‰¾åˆ°éœ€è¦å¡«å†™çš„åˆ—ç´¢å¼•
+    // ÕÒµ½ĞèÒªÌîĞ´µÄÁĞË÷Òı
     const columnIndexes = {};
     const requiredColumns = [
       'item_sku', 'update_delete', 'external_product_id', 'external_product_id_type',
@@ -5227,23 +5231,23 @@ router.post('/generate-fbasku-data', async (req, res) => {
       }
     });
 
-    console.log('ğŸ“‹ æ‰¾åˆ°çš„åˆ—ç´¢å¼•:', columnIndexes);
+    console.log('?? ÕÒµ½µÄÁĞË÷Òı:', columnIndexes);
 
-    // æ­¥éª¤7: å¡«å†™æ•°æ®
-    console.log('ğŸ“ å¼€å§‹å¡«å†™æ•°æ®...');
-    let dataRowIndex = 3; // ä»ç¬¬å››è¡Œå¼€å§‹å¡«å†™æ•°æ®
+    // ²½Öè7: ÌîĞ´Êı¾İ
+    console.log('?? ¿ªÊ¼ÌîĞ´Êı¾İ...');
+    let dataRowIndex = 3; // ´ÓµÚËÄĞĞ¿ªÊ¼ÌîĞ´Êı¾İ
 
     inventorySkus.forEach((inventory, index) => {
       const childSku = inventory.child_sku;
       const amzSkuInfo = amzSkuMap.get(childSku);
       const listingInfo = amzSkuInfo ? listingsMap.get(`${amzSkuInfo.amz_sku}_${amzSkuInfo.site}`) : null;
 
-      // ç¡®ä¿æœ‰è¶³å¤Ÿçš„è¡Œ
+      // È·±£ÓĞ×ã¹»µÄĞĞ
       if (!data[dataRowIndex]) {
         data[dataRowIndex] = new Array(headerRow.length).fill('');
       }
 
-      // å¡«å†™å„åˆ—æ•°æ®
+      // ÌîĞ´¸÷ÁĞÊı¾İ
       if (columnIndexes['item_sku'] !== undefined) {
         data[dataRowIndex][columnIndexes['item_sku']] = `NA${childSku}`;
       }
@@ -5251,14 +5255,14 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['update_delete']] = 'PartialUpdate';
       }
       
-      // å¢å¼ºexternal_product_idå¡«å†™é€»è¾‘ï¼Œæ·»åŠ è°ƒè¯•ä¿¡æ¯
+      // ÔöÇ¿external_product_idÌîĞ´Âß¼­£¬Ìí¼Óµ÷ÊÔĞÅÏ¢
       if (columnIndexes['external_product_id'] !== undefined) {
         if (listingInfo && listingInfo.asin) {
           data[dataRowIndex][columnIndexes['external_product_id']] = listingInfo.asin;
-          console.log(`âœ… å¡«å†™ASIN: ${childSku} -> ${listingInfo.asin}`);
+          console.log(`? ÌîĞ´ASIN: ${childSku} -> ${listingInfo.asin}`);
         } else {
-          console.log(`âš ï¸  è·³è¿‡ASINå¡«å†™: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
-          // ä¸å¡«å†™ç©ºå€¼ï¼Œç›´æ¥è·³è¿‡
+          console.log(`??  Ìø¹ıASINÌîĞ´: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
+          // ²»ÌîĞ´¿ÕÖµ£¬Ö±½ÓÌø¹ı
         }
       }
       
@@ -5266,14 +5270,14 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['external_product_id_type']] = 'ASIN';
       }
       
-      // å¢å¼ºstandard_priceå¡«å†™é€»è¾‘ï¼Œæ·»åŠ è°ƒè¯•ä¿¡æ¯
+      // ÔöÇ¿standard_priceÌîĞ´Âß¼­£¬Ìí¼Óµ÷ÊÔĞÅÏ¢
       if (columnIndexes['standard_price'] !== undefined) {
         if (listingInfo && listingInfo.price) {
           data[dataRowIndex][columnIndexes['standard_price']] = listingInfo.price;
-          console.log(`âœ… å¡«å†™ä»·æ ¼: ${childSku} -> ${listingInfo.price}`);
+          console.log(`? ÌîĞ´¼Û¸ñ: ${childSku} -> ${listingInfo.price}`);
         } else {
-          console.log(`âš ï¸  è·³è¿‡ä»·æ ¼å¡«å†™: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
-          // ä¸å¡«å†™ç©ºå€¼ï¼Œç›´æ¥è·³è¿‡
+          console.log(`??  Ìø¹ı¼Û¸ñÌîĞ´: ${childSku}, amzSku: ${amzSkuInfo?.amz_sku || 'N/A'}`);
+          // ²»ÌîĞ´¿ÕÖµ£¬Ö±½ÓÌø¹ı
         }
       }
       if (columnIndexes['fulfillment_center_id'] !== undefined) {
@@ -5310,7 +5314,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['supplier_declared_dg_hz_regulation1']] = 'Not Applicable';
       }
       if (columnIndexes['condition_type'] !== undefined) {
-        // é˜¿è”é…‹ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šç»Ÿä¸€å¡«å†™ "new, new"
+        // °¢ÁªÇõÕ¾µãÌØÊâ´¦Àí£ºÍ³Ò»ÌîĞ´ "new, new"
         if (country === 'AE') {
           data[dataRowIndex][columnIndexes['condition_type']] = 'new, new';
         } else {
@@ -5321,7 +5325,7 @@ router.post('/generate-fbasku-data', async (req, res) => {
         data[dataRowIndex][columnIndexes['country_of_origin']] = 'China';
       }
       if (columnIndexes['cpsia_cautionary_statement1'] !== undefined) {
-        // åŠ æ‹¿å¤§ç«™ç‚¹ç‰¹æ®Šå¤„ç†ï¼šä½¿ç”¨ç‰¹å®šæ ¼å¼çš„è­¦å‘Šè¯­å¥
+        // ¼ÓÄÃ´óÕ¾µãÌØÊâ´¦Àí£ºÊ¹ÓÃÌØ¶¨¸ñÊ½µÄ¾¯¸æÓï¾ä
         if (country === 'CA') {
           data[dataRowIndex][columnIndexes['cpsia_cautionary_statement1']] = 'Choking Hazard - Small Parts';
         } else {
@@ -5331,72 +5335,72 @@ router.post('/generate-fbasku-data', async (req, res) => {
 
       dataRowIndex++;
       
-      console.log(`âœ… å¤„ç†å®Œæˆç¬¬ ${index + 1}/${inventorySkus.length} ä¸ªSKU: ${inventory.parent_sku} -> ${childSku}`);
+      console.log(`? ´¦ÀíÍê³ÉµÚ ${index + 1}/${inventorySkus.length} ¸öSKU: ${inventory.parent_sku} -> ${childSku}`);
     });
 
-    // æ­¥éª¤8: ç”Ÿæˆæ–°çš„Excelæ–‡ä»¶
-    console.log('ğŸ“ ç”Ÿæˆæ–°çš„Excelæ–‡ä»¶...');
+    // ²½Öè8: Éú³ÉĞÂµÄExcelÎÄ¼ş
+    console.log('?? Éú³ÉĞÂµÄExcelÎÄ¼ş...');
     
     const newWorksheet = XLSX.utils.aoa_to_sheet(data);
     workbook.Sheets['Template'] = newWorksheet;
     
-    // ç”ŸæˆExcelæ–‡ä»¶ç¼“å†²åŒº
+    // Éú³ÉExcelÎÄ¼ş»º³åÇø
     const buffer = XLSX.write(workbook, { 
       type: 'buffer', 
       bookType: 'xlsx',
       cellStyles: true
     });
 
-    // ç”Ÿæˆæ–‡ä»¶å
+    // Éú³ÉÎÄ¼şÃû
     const fileName = `FBASKU_${country}_${parentSkus.join('_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     
-    console.log(`âœ… FBASKUèµ„æ–™ç”Ÿæˆå®Œæˆï¼åŒ…å« ${inventorySkus.length} æ¡è®°å½•`);
-    console.log(`â±ï¸  æ€»è€—æ—¶: ${Date.now() - startTime}ms`);
+    console.log(`? FBASKU×ÊÁÏÉú³ÉÍê³É£¡°üº¬ ${inventorySkus.length} Ìõ¼ÇÂ¼`);
+    console.log(`??  ×ÜºÄÊ±: ${Date.now() - startTime}ms`);
 
-    // è¿”å›ç”Ÿæˆçš„Excelæ–‡ä»¶
+    // ·µ»ØÉú³ÉµÄExcelÎÄ¼ş
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
 
   } catch (error) {
-    console.error('âŒ ç”ŸæˆFBASKUèµ„æ–™å¤±è´¥:', error);
+    console.error('? Éú³ÉFBASKU×ÊÁÏÊ§°Ü:', error);
     res.status(500).json({
-      message: 'ç”Ÿæˆå¤±è´¥: ' + error.message,
+      message: 'Éú³ÉÊ§°Ü: ' + error.message,
       error: error.toString()
     });
   }
 });
 
-// ==================== æ‰¹é‡æ·»åŠ Amazon SKUæ˜ å°„æ¥å£ ====================
+// ==================== ÅúÁ¿Ìí¼ÓAmazon SKUÓ³Éä½Ó¿Ú ====================
 
-// æ‰¹é‡æ·»åŠ Amazon SKUæ˜ å°„åˆ°pbi_amzsku_skuè¡¨
+// ÅúÁ¿Ìí¼ÓAmazon SKUÓ³Éäµ½pbi_amzsku_sku±í
 router.post('/batch-add-amz-sku-mapping', async (req, res) => {
   try {
-    console.log('ğŸ“‹ æ”¶åˆ°æ‰¹é‡æ·»åŠ Amazon SKUæ˜ å°„è¯·æ±‚');
+    console.log('?? ÊÕµ½ÅúÁ¿Ìí¼ÓAmazon SKUÓ³ÉäÇëÇó');
     
     const { mappings } = req.body;
     
     if (!Array.isArray(mappings) || mappings.length === 0) {
-      return res.status(400).json({ message: 'è¯·æä¾›è¦æ·»åŠ çš„æ˜ å°„æ•°æ®' });
+      return res.status(400).json({ message: 'ÇëÌá¹©ÒªÌí¼ÓµÄÓ³ÉäÊı¾İ' });
     }
 
-    console.log(`ğŸ“ å¤„ç† ${mappings.length} æ¡æ˜ å°„æ•°æ®:`, mappings);
+    console.log(`?? ´¦Àí ${mappings.length} ÌõÓ³ÉäÊı¾İ:`, mappings);
 
-    // éªŒè¯å¿…éœ€å­—æ®µ
+    // ÑéÖ¤±ØĞè×Ö¶Î
     for (const mapping of mappings) {
       if (!mapping.amz_sku || !mapping.site || !mapping.country || !mapping.local_sku) {
         return res.status(400).json({ 
-          message: 'æ˜ å°„æ•°æ®ç¼ºå°‘å¿…éœ€å­—æ®µï¼šamz_sku, site, country, local_sku' 
+          message: 'Ó³ÉäÊı¾İÈ±ÉÙ±ØĞè×Ö¶Î£ºamz_sku, site, country, local_sku' 
         });
       }
     }
 
-    // æ‰¹é‡æ’å…¥æ•°æ®
-    console.log('ğŸ” å¼€å§‹æ‰¹é‡æ’å…¥Amazon SKUæ˜ å°„æ•°æ®...');
+    // ÅúÁ¿²åÈëÊı¾İ
+    console.log('?? ¿ªÊ¼ÅúÁ¿²åÈëAmazon SKUÓ³ÉäÊı¾İ...');
     
     const insertPromises = mappings.map(async (mapping) => {
       try {
-        // æ£€æŸ¥æ˜¯å¦å·²å­˜åœ¨
+        // ¼ì²éÊÇ·ñÒÑ´æÔÚ
         const existing = await AmzSkuMapping.findOne({
           where: {
             amz_sku: mapping.amz_sku,
@@ -5405,25 +5409,25 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
         });
 
         if (existing) {
-          console.log(`âš ï¸  æ˜ å°„å·²å­˜åœ¨ï¼Œè·³è¿‡: ${mapping.amz_sku} (${mapping.site})`);
-          return { success: false, reason: 'æ˜ å°„å·²å­˜åœ¨', mapping };
+          console.log(`??  Ó³ÉäÒÑ´æÔÚ£¬Ìø¹ı: ${mapping.amz_sku} (${mapping.site})`);
+          return { success: false, reason: 'Ó³ÉäÒÑ´æÔÚ', mapping };
         }
 
-        // æ’å…¥æ–°è®°å½•
+        // ²åÈëĞÂ¼ÇÂ¼
         await AmzSkuMapping.create({
           amz_sku: mapping.amz_sku,
           site: mapping.site,
           country: mapping.country,
           local_sku: mapping.local_sku,
-          sku_type: mapping.sku_type || 'Local SKU', // é»˜è®¤ç±»å‹æ”¹ä¸ºLocal SKU
+          sku_type: mapping.sku_type || 'Local SKU', // Ä¬ÈÏÀàĞÍ¸ÄÎªLocal SKU
           update_time: new Date()
         });
 
-        console.log(`âœ… æˆåŠŸæ’å…¥: ${mapping.local_sku} -> ${mapping.amz_sku}`);
+        console.log(`? ³É¹¦²åÈë: ${mapping.local_sku} -> ${mapping.amz_sku}`);
         return { success: true, mapping };
         
       } catch (error) {
-        console.error(`âŒ æ’å…¥å¤±è´¥: ${mapping.local_sku} -> ${mapping.amz_sku}`, error);
+        console.error(`? ²åÈëÊ§°Ü: ${mapping.local_sku} -> ${mapping.amz_sku}`, error);
         return { success: false, reason: error.message, mapping };
       }
     });
@@ -5433,11 +5437,11 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
     
-    console.log(`ğŸ“Š æ‰¹é‡æ’å…¥ç»“æœ: æˆåŠŸ${successCount}æ¡, å¤±è´¥${failureCount}æ¡`);
+    console.log(`?? ÅúÁ¿²åÈë½á¹û: ³É¹¦${successCount}Ìõ, Ê§°Ü${failureCount}Ìõ`);
 
     res.json({
       success: true,
-      message: `æ‰¹é‡æ·»åŠ Amazon SKUæ˜ å°„å®Œæˆï¼šæˆåŠŸ${successCount}æ¡ï¼Œå¤±è´¥${failureCount}æ¡`,
+      message: `ÅúÁ¿Ìí¼ÓAmazon SKUÓ³ÉäÍê³É£º³É¹¦${successCount}Ìõ£¬Ê§°Ü${failureCount}Ìõ`,
       results: {
         successCount,
         failureCount,
@@ -5446,61 +5450,61 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('âŒ æ‰¹é‡æ·»åŠ Amazon SKUæ˜ å°„å¤±è´¥:', error);
+    console.error('? ÅúÁ¿Ìí¼ÓAmazon SKUÓ³ÉäÊ§°Ü:', error);
     res.status(500).json({
-      message: 'æ‰¹é‡æ·»åŠ å¤±è´¥: ' + error.message,
+      message: 'ÅúÁ¿Ìí¼ÓÊ§°Ü: ' + error.message,
       error: error.toString()
     });
   }
 });
 
-// ä¿å­˜é¡µé¢æºä»£ç ï¼ˆChromeæ’ä»¶è°ƒç”¨ï¼‰
+// ±£´æÒ³ÃæÔ´´úÂë£¨Chrome²å¼şµ÷ÓÃ£©
 router.post('/save-page-source', async (req, res) => {
   try {
     const { productId, parentSku, weblink, pageSource, sourceLength } = req.body;
 
-    // éªŒè¯å¿…è¦å‚æ•°
+    // ÑéÖ¤±ØÒª²ÎÊı
     if (!productId || !parentSku || !weblink || !pageSource) {
       return res.status(400).json({
         code: 1,
-        message: 'ç¼ºå°‘å¿…è¦å‚æ•°'
+        message: 'È±ÉÙ±ØÒª²ÎÊı'
       });
     }
 
-    // æŸ¥æ‰¾äº§å“è®°å½•
+    // ²éÕÒ²úÆ·¼ÇÂ¼
     const product = await ProductWeblink.findByPk(productId);
     if (!product) {
       return res.status(404).json({
         code: 1,
-        message: 'äº§å“è®°å½•ä¸å­˜åœ¨'
+        message: '²úÆ·¼ÇÂ¼²»´æÔÚ'
       });
     }
 
-    // éªŒè¯äº§å“ä¿¡æ¯åŒ¹é…
+    // ÑéÖ¤²úÆ·ĞÅÏ¢Æ¥Åä
     if (product.parent_sku !== parentSku || product.weblink !== weblink) {
       return res.status(400).json({
         code: 1,
-        message: 'äº§å“ä¿¡æ¯ä¸åŒ¹é…'
+        message: '²úÆ·ĞÅÏ¢²»Æ¥Åä'
       });
     }
 
-    // ç”Ÿæˆæºä»£ç æ‘˜è¦ï¼ˆä¿å­˜å‰1000ä¸ªå­—ç¬¦ï¼‰
+    // Éú³ÉÔ´´úÂëÕªÒª£¨±£´æÇ°1000¸ö×Ö·û£©
     const sourceSummary = pageSource.substring(0, 1000);
     
-    // æ›´æ–°äº§å“è®°å½•ï¼Œåªæ›´æ–°æ£€æŸ¥æ—¶é—´ï¼Œä¸æ›´æ–°å¤‡æ³¨
+    // ¸üĞÂ²úÆ·¼ÇÂ¼£¬Ö»¸üĞÂ¼ì²éÊ±¼ä£¬²»¸üĞÂ±¸×¢
     await ProductWeblink.update({
       check_time: new Date()
     }, {
       where: { id: productId }
     });
 
-    // è¿™é‡Œå¯ä»¥å°†å®Œæ•´çš„é¡µé¢æºä»£ç ä¿å­˜åˆ°æ–‡ä»¶ç³»ç»Ÿæˆ–ä¸“é—¨çš„å­˜å‚¨è¡¨ä¸­
-    // ä¸ºäº†æ¼”ç¤ºï¼Œæˆ‘ä»¬åªåœ¨å“åº”ä¸­è¿”å›æ‘˜è¦
-    console.log(`äº§å“ ${parentSku} é¡µé¢æºä»£ç å·²è·å–ï¼Œé•¿åº¦: ${sourceLength} å­—ç¬¦`);
+    // ÕâÀï¿ÉÒÔ½«ÍêÕûµÄÒ³ÃæÔ´´úÂë±£´æµ½ÎÄ¼şÏµÍ³»ò×¨ÃÅµÄ´æ´¢±íÖĞ
+    // ÎªÁËÑİÊ¾£¬ÎÒÃÇÖ»ÔÚÏìÓ¦ÖĞ·µ»ØÕªÒª
+    console.log(`²úÆ· ${parentSku} Ò³ÃæÔ´´úÂëÒÑ»ñÈ¡£¬³¤¶È: ${sourceLength} ×Ö·û`);
 
     res.json({
       code: 0,
-      message: 'é¡µé¢æºä»£ç ä¿å­˜æˆåŠŸ',
+      message: 'Ò³ÃæÔ´´úÂë±£´æ³É¹¦',
       data: {
         productId,
         parentSku,
@@ -5511,32 +5515,32 @@ router.post('/save-page-source', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('ä¿å­˜é¡µé¢æºä»£ç å¤±è´¥:', error);
+    console.error('±£´æÒ³ÃæÔ´´úÂëÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'ä¿å­˜å¤±è´¥: ' + error.message
+      message: '±£´æÊ§°Ü: ' + error.message
     });
   }
 });
 
-// æ‰¹é‡æ·»åŠ æ–°é“¾æ¥ï¼ˆé‡‡è´­ç”¨ï¼‰
+// ÅúÁ¿Ìí¼ÓĞÂÁ´½Ó£¨²É¹ºÓÃ£©
 router.post('/batch-add-purchase-links', async (req, res) => {
   try {
     const { links } = req.body;
     
     if (!Array.isArray(links) || links.length === 0) {
-      return res.status(400).json({ message: 'è¯·è¾“å…¥äº§å“é“¾æ¥' });
+      return res.status(400).json({ message: 'ÇëÊäÈë²úÆ·Á´½Ó' });
     }
 
     const processedLinks = [];
     const errors = [];
 
-    // æå–å’ŒéªŒè¯æ¯ä¸ªé“¾æ¥
+    // ÌáÈ¡ºÍÑéÖ¤Ã¿¸öÁ´½Ó
     for (let i = 0; i < links.length; i++) {
       const rawLink = links[i].trim();
       if (!rawLink) continue;
 
-      // æå–é“¾æ¥ï¼šä»httpså¼€å¤´åˆ°.htmléƒ¨åˆ†
+      // ÌáÈ¡Á´½Ó£º´Óhttps¿ªÍ·µ½.html²¿·Ö
       const linkMatch = rawLink.match(/(https:\/\/[^?\s]+\.html)/);
       
       if (linkMatch) {
@@ -5546,20 +5550,20 @@ router.post('/batch-add-purchase-links', async (req, res) => {
         errors.push({
           line: i + 1,
           originalLink: rawLink,
-          error: 'é“¾æ¥æ ¼å¼é”™è¯¯ï¼šæœªæ‰¾åˆ°httpså¼€å¤´åˆ°htmlçš„æœ‰æ•ˆé“¾æ¥éƒ¨åˆ†'
+          error: 'Á´½Ó¸ñÊ½´íÎó£ºÎ´ÕÒµ½https¿ªÍ·µ½htmlµÄÓĞĞ§Á´½Ó²¿·Ö'
         });
       }
     }
 
-    // å¦‚æœæœ‰é”™è¯¯ï¼Œè¿”å›é”™è¯¯ä¿¡æ¯
+    // Èç¹ûÓĞ´íÎó£¬·µ»Ø´íÎóĞÅÏ¢
     if (errors.length > 0 && processedLinks.length === 0) {
       return res.status(400).json({ 
-        message: 'æ‰€æœ‰é“¾æ¥æ ¼å¼éƒ½ä¸æ­£ç¡®',
+        message: 'ËùÓĞÁ´½Ó¸ñÊ½¶¼²»ÕıÈ·',
         errors: errors
       });
     }
 
-    // æ£€æŸ¥é‡å¤é“¾æ¥
+    // ¼ì²éÖØ¸´Á´½Ó
     const existingLinks = await ProductWeblink.findAll({
       where: {
         weblink: processedLinks
@@ -5577,21 +5581,21 @@ router.post('/batch-add-purchase-links', async (req, res) => {
           line: links.findIndex(l => l.includes(link)) + 1,
           originalLink: links.find(l => l.includes(link)),
           extractedLink: link,
-          error: 'é“¾æ¥å·²å­˜åœ¨äºæ•°æ®åº“ä¸­'
+          error: 'Á´½ÓÒÑ´æÔÚÓÚÊı¾İ¿âÖĞ'
         });
       } else {
         uniqueLinks.push(link);
       }
     });
 
-    // å‡†å¤‡æ’å…¥æ•°æ®ï¼ˆåªæ’å…¥ä¸é‡å¤çš„ï¼‰
+    // ×¼±¸²åÈëÊı¾İ£¨Ö»²åÈë²»ÖØ¸´µÄ£©
     const insertData = uniqueLinks.map(link => ({
       weblink: link,
-      status: 'æ–°å“ä¸€å®¡',
+      status: 'ĞÂÆ·Ò»Éó',
       update_time: new Date()
     }));
 
-    // æ‰¹é‡æ’å…¥åˆ°æ•°æ®åº“
+    // ÅúÁ¿²åÈëµ½Êı¾İ¿â
     let createdRecords = [];
     if (insertData.length > 0) {
       createdRecords = await ProductWeblink.bulkCreate(insertData, {
@@ -5599,24 +5603,24 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       });
     }
 
-    // åˆå¹¶æ‰€æœ‰é”™è¯¯ï¼ˆæ ¼å¼é”™è¯¯ + é‡å¤é”™è¯¯ï¼‰
+    // ºÏ²¢ËùÓĞ´íÎó£¨¸ñÊ½´íÎó + ÖØ¸´´íÎó£©
     const allErrors = [...errors, ...duplicateLinks];
 
-    // æ„å»ºå“åº”æ¶ˆæ¯
+    // ¹¹½¨ÏìÓ¦ÏûÏ¢
     let message = '';
     if (createdRecords.length > 0) {
-      message = `æˆåŠŸæ·»åŠ  ${createdRecords.length} æ¡é‡‡è´­é“¾æ¥`;
+      message = `³É¹¦Ìí¼Ó ${createdRecords.length} Ìõ²É¹ºÁ´½Ó`;
     }
     if (duplicateLinks.length > 0) {
-      if (message) message += `ï¼Œè·³è¿‡ ${duplicateLinks.length} æ¡é‡å¤é“¾æ¥`;
-      else message = `è·³è¿‡ ${duplicateLinks.length} æ¡é‡å¤é“¾æ¥`;
+      if (message) message += `£¬Ìø¹ı ${duplicateLinks.length} ÌõÖØ¸´Á´½Ó`;
+      else message = `Ìø¹ı ${duplicateLinks.length} ÌõÖØ¸´Á´½Ó`;
     }
     if (errors.length > 0) {
-      if (message) message += `ï¼Œè·³è¿‡ ${errors.length} æ¡æ ¼å¼é”™è¯¯çš„é“¾æ¥`;
-      else message = `è·³è¿‡ ${errors.length} æ¡æ ¼å¼é”™è¯¯çš„é“¾æ¥`;
+      if (message) message += `£¬Ìø¹ı ${errors.length} Ìõ¸ñÊ½´íÎóµÄÁ´½Ó`;
+      else message = `Ìø¹ı ${errors.length} Ìõ¸ñÊ½´íÎóµÄÁ´½Ó`;
     }
     if (!message) {
-      message = 'æ²¡æœ‰æ·»åŠ ä»»ä½•æ–°é“¾æ¥';
+      message = 'Ã»ÓĞÌí¼ÓÈÎºÎĞÂÁ´½Ó';
     }
 
     res.json({
@@ -5631,29 +5635,29 @@ router.post('/batch-add-purchase-links', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('æ‰¹é‡æ·»åŠ é‡‡è´­é“¾æ¥å¤±è´¥:', err);
-    res.status(500).json({ message: 'æœåŠ¡å™¨é”™è¯¯: ' + err.message });
+    console.error('ÅúÁ¿Ìí¼Ó²É¹ºÁ´½ÓÊ§°Ü:', err);
+    res.status(500).json({ message: '·şÎñÆ÷´íÎó: ' + err.message });
   }
 });
 
-// å¯¼å‡ºExcelæ–‡ä»¶
+// µ¼³öExcelÎÄ¼ş
 router.post('/export-excel', async (req, res) => {
   try {
     const { data } = req.body;
     
     if (!Array.isArray(data) || data.length === 0) {
-      return res.status(400).json({ message: 'æ²¡æœ‰æ•°æ®å¯å¯¼å‡º' });
+      return res.status(400).json({ message: 'Ã»ÓĞÊı¾İ¿Éµ¼³ö' });
     }
 
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('é‡‡è´­é“¾æ¥ç®¡ç†');
+    const worksheet = workbook.addWorksheet('²É¹ºÁ´½Ó¹ÜÀí');
 
-    // è®¾ç½®åˆ—æ ‡é¢˜
+    // ÉèÖÃÁĞ±êÌâ
     const headers = Object.keys(data[0]);
     worksheet.addRow(headers);
 
-    // è®¾ç½®æ ‡é¢˜è¡Œæ ·å¼
+    // ÉèÖÃ±êÌâĞĞÑùÊ½
     const headerRow = worksheet.getRow(1);
     headerRow.font = { bold: true };
     headerRow.fill = {
@@ -5662,13 +5666,13 @@ router.post('/export-excel', async (req, res) => {
       fgColor: { argb: 'FFE6F7FF' }
     };
 
-    // æ·»åŠ æ•°æ®è¡Œ
+    // Ìí¼ÓÊı¾İĞĞ
     data.forEach(item => {
       const row = headers.map(header => item[header] || '');
       worksheet.addRow(row);
     });
 
-    // è‡ªåŠ¨è°ƒæ•´åˆ—å®½
+    // ×Ô¶¯µ÷ÕûÁĞ¿í
     headers.forEach((header, index) => {
       const column = worksheet.getColumn(index + 1);
       let maxLength = header.length;
@@ -5676,30 +5680,30 @@ router.post('/export-excel', async (req, res) => {
       data.forEach(item => {
         const value = item[header] || '';
         if (value.toString().length > maxLength) {
-          maxLength = Math.min(value.toString().length, 50); // é™åˆ¶æœ€å¤§å®½åº¦
+          maxLength = Math.min(value.toString().length, 50); // ÏŞÖÆ×î´ó¿í¶È
         }
       });
       
       column.width = Math.max(maxLength + 2, 10);
     });
 
-    // è®¾ç½®å“åº”å¤´
+    // ÉèÖÃÏìÓ¦Í·
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="purchase_links_export.xlsx"');
 
-    // å†™å…¥å“åº”
+    // Ğ´ÈëÏìÓ¦
     await workbook.xlsx.write(res);
     res.end();
 
   } catch (error) {
-    console.error('å¯¼å‡ºExcelå¤±è´¥:', error);
-    res.status(500).json({ message: 'å¯¼å‡ºå¤±è´¥: ' + error.message });
+    console.error('µ¼³öExcelÊ§°Ü:', error);
+    res.status(500).json({ message: 'µ¼³öÊ§°Ü: ' + error.message });
   }
 });
 
-// ========== SellerInventorySkuç›¸å…³API ==========
+// ========== SellerInventorySkuÏà¹ØAPI ==========
 
-// æ ¹æ®parent_skuæŸ¥è¯¢SellerInventorySkuæ•°æ®
+// ¸ù¾İparent_sku²éÑ¯SellerInventorySkuÊı¾İ
 router.get('/seller-inventory-sku/:parentSku', async (req, res) => {
   try {
     const { parentSku } = req.params;
@@ -5707,11 +5711,11 @@ router.get('/seller-inventory-sku/:parentSku', async (req, res) => {
     if (!parentSku) {
       return res.status(400).json({
         code: 1,
-        message: 'æ¯SKUå‚æ•°ä¸èƒ½ä¸ºç©º'
+        message: 'Ä¸SKU²ÎÊı²»ÄÜÎª¿Õ'
       });
     }
 
-    console.log('æŸ¥è¯¢SellerInventorySkuæ•°æ®ï¼Œæ¯SKU:', parentSku);
+    console.log('²éÑ¯SellerInventorySkuÊı¾İ£¬Ä¸SKU:', parentSku);
 
     const data = await SellerInventorySku.findAll({
       where: {
@@ -5720,24 +5724,24 @@ router.get('/seller-inventory-sku/:parentSku', async (req, res) => {
       order: [['child_sku', 'ASC']]
     });
 
-    console.log(`æŸ¥è¯¢åˆ°${data.length}æ¡SellerInventorySkuè®°å½•`);
+    console.log(`²éÑ¯µ½${data.length}ÌõSellerInventorySku¼ÇÂ¼`);
 
     res.json({
       code: 0,
-      message: 'æŸ¥è¯¢æˆåŠŸ',
+      message: '²éÑ¯³É¹¦',
       data: data
     });
 
   } catch (error) {
-    console.error('æŸ¥è¯¢SellerInventorySkuæ•°æ®å¤±è´¥:', error);
+    console.error('²éÑ¯SellerInventorySkuÊı¾İÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æŸ¥è¯¢å¤±è´¥: ' + error.message
+      message: '²éÑ¯Ê§°Ü: ' + error.message
     });
   }
 });
 
-// æ›´æ–°å•ä¸ªSellerInventorySkuè®°å½•
+// ¸üĞÂµ¥¸öSellerInventorySku¼ÇÂ¼
 router.put('/seller-inventory-sku/:skuid', async (req, res) => {
   try {
     const { skuid } = req.params;
@@ -5746,22 +5750,22 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
     if (!skuid) {
       return res.status(400).json({
         code: 1,
-        message: 'SKU IDå‚æ•°ä¸èƒ½ä¸ºç©º'
+        message: 'SKU ID²ÎÊı²»ÄÜÎª¿Õ'
       });
     }
 
-    console.log('æ›´æ–°SellerInventorySkuè®°å½•ï¼ŒSKU ID:', skuid, 'æ›´æ–°æ•°æ®:', updateData);
+    console.log('¸üĞÂSellerInventorySku¼ÇÂ¼£¬SKU ID:', skuid, '¸üĞÂÊı¾İ:', updateData);
 
-    // æŸ¥æ‰¾è®°å½•
+    // ²éÕÒ¼ÇÂ¼
     const record = await SellerInventorySku.findByPk(skuid);
     if (!record) {
       return res.status(404).json({
         code: 1,
-        message: 'è®°å½•ä¸å­˜åœ¨'
+        message: '¼ÇÂ¼²»´æÔÚ'
       });
     }
 
-    // æ›´æ–°è®°å½•
+    // ¸üĞÂ¼ÇÂ¼
     const [affectedRows] = await SellerInventorySku.update(updateData, {
       where: { skuid: skuid }
     });
@@ -5769,22 +5773,22 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
     if (affectedRows === 0) {
       return res.status(404).json({
         code: 1,
-        message: 'æ›´æ–°å¤±è´¥ï¼Œè®°å½•å¯èƒ½ä¸å­˜åœ¨'
+        message: '¸üĞÂÊ§°Ü£¬¼ÇÂ¼¿ÉÄÜ²»´æÔÚ'
       });
     }
 
-    console.log('SellerInventorySkuè®°å½•æ›´æ–°æˆåŠŸï¼Œå½±å“è¡Œæ•°:', affectedRows);
+    console.log('SellerInventorySku¼ÇÂ¼¸üĞÂ³É¹¦£¬Ó°ÏìĞĞÊı:', affectedRows);
 
     res.json({
       code: 0,
-      message: 'æ›´æ–°æˆåŠŸ'
+      message: '¸üĞÂ³É¹¦'
     });
 
   } catch (error) {
-    console.error('æ›´æ–°SellerInventorySkuæ•°æ®å¤±è´¥:', error);
+    console.error('¸üĞÂSellerInventorySkuÊı¾İÊ§°Ü:', error);
     res.status(500).json({
       code: 1,
-      message: 'æ›´æ–°å¤±è´¥: ' + error.message
+      message: '¸üĞÂÊ§°Ü: ' + error.message
     });
   }
 });
