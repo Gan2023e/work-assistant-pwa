@@ -271,6 +271,13 @@ const PurchaseInvoice: React.FC = () => {
       return;
     }
 
+    // 检查选中的订单是否属于同一个买家公司
+    const buyerCompanies = Array.from(new Set(selectedOrders.map(order => order.payment_account)));
+    if (buyerCompanies.length > 1) {
+      message.error(`选中的订单包含多个买家公司（${buyerCompanies.join('、')}），不能一起下载发票。请选择同一个买家公司的订单。`);
+      return;
+    }
+
     // 检查是否有发票文件
     const ordersWithoutFiles = selectedOrders.filter(order => 
       !order.invoice || !order.invoice.invoice_file_url
