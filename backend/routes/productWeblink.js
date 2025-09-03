@@ -2967,6 +2967,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             depthUnit = 'Centimetres';
           }
         }
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && depthUnit === 'Centimetres') {
+          depthUnit = 'Centimeters';
+        }
         data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
       }
                     if (depthWidthSideToSideCol !== -1) {
@@ -2999,6 +3003,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             widthUnit = 'Centimetres';
           }
         }
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && widthUnit === 'Centimetres') {
+          widthUnit = 'Centimeters';
+        }
         data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
       }
                     if (depthHeightFloorToTopCol !== -1) {
@@ -3030,6 +3038,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
           } else if (heightUnit === 'Centimeters') {
             heightUnit = 'Centimetres';
           }
+        }
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((actualCountry === 'CA' || actualCountry === 'AE' || actualCountry === 'AU') && heightUnit === 'Centimetres') {
+          heightUnit = 'Centimeters';
         }
         data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
       }
@@ -4503,8 +4515,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             depthUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (targetCountry === 'AE' && depthUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && depthUnit === 'Centimetres') {
           depthUnit = 'Centimeters';
         }
         data[currentRowIndex][depthFrontToBackUnitOfMeasureCol] = depthUnit;
@@ -4539,8 +4551,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             widthUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (targetCountry === 'AE' && widthUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && widthUnit === 'Centimetres') {
           widthUnit = 'Centimeters';
         }
         data[currentRowIndex][depthWidthSideToSideUnitOfMeasureCol] = widthUnit;
@@ -4575,8 +4587,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             heightUnit = 'Centimetres';
           }
         }
-        // 阿联酋站点特殊处理：Centimetres转换为Centimeters
-        if (targetCountry === 'AE' && heightUnit === 'Centimetres') {
+        // 加拿大、阿联酋、澳大利亚站点特殊处理：Centimetres转换为Centimeters
+        if ((targetCountry === 'CA' || targetCountry === 'AE' || targetCountry === 'AU') && heightUnit === 'Centimetres') {
           heightUnit = 'Centimeters';
         }
         data[currentRowIndex][depthHeightFloorToTopUnitOfMeasureCol] = heightUnit;
