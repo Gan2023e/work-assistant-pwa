@@ -135,7 +135,7 @@ const PurchaseInvoice: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [pagination, setPagination] = useState({
     current: 1,
-    pageSize: 20,
+    pageSize: 100,
     total: 0
   });
   
@@ -272,9 +272,16 @@ const PurchaseInvoice: React.FC = () => {
     }
 
     // 检查选中的订单是否属于同一个买家公司
-    const buyerCompanies = Array.from(new Set(selectedOrders.map(order => order.payment_account)));
+    const buyerCompanies = Array.from(new Set(selectedOrders.map(order => order.payment_account).filter(Boolean)));
+    console.log('选中的订单买家公司:', buyerCompanies);
+    
     if (buyerCompanies.length > 1) {
       message.error(`选中的订单包含多个买家公司（${buyerCompanies.join('、')}），不能一起下载发票。请选择同一个买家公司的订单。`);
+      return;
+    }
+    
+    if (buyerCompanies.length === 0) {
+      message.error('选中的订单中没有有效的买家公司信息');
       return;
     }
 
