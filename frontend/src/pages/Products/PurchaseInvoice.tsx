@@ -272,7 +272,7 @@ const PurchaseInvoice: React.FC = () => {
     }
 
     // 检查选中的订单是否属于同一个买家公司
-    const buyerCompanies = Array.from(new Set(selectedOrders.map(order => order.payment_account).filter(Boolean)));
+    const buyerCompanies = Array.from(new Set(selectedOrders.map(order => order.payment_account?.trim()).filter(Boolean)));
     console.log('选中的订单买家公司:', buyerCompanies);
     
     if (buyerCompanies.length > 1) {
