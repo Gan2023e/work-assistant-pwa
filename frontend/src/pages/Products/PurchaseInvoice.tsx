@@ -547,7 +547,12 @@ const PurchaseInvoice: React.FC = () => {
     try {
       const orderData = {
         ...values,
-        order_date: values.order_date.format('YYYY-MM-DD')
+        order_date: values.order_date.format('YYYY-MM-DD'),
+        // 去除字符串字段的前后空格
+        order_number: values.order_number?.trim(),
+        seller_name: values.seller_name?.trim(),
+        payment_account: values.payment_account?.trim(),
+        remarks: values.remarks?.trim()
       };
       
       const url = editingOrder 

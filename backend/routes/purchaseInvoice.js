@@ -156,7 +156,16 @@ router.get('/orders', async (req, res) => {
 // 创建采购订单
 router.post('/orders', async (req, res) => {
   try {
-    const orderData = req.body;
+    const rawOrderData = req.body;
+    
+    // 处理数据，去除字符串字段的前后空格
+    const orderData = {
+      ...rawOrderData,
+      order_number: rawOrderData.order_number?.trim(),
+      seller_name: rawOrderData.seller_name?.trim(),
+      payment_account: rawOrderData.payment_account?.trim(),
+      remarks: rawOrderData.remarks?.trim()
+    };
     
     // 检查订单号是否已存在
     const existingOrder = await PurchaseOrder.findOne({
@@ -488,7 +497,16 @@ router.post('/orders/batch', excelUpload.single('excel'), async (req, res) => {
 router.put('/orders/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const rawUpdateData = req.body;
+    
+    // 处理数据，去除字符串字段的前后空格
+    const updateData = {
+      ...rawUpdateData,
+      order_number: rawUpdateData.order_number?.trim(),
+      seller_name: rawUpdateData.seller_name?.trim(),
+      payment_account: rawUpdateData.payment_account?.trim(),
+      remarks: rawUpdateData.remarks?.trim()
+    };
     
     const order = await PurchaseOrder.findByPk(id);
     if (!order) {
