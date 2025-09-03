@@ -2283,7 +2283,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
   try {
     console.log('📋 收到生成其他站点资料表请求');
     
-    const { country, targetCountry } = req.body;
+    const { country, targetCountry, sourceCountry } = req.body;
     const uploadedFile = req.file;
     
     // 支持两种参数格式：country 或 targetCountry
@@ -2293,13 +2293,32 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return res.status(400).json({ message: '请提供国家信息和Excel文件' });
     }
 
-    console.log(`📝 处理国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
+    console.log(`📝 处理源国家: ${sourceCountry || '未知'} -> 目标国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
 
-    // 处理文本字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    // 处理文本字段的转换规则（基于源国家和目标国家）
     const processTextForUKAUAE = (text, fieldType = 'general') => {
       if (!text) return text;
       
-      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
+      const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        if (fieldType === 'brand_name') {
+          return 'JiaYou';  // SellerFun -> JiaYou
+        }
+        if (fieldType === 'manufacturer') {
+          return text.replace(/SellerFun/g, 'JiaYou');
+        }
+        if (fieldType === 'item_name') {
+          return text.replace(/SellerFun/g, 'JiaYou');
+        }
+        return text;
+      }
+      
+      // 原有逻辑：生成UK/AU/AE资料表时的处理
+      if (targetIsUKAUAE) {
         // 对于brand_name和manufacturer字段，统一设置为SellerFun
         if (fieldType === 'brand_name' || fieldType === 'manufacturer') {
           return 'SellerFun';
@@ -2323,11 +2342,22 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return text;
     };
 
-    // 处理SKU字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    // 处理SKU字段的转换规则（基于源国家和目标国家）
     const processSkuForUKAUAE = (sku) => {
       if (!sku) return sku;
       
-      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
+      const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // UK前缀改为US前缀
+        return sku.replace(/^UK/, 'US');
+      }
+      
+      // 原有逻辑：生成UK/AU/AE资料表时的处理
+      if (targetIsUKAUAE) {
         // SKU前缀改为UK
         return sku.replace(/^[A-Z]{2}/, 'UK');
       }
@@ -2335,11 +2365,26 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return sku;
     };
 
-    // 处理model字段的特殊规则（针对英国、澳大利亚、阿联酋）
+    // 处理model字段的转换规则（基于源国家和目标国家）
     const processModelForUKAUAE = (model) => {
       if (!model) return model;
       
-      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
+      const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // UK前缀改为US前缀
+        if (model.startsWith('UK')) {
+          return model.replace(/^UK/, 'US');
+        }
+        // 如果没有前缀，添加US前缀
+        return 'US' + model;
+      }
+      
+      // 原有逻辑：生成UK/AU/AE资料表时的处理
+      if (targetIsUKAUAE) {
         // model字段加上UK前缀
         if (model.startsWith('UK')) {
           return model;
@@ -2350,11 +2395,28 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return model;
     };
 
-    // 处理图片URL的特殊规则（针对英国、澳大利亚、阿联酋）
+    // 处理图片URL的转换规则（基于源国家和目标国家）
     const processImageUrlForUKAUAE = (url) => {
       if (!url) return url;
       
-      if (actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE') {
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = actualCountry === 'US' || actualCountry === 'CA';
+      const targetIsUKAUAE = actualCountry === 'UK' || actualCountry === 'AU' || actualCountry === 'AE';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // 域名：pic.sellerfun.net -> pic.jiayou.ink
+        let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+        
+        // SKU前缀改成US (例如：UKXBC188 -> USXBC188)
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
+        
+        return processedUrl;
+      }
+      
+      // 原有逻辑：生成UK/AU/AE资料表时的处理
+      if (targetIsUKAUAE) {
         // 如果域名包含pic.jiayou.ink，改成pic.sellerfun.net
         let processedUrl = url.replace(/pic\.jiayou\.ink/g, 'pic.sellerfun.net');
         
@@ -3898,6 +3960,87 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
 
     console.log(`📝 处理批量生成: ${sourceCountry} -> ${targetCountry}, 文件: ${uploadedFile.originalname}`);
 
+    // 定义处理函数（与单个生成函数保持一致）
+    const processBatchText = (text, fieldType = 'general') => {
+      if (!text) return text;
+      
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
+      const targetIsUKAUAE = targetCountry === 'UK' || targetCountry === 'AU' || targetCountry === 'AE';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        if (fieldType === 'brand_name') {
+          return 'JiaYou';  // SellerFun -> JiaYou
+        }
+        if (fieldType === 'manufacturer') {
+          return text.replace(/SellerFun/g, 'JiaYou');
+        }
+        if (fieldType === 'item_name') {
+          return text.replace(/SellerFun/g, 'JiaYou');
+        }
+        return text;
+      }
+      
+      // 其他转换逻辑保持原有
+      return text;
+    };
+
+    const processBatchSku = (sku) => {
+      if (!sku) return sku;
+      
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // UK前缀改为US前缀
+        return sku.replace(/^UK/, 'US');
+      }
+      
+      return sku;
+    };
+
+    const processBatchModel = (model) => {
+      if (!model) return model;
+      
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // UK前缀改为US前缀
+        if (model.startsWith('UK')) {
+          return model.replace(/^UK/, 'US');
+        }
+        // 如果没有前缀，添加US前缀
+        return 'US' + model;
+      }
+      
+      return model;
+    };
+
+    const processBatchImageUrl = (url) => {
+      if (!url) return url;
+      
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        // 域名：pic.sellerfun.net -> pic.jiayou.ink
+        let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+        
+        // SKU前缀改成US (例如：UKXBC188 -> USXBC188)
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
+        
+        return processedUrl;
+      }
+      
+      return url;
+    };
+
     // 步骤1: 解析上传的Excel文件
     console.log('📖 解析上传的Excel文件...');
     const workbook = xlsx.read(uploadedFile.buffer);
@@ -3998,10 +4141,75 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         console.warn(`⚠️ 批量记录缺少parent_child信息，使用item_sku生成original_parent_sku: ${rowData.item_sku} -> ${rowData.original_parent_sku}`);
       }
       
-      // 关键转换：将源站点的SKU转换为目标站点的SKU
+      // 关键转换：将源站点的数据转换为目标站点的数据
+      const sourceIsUKAUAE = sourceCountry && (sourceCountry === 'UK' || sourceCountry === 'AU' || sourceCountry === 'AE');
+      const targetIsUSCA = targetCountry === 'US' || targetCountry === 'CA';
+      
+      // SKU字段转换
       if (rowData.item_sku && rowData.item_sku.length > 2) {
-        // 生成目标站点的SKU：目标站点前缀 + 原始SKU的后部分
-        rowData.item_sku = targetCountry + rowData.item_sku.substring(2);
+        if (sourceIsUKAUAE && targetIsUSCA) {
+          // 从UK/AU/AE生成US/CA：UK前缀改为US前缀
+          rowData.item_sku = rowData.item_sku.replace(/^UK/, 'US');
+        } else {
+          // 原有逻辑：目标站点前缀 + 原始SKU的后部分
+          rowData.item_sku = targetCountry + rowData.item_sku.substring(2);
+        }
+      }
+      
+      // parent_sku字段转换
+      if (rowData.parent_sku && rowData.parent_sku.length > 2) {
+        if (sourceIsUKAUAE && targetIsUSCA) {
+          // 从UK/AU/AE生成US/CA：UK前缀改为US前缀
+          rowData.parent_sku = rowData.parent_sku.replace(/^UK/, 'US');
+        } else {
+          // 原有逻辑：目标站点前缀 + 原始SKU的后部分
+          rowData.parent_sku = targetCountry + rowData.parent_sku.substring(2);
+        }
+      }
+      
+      // model字段转换
+      if (rowData.model) {
+        if (sourceIsUKAUAE && targetIsUSCA) {
+          // 从UK/AU/AE生成US/CA：UK前缀改为US前缀
+          if (rowData.model.startsWith('UK')) {
+            rowData.model = rowData.model.replace(/^UK/, 'US');
+          } else {
+            rowData.model = 'US' + rowData.model;
+          }
+        }
+      }
+      
+      // 品牌名称转换
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        if (rowData.brand_name) {
+          rowData.brand_name = 'JiaYou';  // SellerFun -> JiaYou
+        }
+        if (rowData.manufacturer) {
+          rowData.manufacturer = rowData.manufacturer.replace(/SellerFun/g, 'JiaYou');
+        }
+        if (rowData.item_name) {
+          rowData.item_name = rowData.item_name.replace(/SellerFun/g, 'JiaYou');
+        }
+      }
+      
+      // 图片URL转换
+      if (sourceIsUKAUAE && targetIsUSCA) {
+        const imageFields = [
+          'main_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3', 
+          'other_image_url4', 'other_image_url5', 'other_image_url6', 'other_image_url7', 
+          'other_image_url8', 'swatch_image_url'
+        ];
+        
+        imageFields.forEach(field => {
+          if (rowData[field]) {
+            // 域名：pic.sellerfun.net -> pic.jiayou.ink
+            rowData[field] = rowData[field].replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+            
+            // SKU前缀：UK -> US
+            rowData[field] = rowData[field].replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
+            rowData[field] = rowData[field].replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
+          }
+        });
       }
       
       // 设置site字段为目标国家（转换为中文名称）
@@ -4221,19 +4429,19 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         data[currentRowIndex].push('');
       }
       
-      // 填写数据
-      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = record.item_sku || '';
-      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = record.item_name || '';
+      // 填写数据（应用转换函数）
+      if (itemSkuCol !== -1) data[currentRowIndex][itemSkuCol] = processBatchSku(record.item_sku) || '';
+      if (itemNameCol !== -1) data[currentRowIndex][itemNameCol] = processBatchText(record.item_name, 'item_name') || '';
       if (colorNameCol !== -1) data[currentRowIndex][colorNameCol] = record.color_name || '';
       if (sizeNameCol !== -1) data[currentRowIndex][sizeNameCol] = record.size_name || '';
-      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = record.brand_name || '';
-      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = record.manufacturer || '';
-      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = record.main_image_url || '';
-      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = record.other_image_url1 || '';
-      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = record.other_image_url2 || '';
-      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = record.other_image_url3 || '';
-      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = record.other_image_url4 || '';
-      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = record.other_image_url5 || '';
+      if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = processBatchText(record.brand_name, 'brand_name') || '';
+      if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = processBatchText(record.manufacturer, 'manufacturer') || '';
+      if (mainImageUrlCol !== -1) data[currentRowIndex][mainImageUrlCol] = processBatchImageUrl(record.main_image_url) || '';
+      if (otherImageUrl1Col !== -1) data[currentRowIndex][otherImageUrl1Col] = processBatchImageUrl(record.other_image_url1) || '';
+      if (otherImageUrl2Col !== -1) data[currentRowIndex][otherImageUrl2Col] = processBatchImageUrl(record.other_image_url2) || '';
+      if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = processBatchImageUrl(record.other_image_url3) || '';
+      if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = processBatchImageUrl(record.other_image_url4) || '';
+      if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = processBatchImageUrl(record.other_image_url5) || '';
       if (productDescriptionCol !== -1) data[currentRowIndex][productDescriptionCol] = record.product_description || '';
       if (bulletPoint1Col !== -1) data[currentRowIndex][bulletPoint1Col] = record.bullet_point1 || '';
       if (bulletPoint2Col !== -1) data[currentRowIndex][bulletPoint2Col] = record.bullet_point2 || '';
@@ -4244,7 +4452,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       // 填写加拿大站点新增字段数据
       if (closureTypeCol !== -1) data[currentRowIndex][closureTypeCol] = record.closure_type || '';
       if (careInstructionsCol !== -1) data[currentRowIndex][careInstructionsCol] = record.care_instructions || '';
-      if (modelCol !== -1) data[currentRowIndex][modelCol] = record.model || '';
+      if (modelCol !== -1) data[currentRowIndex][modelCol] = processBatchModel(record.model) || '';
       if (targetGenderCol !== -1) data[currentRowIndex][targetGenderCol] = record.target_gender || '';
       if (recommendedUsesForProductCol !== -1) data[currentRowIndex][recommendedUsesForProductCol] = record.recommended_uses_for_product || '';
       if (seasons1Col !== -1) data[currentRowIndex][seasons1Col] = record.seasons1 || '';
