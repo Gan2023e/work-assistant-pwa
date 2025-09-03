@@ -1683,14 +1683,23 @@ const PurchaseInvoice: React.FC = () => {
                 type="primary" 
                 icon={<UploadOutlined />}
                 disabled={selectedRowKeys.length === 0}
-                                 onClick={() => {
-                   setExtractedInfo(null);
-                   setFileList([]);
-                   setAmountDifference(0);
-                   setUploadedScreenshots([]);
-                   invoiceForm.resetFields();
-                   setInvoiceModalVisible(true);
-                 }}
+                onClick={() => {
+                  // 检查选中的订单是否都是未开票状态
+                  const selectedOrders = purchaseOrders.filter(order => selectedRowKeys.includes(order.id));
+                  const invoicedOrders = selectedOrders.filter(order => order.invoice_status === '已开票');
+                  
+                  if (invoicedOrders.length > 0) {
+                    message.warning(`选中的订单中有 ${invoicedOrders.length} 个订单已开票，无法重复开票`);
+                    return;
+                  }
+                  
+                  setExtractedInfo(null);
+                  setFileList([]);
+                  setAmountDifference(0);
+                  setUploadedScreenshots([]);
+                  invoiceForm.resetFields();
+                  setInvoiceModalVisible(true);
+                }}
               >
                 批量开票 ({selectedRowKeys.length})
               </Button>
@@ -1768,7 +1777,7 @@ const PurchaseInvoice: React.FC = () => {
             onChange: setSelectedRowKeys,
             preserveSelectedRowKeys: false, // 不保留跨页选中状态
             getCheckboxProps: (record) => ({
-              disabled: record.invoice_status === '已开票', // 已开票的订单不允许选择
+              disabled: false, // 允许选择所有订单，具体功能在按钮点击时验证
             })
           }}
           scroll={{ x: 1200 }}
