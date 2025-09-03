@@ -1784,7 +1784,7 @@ router.get('/invoices/:id/file', async (req, res) => {
         // 设置安全的响应头
         res.set({
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename*=UTF-8''${encodedFileName}`,
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodedFileName}`,
           'Content-Length': result.content.length.toString(),
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -1824,6 +1824,136 @@ router.get('/invoices/:id/file', async (req, res) => {
       code: 1,
       message: '获取发票文件失败',
       error: error.message
+    });
+  }
+});
+
+// 批量下载发票文件
+router.post('/invoices/batch-download', async (req, res) => {
+  try {
+    const { order_ids } = req.body;
+    
+    if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供要下载的订单ID列表'
+      });
+    }
+    
+    // 获取所有选中订单的发票信息
+    const orders = await PurchaseOrder.findAll({
+      where: { 
+        id: { [Op.in]: order_ids },
+        invoice_status: '已开票'
+      },
+      include: [{
+        model: Invoice,
+        as: 'invoice',
+        required: true,
+        where: {
+          invoice_file_url: { [Op.not]: null }
+        }
+      }]
+    });
+    
+    if (orders.length === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '没有找到可下载的发票文件'
+      });
+    }
+    
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+    const OSS = require('ali-oss');
+    
+    // 初始化OSS客户端
+    const client = new OSS({
+      region: process.env.OSS_REGION,
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+      bucket: process.env.OSS_BUCKET,
+      endpoint: process.env.OSS_ENDPOINT
+    });
+    
+    let successCount = 0;
+    let failedFiles = [];
+    
+    // 遍历每个订单，下载发票文件并添加到ZIP
+    for (const order of orders) {
+      try {
+        const invoice = order.invoice;
+        
+        if (invoice.invoice_file_url && invoice.invoice_file_url.includes('aliyuncs.com')) {
+          // 从URL中提取对象名称
+          const url = new URL(invoice.invoice_file_url);
+          const objectName = url.pathname.substring(1);
+          
+          console.log(`正在下载发票文件: ${objectName}`);
+          
+          // 从OSS获取文件内容
+          const result = await client.get(objectName);
+          
+          // 生成安全的文件名
+          const rawFileName = invoice.invoice_file_name || `发票_${order.order_number}.pdf`;
+          const cleanFileName = rawFileName
+            .replace(/[\r\n\t]/g, '')
+            .replace(/[^\x20-\x7E\u4e00-\u9fff]/g, '')
+            .trim();
+          
+          const safeFileName = cleanFileName || `发票_${order.order_number}_${invoice.id}.pdf`;
+          
+          // 添加文件到ZIP
+          zip.file(safeFileName, result.content);
+          successCount++;
+          
+        } else {
+          failedFiles.push({
+            orderNumber: order.order_number,
+            reason: '不支持的文件URL格式'
+          });
+        }
+        
+      } catch (error) {
+        console.error(`下载订单 ${order.order_number} 的发票文件失败:`, error);
+        failedFiles.push({
+          orderNumber: order.order_number,
+          reason: error.message
+        });
+      }
+    }
+    
+    if (successCount === 0) {
+      return res.status(500).json({
+        code: 1,
+        message: '所有发票文件下载失败',
+        data: { failedFiles }
+      });
+    }
+    
+    // 生成ZIP文件
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+    
+    // 设置响应头
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `采购发票_${dateStr}.zip`;
+    
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Content-Length': zipBuffer.length.toString()
+    });
+    
+    // 返回ZIP文件
+    res.send(zipBuffer);
+    
+    console.log(`✅ 批量下载完成: 成功 ${successCount} 个文件，失败 ${failedFiles.length} 个文件`);
+    
+  } catch (error) {
+    console.error('批量下载发票文件失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量下载失败: ' + error.message
     });
   }
 });

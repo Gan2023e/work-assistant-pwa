@@ -177,6 +177,9 @@ const PurchaseInvoice: React.FC = () => {
   // 导出相关状态
   const [exportLoading, setExportLoading] = useState(false);
 
+  // 批量下载发票相关状态
+  const [downloadInvoicesLoading, setDownloadInvoicesLoading] = useState(false);
+
   // 处理导出功能
   const handleExport = async () => {
     try {
@@ -249,6 +252,97 @@ const PurchaseInvoice: React.FC = () => {
       message.error('导出失败，请重试');
     } finally {
       setExportLoading(false);
+    }
+  };
+
+  // 处理批量下载发票文件
+  const handleDownloadInvoices = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要下载发票的订单');
+      return;
+    }
+
+    // 检查选中的订单是否都已开票
+    const selectedOrders = purchaseOrders.filter(order => selectedRowKeys.includes(order.id));
+    const uninvoicedOrders = selectedOrders.filter(order => order.invoice_status !== '已开票');
+    
+    if (uninvoicedOrders.length > 0) {
+      message.warning(`选中的订单中有 ${uninvoicedOrders.length} 个订单未开票，无法下载发票文件`);
+      return;
+    }
+
+    // 检查是否有发票文件
+    const ordersWithoutFiles = selectedOrders.filter(order => 
+      !order.invoice || !order.invoice.invoice_file_url
+    );
+    
+    if (ordersWithoutFiles.length > 0) {
+      const hasOrdersWithFiles = selectedOrders.length > ordersWithoutFiles.length;
+      if (hasOrdersWithFiles) {
+        const confirmResult = await new Promise((resolve) => {
+          Modal.confirm({
+            title: '部分订单无发票文件',
+            content: `选中的 ${selectedRowKeys.length} 个订单中，有 ${ordersWithoutFiles.length} 个订单没有上传发票文件。是否继续下载其他 ${selectedOrders.length - ordersWithoutFiles.length} 个订单的发票文件？`,
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+        
+        if (!confirmResult) {
+          return;
+        }
+      } else {
+        message.warning('选中的订单都没有发票文件可下载');
+        return;
+      }
+    }
+
+    try {
+      setDownloadInvoicesLoading(true);
+      
+      const response = await fetch(`${API_BASE_URL}/api/purchase-invoice/invoices/batch-download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order_ids: selectedRowKeys
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      
+      // 获取文件名
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `采购发票_${new Date().toISOString().slice(0, 10)}.zip`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+      
+      // 下载ZIP文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success(`成功下载 ${selectedRowKeys.length} 个订单的发票文件`);
+      
+    } catch (error: any) {
+      console.error('批量下载发票失败:', error);
+      message.error(`批量下载发票失败: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setDownloadInvoicesLoading(false);
     }
   };
 
@@ -1622,6 +1716,22 @@ const PurchaseInvoice: React.FC = () => {
                 </Button>
               </Tooltip>
 
+              <Tooltip
+                title={
+                  selectedRowKeys.length > 0 
+                    ? `下载 ${selectedRowKeys.length} 条选中记录的发票文件`
+                    : '请先选择要下载发票的订单'
+                }
+              >
+                <Button 
+                  icon={<FilePdfOutlined />}
+                  loading={downloadInvoicesLoading}
+                  disabled={selectedRowKeys.length === 0}
+                  onClick={handleDownloadInvoices}
+                >
+                  下载发票{selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}
+                </Button>
+              </Tooltip>
             </Space>
           </Col>
           <Col>
