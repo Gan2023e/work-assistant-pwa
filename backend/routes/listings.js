@@ -31,23 +31,83 @@ router.get('/', async (req, res) => {
       };
     }
 
-    // 分页查询母子SKU关系，同时关联product_weblink表
+    // 使用原生SQL实现FULL OUTER JOIN (MySQL使用UNION模拟)
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const { count, rows: skuData } = await SellerInventorySku.findAndCountAll({
-      where: whereCondition,
-      include: [{
-        model: ProductWeblink,
-        as: 'ProductWeblink',
-        required: false, // LEFT JOIN
-        attributes: ['weblink', 'status']
-      }],
-      order: [[sort_by, sort_order.toUpperCase()]],
-      limit: parseInt(limit),
-      offset: offset
-    });
+    
+    // 构建搜索条件的SQL片段
+    let searchCondition = '';
+    if (search) {
+      searchCondition = `
+        AND (sku.parent_sku LIKE '%${search}%' 
+        OR sku.child_sku LIKE '%${search}%' 
+        OR sku.sellercolorname LIKE '%${search}%' 
+        OR sku.sellersizename LIKE '%${search}%')
+      `;
+    }
 
-    // 获取所有相关的child_sku列表
-    const childSkus = skuData.map(item => item.child_sku);
+    // FULL OUTER JOIN查询 - 显示所有记录
+    const fullJoinQuery = `
+      SELECT 
+        sku.skuid,
+        sku.parent_sku,
+        sku.child_sku,
+        sku.sellercolorname,
+        sku.sellersizename,
+        sku.qty_per_box,
+        pw.weblink,
+        pw.status as product_status,
+        CASE 
+          WHEN sku.skuid IS NULL THEN 'only_weblink'
+          WHEN pw.parent_sku IS NULL THEN 'only_sku' 
+          ELSE 'both'
+        END as data_source
+      FROM sellerinventory_sku sku
+      LEFT JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
+      WHERE 1=1 ${searchCondition}
+      
+      UNION
+      
+      SELECT 
+        NULL as skuid,
+        pw.parent_sku,
+        NULL as child_sku,
+        NULL as sellercolorname,
+        NULL as sellersizename,
+        NULL as qty_per_box,
+        pw.weblink,
+        pw.status as product_status,
+        'only_weblink' as data_source
+      FROM product_weblink pw
+      LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
+      WHERE sku.parent_sku IS NULL
+      
+      ORDER BY parent_sku ${sort_order}
+      LIMIT ${parseInt(limit)} OFFSET ${offset}
+    `;
+
+    // 获取总数查询
+    const countQuery = `
+      SELECT COUNT(*) as total FROM (
+        SELECT sku.parent_sku FROM sellerinventory_sku sku
+        LEFT JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
+        WHERE 1=1 ${searchCondition}
+        
+        UNION
+        
+        SELECT pw.parent_sku FROM product_weblink pw
+        LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
+        WHERE sku.parent_sku IS NULL
+      ) as combined_data
+    `;
+
+    const [skuData] = await sequelize.query(fullJoinQuery);
+    const [countResult] = await sequelize.query(countQuery);
+    const count = countResult[0].total;
+
+    // 获取所有相关的child_sku列表 (排除null值)
+    const childSkus = skuData
+      .filter(item => item.child_sku)
+      .map(item => item.child_sku);
     
     // 查询这些child_sku在各站点的映射情况
     let mappings = [];
@@ -113,10 +173,10 @@ router.get('/', async (req, res) => {
     });
     const siteList = allSites.map(s => s.site);
 
-    // 整理数据结构
+    // 整理数据结构 - 适配新的查询结果
     const result = skuData.map(sku => {
-      // 找到该child_sku的所有映射
-      const skuMappings = mappings.filter(m => m.local_sku === sku.child_sku);
+      // 找到该child_sku的所有映射 (只有存在child_sku的记录才有映射)
+      const skuMappings = sku.child_sku ? mappings.filter(m => m.local_sku === sku.child_sku) : [];
       
       // 按国家组织映射数据
       const countryStatus = {};
@@ -159,19 +219,18 @@ router.get('/', async (req, res) => {
         listingStatus = 'partial';
       }
 
-      // 获取关联的product_weblink信息
-      const productWeblink = sku.ProductWeblink || null;
-
       return {
-        skuid: sku.skuid,
+        skuid: sku.skuid, // 对于只有weblink的记录，这里为null
         parent_sku: sku.parent_sku,
         child_sku: sku.child_sku,
         sellercolorname: sku.sellercolorname,
         sellersizename: sku.sellersizename,
         qty_per_box: sku.qty_per_box,
-        // 新增产品链接信息
-        weblink: productWeblink ? productWeblink.weblink : null,
-        product_status: productWeblink ? productWeblink.status : null,
+        // 产品链接信息 (直接从查询结果获取)
+        weblink: sku.weblink,
+        product_status: sku.product_status,
+        // 数据来源标识
+        data_source: sku.data_source,
         countryStatus,
         listingStatus,
         listedCount,
@@ -606,6 +665,143 @@ router.delete('/batch-delete', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 数据一致性检查API
+router.get('/data-consistency-check', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 执行数据一致性检查');
+  
+  try {
+    // 查找只在sellerinventory_sku中存在的记录
+    const onlyInSkuQuery = `
+      SELECT sku.parent_sku, COUNT(sku.skuid) as sku_count, 'missing_weblink' as issue_type
+      FROM sellerinventory_sku sku
+      LEFT JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
+      WHERE pw.parent_sku IS NULL
+      GROUP BY sku.parent_sku
+    `;
+
+    // 查找只在product_weblink中存在的记录
+    const onlyInWeblinkQuery = `
+      SELECT pw.parent_sku, pw.status, pw.weblink, 'missing_sku' as issue_type
+      FROM product_weblink pw
+      LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
+      WHERE sku.parent_sku IS NULL
+    `;
+
+    const [onlyInSku] = await sequelize.query(onlyInSkuQuery);
+    const [onlyInWeblink] = await sequelize.query(onlyInWeblinkQuery);
+
+    // 统计信息
+    const totalSkuRecords = await SellerInventorySku.count();
+    const totalWeblinkRecords = await ProductWeblink.count();
+    const consistentRecords = await sequelize.query(`
+      SELECT COUNT(DISTINCT sku.parent_sku) as count
+      FROM sellerinventory_sku sku
+      INNER JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
+    `);
+
+    const stats = {
+      totalSkuRecords,
+      totalWeblinkRecords,
+      consistentRecords: consistentRecords[0][0].count,
+      missingWeblinkRecords: onlyInSku.length,
+      missingSkuRecords: onlyInWeblink.length,
+      consistencyRate: totalSkuRecords > 0 ? 
+        Math.round((consistentRecords[0][0].count / totalSkuRecords) * 100) : 0
+    };
+
+    console.log('\x1b[33m%s\x1b[0m', `📊 一致性检查完成: 一致率${stats.consistencyRate}%`);
+
+    res.json({
+      code: 0,
+      message: '数据一致性检查完成',
+      data: {
+        statistics: stats,
+        inconsistentData: {
+          missingWeblink: onlyInSku,
+          missingSku: onlyInWeblink
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 数据一致性检查失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '检查失败',
+      error: error.message
+    });
+  }
+});
+
+// 数据同步API
+router.post('/sync-data', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔄 执行数据同步');
+  
+  try {
+    const { action, parentSkus } = req.body; // action: 'create_weblink' | 'create_sku' | 'delete_orphan'
+    
+    if (!action || !parentSkus || !Array.isArray(parentSkus)) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供同步操作类型和父SKU列表'
+      });
+    }
+
+    let result = { created: 0, deleted: 0, errors: [] };
+
+    switch (action) {
+      case 'create_weblink':
+        // 为缺少weblink的SKU创建默认记录
+        for (const parentSku of parentSkus) {
+          try {
+            await ProductWeblink.create({
+              parent_sku: parentSku,
+              weblink: '',
+              status: '待处理',
+              update_time: new Date()
+            });
+            result.created++;
+          } catch (error) {
+            result.errors.push(`${parentSku}: ${error.message}`);
+          }
+        }
+        break;
+
+      case 'delete_orphan':
+        // 删除孤立的weblink记录
+        const deletedCount = await ProductWeblink.destroy({
+          where: {
+            parent_sku: { [Op.in]: parentSkus }
+          }
+        });
+        result.deleted = deletedCount;
+        break;
+
+      default:
+        return res.status(400).json({
+          code: 1,
+          message: '不支持的同步操作类型'
+        });
+    }
+
+    console.log('\x1b[32m%s\x1b[0m', `✅ 数据同步完成: 创建${result.created}条, 删除${result.deleted}条`);
+
+    res.json({
+      code: 0,
+      message: `数据同步完成`,
+      data: result
+    });
+
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 数据同步失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '同步失败',
       error: error.message
     });
   }

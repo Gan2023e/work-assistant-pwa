@@ -15,7 +15,8 @@ import {
   Space,
   Table,
   Progress,
-  Card
+  Card,
+  Statistic
 } from 'antd';
 import {
   PlusOutlined,
@@ -72,6 +73,11 @@ const Listings: React.FC = () => {
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
   const [productStatusOptions, setProductStatusOptions] = useState<string[]>([]);
   
+  // 数据一致性检查状态
+  const [consistencyCheckVisible, setConsistencyCheckVisible] = useState(false);
+  const [consistencyData, setConsistencyData] = useState<any>(null);
+  const [consistencyLoading, setConsistencyLoading] = useState(false);
+  
   // 弹窗状态
   const [addMappingVisible, setAddMappingVisible] = useState(false);
   const [batchImportVisible, setBatchImportVisible] = useState(false);
@@ -109,7 +115,10 @@ const Listings: React.FC = () => {
             status !== undefined && status.trim() !== ''
           );
         const uniqueStatuses = Array.from(new Set(statusList)).sort();
-        setProductStatusOptions(uniqueStatuses);
+        
+        // 添加特殊的筛选选项
+        const allStatusOptions = ['无SKU数据', ...uniqueStatuses];
+        setProductStatusOptions(allStatusOptions);
       } else {
         message.error(result.message || '获取数据失败');
       }
@@ -194,7 +203,7 @@ const Listings: React.FC = () => {
         message.success('映射删除成功');
         fetchListings();
         fetchStatistics();
-        if (selectedSku) {
+        if (selectedSku && selectedSku.child_sku) {
           fetchSkuMappings(selectedSku.child_sku);
         }
       } else {
@@ -331,12 +340,74 @@ const Listings: React.FC = () => {
       setSelectedRows(selectedRows);
     },
   };
+
+  // 数据一致性检查
+  const handleConsistencyCheck = async () => {
+    setConsistencyLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/listings/data-consistency-check`);
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setConsistencyData(result.data);
+        setConsistencyCheckVisible(true);
+        message.success('数据一致性检查完成');
+      } else {
+        message.error(result.message || '检查失败');
+      }
+    } catch (error) {
+      console.error('一致性检查失败:', error);
+      message.error('检查失败');
+    } finally {
+      setConsistencyLoading(false);
+    }
+  };
+
+  // 数据同步
+  const handleDataSync = async (action: string, parentSkus: string[]) => {
+    if (parentSkus.length === 0) {
+      message.warning('请选择要同步的记录');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认数据同步',
+      content: `确定要${action === 'create_weblink' ? '创建产品链接记录' : '删除孤立记录'}吗？`,
+      onOk: async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/listings/sync-data`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action, parentSkus }),
+          });
+
+          const result = await response.json();
+
+          if (result.code === 0) {
+            message.success(`数据同步完成: ${result.data.created || result.data.deleted} 条记录`);
+            fetchListings();
+            fetchStatistics();
+            handleConsistencyCheck(); // 重新检查一致性
+          } else {
+            message.error(result.message || '同步失败');
+          }
+        } catch (error) {
+          console.error('数据同步失败:', error);
+          message.error('同步失败');
+        }
+      }
+    });
+  };
   
   // 查看SKU详情
   const handleViewSkuDetail = (sku: ParentSkuData) => {
     setSelectedSku(sku);
     setSkuDetailVisible(true);
-    fetchSkuMappings(sku.child_sku);
+    if (sku.child_sku) {
+      fetchSkuMappings(sku.child_sku);
+    }
   };
   
   // 更新查询参数
@@ -422,7 +493,12 @@ const Listings: React.FC = () => {
     // 先应用产品状态筛选
     let filteredListings = listings;
     if (productStatusFilter && productStatusFilter !== 'all') {
-      filteredListings = listings.filter(item => item.product_status === productStatusFilter);
+      if (productStatusFilter === '无SKU数据') {
+        // 筛选只在product_weblink中存在的记录
+        filteredListings = listings.filter(item => item.data_source === 'only_weblink');
+      } else {
+        filteredListings = listings.filter(item => item.product_status === productStatusFilter);
+      }
     }
 
     const groupedData = new Map<string, ParentSkuData[]>();
@@ -607,7 +683,7 @@ const Listings: React.FC = () => {
         if (!record || !record.countryStatus) {
           return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
         }
-        return renderCountryStatus(record.countryStatus, record.child_sku, country);
+        return renderCountryStatus(record.countryStatus, record.child_sku || '', country);
       },
     }));
 
@@ -787,6 +863,14 @@ const Listings: React.FC = () => {
                 fetchStatistics();
               }}
             />
+            
+            <Button
+              icon={<CheckOutlined />}
+              loading={consistencyLoading}
+              onClick={handleConsistencyCheck}
+            >
+              数据一致性检查
+            </Button>
           </div>
         </div>
       </div>
@@ -1022,6 +1106,105 @@ const Listings: React.FC = () => {
         onConfirm={handleBatchImport}
         siteList={siteList}
       />
+
+      {/* 数据一致性检查结果弹窗 */}
+      <Modal
+        title="数据一致性检查结果"
+        open={consistencyCheckVisible}
+        onCancel={() => setConsistencyCheckVisible(false)}
+        footer={null}
+        width={800}
+      >
+        {consistencyData && (
+          <div>
+            {/* 统计信息 */}
+            <Card title="数据统计" size="small" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                <div>
+                  <Statistic title="总SKU记录" value={consistencyData.statistics.totalSkuRecords} />
+                </div>
+                <div>
+                  <Statistic title="总产品链接记录" value={consistencyData.statistics.totalWeblinkRecords} />
+                </div>
+                <div>
+                  <Statistic title="一致性记录" value={consistencyData.statistics.consistentRecords} />
+                </div>
+                <div>
+                  <Statistic title="缺少产品链接" value={consistencyData.statistics.missingWeblinkRecords} valueStyle={{ color: '#cf1322' }} />
+                </div>
+                <div>
+                  <Statistic title="孤立产品链接" value={consistencyData.statistics.missingSkuRecords} valueStyle={{ color: '#cf1322' }} />
+                </div>
+                <div>
+                  <Statistic title="一致性率" value={consistencyData.statistics.consistencyRate} suffix="%" valueStyle={{ color: consistencyData.statistics.consistencyRate > 80 ? '#3f8600' : '#cf1322' }} />
+                </div>
+              </div>
+            </Card>
+
+            {/* 缺少产品链接的SKU */}
+            {consistencyData.inconsistentData.missingWeblink.length > 0 && (
+              <Card title={`缺少产品链接的SKU (${consistencyData.inconsistentData.missingWeblink.length}条)`} size="small" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span>这些SKU存在于库存表中，但没有对应的产品链接</span>
+                  <Button 
+                    size="small" 
+                    type="primary"
+                    onClick={() => handleDataSync('create_weblink', consistencyData.inconsistentData.missingWeblink.map((item: any) => item.parent_sku))}
+                  >
+                    为所有SKU创建默认产品链接
+                  </Button>
+                </div>
+                <Table
+                  size="small"
+                  dataSource={consistencyData.inconsistentData.missingWeblink}
+                  rowKey="parent_sku"
+                  pagination={{ pageSize: 5 }}
+                  columns={[
+                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku' },
+                    { title: '子SKU数量', dataIndex: 'sku_count', key: 'sku_count' }
+                  ]}
+                />
+              </Card>
+            )}
+
+            {/* 孤立的产品链接 */}
+            {consistencyData.inconsistentData.missingSku.length > 0 && (
+              <Card title={`孤立的产品链接 (${consistencyData.inconsistentData.missingSku.length}条)`} size="small">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span>这些产品链接没有对应的SKU记录</span>
+                  <Button 
+                    size="small" 
+                    danger
+                    onClick={() => handleDataSync('delete_orphan', consistencyData.inconsistentData.missingSku.map((item: any) => item.parent_sku))}
+                  >
+                    删除所有孤立记录
+                  </Button>
+                </div>
+                <Table
+                  size="small"
+                  dataSource={consistencyData.inconsistentData.missingSku}
+                  rowKey="parent_sku"
+                  pagination={{ pageSize: 5 }}
+                  columns={[
+                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku' },
+                    { title: '状态', dataIndex: 'status', key: 'status', render: (status: string) => <Tag>{status}</Tag> },
+                    { 
+                      title: '产品链接', 
+                      dataIndex: 'weblink', 
+                      key: 'weblink',
+                      render: (weblink: string) => weblink ? (
+                        <a href={weblink} target="_blank" rel="noopener noreferrer">
+                          {weblink.length > 50 ? `${weblink.substring(0, 50)}...` : weblink}
+                        </a>
+                      ) : '-'
+                    }
+                  ]}
+                />
+              </Card>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

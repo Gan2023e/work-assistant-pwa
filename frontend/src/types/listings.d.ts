@@ -14,19 +14,51 @@ export interface CountryStatus {
 
 // 母SKU信息
 export interface ParentSkuData {
-  skuid: string;
+  skuid: string | null;
   parent_sku: string;
-  child_sku: string;
+  child_sku: string | null;
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
   weblink?: string;
   product_status?: string;
+  data_source: 'both' | 'only_sku' | 'only_weblink';
   countryStatus: Record<string, CountryStatus>;
   listingStatus: 'listed' | 'unlisted' | 'partial';
   listedCount: number;
   totalCountries: number;
   listingRate: number;
+}
+
+// 数据一致性检查结果
+export interface DataConsistencyResult {
+  statistics: {
+    totalSkuRecords: number;
+    totalWeblinkRecords: number;
+    consistentRecords: number;
+    missingWeblinkRecords: number;
+    missingSkuRecords: number;
+    consistencyRate: number;
+  };
+  inconsistentData: {
+    missingWeblink: Array<{
+      parent_sku: string;
+      sku_count: number;
+      issue_type: string;
+    }>;
+    missingSku: Array<{
+      parent_sku: string;
+      status: string;
+      weblink: string;
+      issue_type: string;
+    }>;
+  };
+}
+
+// 数据同步请求
+export interface DataSyncRequest {
+  action: 'create_weblink' | 'delete_orphan';
+  parentSkus: string[];
 }
 
 // SKU映射信息
