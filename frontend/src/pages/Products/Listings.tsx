@@ -642,7 +642,7 @@ const Listings: React.FC = () => {
                       borderRadius: 2,
                       fontWeight: 'bold'
                     }}
-                    title={mapping.isFbaSku ? 'FBA库存 (MFN可售数量)' : 'Listing库存数量'}
+                    title={mapping.isFbaSku ? 'FBA库存 (AFN可售数量)' : 'Listing库存数量'}
                   >
                     {mapping.quantity}
                   </span>

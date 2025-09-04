@@ -138,10 +138,10 @@ router.get('/', async (req, res) => {
           `(sku = '${condition.sku}' AND site = '${condition.site}')`
         ).join(' OR ');
 
-        console.log('\x1b[35m%s\x1b[0m', '🔍 FBA库存查询SQL:', `SELECT sku, site, \`mfn-fulfillable-quantity\` FROM fba_inventory WHERE ${fbaQueries}`);
+        console.log('\x1b[35m%s\x1b[0m', '🔍 FBA库存查询SQL:', `SELECT sku, site, \`afn-fulfillable-quantity\` FROM fba_inventory WHERE ${fbaQueries}`);
         
         fbaInventoryData = await sequelize.query(`
-          SELECT sku, site, \`mfn-fulfillable-quantity\`
+          SELECT sku, site, \`afn-fulfillable-quantity\`
           FROM fba_inventory 
           WHERE ${fbaQueries}
         `, {
@@ -160,12 +160,12 @@ router.get('/', async (req, res) => {
     fbaInventoryData.forEach(fba => {
       const key = `${fba.sku}_${fba.site}`;
       // 处理空字符串和null值，转换为0
-      let quantity = fba['mfn-fulfillable-quantity'];
+      let quantity = fba['afn-fulfillable-quantity'];
       if (quantity === '' || quantity === null || quantity === undefined) {
         quantity = 0;
       }
       fbaInventoryMap.set(key, {
-        mfnFulfillableQuantity: quantity
+        afnFulfillableQuantity: quantity
       });
     });
 
@@ -189,7 +189,7 @@ router.get('/', async (req, res) => {
       let inventoryQuantity = null;
       if (isFbaSku) {
         const fbaInfo = fbaInventoryMap.get(key);
-        inventoryQuantity = fbaInfo ? fbaInfo.mfnFulfillableQuantity : null;
+        inventoryQuantity = fbaInfo ? fbaInfo.afnFulfillableQuantity : null;
         console.log('\x1b[35m%s\x1b[0m', `🔵 FBA SKU: ${listing['seller-sku']}, quantity: ${inventoryQuantity}`);
       } else {
         inventoryQuantity = listing.quantity;
