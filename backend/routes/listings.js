@@ -159,8 +159,13 @@ router.get('/', async (req, res) => {
     const fbaInventoryMap = new Map();
     fbaInventoryData.forEach(fba => {
       const key = `${fba.sku}_${fba.site}`;
+      // 处理空字符串和null值，转换为0
+      let quantity = fba['mfn-fulfillable-quantity'];
+      if (quantity === '' || quantity === null || quantity === undefined) {
+        quantity = 0;
+      }
       fbaInventoryMap.set(key, {
-        mfnFulfillableQuantity: fba['mfn-fulfillable-quantity']
+        mfnFulfillableQuantity: quantity
       });
     });
 
