@@ -84,20 +84,30 @@ router.get('/', async (req, res) => {
     let fbaInventoryData = [];
     if (listingsData.length > 0) {
       // 获取所有需要查询FBA库存的SKU和站点
+      console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找FBA SKU...');
       const fbaConditions = listingsData
-        .filter(listing => listing['fulfillment-channel'] && 
-          (listing['fulfillment-channel'].includes('DEFAULT') || 
-           listing['fulfillment-channel'].includes('AFN')))
+        .filter(listing => {
+          const isFba = listing['fulfillment-channel'] && 
+            (listing['fulfillment-channel'].includes('DEFAULT') || 
+             listing['fulfillment-channel'].includes('AFN') ||
+             listing['fulfillment-channel'].includes('AMAZON'));
+          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, fulfillment-channel: ${listing['fulfillment-channel']}, isFBA: ${isFba}`);
+          return isFba;
+        })
         .map(listing => ({
           sku: listing['seller-sku'],
           site: listing.site
         }));
+      
+      console.log('\x1b[33m%s\x1b[0m', `🎯 找到 ${fbaConditions.length} 个FBA SKU需要查询库存`);
 
       if (fbaConditions.length > 0) {
         const fbaQueries = fbaConditions.map(condition => 
           `(sku = '${condition.sku}' AND site = '${condition.site}')`
         ).join(' OR ');
 
+        console.log('\x1b[35m%s\x1b[0m', '🔍 FBA库存查询SQL:', `SELECT sku, site, \`mfn-fulfillable-quantity\` FROM fba_inventory WHERE ${fbaQueries}`);
+        
         fbaInventoryData = await sequelize.query(`
           SELECT sku, site, \`mfn-fulfillable-quantity\`
           FROM fba_inventory 
@@ -105,6 +115,11 @@ router.get('/', async (req, res) => {
         `, {
           type: sequelize.QueryTypes.SELECT
         });
+        
+        console.log('\x1b[32m%s\x1b[0m', `📊 从fba_inventory表查询到 ${fbaInventoryData.length} 条记录`);
+        if (fbaInventoryData.length > 0) {
+          console.log('\x1b[32m%s\x1b[0m', '📊 FBA库存示例:', JSON.stringify(fbaInventoryData.slice(0, 2), null, 2));
+        }
       }
     }
 
@@ -125,7 +140,8 @@ router.get('/', async (req, res) => {
       const key = `${listing['seller-sku']}_${listing.site}`;
       const isFbaSku = listing['fulfillment-channel'] && 
         (listing['fulfillment-channel'].includes('DEFAULT') || 
-         listing['fulfillment-channel'].includes('AFN'));
+         listing['fulfillment-channel'].includes('AFN') ||
+         listing['fulfillment-channel'].includes('AMAZON'));
       
       // 获取对应的库存数量
       let inventoryQuantity = null;

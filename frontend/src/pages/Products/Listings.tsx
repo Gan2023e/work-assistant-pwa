@@ -393,7 +393,7 @@ const Listings: React.FC = () => {
             
             // 将同一母SKU下的所有记录的skuid添加到选择列表中
             siblingRecords.forEach(sibling => {
-              if (sibling.skuid && !finalSelectedKeys.includes(sibling.skuid)) {
+              if (sibling.skuid !== null && sibling.skuid !== undefined && !finalSelectedKeys.includes(sibling.skuid)) {
                 finalSelectedKeys.push(sibling.skuid);
               }
             });
@@ -403,7 +403,7 @@ const Listings: React.FC = () => {
         // 去重并更新选择状态
         const uniqueKeys = Array.from(new Set(finalSelectedKeys));
         const correspondingRows = currentData.filter(record => 
-          record.skuid && uniqueKeys.includes(record.skuid)
+          record.skuid !== null && record.skuid !== undefined && uniqueKeys.includes(record.skuid)
         );
         
         setSelectedRowKeys(uniqueKeys);
@@ -425,12 +425,12 @@ const Listings: React.FC = () => {
         // 收集同一母SKU下所有记录的skuid
         const siblingKeys = siblingRecords
           .map(sibling => sibling.skuid)
-          .filter(skuid => skuid !== null && skuid !== undefined);
+          .filter((skuid): skuid is string => skuid !== null && skuid !== undefined);
         
         // 合并到现有选择中
         const newSelectedKeys = Array.from(new Set([...selectedRowKeys, ...siblingKeys]));
         const newSelectedRows = getProcessedData().filter(item => 
-          item.skuid && newSelectedKeys.includes(item.skuid)
+          item.skuid !== null && item.skuid !== undefined && newSelectedKeys.includes(item.skuid)
         );
         
         setSelectedRowKeys(newSelectedKeys);
