@@ -4,6 +4,12 @@ export interface MappingDetail {
   site: string;
   skuType: string;
   updateTime: string;
+  asin?: string;
+  price?: number;
+  fulfillmentChannel?: string;
+  quantity?: number;
+  isFbaSku?: boolean;
+  isInListings?: boolean;
 }
 
 // 国家状态信息

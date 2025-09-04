@@ -16,7 +16,8 @@ import {
   Table,
   Progress,
   Card,
-  Statistic
+  Statistic,
+  Switch
 } from 'antd';
 import {
   PlusOutlined,
@@ -301,10 +302,36 @@ const Listings: React.FC = () => {
       return;
     }
 
+    let deleteParentSku = true; // 默认开启删除母SKU
+
+    const modalContent = (
+      <div>
+        <p style={{ marginBottom: 16 }}>确定要删除选中的 {selectedRowKeys.length} 条记录吗？此操作不可恢复。</p>
+        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>同时删除母SKU在product_weblink表中的记录</span>
+            <Switch
+              defaultChecked={true}
+              onChange={(checked) => { deleteParentSku = checked; }}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: '#666', lineHeight: 1.4 }}>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: '#52c41a' }}>• 开启：</span>同时删除SKU记录和对应的母SKU记录
+            </div>
+            <div>
+              <span style={{ color: '#faad14' }}>• 关闭：</span>仅删除选中的SKU记录，保留母SKU记录
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除选中的 ${selectedRowKeys.length} 条记录吗？此操作不可恢复。`,
+      content: modalContent,
       okType: 'danger',
+      width: 480,
       onOk: async () => {
         try {
           const response = await fetch(`${API_BASE_URL}/api/listings/batch-delete`, {
@@ -312,13 +339,16 @@ const Listings: React.FC = () => {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ skuids: selectedRowKeys }),
+            body: JSON.stringify({ 
+              skuids: selectedRowKeys,
+              deleteParentSku: deleteParentSku 
+            }),
           });
 
           const result = await response.json();
 
           if (result.code === 0) {
-            message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
+            message.success(result.message);
             setSelectedRowKeys([]);
             setSelectedRows([]);
             fetchListings();
@@ -515,7 +545,24 @@ const Listings: React.FC = () => {
                 }
               }}
             >
-              {mapping.amzSku}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>{mapping.amzSku}</span>
+                {(mapping.quantity !== null && mapping.quantity !== undefined) && (
+                  <span 
+                    style={{ 
+                      fontSize: 10, 
+                      padding: '1px 4px',
+                      background: mapping.isFbaSku ? '#e6f7ff' : '#fff7e6',
+                      color: mapping.isFbaSku ? '#1890ff' : '#fa8c16',
+                      borderRadius: 2,
+                      fontWeight: 'bold'
+                    }}
+                    title={mapping.isFbaSku ? 'FBA库存 (MFN可售数量)' : 'Listing库存数量'}
+                  >
+                    {mapping.quantity}
+                  </span>
+                )}
+              </div>
             </Tag>
           </Tooltip>
         ))}

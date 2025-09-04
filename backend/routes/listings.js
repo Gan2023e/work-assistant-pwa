@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SellerInventorySku, AmzSkuMapping, ProductWeblink, sequelize } = require('../models');
+const { SellerInventorySku, AmzSkuMapping, ProductWeblink, FbaInventory, ListingsSku, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // 获取母SKU及其站点上架状态列表
@@ -71,7 +71,7 @@ router.get('/', async (req, res) => {
       
       if (conditions) {
         listingsData = await sequelize.query(`
-          SELECT \`seller-sku\`, site, asin1, price, \`fulfillment-channel\`
+          SELECT \`seller-sku\`, site, asin1, price, \`fulfillment-channel\`, quantity
           FROM listings_sku 
           WHERE ${conditions}
         `, {
@@ -80,16 +80,68 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // 查询FBA库存数据
+    let fbaInventoryData = [];
+    if (listingsData.length > 0) {
+      // 获取所有需要查询FBA库存的SKU和站点
+      const fbaConditions = listingsData
+        .filter(listing => listing['fulfillment-channel'] && 
+          (listing['fulfillment-channel'].includes('DEFAULT') || 
+           listing['fulfillment-channel'].includes('AFN')))
+        .map(listing => ({
+          sku: listing['seller-sku'],
+          site: listing.site
+        }));
+
+      if (fbaConditions.length > 0) {
+        const fbaQueries = fbaConditions.map(condition => 
+          `(sku = '${condition.sku}' AND site = '${condition.site}')`
+        ).join(' OR ');
+
+        fbaInventoryData = await sequelize.query(`
+          SELECT sku, site, \`mfn-fulfillable-quantity\`
+          FROM fba_inventory 
+          WHERE ${fbaQueries}
+        `, {
+          type: sequelize.QueryTypes.SELECT
+        });
+      }
+    }
+
+    // 建立FBA库存的映射表
+    const fbaInventoryMap = new Map();
+    fbaInventoryData.forEach(fba => {
+      const key = `${fba.sku}_${fba.site}`;
+      fbaInventoryMap.set(key, {
+        mfnFulfillableQuantity: fba['mfn-fulfillable-quantity']
+      });
+    });
+
     // 建立listings_sku的映射表，以amz_sku + site为键
     const listingsMap = new Map();
     listingsData.forEach(listing => {
       const key = `${listing['seller-sku']}_${listing.site}`;
+      const isFbaSku = listing['fulfillment-channel'] && 
+        (listing['fulfillment-channel'].includes('DEFAULT') || 
+         listing['fulfillment-channel'].includes('AFN'));
+      
+      // 获取对应的库存数量
+      let inventoryQuantity = null;
+      if (isFbaSku) {
+        const fbaInfo = fbaInventoryMap.get(key);
+        inventoryQuantity = fbaInfo ? fbaInfo.mfnFulfillableQuantity : null;
+      } else {
+        inventoryQuantity = listing.quantity;
+      }
+
       listingsMap.set(key, {
         sellerSku: listing['seller-sku'],
         site: listing.site,
         asin: listing.asin1,
         price: listing.price,
-        fulfillmentChannel: listing['fulfillment-channel']
+        fulfillmentChannel: listing['fulfillment-channel'],
+        quantity: inventoryQuantity,
+        isFbaSku: isFbaSku
       });
     });
 
@@ -139,6 +191,8 @@ router.get('/', async (req, res) => {
             asin: listingInfo ? listingInfo.asin : null,
             price: listingInfo ? listingInfo.price : null,
             fulfillmentChannel: listingInfo ? listingInfo.fulfillmentChannel : null,
+            quantity: listingInfo ? listingInfo.quantity : null,
+            isFbaSku: listingInfo ? listingInfo.isFbaSku : false,
             isInListings: !!listingInfo // 标识是否在listings_sku表中存在
           };
         }).filter(mapping => mapping.isInListings); // 只显示在listings_sku表中存在的SKU
@@ -575,7 +629,7 @@ router.delete('/batch-delete', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到批量删除SKU请求');
   
   try {
-    const { skuids } = req.body;
+    const { skuids, deleteParentSku = true } = req.body;
     
     if (!skuids || !Array.isArray(skuids) || skuids.length === 0) {
       return res.status(400).json({
@@ -584,7 +638,35 @@ router.delete('/batch-delete', async (req, res) => {
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `准备删除 ${skuids.length} 条SKU记录`);
+    console.log('\x1b[33m%s\x1b[0m', `准备删除 ${skuids.length} 条SKU记录，删除母SKU选项: ${deleteParentSku}`);
+
+    let deletedParentSkuCount = 0;
+    
+    // 如果需要删除母SKU，先获取所有母SKU列表
+    if (deleteParentSku) {
+      const skuRecords = await SellerInventorySku.findAll({
+        where: {
+          skuid: { [Op.in]: skuids }
+        },
+        attributes: ['parent_sku'],
+        group: ['parent_sku']
+      });
+      
+      const parentSkus = skuRecords.map(record => record.parent_sku);
+      
+      if (parentSkus.length > 0) {
+        console.log('\x1b[33m%s\x1b[0m', `准备删除 ${parentSkus.length} 个母SKU:`, parentSkus);
+        
+        // 删除product_weblink表中对应的母SKU记录
+        deletedParentSkuCount = await ProductWeblink.destroy({
+          where: {
+            parent_sku: { [Op.in]: parentSkus }
+          }
+        });
+        
+        console.log('\x1b[32m%s\x1b[0m', `✅ 成功删除 ${deletedParentSkuCount} 条母SKU记录`);
+      }
+    }
 
     // 批量删除SellerInventorySku记录
     const deletedCount = await SellerInventorySku.destroy({
@@ -597,10 +679,14 @@ router.delete('/batch-delete', async (req, res) => {
 
     res.json({
       code: 0,
-      message: `成功删除 ${deletedCount} 条记录`,
+      message: deleteParentSku 
+        ? `成功删除 ${deletedCount} 条SKU记录和 ${deletedParentSkuCount} 条母SKU记录`
+        : `成功删除 ${deletedCount} 条SKU记录`,
       data: {
         deletedCount,
-        requestedCount: skuids.length
+        deletedParentSkuCount,
+        requestedCount: skuids.length,
+        deleteParentSku
       }
     });
 

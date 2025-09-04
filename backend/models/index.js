@@ -21,6 +21,7 @@ const PurchaseOrder = require('./PurchaseOrder');
 const Invoice = require('./Invoice');
 const TemplateLink = require('./TemplateLink');
 const ProductInformation = require('./ProductInformation');
+const ListingsSku = require('./ListingsSku');
 
 // 设置模型关联关系
 
@@ -82,7 +83,7 @@ Invoice.hasMany(PurchaseOrder, {
 // 注意：need_num字段使用逻辑关联，不设置数据库级外键约束
 // 因为原表没有对need_num字段建立索引
 
-module.exports = { 
+module.exports = {
   sequelize,
   User,
   LocalBox,
@@ -102,5 +103,6 @@ module.exports = {
   PurchaseOrder,
   Invoice,
   TemplateLink,
-  ProductInformation
+  ProductInformation,
+  ListingsSku
 };
