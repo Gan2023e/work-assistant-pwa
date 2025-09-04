@@ -53,25 +53,54 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // 查询listings_sku表获取实际的seller-sku数据
+    let listingsData = [];
+    if (mappings.length > 0) {
+      // 构建查询条件，匹配amz_sku和site
+      const conditions = mappings.map(mapping => 
+        `(\`seller-sku\` = '${mapping.amz_sku}' AND site = '${mapping.site}')`
+      ).join(' OR ');
+      
+      if (conditions) {
+        listingsData = await sequelize.query(`
+          SELECT \`seller-sku\`, site, asin1, price, \`fulfillment-channel\`
+          FROM listings_sku 
+          WHERE ${conditions}
+        `, {
+          type: sequelize.QueryTypes.SELECT
+        });
+      }
+    }
+
+    // 建立listings_sku的映射表，以amz_sku + site为键
+    const listingsMap = new Map();
+    listingsData.forEach(listing => {
+      const key = `${listing['seller-sku']}_${listing.site}`;
+      listingsMap.set(key, {
+        sellerSku: listing['seller-sku'],
+        site: listing.site,
+        asin: listing.asin1,
+        price: listing.price,
+        fulfillmentChannel: listing['fulfillment-channel']
+      });
+    });
+
     // 站点到中文国家名称的映射
     const siteToCountryMap = {
       'www.amazon.com': '美国',
-      'www.amazon.co.uk': '英国', 
+      'www.amazon.ca': '加拿大',
+      'www.amazon.co.uk': '英国',
+      'www.amazon.com.au': '澳大利亚',
+      'www.amazon.ae': '阿联酋',
       'www.amazon.de': '德国',
       'www.amazon.fr': '法国',
       'www.amazon.it': '意大利',
-      'www.amazon.es': '西班牙',
-      'www.amazon.ca': '加拿大',
-      'www.amazon.co.jp': '日本',
-      'www.amazon.com.au': '澳大利亚',
-      'www.amazon.sg': '新加坡',
-      'www.amazon.ae': '阿联酋'
+      'www.amazon.es': '西班牙'
     };
-
-    // 定义5个主要国家
+    
     const countryList = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
-
-    // 获取所有站点列表（用于后续处理）
+    
+    // 获取所有站点列表
     const allSites = await AmzSkuMapping.findAll({
       attributes: [[sequelize.fn('DISTINCT', sequelize.col('site')), 'site']],
       raw: true
@@ -88,14 +117,27 @@ router.get('/', async (req, res) => {
       countryList.forEach(country => {
         // 找到该国家的所有映射
         const countryMappings = skuMappings.filter(m => m.country === country);
+        
+        // 从listings_sku表中获取实际的seller-sku数据
+        const listingMappings = countryMappings.map(mapping => {
+          const listingKey = `${mapping.amz_sku}_${mapping.site}`;
+          const listingInfo = listingsMap.get(listingKey);
+          
+          return {
+            amzSku: listingInfo ? listingInfo.sellerSku : mapping.amz_sku, // 优先显示listings_sku中的seller-sku
+            site: mapping.site,
+            skuType: mapping.sku_type,
+            updateTime: mapping.update_time,
+            asin: listingInfo ? listingInfo.asin : null,
+            price: listingInfo ? listingInfo.price : null,
+            fulfillmentChannel: listingInfo ? listingInfo.fulfillmentChannel : null,
+            isInListings: !!listingInfo // 标识是否在listings_sku表中存在
+          };
+        }).filter(mapping => mapping.isInListings); // 只显示在listings_sku表中存在的SKU
+        
         countryStatus[country] = {
-          isListed: countryMappings.length > 0,
-          mappings: countryMappings.map(m => ({
-            amzSku: m.amz_sku,
-            site: m.site,
-            skuType: m.sku_type,
-            updateTime: m.update_time
-          }))
+          isListed: listingMappings.length > 0,
+          mappings: listingMappings
         };
       });
 
@@ -139,6 +181,7 @@ router.get('/', async (req, res) => {
     }
 
     console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${filteredResult.length} 个母SKU的Listings数据`);
+    console.log('\x1b[36m%s\x1b[0m', `📋 从listings_sku表获取到 ${listingsData.length} 条seller-sku记录`);
 
     res.json({
       code: 0,
