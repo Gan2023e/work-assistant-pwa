@@ -1043,35 +1043,136 @@ const parseInvoicePDF = (text) => {
       }
     }
 
-    // 开票日期解析 - 针对中文日期格式优化
-    const datePatterns = [
-      // 匹配 "开票日期：YYYY年MM月DD日" 格式
-      /开票日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
-      /开具日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
-      // 匹配其他日期格式
-      /开票日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
-      /开具日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
-      /日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
-      /开票时间[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
-      // 支持 YYYY-MM-DD 格式
-      /(\d{4}-\d{1,2}-\d{1,2})/,
-      // 支持 YYYY/MM/DD 格式
-      /(\d{4}\/\d{1,2}\/\d{1,2})/,
-      // 支持中文日期格式
-      /(\d{4}年\d{1,2}月\d{1,2}日)/
+    // 开票日期解析 - 增强版本，专门针对"开票日期"关键字后的日期
+    console.log('🔍 开始解析开票日期，原始文本长度:', originalText.length);
+    console.log('🔍 清理后文本片段(前500字符):', cleanText.substring(0, 500));
+    
+    // 先尝试最直接的"开票日期"关键字匹配
+    const directDatePatterns = [
+      // 最直接的开票日期匹配
+      /开票日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/g,
+      /开具日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/g,
+      // 支持不同的分隔符
+      /开票日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/g,
+      /开具日期[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/g,
+      /开票日期[：:\s]*(\d{4}[\/]\d{1,2}[\/]\d{1,2})/g,
+      /开具日期[：:\s]*(\d{4}[\/]\d{1,2}[\/]\d{1,2})/g,
+      // 支持数字格式的日期
+      /开票日期[：:\s]*(\d{4}-\d{1,2}-\d{1,2})/g,
+      /开具日期[：:\s]*(\d{4}-\d{1,2}-\d{1,2})/g
     ];
     
-    for (const pattern of datePatterns) {
-      const match = cleanText.match(pattern);
-      if (match) {
-        let dateStr = match[1];
-        // 标准化日期格式
-        dateStr = dateStr.replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/\//g, '-');
-        if (dateStr.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
-          result.invoice_date = dateStr;
-          break;
+    let foundInvoiceDate = null;
+    
+    // 优先使用直接匹配
+    for (const pattern of directDatePatterns) {
+      const matches = [...cleanText.matchAll(pattern)];
+      console.log(`🔍 使用模式 ${pattern} 找到匹配:`, matches.map(m => m[0]));
+      
+      if (matches.length > 0) {
+        // 取第一个匹配（通常是最准确的）
+        const match = matches[0];
+        foundInvoiceDate = match[1];
+        console.log('✅ 直接匹配找到开票日期:', foundInvoiceDate, '完整匹配:', match[0]);
+        break;
+      }
+    }
+    
+    // 如果直接匹配失败，尝试在原始文本中查找
+    if (!foundInvoiceDate) {
+      console.log('🔍 直接匹配失败，尝试在原始文本中查找...');
+      
+      // 在原始文本中查找"开票日期"关键字的位置
+      const invoiceDateIndex = originalText.indexOf('开票日期');
+      const issueDataIndex = originalText.indexOf('开具日期');
+      
+      let startIndex = -1;
+      if (invoiceDateIndex !== -1) {
+        startIndex = invoiceDateIndex;
+        console.log('🔍 找到"开票日期"关键字位置:', startIndex);
+      } else if (issueDataIndex !== -1) {
+        startIndex = issueDataIndex;
+        console.log('🔍 找到"开具日期"关键字位置:', startIndex);
+      }
+      
+      if (startIndex !== -1) {
+        // 提取关键字后面的100个字符进行日期匹配
+        const contextText = originalText.substring(startIndex, startIndex + 100);
+        console.log('🔍 提取的上下文文本:', contextText);
+        
+        // 在上下文中查找日期
+        const contextDatePatterns = [
+          /(\d{4}年\d{1,2}月\d{1,2}日)/,
+          /(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)/,
+          /(\d{4}[\/]\d{1,2}[\/]\d{1,2})/,
+          /(\d{4}-\d{1,2}-\d{1,2})/
+        ];
+        
+        for (const pattern of contextDatePatterns) {
+          const match = contextText.match(pattern);
+          if (match) {
+            foundInvoiceDate = match[1];
+            console.log('✅ 上下文匹配找到开票日期:', foundInvoiceDate);
+            break;
+          }
         }
       }
+    }
+    
+    // 如果仍然没找到，尝试通用日期匹配但优先选择靠前的
+    if (!foundInvoiceDate) {
+      console.log('🔍 上下文匹配失败，尝试通用日期匹配...');
+      
+      const generalDatePatterns = [
+        /(\d{4}年\d{1,2}月\d{1,2}日)/g,
+        /(\d{4}-\d{1,2}-\d{1,2})/g,
+        /(\d{4}\/\d{1,2}\/\d{1,2})/g
+      ];
+      
+      let allDates = [];
+      for (const pattern of generalDatePatterns) {
+        const matches = [...cleanText.matchAll(pattern)];
+        matches.forEach(match => {
+          allDates.push({
+            date: match[1],
+            index: match.index,
+            full: match[0]
+          });
+        });
+      }
+      
+      // 排序，优先选择出现位置较早的日期（通常发票日期在发票上方）
+      allDates.sort((a, b) => a.index - b.index);
+      console.log('🔍 找到的所有日期（按位置排序）:', allDates);
+      
+      if (allDates.length > 0) {
+        foundInvoiceDate = allDates[0].date;
+        console.log('✅ 通用匹配选择第一个日期作为开票日期:', foundInvoiceDate);
+      }
+    }
+    
+    // 处理找到的日期
+    if (foundInvoiceDate) {
+      // 标准化日期格式
+      let dateStr = foundInvoiceDate;
+      dateStr = dateStr.replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/\//g, '-');
+      
+      console.log('🔍 标准化处理后的日期:', dateStr);
+      
+      // 确保格式为 YYYY-MM-DD
+      if (dateStr.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
+        // 补齐月份和日期的前导零
+        const parts = dateStr.split('-');
+        const year = parts[0];
+        const month = parts[1].padStart(2, '0');
+        const day = parts[2].padStart(2, '0');
+        result.invoice_date = `${year}-${month}-${day}`;
+        console.log('✅ 开票日期最终解析成功:', result.invoice_date);
+      } else {
+        console.log('❌ 日期格式标准化失败:', dateStr);
+      }
+    } else {
+      console.log('❌ 未找到任何开票日期信息');
     }
 
     // 金额解析 - 获取所有"¥"后面的数字，取最大的作为总金额

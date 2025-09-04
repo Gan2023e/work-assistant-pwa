@@ -149,6 +149,7 @@ const PurchaseInvoice: React.FC = () => {
   const [amountDifference, setAmountDifference] = useState<number>(0);
   const [screenshotUploading, setScreenshotUploading] = useState(false);
   const [uploadedScreenshots, setUploadedScreenshots] = useState<UploadFile[]>([]);
+  const [canSubmitInvoice, setCanSubmitInvoice] = useState(false);
   
   // 搜索筛选状态
   const [filters, setFilters] = useState({
@@ -632,6 +633,9 @@ const PurchaseInvoice: React.FC = () => {
         const difference = Math.abs(invoiceAmount - ordersAmount);
         setAmountDifference(difference);
         
+        // 检查表单完整性
+        setTimeout(() => checkInvoiceFormCompleteness(), 100);
+        
         // 根据解析质量提供不同的提示
         if (parseQuality.completeness >= 90) {
           if (difference > 0.01) {
@@ -640,9 +644,13 @@ const PurchaseInvoice: React.FC = () => {
             message.success(`PDF解析成功(完整度${parseQuality.completeness}%)，发票金额与订单金额一致`);
           }
         } else if (parseQuality.completeness >= 70) {
-          message.warning(`PDF解析完成(完整度${parseQuality.completeness}%)，请检查并补充缺失的信息`);
+          message.warning(`PDF解析完成(完整度${parseQuality.completeness}%)，请检查并补充缺失的信息，手动修改后可以提交`);
+        } else if (parseQuality.completeness >= 50) {
+          message.warning(`PDF解析完成(完整度${parseQuality.completeness}%)，解析质量一般，请仔细核对并手动完善信息后提交`);
+        } else if (parseQuality.completeness > 0) {
+          message.error(`PDF解析完成(完整度${parseQuality.completeness}%)，解析质量较低，建议手动输入所有信息后提交`);
         } else {
-          message.error(`PDF解析完成(完整度${parseQuality.completeness}%)，解析质量较低，请手动核查所有信息`);
+          message.error('PDF解析失败，未识别到有效信息，请手动输入发票信息后提交');
         }
       } else {
         message.error(result.message);
@@ -704,6 +712,9 @@ const PurchaseInvoice: React.FC = () => {
         setUploadedScreenshots(prev => [...prev, newFile]);
         loadingMessage(); // 关闭加载消息
         message.success(`截图上传成功：${result.data.filename}`);
+        
+        // 检查表单完整性
+        setTimeout(() => checkInvoiceFormCompleteness(), 100);
       } else {
         loadingMessage(); // 关闭加载消息
         message.error(`截图上传失败: ${result.message || '未知错误'}`);
@@ -1052,6 +1063,29 @@ const PurchaseInvoice: React.FC = () => {
     return sellers.filter((seller, index) => sellers.indexOf(seller) === index);
   };
 
+  // 检查发票表单必填字段是否完整
+  const checkInvoiceFormCompleteness = () => {
+    const values = invoiceForm.getFieldsValue();
+    const requiredFields = ['invoice_number', 'invoice_date', 'total_amount', 'seller_name'];
+    
+    const isComplete = requiredFields.every(field => {
+      const value = values[field];
+      if (field === 'total_amount') {
+        return value !== null && value !== undefined && value > 0;
+      }
+      return value !== null && value !== undefined && value !== '';
+    });
+    
+    const hasAmountDifference = amountDifference > 0.01;
+    const hasScreenshots = uploadedScreenshots.length > 0;
+    
+    // 表单完整且（没有金额差异或已上传截图）
+    const canSubmit = isComplete && (!hasAmountDifference || hasScreenshots);
+    
+    setCanSubmitInvoice(canSubmit);
+    return canSubmit;
+  };
+
   // 查看发票文件（直接打开代理URL）
   const handleViewInvoiceFile = (invoiceId: number) => {
     // 直接在新窗口打开后端代理URL
@@ -1267,6 +1301,7 @@ const PurchaseInvoice: React.FC = () => {
     setFileList([]);
     setAmountDifference(0);
     setUploadedScreenshots([]);
+    setCanSubmitInvoice(false);
     
     // 重置表单
     invoiceForm.resetFields();
@@ -1276,6 +1311,9 @@ const PurchaseInvoice: React.FC = () => {
     
     // 显示提示信息
     message.info(`已选择订单：${record.order_number}，开始为其开票`);
+    
+    // 初始化表单完整性检查
+    setTimeout(() => checkInvoiceFormCompleteness(), 100);
   };
 
   // 删除发票方法
@@ -1716,8 +1754,12 @@ const PurchaseInvoice: React.FC = () => {
                   setFileList([]);
                   setAmountDifference(0);
                   setUploadedScreenshots([]);
+                  setCanSubmitInvoice(false);
                   invoiceForm.resetFields();
                   setInvoiceModalVisible(true);
+                  
+                  // 初始化表单完整性检查
+                  setTimeout(() => checkInvoiceFormCompleteness(), 100);
                 }}
               >
                 批量开票 ({selectedRowKeys.length})
@@ -1913,6 +1955,7 @@ const PurchaseInvoice: React.FC = () => {
           setFileList([]);
           setAmountDifference(0);
           setUploadedScreenshots([]);
+          setCanSubmitInvoice(false);
           invoiceForm.resetFields();
         }}
         width={800}
@@ -1926,6 +1969,7 @@ const PurchaseInvoice: React.FC = () => {
               setFileList([]);
               setAmountDifference(0);
               setUploadedScreenshots([]);
+              setCanSubmitInvoice(false);
               invoiceForm.resetFields();
             }}
           >
@@ -1934,20 +1978,17 @@ const PurchaseInvoice: React.FC = () => {
           <Tooltip
             key="submit"
             title={
-              parseQuality && parseQuality.completeness < 100
-                ? "PDF解析有误，需修复后再上传"
-                : amountDifference > 0.01 && uploadedScreenshots.length === 0
-                ? "金额不匹配，请上传相关截图后再确认"
+              !canSubmitInvoice
+                ? amountDifference > 0.01 && uploadedScreenshots.length === 0
+                  ? "请填写必填字段并上传金额差异截图"
+                  : "请填写所有必填字段（发票号、开票日期、发票总金额、开票方）"
                 : ""
             }
           >
             <Button
               type="primary"
               loading={loading}
-              disabled={
-                (parseQuality ? parseQuality.completeness < 100 : false) ||
-                (amountDifference > 0.01 && uploadedScreenshots.length === 0)
-              }
+              disabled={!canSubmitInvoice}
               onClick={() => invoiceForm.submit()}
             >
               确定
@@ -1975,6 +2016,7 @@ const PurchaseInvoice: React.FC = () => {
           form={invoiceForm}
           layout="vertical"
           onFinish={handleInvoiceSubmit}
+          onValuesChange={checkInvoiceFormCompleteness}
         >
           {/* PDF上传区域 */}
           <Form.Item label="上传发票PDF（自动识别）">
@@ -2022,31 +2064,37 @@ const PurchaseInvoice: React.FC = () => {
                   <Descriptions.Item label="发票号">
                     <span style={{ color: parseQuality.hasInvoiceNumber ? '#52c41a' : '#ff4d4f' }}>
                       {extractedInfo.invoice_number || '未识别'}
+                      {!parseQuality.hasInvoiceNumber && <span style={{ color: '#ff4d4f', fontSize: '12px', marginLeft: '8px' }}>(必填，请手动输入)</span>}
                     </span>
                   </Descriptions.Item>
                   <Descriptions.Item label="开票日期">
                     <span style={{ color: parseQuality.hasInvoiceDate ? '#52c41a' : '#ff4d4f' }}>
                       {extractedInfo.invoice_date || '未识别'}
+                      {!parseQuality.hasInvoiceDate && <span style={{ color: '#ff4d4f', fontSize: '12px', marginLeft: '8px' }}>(必填，请手动选择)</span>}
                     </span>
                   </Descriptions.Item>
                   <Descriptions.Item label="总金额">
                     <span style={{ color: parseQuality.hasTotalAmount ? '#52c41a' : '#ff4d4f' }}>
                       {extractedInfo.total_amount ? `¥${parseFloat(extractedInfo.total_amount).toLocaleString()}` : '未识别'}
+                      {!parseQuality.hasTotalAmount && <span style={{ color: '#ff4d4f', fontSize: '12px', marginLeft: '8px' }}>(必填，请手动输入)</span>}
                     </span>
                   </Descriptions.Item>
                   <Descriptions.Item label="税额">
                     <span style={{ color: extractedInfo.tax_amount ? '#52c41a' : '#faad14' }}>
                       {extractedInfo.tax_amount ? `¥${parseFloat(extractedInfo.tax_amount).toLocaleString()}` : '未识别'}
+                      <span style={{ color: '#666', fontSize: '12px', marginLeft: '8px' }}>(可选)</span>
                     </span>
                   </Descriptions.Item>
                   <Descriptions.Item label="税率">
                     <span style={{ color: extractedInfo.tax_rate ? '#52c41a' : '#faad14' }}>
                       {extractedInfo.tax_rate || '未识别'}
+                      <span style={{ color: '#666', fontSize: '12px', marginLeft: '8px' }}>(可选)</span>
                     </span>
                   </Descriptions.Item>
                   <Descriptions.Item label="开票方">
                     <span style={{ color: parseQuality.hasSellerName ? '#52c41a' : '#ff4d4f' }}>
                       {extractedInfo.seller_name || '未识别'}
+                      {!parseQuality.hasSellerName && <span style={{ color: '#ff4d4f', fontSize: '12px', marginLeft: '8px' }}>(必填，请手动输入)</span>}
                     </span>
                   </Descriptions.Item>
                 </Descriptions>
@@ -2063,15 +2111,59 @@ const PurchaseInvoice: React.FC = () => {
                 ) : parseQuality.completeness >= 70 ? (
                   <Alert
                     message="解析质量良好"
-                    description="PDF解析基本完成，请检查并补充红色标记的缺失信息。"
+                    description={
+                      <div>
+                        <div>PDF解析基本完成，请填写标记为"必填"的红色字段后即可提交。</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+                          💡 提示：已识别字段无需修改，只需补充缺失的必填信息即可
+                        </div>
+                      </div>
+                    }
                     type="warning"
+                    showIcon
+                    style={{ marginBottom: '8px' }}
+                  />
+                ) : parseQuality.completeness >= 50 ? (
+                  <Alert
+                    message="解析质量一般"
+                    description={
+                      <div>
+                        <div>PDF解析部分完成，请仔细填写所有标记为"必填"的红色字段后提交。</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+                          💡 必填字段：发票号、开票日期、发票总金额、开票方
+                        </div>
+                      </div>
+                    }
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: '8px' }}
+                  />
+                ) : parseQuality.completeness > 0 ? (
+                  <Alert
+                    message="解析质量较低"
+                    description={
+                      <div>
+                        <div>PDF解析识别有限，请手动填写下方表单中的所有必填字段后提交。</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+                          💡 必填字段：发票号、开票日期、发票总金额、开票方
+                        </div>
+                      </div>
+                    }
+                    type="error"
                     showIcon
                     style={{ marginBottom: '8px' }}
                   />
                 ) : (
                   <Alert
-                    message="解析质量较低"
-                    description="PDF解析质量不理想，请仔细核对所有信息并手动补充。"
+                    message="解析失败"
+                    description={
+                      <div>
+                        <div>PDF未能识别到有效信息，请手动填写下方表单中的所有必填字段后提交。</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+                          💡 必填字段：发票号、开票日期、发票总金额、开票方
+                        </div>
+                      </div>
+                    }
                     type="error"
                     showIcon
                     style={{ marginBottom: '8px' }}
@@ -2150,6 +2242,9 @@ const PurchaseInvoice: React.FC = () => {
                                 prev.filter(item => item.uid !== file.uid)
                               );
                               message.success('截图删除成功');
+                              
+                              // 检查表单完整性
+                              setTimeout(() => checkInvoiceFormCompleteness(), 100);
                               
                             } catch (error) {
                               console.error('删除截图时发生错误:', error);
