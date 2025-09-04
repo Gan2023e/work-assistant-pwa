@@ -68,12 +68,6 @@ OrderShipmentRelation.belongsTo(ShipmentRecord, {
   as: 'shipmentRecord'
 });
 
-// 需求单发货关联
-OrderShipmentRelation.belongsTo(ShipmentRecord, {
-  foreignKey: 'shipment_id',
-  as: 'shipmentRecord'
-});
-
 // 采购订单与发票的关联关系
 PurchaseOrder.belongsTo(Invoice, {
   foreignKey: 'invoice_id',
