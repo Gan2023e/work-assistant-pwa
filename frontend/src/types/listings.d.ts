@@ -74,8 +74,8 @@ export interface ListingsQueryParams {
   page?: number;
   limit?: number;
   search?: string;
+  site?: string;
   status?: 'all' | 'listed' | 'unlisted' | 'partial';
-  product_status?: string;
   sort_by?: string;
   sort_order?: 'ASC' | 'DESC';
 }
