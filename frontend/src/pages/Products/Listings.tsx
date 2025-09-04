@@ -367,9 +367,82 @@ const Listings: React.FC = () => {
   // 处理行选择
   const handleRowSelection = {
     selectedRowKeys,
-    onChange: (selectedRowKeys: any[], selectedRows: ParentSkuData[]) => {
-      setSelectedRowKeys(selectedRowKeys);
-      setSelectedRows(selectedRows);
+    onChange: (newSelectedRowKeys: any[], newSelectedRows: ParentSkuData[]) => {
+      // 获取当前处理后的数据（与表格数据源一致）
+      const currentData = getProcessedData();
+      
+      // 检测新勾选的记录（相对于之前的选择）
+      const previousKeys = new Set(selectedRowKeys);
+      const newKeys = new Set(newSelectedRowKeys);
+      
+      // 找出这次新增选中的记录
+      const addedKeys = newSelectedRowKeys.filter(key => !previousKeys.has(key));
+      
+      if (addedKeys.length > 0) {
+        // 如果有新增选中的记录，需要自动选中同一母SKU下的所有记录
+        let finalSelectedKeys = [...newSelectedRowKeys];
+        
+        addedKeys.forEach(addedKey => {
+          // 找到被选中的记录
+          const selectedRecord = currentData.find(record => record.skuid === addedKey);
+          if (selectedRecord) {
+            // 找到同一母SKU下的所有记录
+            const siblingRecords = currentData.filter(record => 
+              record.parent_sku === selectedRecord.parent_sku
+            );
+            
+            // 将同一母SKU下的所有记录的skuid添加到选择列表中
+            siblingRecords.forEach(sibling => {
+              if (sibling.skuid && !finalSelectedKeys.includes(sibling.skuid)) {
+                finalSelectedKeys.push(sibling.skuid);
+              }
+            });
+          }
+        });
+        
+        // 去重并更新选择状态
+        const uniqueKeys = Array.from(new Set(finalSelectedKeys));
+        const correspondingRows = currentData.filter(record => 
+          record.skuid && uniqueKeys.includes(record.skuid)
+        );
+        
+        setSelectedRowKeys(uniqueKeys);
+        setSelectedRows(correspondingRows);
+      } else {
+        // 如果没有新增选中的记录（取消选择的情况），直接使用新的选择状态
+        setSelectedRowKeys(newSelectedRowKeys);
+        setSelectedRows(newSelectedRows);
+      }
+    },
+    onSelect: (record: ParentSkuData, selected: boolean) => {
+      if (selected) {
+        // 当选中一个记录时，自动选中同一母SKU下的所有记录
+        const currentData = getProcessedData();
+        const siblingRecords = currentData.filter(item => 
+          item.parent_sku === record.parent_sku
+        );
+        
+        // 收集同一母SKU下所有记录的skuid
+        const siblingKeys = siblingRecords
+          .map(sibling => sibling.skuid)
+          .filter(skuid => skuid !== null && skuid !== undefined);
+        
+        // 合并到现有选择中
+        const newSelectedKeys = Array.from(new Set([...selectedRowKeys, ...siblingKeys]));
+        const newSelectedRows = getProcessedData().filter(item => 
+          item.skuid && newSelectedKeys.includes(item.skuid)
+        );
+        
+        setSelectedRowKeys(newSelectedKeys);
+        setSelectedRows(newSelectedRows);
+      } else {
+        // 取消选择时，只移除当前记录
+        const newSelectedKeys = selectedRowKeys.filter(key => key !== record.skuid);
+        const newSelectedRows = selectedRows.filter(row => row.skuid !== record.skuid);
+        
+        setSelectedRowKeys(newSelectedKeys);
+        setSelectedRows(newSelectedRows);
+      }
     },
   };
 
@@ -526,11 +599,23 @@ const Listings: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {status.mappings.map((mapping: any, index: number) => (
-          <Tooltip
-            key={`${mapping.amzSku}-${index}`}
-            title={`站点: ${mapping.site} | 类型: ${mapping.skuType} | 更新时间: ${mapping.updateTime ? new Date(mapping.updateTime).toLocaleDateString() : '-'}`}
-          >
+        {status.mappings.map((mapping: any, index: number) => {
+          // 调试日志：检查mapping对象的结构
+          if (index === 0) { // 只打印第一个mapping避免日志过多
+            console.log('🔍 前端mapping对象结构:', {
+              amzSku: mapping.amzSku,
+              quantity: mapping.quantity,
+              isFbaSku: mapping.isFbaSku,
+              fulfillmentChannel: mapping.fulfillmentChannel,
+              country: country
+            });
+          }
+          
+          return (
+            <Tooltip
+              key={`${mapping.amzSku}-${index}`}
+              title={`站点: ${mapping.site} | 类型: ${mapping.skuType} | 更新时间: ${mapping.updateTime ? new Date(mapping.updateTime).toLocaleDateString() : '-'}`}
+            >
             <Tag
               color="blue"
               style={{ 
@@ -565,7 +650,8 @@ const Listings: React.FC = () => {
               </div>
             </Tag>
           </Tooltip>
-        ))}
+          );
+        })}
       </div>
     );
   };

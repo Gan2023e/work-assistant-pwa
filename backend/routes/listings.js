@@ -119,6 +119,8 @@ router.get('/', async (req, res) => {
 
     // 建立listings_sku的映射表，以amz_sku + site为键
     const listingsMap = new Map();
+    console.log('\x1b[36m%s\x1b[0m', `📋 处理 ${listingsData.length} 条listings_sku数据`);
+    
     listingsData.forEach(listing => {
       const key = `${listing['seller-sku']}_${listing.site}`;
       const isFbaSku = listing['fulfillment-channel'] && 
@@ -130,8 +132,10 @@ router.get('/', async (req, res) => {
       if (isFbaSku) {
         const fbaInfo = fbaInventoryMap.get(key);
         inventoryQuantity = fbaInfo ? fbaInfo.mfnFulfillableQuantity : null;
+        console.log('\x1b[35m%s\x1b[0m', `🔵 FBA SKU: ${listing['seller-sku']}, quantity: ${inventoryQuantity}`);
       } else {
         inventoryQuantity = listing.quantity;
+        console.log('\x1b[33m%s\x1b[0m', `🟡 非FBA SKU: ${listing['seller-sku']}, quantity: ${inventoryQuantity}`);
       }
 
       listingsMap.set(key, {
@@ -144,6 +148,17 @@ router.get('/', async (req, res) => {
         isFbaSku: isFbaSku
       });
     });
+    
+    console.log('\x1b[32m%s\x1b[0m', `✅ 构建了 ${listingsMap.size} 个listing映射`);
+    
+    // 输出几个映射示例用于调试
+    let debugCount = 0;
+    for (let [key, value] of listingsMap) {
+      if (debugCount < 3) {
+        console.log('\x1b[36m%s\x1b[0m', `🔍 映射示例: ${key} ->`, JSON.stringify(value, null, 2));
+        debugCount++;
+      }
+    }
 
     // 站点到中文国家名称的映射
     const siteToCountryMap = {
