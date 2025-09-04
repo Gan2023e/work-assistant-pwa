@@ -87,11 +87,19 @@ router.get('/', async (req, res) => {
       console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找FBA SKU...');
       const fbaConditions = listingsData
         .filter(listing => {
-          const isFba = listing['fulfillment-channel'] && 
-            (listing['fulfillment-channel'].includes('DEFAULT') || 
-             listing['fulfillment-channel'].includes('AFN') ||
-             listing['fulfillment-channel'].includes('AMAZON'));
-          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, fulfillment-channel: ${listing['fulfillment-channel']}, isFBA: ${isFba}`);
+          const fulfillmentChannel = listing['fulfillment-channel'];
+          const isFba = fulfillmentChannel && 
+            (fulfillmentChannel.includes('DEFAULT') || 
+             fulfillmentChannel.includes('AFN') ||
+             fulfillmentChannel.includes('AMAZON'));
+          
+          if (listing['seller-sku'] === 'FBAXBA039A1') {
+            console.log('\x1b[36m%s\x1b[0m', `🎯 FBA过滤阶段 - FBAXBA039A1:`);
+            console.log('\x1b[36m%s\x1b[0m', `   fulfillment-channel: "${fulfillmentChannel}"`);
+            console.log('\x1b[36m%s\x1b[0m', `   isFBA结果: ${isFba}`);
+          }
+          
+          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, fulfillment-channel: ${fulfillmentChannel}, isFBA: ${isFba}`);
           return isFba;
         })
         .map(listing => ({
@@ -138,10 +146,19 @@ router.get('/', async (req, res) => {
     
     listingsData.forEach(listing => {
       const key = `${listing['seller-sku']}_${listing.site}`;
-      const isFbaSku = listing['fulfillment-channel'] && 
-        (listing['fulfillment-channel'].includes('DEFAULT') || 
-         listing['fulfillment-channel'].includes('AFN') ||
-         listing['fulfillment-channel'].includes('AMAZON'));
+      const fulfillmentChannel = listing['fulfillment-channel'];
+      const isFbaSku = fulfillmentChannel && 
+        (fulfillmentChannel.includes('DEFAULT') || 
+         fulfillmentChannel.includes('AFN') ||
+         fulfillmentChannel.includes('AMAZON'));
+      
+      // 添加详细调试信息，特别是FBAXBA039A1
+      if (listing['seller-sku'] === 'FBAXBA039A1') {
+        console.log('\x1b[33m%s\x1b[0m', `🔍 FBAXBA039A1 详细分析:`);
+        console.log('\x1b[33m%s\x1b[0m', `   fulfillment-channel: "${fulfillmentChannel}"`);
+        console.log('\x1b[33m%s\x1b[0m', `   包含AMAZON: ${fulfillmentChannel ? fulfillmentChannel.includes('AMAZON') : false}`);
+        console.log('\x1b[33m%s\x1b[0m', `   isFbaSku结果: ${isFbaSku}`);
+      }
       
       // 获取对应的库存数量
       let inventoryQuantity = null;
