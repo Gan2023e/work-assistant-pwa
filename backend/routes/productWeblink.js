@@ -2409,8 +2409,12 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
         
         // SKU前缀改成US (例如：UKXBC188 -> USXBC188)
-        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
-        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
+        // 匹配更多URL格式：/UK123ABC/、/UK123ABC.、UK123ABC-、UK123ABC_等
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)([\/\.\-_\?])/g, '/US$1$2');
+        // 处理URL开头或结尾的情况
+        processedUrl = processedUrl.replace(/(^|[\/])UK([A-Z0-9]+)$/g, '$1US$2');
+        // 处理文件名中的UK前缀（如果上面的规则没有覆盖到）
+        processedUrl = processedUrl.replace(/UK([A-Z0-9]+)(?=[\.\-_]|$)/g, 'US$1');
         
         return processedUrl;
       }
@@ -3547,8 +3551,17 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
 
     // 判断源文件类型（通过第一条记录的SKU前缀）
-    const sourceCountryType = records.length > 0 && records[0].item_sku ? 
-      (records[0].item_sku.startsWith('US') ? 'US_CA' : 'OTHER') : 'OTHER';
+    let sourceCountryType = 'OTHER';
+    if (records.length > 0 && records[0].item_sku) {
+      const firstSku = records[0].item_sku;
+      if (firstSku.startsWith('US')) {
+        sourceCountryType = 'US_CA';
+      } else if (firstSku.startsWith('UK')) {
+        sourceCountryType = 'UK_AU_AE';
+      } else {
+        sourceCountryType = 'OTHER';
+      }
+    }
     
     console.log(`📍 源文件类型: ${sourceCountryType}, 目标国家: ${country}`);
 
@@ -3596,6 +3609,22 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     // 处理图片URL，根据源文件和目标国家决定替换规则
     const processImageUrl = (url) => {
       if (!url) return url;
+      
+      // 从UK/AU/AE生成US/CA的转换逻辑
+      if (sourceCountryType === 'UK_AU_AE' && (country === 'US' || country === 'CA')) {
+        // 域名：pic.sellerfun.net -> pic.jiayou.ink
+        let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
+        
+        // SKU前缀改成US (例如：UKXBC188 -> USXBC188)
+        // 匹配更多URL格式：/UK123ABC/、/UK123ABC.、UK123ABC-、UK123ABC_等
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)([\/\.\-_\?])/g, '/US$1$2');
+        // 处理URL开头或结尾的情况
+        processedUrl = processedUrl.replace(/(^|[\/])UK([A-Z0-9]+)$/g, '$1US$2');
+        // 处理文件名中的UK前缀（如果上面的规则没有覆盖到）
+        processedUrl = processedUrl.replace(/UK([A-Z0-9]+)(?=[\.\-_]|$)/g, 'US$1');
+        
+        return processedUrl;
+      }
       
       // 如果目标国家是英国、澳大利亚、阿联酋，应用特殊处理规则
       if (country === 'UK' || country === 'AU' || country === 'AE') {
@@ -4236,8 +4265,12 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         let processedUrl = url.replace(/pic\.sellerfun\.net/g, 'pic.jiayou.ink');
         
         // SKU前缀改成US (例如：UKXBC188 -> USXBC188)
-        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\//g, '/US$1/');
-        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)\./g, '/US$1.');
+        // 匹配更多URL格式：/UK123ABC/、/UK123ABC.、UK123ABC-、UK123ABC_等
+        processedUrl = processedUrl.replace(/\/UK([A-Z0-9]+)([\/\.\-_\?])/g, '/US$1$2');
+        // 处理URL开头或结尾的情况
+        processedUrl = processedUrl.replace(/(^|[\/])UK([A-Z0-9]+)$/g, '$1US$2');
+        // 处理文件名中的UK前缀（如果上面的规则没有覆盖到）
+        processedUrl = processedUrl.replace(/UK([A-Z0-9]+)(?=[\.\-_]|$)/g, 'US$1');
         
         return processedUrl;
       }
