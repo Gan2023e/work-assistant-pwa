@@ -70,6 +70,7 @@ const Listings: React.FC = () => {
 
   // 产品状态筛选
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
+  const [productStatusOptions, setProductStatusOptions] = useState<string[]>([]);
   
   // 弹窗状态
   const [addMappingVisible, setAddMappingVisible] = useState(false);
@@ -100,6 +101,15 @@ const Listings: React.FC = () => {
         setTotal(result.data.total);
         setSiteList(result.data.siteList);
         setCountryList(result.data.countryList || []);
+        
+        // 动态提取所有非重复的产品状态
+        const statusList = result.data.records
+          .map((record: ParentSkuData) => record.product_status)
+          .filter((status: string | undefined): status is string => 
+            status !== undefined && status.trim() !== ''
+          );
+        const uniqueStatuses = Array.from(new Set(statusList)).sort();
+        setProductStatusOptions(uniqueStatuses);
       } else {
         message.error(result.message || '获取数据失败');
       }
@@ -719,12 +729,11 @@ const Listings: React.FC = () => {
             style={{ width: 150 }}
           >
             <Option value="all">全部状态</Option>
-            <Option value="待审核">待审核</Option>
-            <Option value="审核通过">审核通过</Option>
-            <Option value="审核拒绝">审核拒绝</Option>
-            <Option value="待处理">待处理</Option>
-            <Option value="已处理">已处理</Option>
-            <Option value="暂停">暂停</Option>
+            {productStatusOptions.map(status => (
+              <Option key={status} value={status}>
+                {status}
+              </Option>
+            ))}
           </Select>
           
           <Select
