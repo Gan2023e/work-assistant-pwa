@@ -22,7 +22,7 @@ export interface ParentSkuData {
   qty_per_box?: number;
   weblink?: string;
   product_status?: string;
-  data_source: 'both' | 'only_sku' | 'only_weblink';
+  notice?: string;
   countryStatus: Record<string, CountryStatus>;
   listingStatus: 'listed' | 'unlisted' | 'partial';
   listedCount: number;
@@ -50,6 +50,7 @@ export interface DataConsistencyResult {
       parent_sku: string;
       status: string;
       weblink: string;
+      notice: string;
       issue_type: string;
     }>;
   };

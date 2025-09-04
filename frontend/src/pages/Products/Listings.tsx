@@ -78,6 +78,9 @@ const Listings: React.FC = () => {
   const [consistencyData, setConsistencyData] = useState<any>(null);
   const [consistencyLoading, setConsistencyLoading] = useState(false);
   
+  // 数据一致性检查中的复选框状态
+  const [selectedOrphanRows, setSelectedOrphanRows] = useState<string[]>([]);
+  
   // 弹窗状态
   const [addMappingVisible, setAddMappingVisible] = useState(false);
   const [batchImportVisible, setBatchImportVisible] = useState(false);
@@ -116,9 +119,8 @@ const Listings: React.FC = () => {
           );
         const uniqueStatuses = Array.from(new Set(statusList)).sort();
         
-        // 添加特殊的筛选选项
-        const allStatusOptions = ['无SKU数据', ...uniqueStatuses];
-        setProductStatusOptions(allStatusOptions);
+        // 设置产品状态选项（移除"无SKU数据"）
+        setProductStatusOptions(uniqueStatuses);
       } else {
         message.error(result.message || '获取数据失败');
       }
@@ -372,7 +374,7 @@ const Listings: React.FC = () => {
 
     Modal.confirm({
       title: '确认数据同步',
-      content: `确定要${action === 'create_weblink' ? '创建产品链接记录' : '删除孤立记录'}吗？`,
+      content: `确定要${action === 'create_weblink' ? '创建产品链接记录' : `删除选中的 ${parentSkus.length} 条孤立记录`}吗？`,
       onOk: async () => {
         try {
           const response = await fetch(`${API_BASE_URL}/api/listings/sync-data`, {
@@ -390,6 +392,9 @@ const Listings: React.FC = () => {
             fetchListings();
             fetchStatistics();
             handleConsistencyCheck(); // 重新检查一致性
+            if (action === 'delete_orphan') {
+              setSelectedOrphanRows([]); // 清空选择
+            }
           } else {
             message.error(result.message || '同步失败');
           }
@@ -399,6 +404,36 @@ const Listings: React.FC = () => {
         }
       }
     });
+  };
+
+  // 批量打开链接
+  const handleBatchOpenLinks = (records: any[]) => {
+    const linksToOpen = records
+      .filter(record => record.weblink && record.weblink.trim() !== '')
+      .map(record => record.weblink);
+    
+    if (linksToOpen.length === 0) {
+      message.warning('没有可打开的链接');
+      return;
+    }
+
+    if (linksToOpen.length > 10) {
+      Modal.confirm({
+        title: '批量打开链接',
+        content: `即将打开 ${linksToOpen.length} 个链接，可能会被浏览器拦截。是否继续？`,
+        onOk: () => {
+          linksToOpen.forEach(link => {
+            window.open(link, '_blank');
+          });
+          message.success(`已尝试打开 ${linksToOpen.length} 个链接`);
+        }
+      });
+    } else {
+      linksToOpen.forEach(link => {
+        window.open(link, '_blank');
+      });
+      message.success(`已打开 ${linksToOpen.length} 个链接`);
+    }
   };
   
   // 查看SKU详情
@@ -493,12 +528,7 @@ const Listings: React.FC = () => {
     // 先应用产品状态筛选
     let filteredListings = listings;
     if (productStatusFilter && productStatusFilter !== 'all') {
-      if (productStatusFilter === '无SKU数据') {
-        // 筛选只在product_weblink中存在的记录
-        filteredListings = listings.filter(item => item.data_source === 'only_weblink');
-      } else {
-        filteredListings = listings.filter(item => item.product_status === productStatusFilter);
-      }
+      filteredListings = listings.filter(item => item.product_status === productStatusFilter);
     }
 
     const groupedData = new Map<string, ParentSkuData[]>();
@@ -1111,9 +1141,12 @@ const Listings: React.FC = () => {
       <Modal
         title="数据一致性检查结果"
         open={consistencyCheckVisible}
-        onCancel={() => setConsistencyCheckVisible(false)}
+        onCancel={() => {
+          setConsistencyCheckVisible(false);
+          setSelectedOrphanRows([]); // 关闭弹窗时清空选择
+        }}
         footer={null}
-        width={800}
+        width={1200}
       >
         {consistencyData && (
           <div>
@@ -1158,7 +1191,7 @@ const Listings: React.FC = () => {
                   size="small"
                   dataSource={consistencyData.inconsistentData.missingWeblink}
                   rowKey="parent_sku"
-                  pagination={{ pageSize: 5 }}
+                  pagination={{ pageSize: 50 }}
                   columns={[
                     { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku' },
                     { title: '子SKU数量', dataIndex: 'sku_count', key: 'sku_count' }
@@ -1172,31 +1205,60 @@ const Listings: React.FC = () => {
               <Card title={`孤立的产品链接 (${consistencyData.inconsistentData.missingSku.length}条)`} size="small">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span>这些产品链接没有对应的SKU记录</span>
-                  <Button 
-                    size="small" 
-                    danger
-                    onClick={() => handleDataSync('delete_orphan', consistencyData.inconsistentData.missingSku.map((item: any) => item.parent_sku))}
-                  >
-                    删除所有孤立记录
-                  </Button>
+                  <Space>
+                    <Button 
+                      size="small" 
+                      type="primary"
+                      disabled={selectedOrphanRows.length === 0}
+                      onClick={() => {
+                        const selectedRecords = consistencyData.inconsistentData.missingSku
+                          .filter((item: any) => selectedOrphanRows.includes(item.parent_sku));
+                        handleBatchOpenLinks(selectedRecords);
+                      }}
+                    >
+                      批量打开链接 ({selectedOrphanRows.length})
+                    </Button>
+                    <Button 
+                      size="small" 
+                      danger
+                      disabled={selectedOrphanRows.length === 0}
+                      onClick={() => handleDataSync('delete_orphan', selectedOrphanRows)}
+                    >
+                      删除勾选记录 ({selectedOrphanRows.length})
+                    </Button>
+                  </Space>
                 </div>
                 <Table
                   size="small"
                   dataSource={consistencyData.inconsistentData.missingSku}
                   rowKey="parent_sku"
-                  pagination={{ pageSize: 5 }}
+                  pagination={{ pageSize: 50 }}
+                  rowSelection={{
+                    selectedRowKeys: selectedOrphanRows,
+                    onChange: (selectedRowKeys: React.Key[]) => {
+                      setSelectedOrphanRows(selectedRowKeys as string[]);
+                    },
+                  }}
                   columns={[
-                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku' },
-                    { title: '状态', dataIndex: 'status', key: 'status', render: (status: string) => <Tag>{status}</Tag> },
+                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku', width: 120 },
+                    { title: '状态', dataIndex: 'status', key: 'status', width: 100, render: (status: string) => <Tag>{status}</Tag> },
                     { 
                       title: '产品链接', 
                       dataIndex: 'weblink', 
                       key: 'weblink',
+                      width: 300,
                       render: (weblink: string) => weblink ? (
                         <a href={weblink} target="_blank" rel="noopener noreferrer">
-                          {weblink.length > 50 ? `${weblink.substring(0, 50)}...` : weblink}
+                          {weblink.length > 60 ? `${weblink.substring(0, 60)}...` : weblink}
                         </a>
                       ) : '-'
+                    },
+                    {
+                      title: '备注',
+                      dataIndex: 'notice',
+                      key: 'notice',
+                      width: 200,
+                      render: (notice: string) => notice || '-'
                     }
                   ]}
                 />

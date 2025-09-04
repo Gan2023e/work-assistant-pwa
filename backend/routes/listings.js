@@ -31,78 +31,20 @@ router.get('/', async (req, res) => {
       };
     }
 
-    // 使用原生SQL实现FULL OUTER JOIN (MySQL使用UNION模拟)
+    // 恢复以sellerinventory_sku为主的LEFT JOIN查询
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    
-    // 构建搜索条件的SQL片段
-    let searchCondition = '';
-    if (search) {
-      searchCondition = `
-        AND (sku.parent_sku LIKE '%${search}%' 
-        OR sku.child_sku LIKE '%${search}%' 
-        OR sku.sellercolorname LIKE '%${search}%' 
-        OR sku.sellersizename LIKE '%${search}%')
-      `;
-    }
-
-    // FULL OUTER JOIN查询 - 显示所有记录
-    const fullJoinQuery = `
-      SELECT 
-        sku.skuid,
-        sku.parent_sku,
-        sku.child_sku,
-        sku.sellercolorname,
-        sku.sellersizename,
-        sku.qty_per_box,
-        pw.weblink,
-        pw.status as product_status,
-        CASE 
-          WHEN sku.skuid IS NULL THEN 'only_weblink'
-          WHEN pw.parent_sku IS NULL THEN 'only_sku' 
-          ELSE 'both'
-        END as data_source
-      FROM sellerinventory_sku sku
-      LEFT JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
-      WHERE 1=1 ${searchCondition}
-      
-      UNION
-      
-      SELECT 
-        NULL as skuid,
-        pw.parent_sku,
-        NULL as child_sku,
-        NULL as sellercolorname,
-        NULL as sellersizename,
-        NULL as qty_per_box,
-        pw.weblink,
-        pw.status as product_status,
-        'only_weblink' as data_source
-      FROM product_weblink pw
-      LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
-      WHERE sku.parent_sku IS NULL
-      
-      ORDER BY parent_sku ${sort_order}
-      LIMIT ${parseInt(limit)} OFFSET ${offset}
-    `;
-
-    // 获取总数查询
-    const countQuery = `
-      SELECT COUNT(*) as total FROM (
-        SELECT sku.parent_sku FROM sellerinventory_sku sku
-        LEFT JOIN product_weblink pw ON sku.parent_sku = pw.parent_sku
-        WHERE 1=1 ${searchCondition}
-        
-        UNION
-        
-        SELECT pw.parent_sku FROM product_weblink pw
-        LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
-        WHERE sku.parent_sku IS NULL
-      ) as combined_data
-    `;
-
-    const [skuData] = await sequelize.query(fullJoinQuery);
-    const [countResult] = await sequelize.query(countQuery);
-    const count = countResult[0].total;
+    const { count, rows: skuData } = await SellerInventorySku.findAndCountAll({
+      where: whereCondition,
+      include: [{
+        model: ProductWeblink,
+        as: 'ProductWeblink',
+        required: false, // LEFT JOIN
+        attributes: ['weblink', 'status', 'notice']
+      }],
+      order: [[sort_by, sort_order.toUpperCase()]],
+      limit: parseInt(limit),
+      offset: offset
+    });
 
     // 获取所有相关的child_sku列表 (排除null值)
     const childSkus = skuData
@@ -219,18 +161,20 @@ router.get('/', async (req, res) => {
         listingStatus = 'partial';
       }
 
+      // 获取关联的product_weblink信息
+      const productWeblink = sku.ProductWeblink || null;
+
       return {
-        skuid: sku.skuid, // 对于只有weblink的记录，这里为null
+        skuid: sku.skuid,
         parent_sku: sku.parent_sku,
         child_sku: sku.child_sku,
         sellercolorname: sku.sellercolorname,
         sellersizename: sku.sellersizename,
         qty_per_box: sku.qty_per_box,
-        // 产品链接信息 (直接从查询结果获取)
-        weblink: sku.weblink,
-        product_status: sku.product_status,
-        // 数据来源标识
-        data_source: sku.data_source,
+        // 产品链接信息
+        weblink: productWeblink ? productWeblink.weblink : null,
+        product_status: productWeblink ? productWeblink.status : null,
+        notice: productWeblink ? productWeblink.notice : null,
         countryStatus,
         listingStatus,
         listedCount,
@@ -686,7 +630,7 @@ router.get('/data-consistency-check', async (req, res) => {
 
     // 查找只在product_weblink中存在的记录
     const onlyInWeblinkQuery = `
-      SELECT pw.parent_sku, pw.status, pw.weblink, 'missing_sku' as issue_type
+      SELECT pw.parent_sku, pw.status, pw.weblink, pw.notice, 'missing_sku' as issue_type
       FROM product_weblink pw
       LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
       WHERE sku.parent_sku IS NULL
