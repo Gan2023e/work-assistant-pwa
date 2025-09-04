@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 
 // 获取母SKU及其站点上架状态列表
 router.get('/', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 获取在线Listings管理数据');
+  
   
   try {
     const { 
@@ -83,8 +83,6 @@ router.get('/', async (req, res) => {
     // 查询SKU类型信息，从pbi_amzsku_sku表获取sku_type
     let skuTypeMap = new Map();
     if (mappings.length > 0) {
-      console.log('\x1b[36m%s\x1b[0m', '🔍 查询SKU类型信息...');
-      
       const skuTypeData = await AmzSkuMapping.findAll({
         where: {
           amz_sku: { [Op.in]: mappings.map(m => m.amz_sku) },
@@ -93,53 +91,32 @@ router.get('/', async (req, res) => {
         attributes: ['amz_sku', 'site', 'sku_type']
       });
       
-      console.log('\x1b[32m%s\x1b[0m', `📊 查询到 ${skuTypeData.length} 条SKU类型信息`);
-      
       // 构建SKU类型映射
       skuTypeData.forEach(item => {
         const key = `${item.amz_sku}_${item.site}`;
         skuTypeMap.set(key, item.sku_type);
-        
-        if (item.amz_sku === 'FBAXBA039A1') {
-          console.log('\x1b[33m%s\x1b[0m', `🎯 FBAXBA039A1 SKU类型: "${item.sku_type}"`);
-        }
       });
     }
 
     // 查询FBA库存数据 - 基于sku_type判断
     let fbaInventoryData = [];
     if (listingsData.length > 0) {
-      console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找FBA SKU...');
-      
       const fbaConditions = listingsData
         .filter(listing => {
           const key = `${listing['seller-sku']}_${listing.site}`;
           const skuType = skuTypeMap.get(key);
-          const isFba = skuType === 'FBA SKU';
-          
-          if (listing['seller-sku'] === 'FBAXBA039A1') {
-            console.log('\x1b[36m%s\x1b[0m', `🎯 FBA过滤阶段 - FBAXBA039A1:`);
-            console.log('\x1b[36m%s\x1b[0m', `   sku_type: "${skuType}"`);
-            console.log('\x1b[36m%s\x1b[0m', `   isFBA结果: ${isFba}`);
-          }
-          
-          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, sku_type: ${skuType}, isFBA: ${isFba}`);
-          return isFba;
+          return skuType === 'FBA SKU';
         })
         .map(listing => ({
           sku: listing['seller-sku'],
           site: listing.site
         }));
-      
-      console.log('\x1b[33m%s\x1b[0m', `🎯 找到 ${fbaConditions.length} 个FBA SKU需要查询库存`);
 
       if (fbaConditions.length > 0) {
         const fbaQueries = fbaConditions.map(condition => 
           `(sku = '${condition.sku}' AND site = '${condition.site}')`
         ).join(' OR ');
 
-        console.log('\x1b[35m%s\x1b[0m', '🔍 FBA库存查询SQL:', `SELECT sku, site, \`afn-fulfillable-quantity\` FROM fba_inventory WHERE ${fbaQueries}`);
-        
         fbaInventoryData = await sequelize.query(`
           SELECT sku, site, \`afn-fulfillable-quantity\`
           FROM fba_inventory 
@@ -147,11 +124,6 @@ router.get('/', async (req, res) => {
         `, {
           type: sequelize.QueryTypes.SELECT
         });
-        
-        console.log('\x1b[32m%s\x1b[0m', `📊 从fba_inventory表查询到 ${fbaInventoryData.length} 条记录`);
-        if (fbaInventoryData.length > 0) {
-          console.log('\x1b[32m%s\x1b[0m', '📊 FBA库存示例:', JSON.stringify(fbaInventoryData.slice(0, 2), null, 2));
-        }
       }
     }
 
@@ -171,29 +143,22 @@ router.get('/', async (req, res) => {
 
     // 建立listings_sku的映射表，以amz_sku + site为键
     const listingsMap = new Map();
-    console.log('\x1b[36m%s\x1b[0m', `📋 处理 ${listingsData.length} 条listings_sku数据`);
+
     
     listingsData.forEach(listing => {
       const key = `${listing['seller-sku']}_${listing.site}`;
       const skuType = skuTypeMap.get(key);
       const isFbaSku = skuType === 'FBA SKU';
       
-      // 添加详细调试信息，特别是FBAXBA039A1
-      if (listing['seller-sku'] === 'FBAXBA039A1') {
-        console.log('\x1b[33m%s\x1b[0m', `🔍 FBAXBA039A1 详细分析:`);
-        console.log('\x1b[33m%s\x1b[0m', `   sku_type: "${skuType}"`);
-        console.log('\x1b[33m%s\x1b[0m', `   isFbaSku结果: ${isFbaSku}`);
-      }
+      
       
       // 获取对应的库存数量
       let inventoryQuantity = null;
       if (isFbaSku) {
         const fbaInfo = fbaInventoryMap.get(key);
         inventoryQuantity = fbaInfo ? fbaInfo.afnFulfillableQuantity : null;
-        console.log('\x1b[35m%s\x1b[0m', `🔵 FBA SKU: ${listing['seller-sku']}, quantity: ${inventoryQuantity}`);
       } else {
         inventoryQuantity = listing.quantity;
-        console.log('\x1b[33m%s\x1b[0m', `🟡 非FBA SKU: ${listing['seller-sku']}, quantity: ${inventoryQuantity}`);
       }
 
       listingsMap.set(key, {
@@ -207,16 +172,7 @@ router.get('/', async (req, res) => {
       });
     });
     
-    console.log('\x1b[32m%s\x1b[0m', `✅ 构建了 ${listingsMap.size} 个listing映射`);
-    
-    // 输出几个映射示例用于调试
-    let debugCount = 0;
-    for (let [key, value] of listingsMap) {
-      if (debugCount < 3) {
-        console.log('\x1b[36m%s\x1b[0m', `🔍 映射示例: ${key} ->`, JSON.stringify(value, null, 2));
-        debugCount++;
-      }
-    }
+
 
     // 站点到中文国家名称的映射
     const siteToCountryMap = {
@@ -322,8 +278,7 @@ router.get('/', async (req, res) => {
       filteredResult = filteredResult.filter(item => item.countryStatus[site]?.isListed);
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${filteredResult.length} 个母SKU的Listings数据`);
-    console.log('\x1b[36m%s\x1b[0m', `📋 从listings_sku表获取到 ${listingsData.length} 条seller-sku记录`);
+
 
     res.json({
       code: 0,
@@ -355,7 +310,7 @@ router.get('/', async (req, res) => {
 
 // 获取单个SKU的详细映射信息
 router.get('/:childSku/mappings', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 获取单个SKU映射详情');
+  
   
   try {
     const { childSku } = req.params;
@@ -378,7 +333,7 @@ router.get('/:childSku/mappings', async (req, res) => {
       order: [['site', 'ASC']]
     });
     
-    console.log('\x1b[33m%s\x1b[0m', `📦 查询到SKU ${childSku} 的 ${mappings.length} 条映射记录`);
+
     
     res.json({
       code: 0,
@@ -400,7 +355,7 @@ router.get('/:childSku/mappings', async (req, res) => {
 
 // 添加新的SKU映射
 router.post('/mappings', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 添加SKU映射');
+  
   
   try {
     const { local_sku, amz_sku, site, country, sku_type = 'FBA SKU' } = req.body;
@@ -437,7 +392,7 @@ router.post('/mappings', async (req, res) => {
       update_time: new Date()
     });
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射添加成功');
+    
     
     res.json({
       code: 0,
@@ -456,7 +411,7 @@ router.post('/mappings', async (req, res) => {
 
 // 更新SKU映射
 router.put('/mappings/:amzSku/:site', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 更新SKU映射');
+  
   
   try {
     const { amzSku, site } = req.params;
@@ -484,7 +439,7 @@ router.put('/mappings/:amzSku/:site', async (req, res) => {
       update_time: new Date()
     });
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射更新成功');
+    
     
     res.json({
       code: 0,
@@ -503,7 +458,7 @@ router.put('/mappings/:amzSku/:site', async (req, res) => {
 
 // 删除SKU映射
 router.delete('/mappings/:amzSku/:site', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 删除SKU映射');
+  
   
   try {
     const { amzSku, site } = req.params;
@@ -522,7 +477,7 @@ router.delete('/mappings/:amzSku/:site', async (req, res) => {
       });
     }
     
-    console.log('\x1b[32m%s\x1b[0m', '✅ SKU映射删除成功');
+    
     
     res.json({
       code: 0,
@@ -540,7 +495,7 @@ router.delete('/mappings/:amzSku/:site', async (req, res) => {
 
 // 批量添加SKU映射
 router.post('/mappings/batch', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 批量添加SKU映射');
+  
   
   try {
     const { mappings } = req.body;
@@ -614,7 +569,7 @@ router.post('/mappings/batch', async (req, res) => {
       const successCount = results.filter(r => r.success).length;
       const failureCount = results.filter(r => !r.success).length;
       
-      console.log('\x1b[32m%s\x1b[0m', `✅ 批量添加完成: 成功${successCount}条, 失败${failureCount}条`);
+
       
       res.json({
         code: 0,
@@ -641,7 +596,7 @@ router.post('/mappings/batch', async (req, res) => {
 
 // 获取统计数据
 router.get('/statistics', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 获取Listings统计数据');
+  
   
   try {
     // 获取总SKU数量
@@ -670,7 +625,7 @@ router.get('/statistics', async (req, res) => {
     
     const unmappedSkus = totalSkus - mappedSkus;
     
-    console.log('\x1b[33m%s\x1b[0m', '📊 统计数据获取成功');
+    
     
     res.json({
       code: 0,
@@ -699,7 +654,7 @@ router.get('/statistics', async (req, res) => {
 
 // 批量删除SKU记录
 router.delete('/batch-delete', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到批量删除SKU请求');
+  
   
   try {
     const { skuids, deleteParentSku = true } = req.body;
@@ -711,7 +666,7 @@ router.delete('/batch-delete', async (req, res) => {
       });
     }
 
-    console.log('\x1b[33m%s\x1b[0m', `准备删除 ${skuids.length} 条SKU记录，删除母SKU选项: ${deleteParentSku}`);
+    
 
     let deletedParentSkuCount = 0;
     
@@ -728,7 +683,7 @@ router.delete('/batch-delete', async (req, res) => {
       const parentSkus = skuRecords.map(record => record.parent_sku);
       
       if (parentSkus.length > 0) {
-        console.log('\x1b[33m%s\x1b[0m', `准备删除 ${parentSkus.length} 个母SKU:`, parentSkus);
+
         
         // 删除product_weblink表中对应的母SKU记录
         deletedParentSkuCount = await ProductWeblink.destroy({
@@ -737,7 +692,7 @@ router.delete('/batch-delete', async (req, res) => {
           }
         });
         
-        console.log('\x1b[32m%s\x1b[0m', `✅ 成功删除 ${deletedParentSkuCount} 条母SKU记录`);
+        
       }
     }
 
@@ -748,7 +703,7 @@ router.delete('/batch-delete', async (req, res) => {
       }
     });
 
-    console.log('\x1b[32m%s\x1b[0m', `✅ 成功删除 ${deletedCount} 条SKU记录`);
+    
 
     res.json({
       code: 0,
@@ -775,7 +730,7 @@ router.delete('/batch-delete', async (req, res) => {
 
 // 数据一致性检查API
 router.get('/data-consistency-check', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔍 执行数据一致性检查');
+  
   
   try {
     // 查找只在sellerinventory_sku中存在的记录
@@ -817,7 +772,7 @@ router.get('/data-consistency-check', async (req, res) => {
         Math.round((consistentRecords[0][0].count / totalSkuRecords) * 100) : 0
     };
 
-    console.log('\x1b[33m%s\x1b[0m', `📊 一致性检查完成: 一致率${stats.consistencyRate}%`);
+    
 
     res.json({
       code: 0,
@@ -843,7 +798,7 @@ router.get('/data-consistency-check', async (req, res) => {
 
 // 数据同步API
 router.post('/sync-data', async (req, res) => {
-  console.log('\x1b[32m%s\x1b[0m', '🔄 执行数据同步');
+  
   
   try {
     const { action, parentSkus } = req.body; // action: 'create_weblink' | 'create_sku' | 'delete_orphan'
@@ -892,7 +847,7 @@ router.post('/sync-data', async (req, res) => {
         });
     }
 
-    console.log('\x1b[32m%s\x1b[0m', `✅ 数据同步完成: 创建${result.created}条, 删除${result.deleted}条`);
+    
 
     res.json({
       code: 0,

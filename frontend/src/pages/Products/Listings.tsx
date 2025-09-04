@@ -600,16 +600,7 @@ const Listings: React.FC = () => {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {status.mappings.map((mapping: any, index: number) => {
-          // 调试日志：检查mapping对象的结构
-          if (index === 0) { // 只打印第一个mapping避免日志过多
-            console.log('🔍 前端mapping对象结构:', {
-              amzSku: mapping.amzSku,
-              quantity: mapping.quantity,
-              isFbaSku: mapping.isFbaSku,
-              fulfillmentChannel: mapping.fulfillmentChannel,
-              country: country
-            });
-          }
+
           
           return (
             <Tooltip
