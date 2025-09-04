@@ -20,6 +20,8 @@ export interface ParentSkuData {
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
+  weblink?: string;
+  product_status?: string;
   countryStatus: Record<string, CountryStatus>;
   listingStatus: 'listed' | 'unlisted' | 'partial';
   listedCount: number;

@@ -223,6 +223,8 @@ const Listings: React.FC = () => {
     const csvData = listings.map(sku => {
       const baseData = {
         母SKU: sku.parent_sku,
+        状态: sku.product_status || '',
+        产品链接: sku.weblink || '',
         子SKU: sku.child_sku,
         颜色: sku.sellercolorname || '',
         尺寸: sku.sellersizename || '',
@@ -362,6 +364,48 @@ const Listings: React.FC = () => {
         width: 120,
         fixed: 'left' as const,
         sorter: true,
+        render: (text: string, record: ParentSkuData) => (
+          <span
+            style={{ 
+              color: record.weblink ? '#1890ff' : 'inherit',
+              cursor: record.weblink ? 'pointer' : 'default',
+              textDecoration: record.weblink ? 'underline' : 'none'
+            }}
+            onClick={() => {
+              if (record.weblink) {
+                window.open(record.weblink, '_blank');
+              }
+            }}
+            title={record.weblink ? '点击打开产品链接' : '无产品链接'}
+          >
+            {text}
+          </span>
+        ),
+      },
+      {
+        title: '状态',
+        dataIndex: 'product_status',
+        key: 'product_status',
+        width: 100,
+        render: (status: string) => {
+          if (!status) return <span style={{ color: '#999' }}>-</span>;
+          
+          const statusConfig = {
+            '待审核': { color: 'orange', text: '待审核' },
+            '审核通过': { color: 'green', text: '审核通过' },
+            '审核拒绝': { color: 'red', text: '审核拒绝' },
+            '待处理': { color: 'blue', text: '待处理' },
+            '已处理': { color: 'success', text: '已处理' },
+            '暂停': { color: 'default', text: '暂停' }
+          };
+          
+          const config = statusConfig[status as keyof typeof statusConfig];
+          if (config) {
+            return <Tag color={config.color}>{config.text}</Tag>;
+          }
+          
+          return <Tag>{status}</Tag>;
+        },
       },
       {
         title: '子SKU',

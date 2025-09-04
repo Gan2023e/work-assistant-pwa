@@ -24,6 +24,18 @@ const ProductInformation = require('./ProductInformation');
 
 // 设置模型关联关系
 
+// SellerInventorySku 和 ProductWeblink 的关联关系
+SellerInventorySku.belongsTo(ProductWeblink, {
+  foreignKey: 'parent_sku',
+  targetKey: 'parent_sku',
+  as: 'ProductWeblink'
+});
+ProductWeblink.hasMany(SellerInventorySku, {
+  foreignKey: 'parent_sku',
+  sourceKey: 'parent_sku',
+  as: 'SellerInventorySkus'
+});
+
 // 发货记录与发货明细的关联
 ShipmentRecord.hasMany(ShipmentItem, {
   foreignKey: 'shipment_id',
@@ -51,6 +63,12 @@ ShipmentRecord.hasMany(OrderShipmentRelation, {
   foreignKey: 'shipment_id',
   as: 'orderRelations'
 });
+OrderShipmentRelation.belongsTo(ShipmentRecord, {
+  foreignKey: 'shipment_id',
+  as: 'shipmentRecord'
+});
+
+// 需求单发货关联
 OrderShipmentRelation.belongsTo(ShipmentRecord, {
   foreignKey: 'shipment_id',
   as: 'shipmentRecord'

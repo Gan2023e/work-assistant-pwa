@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SellerInventorySku, AmzSkuMapping, sequelize } = require('../models');
+const { SellerInventorySku, AmzSkuMapping, ProductWeblink, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // 获取母SKU及其站点上架状态列表
@@ -31,10 +31,16 @@ router.get('/', async (req, res) => {
       };
     }
 
-    // 分页查询母子SKU关系
+    // 分页查询母子SKU关系，同时关联product_weblink表
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const { count, rows: skuData } = await SellerInventorySku.findAndCountAll({
       where: whereCondition,
+      include: [{
+        model: ProductWeblink,
+        as: 'ProductWeblink',
+        required: false, // LEFT JOIN
+        attributes: ['weblink', 'status']
+      }],
       order: [[sort_by, sort_order.toUpperCase()]],
       limit: parseInt(limit),
       offset: offset
@@ -153,6 +159,9 @@ router.get('/', async (req, res) => {
         listingStatus = 'partial';
       }
 
+      // 获取关联的product_weblink信息
+      const productWeblink = sku.ProductWeblink || null;
+
       return {
         skuid: sku.skuid,
         parent_sku: sku.parent_sku,
@@ -160,6 +169,9 @@ router.get('/', async (req, res) => {
         sellercolorname: sku.sellercolorname,
         sellersizename: sku.sellersizename,
         qty_per_box: sku.qty_per_box,
+        // 新增产品链接信息
+        weblink: productWeblink ? productWeblink.weblink : null,
+        product_status: productWeblink ? productWeblink.status : null,
         countryStatus,
         listingStatus,
         listedCount,
