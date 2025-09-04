@@ -12,8 +12,8 @@ router.get('/', async (req, res) => {
       page = 1, 
       limit = 20, 
       search, 
-      site, 
       status, // 'all' | 'listed' | 'unlisted' | 'partial'
+      product_status, // 产品状态筛选
       sort_by = 'parent_sku',
       sort_order = 'ASC'
     } = req.query;
@@ -180,16 +180,15 @@ router.get('/', async (req, res) => {
       };
     });
 
-    // 根据状态过滤
+    // 根据上架状态过滤
     let filteredResult = result;
     if (status && status !== 'all') {
-      filteredResult = result.filter(item => item.listingStatus === status);
+      filteredResult = filteredResult.filter(item => item.listingStatus === status);
     }
 
-    // 根据国家过滤
-    if (site && site !== 'all') {
-      // site参数现在用于国家过滤
-      filteredResult = filteredResult.filter(item => item.countryStatus[site]?.isListed);
+    // 根据产品状态过滤
+    if (product_status && product_status !== 'all') {
+      filteredResult = filteredResult.filter(item => item.product_status === product_status);
     }
 
     console.log('\x1b[33m%s\x1b[0m', `📦 查询到 ${filteredResult.length} 个母SKU的Listings数据`);
@@ -562,6 +561,46 @@ router.get('/statistics', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量删除SKU记录
+router.delete('/batch-delete', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到批量删除请求');
+  
+  try {
+    const { skuids } = req.body;
+    
+    if (!skuids || !Array.isArray(skuids) || skuids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请选择要删除的记录'
+      });
+    }
+
+    // 删除SellerInventorySku记录
+    const deletedCount = await SellerInventorySku.destroy({
+      where: {
+        skuid: { [Op.in]: skuids }
+      }
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `✅ 成功删除 ${deletedCount} 条记录`);
+    
+    res.json({
+      code: 0,
+      message: `成功删除 ${deletedCount} 条记录`,
+      data: {
+        deletedCount
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 批量删除失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
       error: error.message
     });
   }

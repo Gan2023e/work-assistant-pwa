@@ -52,14 +52,16 @@ const Listings: React.FC = () => {
   const [siteList, setSiteList] = useState<string[]>([]);
   const [countryList, setCountryList] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
   
   // 查询参数
   const [queryParams, setQueryParams] = useState<ListingsQueryParams>({
     page: 1,
-    limit: 20,
+    limit: 100, // 修改默认每页显示100条
     search: '',
-    site: 'all',
     status: 'all',
+    product_status: 'all', // 添加产品状态筛选参数
     sort_by: 'parent_sku',
     sort_order: 'ASC'
   });
@@ -73,6 +75,42 @@ const Listings: React.FC = () => {
   
   // 表单实例
   const [addForm] = Form.useForm();
+
+  // 批量删除选中记录
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的记录');
+      return;
+    }
+
+    setBatchDeleteLoading(true);
+    try {
+      // 这里需要后端提供批量删除API
+      const response = await fetch(`${API_BASE_URL}/api/listings/batch-delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ skuids: selectedRowKeys }),
+      });
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
+        setSelectedRowKeys([]);
+        fetchListings();
+        fetchStatistics();
+      } else {
+        message.error(result.message || '批量删除失败');
+      }
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      message.error('批量删除失败');
+    } finally {
+      setBatchDeleteLoading(false);
+    }
+  };
   
   // 获取Listings数据
   const fetchListings = useCallback(async () => {
@@ -228,7 +266,6 @@ const Listings: React.FC = () => {
         子SKU: sku.child_sku,
         颜色: sku.sellercolorname || '',
         尺寸: sku.sellersizename || '',
-        装箱数量: sku.qty_per_box || '',
       };
       
       // 添加每个国家的Amazon SKU信息
@@ -351,6 +388,28 @@ const Listings: React.FC = () => {
     );
   };
 
+  // 计算合并单元格的rowSpan
+  const calculateRowSpan = (data: ParentSkuData[], index: number) => {
+    const currentParentSku = data[index].parent_sku;
+    
+    // 如果不是当前父SKU的第一行，返回0（被合并）
+    if (index > 0 && data[index - 1].parent_sku === currentParentSku) {
+      return 0;
+    }
+    
+    // 计算相同父SKU的行数
+    let count = 1;
+    for (let i = index + 1; i < data.length; i++) {
+      if (data[i].parent_sku === currentParentSku) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    
+    return count;
+  };
+
   // 表格列配置 - 固定5个主要国家列
   const getColumns = () => {
     // 定义5个主要国家
@@ -364,47 +423,103 @@ const Listings: React.FC = () => {
         width: 120,
         fixed: 'left' as const,
         sorter: true,
-        render: (text: string, record: ParentSkuData) => (
-          <span
-            style={{ 
-              color: record.weblink ? '#1890ff' : 'inherit',
-              cursor: record.weblink ? 'pointer' : 'default',
-              textDecoration: record.weblink ? 'underline' : 'none'
-            }}
-            onClick={() => {
-              if (record.weblink) {
-                window.open(record.weblink, '_blank');
-              }
-            }}
-            title={record.weblink ? '点击打开产品链接' : '无产品链接'}
-          >
-            {text}
-          </span>
-        ),
+        render: (text: string, record: ParentSkuData, index: number) => {
+          const rowSpan = calculateRowSpan(listings, index);
+          const obj = {
+            children: (
+              <span
+                style={{ 
+                  color: record.weblink ? '#1890ff' : 'inherit',
+                  cursor: record.weblink ? 'pointer' : 'default',
+                  textDecoration: record.weblink ? 'underline' : 'none'
+                }}
+                onClick={() => {
+                  if (record.weblink) {
+                    window.open(record.weblink, '_blank');
+                  }
+                }}
+                title={record.weblink ? '点击打开产品链接' : '无产品链接'}
+              >
+                {text}
+              </span>
+            ),
+            props: {} as any,
+          };
+          
+          if (rowSpan === 0) {
+            obj.props.rowSpan = 0;
+          } else {
+            obj.props.rowSpan = rowSpan;
+          }
+          
+          return obj;
+        },
       },
       {
         title: '状态',
         dataIndex: 'product_status',
         key: 'product_status',
         width: 100,
-        render: (status: string) => {
-          if (!status) return <span style={{ color: '#999' }}>-</span>;
+        render: (status: string, record: ParentSkuData, index: number) => {
+          const rowSpan = calculateRowSpan(listings, index);
           
-          const statusConfig = {
-            '待审核': { color: 'orange', text: '待审核' },
-            '审核通过': { color: 'green', text: '审核通过' },
-            '审核拒绝': { color: 'red', text: '审核拒绝' },
-            '待处理': { color: 'blue', text: '待处理' },
-            '已处理': { color: 'success', text: '已处理' },
-            '暂停': { color: 'default', text: '暂停' }
-          };
-          
-          const config = statusConfig[status as keyof typeof statusConfig];
-          if (config) {
-            return <Tag color={config.color}>{config.text}</Tag>;
+          let statusElement;
+          if (!status) {
+            statusElement = <span style={{ color: '#999' }}>-</span>;
+          } else {
+            const statusConfig = {
+              '待审核': { color: 'orange', text: '待审核' },
+              '审核通过': { color: 'green', text: '审核通过' },
+              '审核拒绝': { color: 'red', text: '审核拒绝' },
+              '待处理': { color: 'blue', text: '待处理' },
+              '已处理': { color: 'success', text: '已处理' },
+              '暂停': { color: 'default', text: '暂停' }
+            };
+            
+            const config = statusConfig[status as keyof typeof statusConfig];
+            statusElement = config ? <Tag color={config.color}>{config.text}</Tag> : <Tag>{status}</Tag>;
           }
           
-          return <Tag>{status}</Tag>;
+          const obj = {
+            children: statusElement,
+            props: {} as any,
+          };
+          
+          if (rowSpan === 0) {
+            obj.props.rowSpan = 0;
+          } else {
+            obj.props.rowSpan = rowSpan;
+          }
+          
+          return obj;
+        },
+      },
+      {
+        title: '上架状态',
+        dataIndex: 'listingStatus',
+        key: 'listingStatus',
+        width: 100,
+        render: (status: string, record: ParentSkuData, index: number) => {
+          const rowSpan = calculateRowSpan(listings, index);
+          const statusMap = {
+            'listed': { color: 'success', text: '全部上架' },
+            'partial': { color: 'warning', text: '部分上架' },
+            'unlisted': { color: 'default', text: '未上架' }
+          };
+          const config = statusMap[status as keyof typeof statusMap];
+          
+          const obj = {
+            children: <Tag color={config.color}>{config.text}</Tag>,
+            props: {} as any,
+          };
+          
+          if (rowSpan === 0) {
+            obj.props.rowSpan = 0;
+          } else {
+            obj.props.rowSpan = rowSpan;
+          }
+          
+          return obj;
         },
       },
       {
@@ -427,67 +542,60 @@ const Listings: React.FC = () => {
         key: 'sellersizename',
         width: 80,
         render: (text: string) => text || '-',
-      },
-      {
-        title: '装箱数量',
-        dataIndex: 'qty_per_box',
-        key: 'qty_per_box',
-        width: 80,
-        render: (text: number) => text ? `${text}个` : '-',
       }
     ];
 
-          // 固定生成5个主要国家列
-      const countryColumns = mainCountries.map(country => ({
-        title: country,
-        key: `country-${country}`,
-        width: 120,
-        render: (text: any, record: ParentSkuData) => {
-          // 双重安全检查
-          if (!record || !record.countryStatus) {
-            return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
-          }
-          return renderCountryStatus(record.countryStatus, record.child_sku, country);
-        },
-      }));
+    // 固定生成5个主要国家列
+    const countryColumns = mainCountries.map(country => ({
+      title: country,
+      key: `country-${country}`,
+      width: 120,
+      render: (text: any, record: ParentSkuData) => {
+        // 双重安全检查
+        if (!record || !record.countryStatus) {
+          return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
+        }
+        return renderCountryStatus(record.countryStatus, record.child_sku, country);
+      },
+    }));
 
     const endColumns = [
       {
         title: '上架进度',
         key: 'listingProgress',
         width: 150,
-        render: (text: any, record: ParentSkuData) => (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Progress
-              percent={record.listingRate}
-              size="small"
-              strokeColor={{
-                '0%': '#f5222d',
-                '50%': '#faad14',
-                '100%': '#52c41a'
-              }}
-              showInfo={false}
-              style={{ flex: 1, minWidth: 60 }}
-            />
-            <span style={{ fontSize: 12, minWidth: 60 }}>
-              {record.listedCount}/{record.totalCountries} ({record.listingRate}%)
-            </span>
-          </div>
-        ),
-      },
-      {
-        title: '上架状态',
-        dataIndex: 'listingStatus',
-        key: 'listingStatus',
-        width: 100,
-        render: (status: string) => {
-          const statusMap = {
-            'listed': { color: 'success', text: '全部上架' },
-            'partial': { color: 'warning', text: '部分上架' },
-            'unlisted': { color: 'default', text: '未上架' }
+        render: (text: any, record: ParentSkuData, index: number) => {
+          const rowSpan = calculateRowSpan(listings, index);
+          
+          const obj = {
+            children: (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Progress
+                  percent={record.listingRate}
+                  size="small"
+                  strokeColor={{
+                    '0%': '#f5222d',
+                    '50%': '#faad14',
+                    '100%': '#52c41a'
+                  }}
+                  showInfo={false}
+                  style={{ flex: 1, minWidth: 60 }}
+                />
+                <span style={{ fontSize: 12, minWidth: 60 }}>
+                  {record.listedCount}/{record.totalCountries} ({record.listingRate}%)
+                </span>
+              </div>
+            ),
+            props: {} as any,
           };
-          const config = statusMap[status as keyof typeof statusMap];
-          return <Tag color={config.color}>{config.text}</Tag>;
+          
+          if (rowSpan === 0) {
+            obj.props.rowSpan = 0;
+          } else {
+            obj.props.rowSpan = rowSpan;
+          }
+          
+          return obj;
         },
       },
       {
@@ -542,8 +650,30 @@ const Listings: React.FC = () => {
     }
   };
 
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+    },
+    onSelectAll: (selected: boolean, selectedRows: ParentSkuData[], changeRows: ParentSkuData[]) => {
+      console.log('onSelectAll', selected, selectedRows, changeRows);
+    },
+  };
+
   return (
     <div className="listings-page">
+      <style jsx>{`
+        .listings-page .ant-table-thead > tr > th {
+          text-align: center !important;
+        }
+        .listings-page .ant-table-thead {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+        }
+      `}</style>
+      
       {/* 页面头部 */}
       <div className="listings-header">
         <h1 className="listings-title">在线Listings管理</h1>
@@ -558,28 +688,48 @@ const Listings: React.FC = () => {
           />
           
           <Select
-            value={queryParams.site}
-            onChange={(value) => updateQueryParams({ site: value })}
-          >
-            <Option value="all">全部国家</Option>
-            {['美国', '加拿大', '英国', '澳大利亚', '阿联酋'].map(country => (
-              <Option key={country} value={country}>
-                {country}
-              </Option>
-            ))}
-          </Select>
-          
-          <Select
             value={queryParams.status}
             onChange={(value) => updateQueryParams({ status: value })}
+            placeholder="选择上架状态"
           >
-            <Option value="all">全部状态</Option>
+            <Option value="all">全部上架状态</Option>
             <Option value="listed">全部上架</Option>
             <Option value="partial">部分上架</Option>
             <Option value="unlisted">未上架</Option>
           </Select>
+
+          <Select
+            value={queryParams.product_status}
+            onChange={(value) => updateQueryParams({ product_status: value })}
+            placeholder="选择产品状态"
+          >
+            <Option value="all">全部产品状态</Option>
+            <Option value="待审核">待审核</Option>
+            <Option value="审核通过">审核通过</Option>
+            <Option value="审核拒绝">审核拒绝</Option>
+            <Option value="待处理">待处理</Option>
+            <Option value="已处理">已处理</Option>
+            <Option value="暂停">暂停</Option>
+          </Select>
           
           <div className="batch-actions">
+            {selectedRowKeys.length > 0 && (
+              <Popconfirm
+                title={`确定要删除选中的 ${selectedRowKeys.length} 条记录吗？`}
+                onConfirm={handleBatchDelete}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button
+                  danger
+                  loading={batchDeleteLoading}
+                  icon={<DeleteOutlined />}
+                >
+                  批量删除 ({selectedRowKeys.length})
+                </Button>
+              </Popconfirm>
+            )}
+            
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -644,8 +794,9 @@ const Listings: React.FC = () => {
       {/* 表格内容 */}
       <Card>
         <Table
+          rowSelection={rowSelection}
           columns={getColumns()}
-          dataSource={listings} // 显示所有记录
+          dataSource={listings}
           loading={loading}
           pagination={false}
           scroll={{ x: 1450 }}
@@ -664,6 +815,7 @@ const Listings: React.FC = () => {
             total={total}
             showSizeChanger
             showQuickJumper
+            pageSizeOptions={['20', '50', '100', '500']}
             showTotal={(total, range) =>
               `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
             }
@@ -782,9 +934,6 @@ const Listings: React.FC = () => {
               )}
               {selectedSku.sellersizename && (
                 <p><strong>尺寸:</strong> {selectedSku.sellersizename}</p>
-              )}
-              {selectedSku.qty_per_box && (
-                <p><strong>装箱数量:</strong> {selectedSku.qty_per_box}个</p>
               )}
             </div>
             
