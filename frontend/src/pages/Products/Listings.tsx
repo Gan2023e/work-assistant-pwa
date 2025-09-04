@@ -940,7 +940,7 @@ const Listings: React.FC = () => {
           dataSource={getProcessedData()} // 使用处理后的数据支持合并单元格
           loading={loading}
           pagination={false}
-          scroll={{ x: 1450, y: 'calc(100vh - 400px)' }}
+          scroll={{ x: 1450 }}
           rowKey="skuid"
           rowSelection={handleRowSelection} // 添加行选择
           onChange={handleTableChange}
