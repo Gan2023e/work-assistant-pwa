@@ -2710,6 +2710,12 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             otherImageUrl4Col = colIndex;
           } else if (cellValue === 'other_image_url5') {
             otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'other_image_url6') {
+            otherImageUrl6Col = colIndex;
+          } else if (cellValue === 'other_image_url7') {
+            otherImageUrl7Col = colIndex;
+          } else if (cellValue === 'other_image_url8') {
+            otherImageUrl8Col = colIndex;
           } else if (cellValue === 'product_description') {
             productDescriptionCol = colIndex;
           } else if (cellValue === 'bullet_point1') {
@@ -2859,7 +2865,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
-        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        otherImageUrl4Col, otherImageUrl5Col, otherImageUrl6Col, otherImageUrl7Col, otherImageUrl8Col, productDescriptionCol,
         bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
         feedProductTypeCol, externalProductIdTypeCol, quantityCol, ageRangeDescriptionCol,
         swatchImageUrlCol, relationshipTypeCol, variationThemeCol, parentSkuCol, parentChildCol,
@@ -4526,6 +4532,12 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             otherImageUrl4Col = colIndex;
           } else if (cellValue === 'other_image_url5') {
             otherImageUrl5Col = colIndex;
+          } else if (cellValue === 'other_image_url6') {
+            otherImageUrl6Col = colIndex;
+          } else if (cellValue === 'other_image_url7') {
+            otherImageUrl7Col = colIndex;
+          } else if (cellValue === 'other_image_url8') {
+            otherImageUrl8Col = colIndex;
           } else if (cellValue === 'product_description') {
             productDescriptionCol = colIndex;
           } else if (cellValue === 'bullet_point1') {
@@ -4614,7 +4626,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       const allColumns = [
         itemSkuCol, itemNameCol, colorNameCol, sizeNameCol, brandNameCol, manufacturerCol,
         mainImageUrlCol, otherImageUrl1Col, otherImageUrl2Col, otherImageUrl3Col, 
-        otherImageUrl4Col, otherImageUrl5Col, productDescriptionCol,
+        otherImageUrl4Col, otherImageUrl5Col, otherImageUrl6Col, otherImageUrl7Col, otherImageUrl8Col, productDescriptionCol,
         bulletPoint1Col, bulletPoint2Col, bulletPoint3Col, bulletPoint4Col, bulletPoint5Col,
         closureTypeCol, careInstructionsCol, modelCol, targetGenderCol, recommendedUsesForProductCol,
         seasons1Col, seasons2Col, seasons3Col, seasons4Col, lifestyle1Col,
@@ -4646,6 +4658,9 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       if (otherImageUrl3Col !== -1) data[currentRowIndex][otherImageUrl3Col] = processBatchImageUrl(record.other_image_url3) || '';
       if (otherImageUrl4Col !== -1) data[currentRowIndex][otherImageUrl4Col] = processBatchImageUrl(record.other_image_url4) || '';
       if (otherImageUrl5Col !== -1) data[currentRowIndex][otherImageUrl5Col] = processBatchImageUrl(record.other_image_url5) || '';
+      if (otherImageUrl6Col !== -1) data[currentRowIndex][otherImageUrl6Col] = processBatchImageUrl(record.other_image_url6) || '';
+      if (otherImageUrl7Col !== -1) data[currentRowIndex][otherImageUrl7Col] = processBatchImageUrl(record.other_image_url7) || '';
+      if (otherImageUrl8Col !== -1) data[currentRowIndex][otherImageUrl8Col] = processBatchImageUrl(record.other_image_url8) || '';
       if (productDescriptionCol !== -1) data[currentRowIndex][productDescriptionCol] = record.product_description || '';
       if (bulletPoint1Col !== -1) data[currentRowIndex][bulletPoint1Col] = record.bullet_point1 || '';
       if (bulletPoint2Col !== -1) data[currentRowIndex][bulletPoint2Col] = record.bullet_point2 || '';
