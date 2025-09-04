@@ -80,26 +80,50 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // 查询FBA库存数据
+    // 查询SKU类型信息，从pbi_amzsku_sku表获取sku_type
+    let skuTypeMap = new Map();
+    if (mappings.length > 0) {
+      console.log('\x1b[36m%s\x1b[0m', '🔍 查询SKU类型信息...');
+      
+      const skuTypeData = await AmzSkuMapping.findAll({
+        where: {
+          amz_sku: { [Op.in]: mappings.map(m => m.amz_sku) },
+          site: { [Op.in]: mappings.map(m => m.site) }
+        },
+        attributes: ['amz_sku', 'site', 'sku_type']
+      });
+      
+      console.log('\x1b[32m%s\x1b[0m', `📊 查询到 ${skuTypeData.length} 条SKU类型信息`);
+      
+      // 构建SKU类型映射
+      skuTypeData.forEach(item => {
+        const key = `${item.amz_sku}_${item.site}`;
+        skuTypeMap.set(key, item.sku_type);
+        
+        if (item.amz_sku === 'FBAXBA039A1') {
+          console.log('\x1b[33m%s\x1b[0m', `🎯 FBAXBA039A1 SKU类型: "${item.sku_type}"`);
+        }
+      });
+    }
+
+    // 查询FBA库存数据 - 基于sku_type判断
     let fbaInventoryData = [];
     if (listingsData.length > 0) {
-      // 获取所有需要查询FBA库存的SKU和站点
       console.log('\x1b[36m%s\x1b[0m', '🔍 开始查找FBA SKU...');
+      
       const fbaConditions = listingsData
         .filter(listing => {
-          const fulfillmentChannel = listing['fulfillment-channel'];
-          const isFba = fulfillmentChannel && 
-            (fulfillmentChannel.includes('DEFAULT') || 
-             fulfillmentChannel.includes('AFN') ||
-             fulfillmentChannel.includes('AMAZON'));
+          const key = `${listing['seller-sku']}_${listing.site}`;
+          const skuType = skuTypeMap.get(key);
+          const isFba = skuType === 'FBA SKU';
           
           if (listing['seller-sku'] === 'FBAXBA039A1') {
             console.log('\x1b[36m%s\x1b[0m', `🎯 FBA过滤阶段 - FBAXBA039A1:`);
-            console.log('\x1b[36m%s\x1b[0m', `   fulfillment-channel: "${fulfillmentChannel}"`);
+            console.log('\x1b[36m%s\x1b[0m', `   sku_type: "${skuType}"`);
             console.log('\x1b[36m%s\x1b[0m', `   isFBA结果: ${isFba}`);
           }
           
-          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, fulfillment-channel: ${fulfillmentChannel}, isFBA: ${isFba}`);
+          console.log('\x1b[36m%s\x1b[0m', `检查SKU ${listing['seller-sku']}, sku_type: ${skuType}, isFBA: ${isFba}`);
           return isFba;
         })
         .map(listing => ({
@@ -146,17 +170,13 @@ router.get('/', async (req, res) => {
     
     listingsData.forEach(listing => {
       const key = `${listing['seller-sku']}_${listing.site}`;
-      const fulfillmentChannel = listing['fulfillment-channel'];
-      const isFbaSku = fulfillmentChannel && 
-        (fulfillmentChannel.includes('DEFAULT') || 
-         fulfillmentChannel.includes('AFN') ||
-         fulfillmentChannel.includes('AMAZON'));
+      const skuType = skuTypeMap.get(key);
+      const isFbaSku = skuType === 'FBA SKU';
       
       // 添加详细调试信息，特别是FBAXBA039A1
       if (listing['seller-sku'] === 'FBAXBA039A1') {
         console.log('\x1b[33m%s\x1b[0m', `🔍 FBAXBA039A1 详细分析:`);
-        console.log('\x1b[33m%s\x1b[0m', `   fulfillment-channel: "${fulfillmentChannel}"`);
-        console.log('\x1b[33m%s\x1b[0m', `   包含AMAZON: ${fulfillmentChannel ? fulfillmentChannel.includes('AMAZON') : false}`);
+        console.log('\x1b[33m%s\x1b[0m', `   sku_type: "${skuType}"`);
         console.log('\x1b[33m%s\x1b[0m', `   isFbaSku结果: ${isFbaSku}`);
       }
       
