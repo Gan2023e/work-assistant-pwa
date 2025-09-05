@@ -305,6 +305,57 @@ const Listings: React.FC = () => {
   };
 
   // 批量删除SKU记录
+  // 生成删除资料表的函数
+  const generateDeleteDataSheet = () => {
+    const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
+    const hierarchicalData = getHierarchicalData();
+    
+    // 收集选中的SKU数据
+    const selectedSkuData: any[] = [];
+    
+    hierarchicalData.forEach(row => {
+      if (selectedRowKeys.includes(row.key!)) {
+        if (row.isParentRow) {
+          // 母SKU：添加母SKU记录
+          selectedSkuData.push({
+            item_sku: row.parent_sku,
+            update_delete: 'Delete',
+            sku_type: 'Parent SKU'
+          });
+        } else {
+          // 子SKU：添加子SKU记录
+          selectedSkuData.push({
+            item_sku: row.child_sku,
+            update_delete: 'Delete',
+            sku_type: 'Child SKU'
+          });
+        }
+      }
+    });
+    
+    // 为每个国家生成单独的资料表
+    mainCountries.forEach(country => {
+      const csvContent = [
+        'item_sku,update_delete,sku_type',
+        ...selectedSkuData.map(item => 
+          `${item.item_sku},${item.update_delete},${item.sku_type}`
+        )
+      ].join('\n');
+      
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.download = `SKU删除资料表_${country}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    });
+    
+    message.success(`已生成 ${mainCountries.length} 个国家的SKU删除资料表`);
+  };
+
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要删除的记录');
@@ -312,11 +363,14 @@ const Listings: React.FC = () => {
     }
 
     let deleteParentSku = true; // 默认开启删除母SKU
+    let generateDataSheet = true; // 默认开启生成删除资料表
 
     const modalContent = (
       <div>
         <p style={{ marginBottom: 16 }}>确定要删除选中的 {selectedRowKeys.length} 条记录吗？此操作不可恢复。</p>
-        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
+        
+        {/* 删除母SKU开关 */}
+        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #e8e8e8', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 500 }}>同时删除母SKU在product_weblink表中的记录</span>
             <Switch
@@ -333,6 +387,25 @@ const Listings: React.FC = () => {
             </div>
           </div>
         </div>
+        
+        {/* 生成删除资料表开关 */}
+        <div style={{ padding: '16px', backgroundColor: '#f0f9ff', borderRadius: '6px', border: '1px solid #bae6fd' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>生成SKU删除资料表</span>
+            <Switch
+              defaultChecked={true}
+              onChange={(checked) => { generateDataSheet = checked; }}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: '#666', lineHeight: 1.4 }}>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: '#0ea5e9' }}>• 开启：</span>为每个国家生成包含删除SKU信息的CSV资料表
+            </div>
+            <div>
+              <span style={{ color: '#94a3b8' }}>• 关闭：</span>仅删除记录，不生成资料表
+            </div>
+          </div>
+        </div>
       </div>
     );
 
@@ -343,6 +416,11 @@ const Listings: React.FC = () => {
       width: 480,
       onOk: async () => {
         try {
+          // 如果开启生成删除资料表，先生成资料表
+          if (generateDataSheet) {
+            generateDeleteDataSheet();
+          }
+
           const response = await fetch(`${API_BASE_URL}/api/listings/batch-delete`, {
             method: 'DELETE',
             headers: {
@@ -412,17 +490,11 @@ const Listings: React.FC = () => {
             }
           });
           
-          if (needExpand) {
-            // 如果需要展开，延迟设置选择状态以确保表格先渲染
-            setTimeout(() => {
-              setSelectedRowKeys(newKeys);
-              setSelectedRows(newChildRows);
-            }, 50);
-          } else {
-            // 如果已经展开，立即设置选择状态
+          // 统一使用延迟设置，确保所有情况下都能正确处理状态更新
+          setTimeout(() => {
             setSelectedRowKeys(newKeys);
             setSelectedRows(newChildRows);
-          }
+          }, needExpand ? 50 : 10);
         } else {
           // 取消选中母SKU：移除母SKU key和所有子SKU keys
           const keysToRemove = [key, ...childKeys];
@@ -432,8 +504,11 @@ const Listings: React.FC = () => {
             return !childKeys.includes(rowKey);
           });
           
-          setSelectedRowKeys(newKeys);
-          setSelectedRows(newChildRows);
+          // 也使用延迟设置确保状态更新的正确性
+          setTimeout(() => {
+            setSelectedRowKeys(newKeys);
+            setSelectedRows(newChildRows);
+          }, 10);
         }
       } else {
         // 选择子SKU时，需要检查是否影响母SKU状态
