@@ -31,19 +31,41 @@ router.get('/', async (req, res) => {
       };
     }
 
-    // 恢复以sellerinventory_sku为主的LEFT JOIN查询
+    // 按母SKU分页：首先获取分页的母SKU列表
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const { count, rows: skuData } = await SellerInventorySku.findAndCountAll({
+    
+    // 1. 获取符合条件的不同母SKU列表（用于分页）
+    const parentSkuResult = await SellerInventorySku.findAll({
       where: whereCondition,
-      include: [{
-        model: ProductWeblink,
-        as: 'ProductWeblink',
-        required: false, // LEFT JOIN
-        attributes: ['weblink', 'status', 'notice']
-      }],
+      attributes: ['parent_sku'],
+      group: ['parent_sku'],
       order: [[sort_by, sort_order.toUpperCase()]],
       limit: parseInt(limit),
       offset: offset
+    });
+    
+    // 2. 获取母SKU总数（用于分页器）
+    const parentSkuCountResult = await SellerInventorySku.findAll({
+      where: whereCondition,
+      attributes: ['parent_sku'],
+      group: ['parent_sku']
+    });
+    const parentSkuCount = parentSkuCountResult.length;
+    
+    // 3. 获取这些母SKU对应的所有子SKU数据
+    const parentSkus = parentSkuResult.map(item => item.parent_sku);
+    const skuData = await SellerInventorySku.findAll({
+      where: {
+        ...whereCondition,
+        parent_sku: { [Op.in]: parentSkus }
+      },
+      include: [{
+        model: ProductWeblink,
+        as: 'ProductWeblink',
+        required: false,
+        attributes: ['weblink', 'status', 'notice']
+      }],
+      order: [[sort_by, sort_order.toUpperCase()]]
     });
 
     // 获取所有相关的child_sku列表 (排除null值)
@@ -284,14 +306,14 @@ router.get('/', async (req, res) => {
       code: 0,
       message: '查询成功',
       data: {
-        total: count,
+        total: parentSkuCount, // 使用母SKU总数
         current: parseInt(page),
         pageSize: parseInt(limit),
         records: filteredResult,
         countryList: countryList.sort(), // 按字母顺序排序
         siteList, // 保留原有字段以兼容性
         summary: {
-          totalSkus: count,
+          totalSkus: parentSkuCount, // 使用母SKU总数
           listedSkus: result.filter(r => r.listingStatus === 'listed').length,
           unlistedSkus: result.filter(r => r.listingStatus === 'unlisted').length,
           partialSkus: result.filter(r => r.listingStatus === 'partial').length

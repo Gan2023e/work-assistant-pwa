@@ -116,7 +116,8 @@ const Listings: React.FC = () => {
       
       if (result.code === 0) {
         setListings(result.data.records);
-        setTotal(result.data.total);
+        setTotal(result.data.total); // 使用后端返回的母SKU总数
+        
         setSiteList(result.data.siteList);
         setCountryList(result.data.countryList || []);
         
@@ -1135,7 +1136,7 @@ const Listings: React.FC = () => {
             showSizeChanger
             showQuickJumper
             showTotal={(total, range) =>
-              `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+              `第 ${range[0]}-${range[1]} 个母SKU，共 ${total} 个母SKU`
             }
             pageSizeOptions={['20', '50', '100', '500']}
             defaultPageSize={50}
