@@ -377,99 +377,137 @@ const Listings: React.FC = () => {
   const handleRowSelection = {
     selectedRowKeys,
     onChange: (newSelectedRowKeys: any[], newSelectedRows: any[]) => {
-      // 这个方法主要由Ant Design内部调用，我们在onSelect和onSelectAll中处理具体逻辑
-      // 这里只是确保状态同步
-      const hierarchicalData = getHierarchicalData();
+      // 不过滤keys，让Antd正确管理选择状态
+      setSelectedRowKeys(newSelectedRowKeys);
       
-      // 计算实际应该选中的keys（包括母SKU的联动状态）
-      const finalSelectedKeys = calculateFinalSelectedKeys(newSelectedRowKeys, hierarchicalData);
-      
-      // 提取子SKU记录用于外部使用
-      const selectedChildRows = hierarchicalData
-        .filter(row => !row.isParentRow && finalSelectedKeys.includes(row.key!))
-        .map(row => row as ParentSkuData);
-      
-      setSelectedRowKeys(finalSelectedKeys);
-      setSelectedRows(selectedChildRows);
+      // 但是在selectedRows中只保存子SKU数据，用于业务逻辑
+      const childRows = newSelectedRows.filter(row => row && !row.isParentRow);
+      setSelectedRows(childRows);
     },
     onSelect: (record: ExpandedParentSkuData, selected: boolean) => {
-      const hierarchicalData = getHierarchicalData();
+      const key = record.key!;
       
       if (record.isParentRow) {
         // 选择母SKU时，联动选择所有子SKU
         const childKeys = record.childSkus?.map(child => child.skuid || `child-${child.child_sku}`).filter(Boolean) || [];
-        const parentKey = record.key!;
-        
-        let newSelectedKeys: string[];
         
         if (selected) {
-          // 选中母SKU：添加母SKU key和所有子SKU keys
-          newSelectedKeys = Array.from(new Set([...selectedRowKeys, parentKey, ...childKeys]));
+          // 选中母SKU：先展开以显示子SKU，然后添加所有keys
+          const parentSkuKey = `parent-${record.parent_sku}`;
+          if (!expandedRowKeys.includes(parentSkuKey)) {
+            setExpandedRowKeys([...expandedRowKeys, parentSkuKey]);
+          }
+          
+          // 添加母SKU key和所有子SKU keys
+          const newKeys = Array.from(new Set([...selectedRowKeys, key, ...childKeys]));
+          const newChildRows = [...selectedRows];
+          
+          // 添加所有子SKU到selectedRows
+          record.childSkus?.forEach(childSku => {
+            const childKey = childSku.skuid || `child-${childSku.child_sku}`;
+            if (!newChildRows.some(row => (row.skuid || `child-${row.child_sku}`) === childKey)) {
+              newChildRows.push(childSku);
+            }
+          });
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
         } else {
           // 取消选中母SKU：移除母SKU key和所有子SKU keys
-          newSelectedKeys = selectedRowKeys.filter(key => key !== parentKey && !childKeys.includes(key));
+          const keysToRemove = [key, ...childKeys];
+          const newKeys = selectedRowKeys.filter(k => !keysToRemove.includes(k));
+          const newChildRows = selectedRows.filter(row => {
+            const rowKey = row.skuid || `child-${row.child_sku}`;
+            return !childKeys.includes(rowKey);
+          });
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
         }
-        
-        // 提取子SKU记录
-        const selectedChildRows = hierarchicalData
-          .filter(row => !row.isParentRow && newSelectedKeys.includes(row.key!))
-          .map(row => row as ParentSkuData);
-        
-        setSelectedRowKeys(newSelectedKeys);
-        setSelectedRows(selectedChildRows);
       } else {
-        // 选择子SKU时，检查是否需要联动母SKU
-        const childKey = record.key!;
-        let newSelectedKeys: string[];
+        // 选择子SKU时，需要检查是否影响母SKU状态
+        const hierarchicalData = getHierarchicalData();
+        const parentRow = hierarchicalData.find(row => 
+          row.isParentRow && row.childSkus?.some(child => 
+            (child.skuid || `child-${child.child_sku}`) === key
+          )
+        );
         
         if (selected) {
           // 选中子SKU
-          newSelectedKeys = [...selectedRowKeys, childKey];
+          const newKeys = [...selectedRowKeys, key];
+          const newChildRows = [...selectedRows, record];
+          
+          // 检查是否所有同级子SKU都被选中，如果是则也选中母SKU
+          if (parentRow) {
+            const allChildKeys = parentRow.childSkus?.map(child => 
+              child.skuid || `child-${child.child_sku}`
+            ).filter(Boolean) || [];
+            
+            const selectedChildKeys = newKeys.filter(k => allChildKeys.includes(k));
+            if (selectedChildKeys.length === allChildKeys.length) {
+              newKeys.push(parentRow.key!);
+            }
+          }
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
         } else {
           // 取消选中子SKU
-          newSelectedKeys = selectedRowKeys.filter(key => key !== childKey);
+          const newKeys = selectedRowKeys.filter(k => k !== key);
+          const newChildRows = selectedRows.filter(row => (row.skuid || `child-${row.child_sku}`) !== key);
+          
+          // 如果取消选中子SKU，确保母SKU也被取消选中
+          if (parentRow && newKeys.includes(parentRow.key!)) {
+            const parentIndex = newKeys.indexOf(parentRow.key!);
+            newKeys.splice(parentIndex, 1);
+          }
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
         }
-        
-        // 检查母SKU状态并更新
-        const finalKeys = calculateFinalSelectedKeys(newSelectedKeys, hierarchicalData);
-        
-        // 提取子SKU记录
-        const selectedChildRows = hierarchicalData
-          .filter(row => !row.isParentRow && finalKeys.includes(row.key!))
-          .map(row => row as ParentSkuData);
-        
-        setSelectedRowKeys(finalKeys);
-        setSelectedRows(selectedChildRows);
       }
     },
     onSelectAll: (selected: boolean, selectedRows: ExpandedParentSkuData[], changeRows: ExpandedParentSkuData[]) => {
       if (selected) {
-        // 全选：获取所有行的keys（包括母SKU和子SKU）
+        // 全选：首先展开所有母SKU，然后选择所有子SKU
         const hierarchicalData = getHierarchicalData();
+        const allParentKeys: string[] = [];
         const allKeys: string[] = [];
+        const allChildRows: ParentSkuData[] = [];
         
+        // 收集所有母SKU和子SKU
         hierarchicalData.forEach(row => {
-          if (row.key) {
-            allKeys.push(row.key);
-          }
-          // 如果是母SKU，还要添加其所有子SKU的keys
-          if (row.isParentRow && row.childSkus) {
-            row.childSkus.forEach(child => {
-              const childKey = child.skuid || `child-${child.child_sku}`;
-              if (childKey && !allKeys.includes(childKey)) {
-                allKeys.push(childKey);
-              }
-            });
+          if (row.isParentRow) {
+            const parentKey = `parent-${row.parent_sku}`;
+            allParentKeys.push(parentKey);
+            allKeys.push(row.key!);
+            
+            // 添加所有子SKU
+            if (row.childSkus) {
+              row.childSkus.forEach(child => {
+                const childKey = child.skuid || `child-${child.child_sku}`;
+                if (childKey && !allKeys.includes(childKey)) {
+                  allKeys.push(childKey);
+                  allChildRows.push(child);
+                }
+              });
+            }
+          } else if (!row.isParentRow) {
+            allKeys.push(row.key!);
+            allChildRows.push(row);
           }
         });
         
-        // 提取子SKU记录
-        const selectedChildRows = hierarchicalData
-          .filter(row => !row.isParentRow)
-          .map(row => row as ParentSkuData);
+        // 展开所有母SKU以确保子SKU可见
+        const uniqueExpandedKeys = Array.from(new Set([...expandedRowKeys, ...allParentKeys]));
+        setExpandedRowKeys(uniqueExpandedKeys);
         
-        setSelectedRowKeys(allKeys);
-        setSelectedRows(selectedChildRows);
+        // 延迟设置选择状态，确保表格数据源先更新
+        setTimeout(() => {
+          setSelectedRowKeys(allKeys);
+          setSelectedRows(allChildRows);
+        }, 0);
       } else {
         // 取消全选
         setSelectedRowKeys([]);
@@ -477,38 +515,25 @@ const Listings: React.FC = () => {
       }
     },
     getCheckboxProps: (record: ExpandedParentSkuData) => {
-      // 简化getCheckboxProps，主要状态由selectedRowKeys控制
-      return {};
-    },
-  };
-
-  // 计算最终应该选中的keys（包括母SKU联动逻辑）
-  const calculateFinalSelectedKeys = (currentSelectedKeys: string[], hierarchicalData: ExpandedParentSkuData[]): string[] => {
-    const finalKeys = [...currentSelectedKeys];
-    
-    // 检查每个母SKU是否应该被选中
-    hierarchicalData.forEach(row => {
-      if (row.isParentRow) {
-        const parentKey = row.key!;
-        const childKeys = row.childSkus?.map(child => child.skuid || `child-${child.child_sku}`).filter(Boolean) || [];
-        const selectedChildKeys = childKeys.filter(key => finalKeys.includes(key));
+      const isSelected = selectedRowKeys.includes(record.key!);
+      
+      if (record.isParentRow) {
+        // 母SKU复选框状态：根据子SKU选择情况决定
+        const childKeys = record.childSkus?.map(child => child.skuid || `child-${child.child_sku}`).filter(Boolean) || [];
+        const selectedChildKeys = selectedRowKeys.filter(key => childKeys.includes(key));
         
-        if (selectedChildKeys.length === childKeys.length && childKeys.length > 0) {
-          // 所有子SKU都被选中，母SKU也应该被选中
-          if (!finalKeys.includes(parentKey)) {
-            finalKeys.push(parentKey);
-          }
+        if (selectedChildKeys.length === 0) {
+          return { checked: false, indeterminate: false };
+        } else if (selectedChildKeys.length === childKeys.length) {
+          return { checked: true, indeterminate: false };
         } else {
-          // 不是所有子SKU都被选中，母SKU不应该被选中
-          const index = finalKeys.indexOf(parentKey);
-          if (index > -1) {
-            finalKeys.splice(index, 1);
-          }
+          return { checked: false, indeterminate: true };
         }
       }
-    });
-    
-    return finalKeys;
+      
+      // 子SKU复选框状态：直接根据selectedRowKeys判断
+      return { checked: isSelected };
+    },
   };
 
   // 数据一致性检查
