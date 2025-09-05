@@ -392,13 +392,15 @@ const Listings: React.FC = () => {
         const childKeys = record.childSkus?.map(child => child.skuid || `child-${child.child_sku}`).filter(Boolean) || [];
         
         if (selected) {
-          // 选中母SKU：先展开以显示子SKU，然后添加所有keys
+          // 选中母SKU：先展开以显示子SKU，然后延迟设置选择状态
           const parentSkuKey = `parent-${record.parent_sku}`;
-          if (!expandedRowKeys.includes(parentSkuKey)) {
+          const needExpand = !expandedRowKeys.includes(parentSkuKey);
+          
+          if (needExpand) {
             setExpandedRowKeys([...expandedRowKeys, parentSkuKey]);
           }
           
-          // 添加母SKU key和所有子SKU keys
+          // 准备选择状态数据
           const newKeys = Array.from(new Set([...selectedRowKeys, key, ...childKeys]));
           const newChildRows = [...selectedRows];
           
@@ -410,8 +412,17 @@ const Listings: React.FC = () => {
             }
           });
           
-          setSelectedRowKeys(newKeys);
-          setSelectedRows(newChildRows);
+          if (needExpand) {
+            // 如果需要展开，延迟设置选择状态以确保表格先渲染
+            setTimeout(() => {
+              setSelectedRowKeys(newKeys);
+              setSelectedRows(newChildRows);
+            }, 50);
+          } else {
+            // 如果已经展开，立即设置选择状态
+            setSelectedRowKeys(newKeys);
+            setSelectedRows(newChildRows);
+          }
         } else {
           // 取消选中母SKU：移除母SKU key和所有子SKU keys
           const keysToRemove = [key, ...childKeys];
