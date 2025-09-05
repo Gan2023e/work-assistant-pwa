@@ -286,21 +286,33 @@ router.post('/search', async (req, res) => {
 // 批量更新状态
 router.post('/batch-update-status', async (req, res) => {
   try {
-    const { ids, status } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: '请选择要更新的记录' });
+    const { ids, parent_skus, status } = req.body;
+    
+    // 支持按id或parent_sku更新
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      await ProductWeblink.update(
+        { status },
+        {
+          where: {
+            id: { [Op.in]: ids }
+          }
+        }
+      );
+    } else if (parent_skus && Array.isArray(parent_skus) && parent_skus.length > 0) {
+      await ProductWeblink.update(
+        { status },
+        {
+          where: {
+            parent_sku: { [Op.in]: parent_skus }
+          }
+        }
+      );
+    } else {
+      return res.status(400).json({ message: '请提供要更新的记录ID或母SKU' });
     }
 
-    await ProductWeblink.update(
-      { status },
-      {
-        where: {
-          id: { [Op.in]: ids }
-        }
-      }
-    );
-
-    res.json({ message: '批量更新成功' });
+    const updateCount = parent_skus?.length || ids?.length;
+    res.json({ message: `批量更新成功，共更新了 ${updateCount} 条记录` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: '服务器错误' });

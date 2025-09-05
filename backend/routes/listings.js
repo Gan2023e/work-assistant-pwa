@@ -770,6 +770,7 @@ router.get('/data-consistency-check', async (req, res) => {
       FROM product_weblink pw
       LEFT JOIN sellerinventory_sku sku ON pw.parent_sku = sku.parent_sku
       WHERE sku.parent_sku IS NULL
+        AND pw.status != '新品一审'
     `;
 
     const [onlyInSku] = await sequelize.query(onlyInSkuQuery);

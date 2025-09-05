@@ -90,6 +90,8 @@ const Listings: React.FC = () => {
   
   // 数据一致性检查中的复选框状态
   const [selectedOrphanRows, setSelectedOrphanRows] = useState<string[]>([]);
+  const [statusUpdateValue, setStatusUpdateValue] = useState<string>('');
+  const [batchUpdateLoading, setBatchUpdateLoading] = useState(false);
   
   // 弹窗状态
   const [addMappingVisible, setAddMappingVisible] = useState(false);
@@ -802,6 +804,55 @@ const Listings: React.FC = () => {
         window.open(link, '_blank');
       });
       message.success(`已打开 ${linksToOpen.length} 个链接`);
+    }
+  };
+  
+  // 批量状态更新
+  const handleBatchStatusUpdate = async () => {
+    if (!statusUpdateValue || selectedOrphanRows.length === 0) {
+      message.warning('请选择状态和记录');
+      return;
+    }
+
+    setBatchUpdateLoading(true);
+    try {
+      // 获取选中记录的详细信息
+      const selectedRecords = consistencyData?.inconsistentData.missingSku
+        .filter((item: any) => selectedOrphanRows.includes(item.parent_sku));
+      
+      if (!selectedRecords || selectedRecords.length === 0) {
+        message.error('未找到选中的记录');
+        return;
+      }
+
+      // 调用批量更新API
+      const response = await fetch(`${API_BASE_URL}/api/product-weblink/batch-update-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parent_skus: selectedOrphanRows,
+          status: statusUpdateValue,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        message.success(`成功更新 ${selectedOrphanRows.length} 条记录的状态为：${statusUpdateValue}`);
+        setSelectedOrphanRows([]);
+        setStatusUpdateValue('');
+        // 重新执行一致性检查以刷新数据
+        handleConsistencyCheck();
+      } else {
+        message.error(result.message || '批量更新失败');
+      }
+    } catch (error) {
+      console.error('批量状态更新失败:', error);
+      message.error('批量更新失败');
+    } finally {
+      setBatchUpdateLoading(false);
     }
   };
   
@@ -1595,6 +1646,7 @@ const Listings: React.FC = () => {
         onCancel={() => {
           setConsistencyCheckVisible(false);
           setSelectedOrphanRows([]); // 关闭弹窗时清空选择
+          setStatusUpdateValue(''); // 关闭弹窗时清空状态选择
         }}
         footer={null}
         width={1200}
@@ -1644,8 +1696,18 @@ const Listings: React.FC = () => {
                   rowKey="parent_sku"
                   pagination={{ pageSize: 50 }}
                   columns={[
-                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku' },
-                    { title: '子SKU数量', dataIndex: 'sku_count', key: 'sku_count' }
+                    { 
+                      title: '母SKU', 
+                      dataIndex: 'parent_sku', 
+                      key: 'parent_sku',
+                      align: 'center' as const
+                    },
+                    { 
+                      title: '子SKU数量', 
+                      dataIndex: 'sku_count', 
+                      key: 'sku_count',
+                      align: 'center' as const
+                    }
                   ]}
                 />
               </Card>
@@ -1657,6 +1719,32 @@ const Listings: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span>这些产品链接没有对应的SKU记录</span>
                   <Space>
+                    <Select
+                      size="small"
+                      style={{ width: 120 }}
+                      placeholder="选择状态"
+                      value={statusUpdateValue}
+                      onChange={setStatusUpdateValue}
+                      disabled={selectedOrphanRows.length === 0}
+                    >
+                      <Select.Option value="待P图">待P图</Select.Option>
+                      <Select.Option value="待上传">待上传</Select.Option>
+                      <Select.Option value="待审核">待审核</Select.Option>
+                      <Select.Option value="新品一审">新品一审</Select.Option>
+                      <Select.Option value="已上线">已上线</Select.Option>
+                      <Select.Option value="已删除">已删除</Select.Option>
+                      <Select.Option value="侵权删除">侵权删除</Select.Option>
+                    </Select>
+                    <Button 
+                      size="small" 
+                      type="primary"
+                      ghost
+                      loading={batchUpdateLoading}
+                      disabled={selectedOrphanRows.length === 0 || !statusUpdateValue}
+                      onClick={handleBatchStatusUpdate}
+                    >
+                      批量更新状态 ({selectedOrphanRows.length})
+                    </Button>
                     <Button 
                       size="small" 
                       type="primary"
@@ -1691,13 +1779,27 @@ const Listings: React.FC = () => {
                     },
                   }}
                   columns={[
-                    { title: '母SKU', dataIndex: 'parent_sku', key: 'parent_sku', width: 120 },
-                    { title: '状态', dataIndex: 'status', key: 'status', width: 100, render: (status: string) => <Tag>{status}</Tag> },
+                    { 
+                      title: '母SKU', 
+                      dataIndex: 'parent_sku', 
+                      key: 'parent_sku', 
+                      width: 120,
+                      align: 'center' as const
+                    },
+                    { 
+                      title: '状态', 
+                      dataIndex: 'status', 
+                      key: 'status', 
+                      width: 100, 
+                      align: 'center' as const,
+                      render: (status: string) => <Tag>{status}</Tag> 
+                    },
                     { 
                       title: '产品链接', 
                       dataIndex: 'weblink', 
                       key: 'weblink',
                       width: 300,
+                      align: 'center' as const,
                       render: (weblink: string) => weblink ? (
                         <a href={weblink} target="_blank" rel="noopener noreferrer">
                           {weblink.length > 60 ? `${weblink.substring(0, 60)}...` : weblink}
@@ -1709,6 +1811,7 @@ const Listings: React.FC = () => {
                       dataIndex: 'notice',
                       key: 'notice',
                       width: 200,
+                      align: 'center' as const,
                       render: (notice: string) => notice || '-'
                     }
                   ]}
