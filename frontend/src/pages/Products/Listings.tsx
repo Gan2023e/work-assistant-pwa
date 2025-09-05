@@ -305,55 +305,150 @@ const Listings: React.FC = () => {
   };
 
   // 批量删除SKU记录
-  // 生成删除资料表的函数
-  const generateDeleteDataSheet = () => {
-    const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
-    const hierarchicalData = getHierarchicalData();
-    
-    // 收集选中的SKU数据
-    const selectedSkuData: any[] = [];
-    
-    hierarchicalData.forEach(row => {
-      if (selectedRowKeys.includes(row.key!)) {
-        if (row.isParentRow) {
-          // 母SKU：添加母SKU记录
-          selectedSkuData.push({
-            item_sku: row.parent_sku,
-            update_delete: 'Delete',
-            sku_type: 'Parent SKU'
+  // 生成删除资料表的函数 - 使用现有亚马逊资料模板
+  const generateDeleteDataSheet = async () => {
+    try {
+      const countryCodeMap = {
+        '美国': 'US',
+        '加拿大': 'CA', 
+        '英国': 'UK',
+        '澳大利亚': 'AU',
+        '阿联酋': 'AE'
+      };
+      
+      const hierarchicalData = getHierarchicalData();
+      
+      // 收集选中的SKU数据
+      const selectedSkuData: any[] = [];
+      
+      hierarchicalData.forEach(row => {
+        if (selectedRowKeys.includes(row.key!)) {
+          if (row.isParentRow) {
+            // 母SKU：添加母SKU记录
+            selectedSkuData.push({
+              item_sku: row.parent_sku,
+              update_delete: 'Delete'
+            });
+          } else {
+            // 子SKU：添加子SKU记录
+            selectedSkuData.push({
+              item_sku: row.child_sku,
+              update_delete: 'Delete'
+            });
+          }
+        }
+      });
+      
+      if (selectedSkuData.length === 0) {
+        message.warning('没有选中要删除的SKU');
+        return;
+      }
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // 为每个国家生成资料表
+      for (const [countryName, countryCode] of Object.entries(countryCodeMap)) {
+        try {
+          // 1. 获取该国家的模板文件列表
+          const templateRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${countryCode}`);
+          const templateResult = await templateRes.json();
+          
+          if (!templateResult.data || templateResult.data.length === 0) {
+            console.warn(`${countryName} 没有找到亚马逊资料模板，跳过生成`);
+            errorCount++;
+            continue;
+          }
+          
+          // 使用第一个模板文件
+          const template = templateResult.data[0];
+          
+          // 2. 下载模板文件
+          const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(template.name)}`;
+          const fileRes = await fetch(downloadUrl);
+          
+          if (!fileRes.ok) {
+            throw new Error(`下载${countryName}模板失败: ${fileRes.statusText}`);
+          }
+          
+          const arrayBuffer = await fileRes.arrayBuffer();
+          
+          // 3. 使用ExcelJS处理Excel文件
+          const ExcelJS = await import('exceljs');
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(arrayBuffer);
+          
+          // 获取第一个工作表
+          const worksheet = workbook.worksheets[0];
+          
+          if (!worksheet) {
+            throw new Error(`${countryName}模板文件中没有找到工作表`);
+          }
+          
+          // 4. 从第4行开始填入数据
+          selectedSkuData.forEach((data, index) => {
+            const rowNumber = 4 + index; // 从第4行开始
+            const row = worksheet.getRow(rowNumber);
+            
+            // 查找item_sku列和update_delete列
+            let itemSkuCol = 1;
+            let updateDeleteCol = 2;
+            
+            // 尝试在前几列中找到正确的列
+            const headerRow = worksheet.getRow(1);
+            for (let col = 1; col <= 20; col++) {
+              const cellValue = headerRow.getCell(col).value?.toString()?.toLowerCase() || '';
+              if (cellValue.includes('item') && cellValue.includes('sku')) {
+                itemSkuCol = col;
+              }
+              if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
+                updateDeleteCol = col;
+              }
+            }
+            
+            // 填入数据
+            row.getCell(itemSkuCol).value = data.item_sku;
+            row.getCell(updateDeleteCol).value = data.update_delete;
+            
+            row.commit();
           });
-        } else {
-          // 子SKU：添加子SKU记录
-          selectedSkuData.push({
-            item_sku: row.child_sku,
-            update_delete: 'Delete',
-            sku_type: 'Child SKU'
+          
+          // 5. 生成新文件并下载
+          const buffer = await workbook.xlsx.writeBuffer();
+          const blob = new Blob([buffer], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
           });
+          
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.href = url;
+          link.download = `SKU删除资料表_${countryName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          
+          successCount++;
+          
+        } catch (error) {
+          console.error(`生成${countryName}删除资料表失败:`, error);
+          errorCount++;
         }
       }
-    });
-    
-    // 为每个国家生成单独的资料表
-    mainCountries.forEach(country => {
-      const csvContent = [
-        'item_sku,update_delete,sku_type',
-        ...selectedSkuData.map(item => 
-          `${item.item_sku},${item.update_delete},${item.sku_type}`
-        )
-      ].join('\n');
       
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.href = url;
-      link.download = `SKU删除资料表_${country}_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    });
-    
-    message.success(`已生成 ${mainCountries.length} 个国家的SKU删除资料表`);
+      // 显示结果
+      if (successCount > 0) {
+        message.success(`成功生成 ${successCount} 个国家的SKU删除资料表`);
+      }
+      
+      if (errorCount > 0) {
+        message.warning(`${errorCount} 个国家的资料表生成失败，请检查是否已上传对应的亚马逊资料模板`);
+      }
+      
+    } catch (error) {
+      console.error('生成删除资料表失败:', error);
+      message.error('生成删除资料表失败，请重试');
+    }
   };
 
   const handleBatchDelete = async () => {
@@ -418,7 +513,7 @@ const Listings: React.FC = () => {
         try {
           // 如果开启生成删除资料表，先生成资料表
           if (generateDataSheet) {
-            generateDeleteDataSheet();
+            await generateDeleteDataSheet();
           }
 
           const response = await fetch(`${API_BASE_URL}/api/listings/batch-delete`, {
