@@ -1,5 +1,0 @@
-[33mca29ff4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m 修改英国资料表生成功能中的age_range_description字段值从'5+ Years'改为'Child'
-[33m17bf34e[m[33m ([m[1;31morigin/main[m[33m)[m 更新CPC文件上传功能和生产环境测试
-[33m416a573[m 🐛 修复发票文件查看问题：优化HTTP响应头处理，解决中文文件名导致的协议冲突
-[33m4bda338[m 修复FBASKU价格获取：根据站点site过滤listings_sku记录
-[33mfea1333[m 添加SKU类型列到数据缺失处理表格，默认填写Local SKU
