@@ -427,6 +427,39 @@ const Listings: React.FC = () => {
         }
       }
     },
+    onSelectAll: (selected: boolean, selectedRows: ExpandedParentSkuData[], changeRows: ExpandedParentSkuData[]) => {
+      if (selected) {
+        // 全选：获取当前页面所有子SKU的key
+        const hierarchicalData = getHierarchicalData();
+        const allChildKeys: string[] = [];
+        const allChildRows: ParentSkuData[] = [];
+        
+        hierarchicalData.forEach(row => {
+          if (row.isParentRow && row.childSkus) {
+            row.childSkus.forEach(child => {
+              const childKey = child.skuid || `child-${child.child_sku}`;
+              if (childKey && !allChildKeys.includes(childKey)) {
+                allChildKeys.push(childKey);
+                allChildRows.push(child);
+              }
+            });
+          } else if (!row.isParentRow) {
+            const childKey = row.key!;
+            if (!allChildKeys.includes(childKey)) {
+              allChildKeys.push(childKey);
+              allChildRows.push(row);
+            }
+          }
+        });
+        
+        setSelectedRowKeys(allChildKeys);
+        setSelectedRows(allChildRows);
+      } else {
+        // 取消全选
+        setSelectedRowKeys([]);
+        setSelectedRows([]);
+      }
+    },
     getCheckboxProps: (record: ExpandedParentSkuData) => {
       if (record.isParentRow) {
         // 母SKU复选框状态
@@ -444,7 +477,7 @@ const Listings: React.FC = () => {
           return { checked: false, indeterminate: true };
         }
       }
-      return {};
+      return { checked: selectedRowKeys.includes(record.key!) };
     },
   };
 
