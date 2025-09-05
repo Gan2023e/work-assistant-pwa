@@ -30,7 +30,8 @@ import {
   CheckOutlined,
   CloseOutlined,
   DownOutlined,
-  RightOutlined
+  RightOutlined,
+  FileExcelOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import BatchImportModal from '../../components/BatchImportModal';
@@ -451,6 +452,25 @@ const Listings: React.FC = () => {
     }
   };
 
+  // 处理生成删除资料表按钮点击
+  const handleGenerateDeleteDataSheet = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要生成删除资料表的记录');
+      return;
+    }
+    
+    Modal.confirm({
+      title: '生成SKU删除资料表',
+      content: `确定要为选中的 ${selectedRowKeys.length} 条记录生成SKU删除资料表吗？将为每个国家生成对应的Excel文件。`,
+      icon: <FileExcelOutlined />,
+      okText: '生成',
+      cancelText: '取消',
+      onOk: async () => {
+        await generateDeleteDataSheet();
+      }
+    });
+  };
+
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要删除的记录');
@@ -458,14 +478,13 @@ const Listings: React.FC = () => {
     }
 
     let deleteParentSku = true; // 默认开启删除母SKU
-    let generateDataSheet = true; // 默认开启生成删除资料表
 
     const modalContent = (
       <div>
         <p style={{ marginBottom: 16 }}>确定要删除选中的 {selectedRowKeys.length} 条记录吗？此操作不可恢复。</p>
         
         {/* 删除母SKU开关 */}
-        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #e8e8e8', marginBottom: 16 }}>
+        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 500 }}>同时删除母SKU在product_weblink表中的记录</span>
             <Switch
@@ -482,25 +501,6 @@ const Listings: React.FC = () => {
             </div>
           </div>
         </div>
-        
-        {/* 生成删除资料表开关 */}
-        <div style={{ padding: '16px', backgroundColor: '#f0f9ff', borderRadius: '6px', border: '1px solid #bae6fd' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 500 }}>生成SKU删除资料表</span>
-            <Switch
-              defaultChecked={true}
-              onChange={(checked) => { generateDataSheet = checked; }}
-            />
-          </div>
-          <div style={{ fontSize: 12, color: '#666', lineHeight: 1.4 }}>
-            <div style={{ marginBottom: 4 }}>
-              <span style={{ color: '#0ea5e9' }}>• 开启：</span>为每个国家生成包含删除SKU信息的CSV资料表
-            </div>
-            <div>
-              <span style={{ color: '#94a3b8' }}>• 关闭：</span>仅删除记录，不生成资料表
-            </div>
-          </div>
-        </div>
       </div>
     );
 
@@ -511,11 +511,6 @@ const Listings: React.FC = () => {
       width: 480,
       onOk: async () => {
         try {
-          // 如果开启生成删除资料表，先生成资料表
-          if (generateDataSheet) {
-            await generateDeleteDataSheet();
-          }
-
           const response = await fetch(`${API_BASE_URL}/api/listings/batch-delete`, {
             method: 'DELETE',
             headers: {
@@ -1316,6 +1311,15 @@ const Listings: React.FC = () => {
             </Button>
             
             <Button
+              type="default"
+              icon={<FileExcelOutlined />}
+              onClick={handleGenerateDeleteDataSheet}
+              disabled={selectedRowKeys.length === 0}
+            >
+              生成删除资料表 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
+            </Button>
+            
+            <Button
               icon={<UploadOutlined />}
               onClick={() => setBatchImportVisible(true)}
             >
@@ -1718,4 +1722,4 @@ const Listings: React.FC = () => {
   );
 };
 
-export default Listings; 
+export default Listings;
