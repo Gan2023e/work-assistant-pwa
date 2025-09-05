@@ -36,6 +36,17 @@ export interface ParentSkuData {
   listingRate: number;
 }
 
+// 扩展数据类型以支持层级结构
+export interface ExpandedParentSkuData extends ParentSkuData {
+  isParentRow?: boolean;
+  childSkus?: ParentSkuData[];
+  colorCount?: number;
+  sizeCount?: number;
+  totalListedCount?: number;
+  totalSkuCount?: number;
+  key?: string;
+}
+
 // 数据一致性检查结果
 export interface DataConsistencyResult {
   statistics: {

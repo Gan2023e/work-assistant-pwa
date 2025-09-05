@@ -28,12 +28,15 @@ import {
   EyeOutlined,
   ReloadOutlined,
   CheckOutlined,
-  CloseOutlined
+  CloseOutlined,
+  DownOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import BatchImportModal from '../../components/BatchImportModal';
 import {
   ParentSkuData,
+  ExpandedParentSkuData,
   ListingsResponse,
   ListingsStatistics,
   ListingsQueryParams,
@@ -45,6 +48,8 @@ import './Listings.css';
 
 const { Search } = Input;
 const { Option } = Select;
+
+// 扩展数据类型定义已移至types文件中
 
 const Listings: React.FC = () => {
   // 状态管理
@@ -70,6 +75,9 @@ const Listings: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [selectedRows, setSelectedRows] = useState<ParentSkuData[]>([]);
 
+  // 展开状态管理
+  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
+
   // 产品状态筛选
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
   const [productStatusOptions, setProductStatusOptions] = useState<string[]>([]);
@@ -91,7 +99,7 @@ const Listings: React.FC = () => {
   
   // 表单实例
   const [addForm] = Form.useForm();
-  
+
   // 获取Listings数据
   const fetchListings = useCallback(async () => {
     setLoading(true);
@@ -340,7 +348,7 @@ const Listings: React.FC = () => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
-              skuids: selectedRowKeys,
+              skuids: selectedRowKeys.filter(key => !key.startsWith('parent-')),
               deleteParentSku: deleteParentSku 
             }),
           });
@@ -367,83 +375,76 @@ const Listings: React.FC = () => {
   // 处理行选择
   const handleRowSelection = {
     selectedRowKeys,
-    onChange: (newSelectedRowKeys: any[], newSelectedRows: ParentSkuData[]) => {
-      // 获取当前处理后的数据（与表格数据源一致）
-      const currentData = getProcessedData();
+    onChange: (newSelectedRowKeys: any[], newSelectedRows: any[]) => {
+      const childKeys: string[] = [];
+      const childRows: ParentSkuData[] = [];
       
-      // 检测新勾选的记录（相对于之前的选择）
-      const previousKeys = new Set(selectedRowKeys);
-      const newKeys = new Set(newSelectedRowKeys);
-      
-      // 找出这次新增选中的记录
-      const addedKeys = newSelectedRowKeys.filter(key => !previousKeys.has(key));
-      
-      if (addedKeys.length > 0) {
-        // 如果有新增选中的记录，需要自动选中同一母SKU下的所有记录
-        let finalSelectedKeys = [...newSelectedRowKeys];
-        
-        addedKeys.forEach(addedKey => {
-          // 找到被选中的记录
-          const selectedRecord = currentData.find(record => record.skuid === addedKey);
-          if (selectedRecord) {
-            // 找到同一母SKU下的所有记录
-            const siblingRecords = currentData.filter(record => 
-              record.parent_sku === selectedRecord.parent_sku
-            );
-            
-            // 将同一母SKU下的所有记录的skuid添加到选择列表中
-            siblingRecords.forEach(sibling => {
-              if (sibling.skuid !== null && sibling.skuid !== undefined && !finalSelectedKeys.includes(sibling.skuid)) {
-                finalSelectedKeys.push(sibling.skuid);
+      newSelectedRowKeys.forEach(key => {
+        if (key.startsWith('parent-')) {
+          // 如果选中的是母SKU，找到所有子SKU并加入选择
+          const parentSku = key.replace('parent-', '');
+          const hierarchicalData = getHierarchicalData();
+          const parentRow = hierarchicalData.find(item => item.key === key && item.isParentRow);
+          
+          if (parentRow && parentRow.childSkus) {
+            parentRow.childSkus.forEach(childSku => {
+              const childKey = childSku.skuid || `child-${childSku.child_sku}`;
+              if (!childKeys.includes(childKey)) {
+                childKeys.push(childKey);
+                childRows.push(childSku);
               }
             });
           }
-        });
+        } else {
+          // 如果选中的是子SKU，直接加入
+          if (!childKeys.includes(key)) {
+            childKeys.push(key);
+            const selectedRow = newSelectedRows.find(row => (row.skuid || `child-${row.child_sku}`) === key);
+            if (selectedRow) {
+              childRows.push(selectedRow);
+            }
+          }
+        }
+      });
+
+      setSelectedRowKeys(childKeys);
+      setSelectedRows(childRows);
+    },
+    onSelect: (record: ExpandedParentSkuData, selected: boolean) => {
+      const key = record.key!;
+      
+      if (record.isParentRow) {
+        // 选择母SKU时，选择/取消选择所有子SKU
+        const childKeys = record.childSkus?.map(child => child.skuid || `child-${child.child_sku}`).filter(Boolean) || [];
         
-        // 去重并更新选择状态
-        const uniqueKeys = Array.from(new Set(finalSelectedKeys));
-        const correspondingRows = currentData.filter(record => 
-          record.skuid !== null && record.skuid !== undefined && uniqueKeys.includes(record.skuid)
-        );
-        
-        setSelectedRowKeys(uniqueKeys);
-        setSelectedRows(correspondingRows);
+        if (selected) {
+          const newKeys = Array.from(new Set([...selectedRowKeys, ...childKeys]));
+          const newRows = [...selectedRows, ...(record.childSkus || [])];
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newRows);
+        } else {
+          const newKeys = selectedRowKeys.filter(k => !childKeys.includes(k));
+          const newRows = selectedRows.filter(row => {
+            const rowKey = row.skuid || `child-${row.child_sku}`;
+            return !childKeys.includes(rowKey);
+          });
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newRows);
+        }
       } else {
-        // 如果没有新增选中的记录（取消选择的情况），直接使用新的选择状态
-        setSelectedRowKeys(newSelectedRowKeys);
-        setSelectedRows(newSelectedRows);
+        // 选择子SKU的逻辑保持不变
+        if (selected) {
+          setSelectedRowKeys([...selectedRowKeys, key]);
+          setSelectedRows([...selectedRows, record]);
+        } else {
+          setSelectedRowKeys(selectedRowKeys.filter(k => k !== key));
+          setSelectedRows(selectedRows.filter(row => (row.skuid || `child-${row.child_sku}`) !== key));
+        }
       }
     },
-    onSelect: (record: ParentSkuData, selected: boolean) => {
-      if (selected) {
-        // 当选中一个记录时，自动选中同一母SKU下的所有记录
-        const currentData = getProcessedData();
-        const siblingRecords = currentData.filter(item => 
-          item.parent_sku === record.parent_sku
-        );
-        
-        // 收集同一母SKU下所有记录的skuid
-        const siblingKeys = siblingRecords
-          .map(sibling => sibling.skuid)
-          .filter((skuid): skuid is string => skuid !== null && skuid !== undefined);
-        
-        // 合并到现有选择中
-        const newSelectedKeys = Array.from(new Set([...selectedRowKeys, ...siblingKeys]));
-        const newSelectedRows = getProcessedData().filter(item => 
-          item.skuid !== null && item.skuid !== undefined && newSelectedKeys.includes(item.skuid)
-        );
-        
-        setSelectedRowKeys(newSelectedKeys);
-        setSelectedRows(newSelectedRows);
-      } else {
-        // 取消选择时，只移除当前记录
-        const newSelectedKeys = selectedRowKeys.filter(key => key !== record.skuid);
-        const newSelectedRows = selectedRows.filter(row => row.skuid !== record.skuid);
-        
-        setSelectedRowKeys(newSelectedKeys);
-        setSelectedRows(newSelectedRows);
-      }
-    },
+    getCheckboxProps: (record: ExpandedParentSkuData) => ({
+      // 所有行都可选择
+    }),
   };
 
   // 数据一致性检查
@@ -565,44 +566,177 @@ const Listings: React.FC = () => {
     return 'low';
   };
 
-  // 渲染国家状态内容
-  const renderCountryStatus = (countryStatus: Record<string, any>, childSku: string, country: string) => {
-    // 安全检查：确保 countryStatus 存在
-    if (!countryStatus) {
-      return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
+  // 计算母SKU的汇总数据
+  const calculateParentSkuSummary = (parentSku: string, childSkus: ParentSkuData[]) => {
+    const colors = new Set(childSkus.map(sku => sku.sellercolorname).filter(Boolean));
+    const sizes = new Set(childSkus.map(sku => sku.sellersizename).filter(Boolean));
+    
+    let totalListedCount = 0;
+    let totalCountries = 0;
+    let totalSkuCount = childSkus.length;
+    
+    // 汇总各国上架情况
+    const countrySummary: Record<string, { listedCount: number, totalCount: number }> = {};
+    const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
+    
+    mainCountries.forEach(country => {
+      countrySummary[country] = { listedCount: 0, totalCount: totalSkuCount };
+    });
+    
+    childSkus.forEach(sku => {
+      totalListedCount += sku.listedCount;
+      totalCountries = Math.max(totalCountries, sku.totalCountries);
+      
+      mainCountries.forEach(country => {
+        const status = sku.countryStatus[country];
+        if (status?.isListed && status.mappings.length > 0) {
+          countrySummary[country].listedCount++;
+        }
+      });
+    });
+
+    // 计算总上架进度
+    const averageListingRate = Math.round((totalListedCount / (childSkus.length * totalCountries)) * 100);
+
+    return {
+      colorCount: colors.size,
+      sizeCount: sizes.size,
+      totalListedCount,
+      totalCountries,
+      totalSkuCount,
+      countrySummary,
+      averageListingRate
+    };
+  };
+
+  // 获取层级化数据
+  const getHierarchicalData = (): ExpandedParentSkuData[] => {
+    // 先应用产品状态筛选
+    let filteredListings = listings;
+    if (productStatusFilter && productStatusFilter !== 'all') {
+      filteredListings = listings.filter(item => item.product_status === productStatusFilter);
     }
+
+    const groupedData = new Map<string, ParentSkuData[]>();
     
-    const status = countryStatus[country];
-    
-    if (!status?.isListed || !status.mappings || status.mappings.length === 0) {
-      return (
-        <Button
-          type="text"
-          size="small"
-          style={{ color: '#999', fontSize: 12 }}
-          onClick={() => {
-            const skuData = listings.find(sku => sku.child_sku === childSku);
-            if (skuData) {
-              setSelectedSku(skuData);
+    // 按母SKU分组
+    filteredListings.forEach(item => {
+      const parentSku = item.parent_sku;
+      if (!groupedData.has(parentSku)) {
+        groupedData.set(parentSku, []);
+      }
+      groupedData.get(parentSku)!.push(item);
+    });
+
+    const hierarchicalData: ExpandedParentSkuData[] = [];
+
+    // 为每个母SKU创建层级结构
+    groupedData.forEach((childSkus, parentSku) => {
+      const firstChild = childSkus[0];
+      const summary = calculateParentSkuSummary(parentSku, childSkus);
+
+      // 创建母SKU行
+      const parentRow: ExpandedParentSkuData = {
+        ...firstChild,
+        key: `parent-${parentSku}`,
+        isParentRow: true,
+        childSkus,
+        colorCount: summary.colorCount,
+        sizeCount: summary.sizeCount,
+        totalListedCount: summary.totalListedCount,
+        totalSkuCount: summary.totalSkuCount,
+        listingRate: summary.averageListingRate,
+        listedCount: summary.totalListedCount,
+        countryStatus: {} // 母SKU行将特殊处理country status
+      };
+
+      // 为母SKU行设置国家状态汇总
+      const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
+      mainCountries.forEach(country => {
+        const countrySummaryData = summary.countrySummary[country];
+        parentRow.countryStatus[country] = {
+          isListed: countrySummaryData.listedCount > 0,
+          mappings: [{
+            amzSku: `${countrySummaryData.listedCount}/${countrySummaryData.totalCount}`,
+            site: 'summary',
+            skuType: 'summary',
+            updateTime: ''
+          }]
+        };
+      });
+
+      hierarchicalData.push(parentRow);
+
+      // 如果该母SKU已展开，添加子SKU行
+      if (expandedRowKeys.includes(`parent-${parentSku}`)) {
+        childSkus.forEach(childSku => {
+          hierarchicalData.push({
+            ...childSku,
+            key: childSku.skuid || `child-${childSku.child_sku}`
+          });
+        });
+      }
+    });
+
+    return hierarchicalData;
+  };
+
+  // 处理行展开/收缩
+  const handleExpand = (expanded: boolean, record: ExpandedParentSkuData) => {
+    const key = record.key!;
+    if (expanded) {
+      setExpandedRowKeys([...expandedRowKeys, key]);
+    } else {
+      setExpandedRowKeys(expandedRowKeys.filter(k => k !== key));
+    }
+  };
+
+  // 渲染国家状态内容
+  const renderCountryStatus = (record: ExpandedParentSkuData, country: string) => {
+    if (record.isParentRow) {
+      // 母SKU行显示汇总信息
+      const countryData = record.countryStatus[country];
+      if (countryData && countryData.mappings.length > 0) {
+        const summaryText = countryData.mappings[0].amzSku; // 格式：已上架/总数
+        return (
+          <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 'bold', color: '#1890ff' }}>
+            {summaryText}
+          </div>
+        );
+      }
+      return <span style={{ color: '#ccc', fontSize: 12 }}>0/{record.totalSkuCount}</span>;
+    } else {
+      // 子SKU行显示具体的Amazon SKU
+      const countryStatus = record.countryStatus;
+      if (!countryStatus) {
+        return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
+      }
+      
+      const status = countryStatus[country];
+      
+      if (!status?.isListed || !status.mappings || status.mappings.length === 0) {
+        return (
+          <Button
+            type="text"
+            size="small"
+            style={{ color: '#999', fontSize: 12 }}
+            onClick={() => {
+              setSelectedSku(record);
               addForm.setFieldsValue({
-                local_sku: childSku,
+                local_sku: record.child_sku,
                 country: country
               });
               setAddMappingVisible(true);
-            }
-          }}
-        >
-          + 添加
-        </Button>
-      );
-    }
+            }}
+          >
+            + 添加
+          </Button>
+        );
+      }
 
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {status.mappings.map((mapping: any, index: number) => {
-
-          
-          return (
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {status.mappings.map((mapping: any, index: number) => (
             <Tooltip
               key={`${mapping.amzSku}-${index}`}
               title={`站点: ${mapping.site} | 类型: ${mapping.skuType} | 更新时间: ${mapping.updateTime ? new Date(mapping.updateTime).toLocaleDateString() : '-'}`}
@@ -614,12 +748,7 @@ const Listings: React.FC = () => {
                 margin: 1,
                 cursor: 'pointer'
               }}
-              onClick={() => {
-                const targetSku = listings.find(sku => sku.child_sku === childSku);
-                if (targetSku) {
-                  handleViewSkuDetail(targetSku);
-                }
-              }}
+              onClick={() => handleViewSkuDetail(record)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span>{mapping.amzSku}</span>
@@ -640,98 +769,62 @@ const Listings: React.FC = () => {
                 )}
               </div>
             </Tag>
-          </Tooltip>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // 数据分组处理 - 计算母SKU的rowSpan
-  const getProcessedData = () => {
-    // 先应用产品状态筛选
-    let filteredListings = listings;
-    if (productStatusFilter && productStatusFilter !== 'all') {
-      filteredListings = listings.filter(item => item.product_status === productStatusFilter);
+            </Tooltip>
+          ))}
+        </div>
+      );
     }
-
-    const groupedData = new Map<string, ParentSkuData[]>();
-    
-    // 按母SKU分组
-    filteredListings.forEach(item => {
-      const parentSku = item.parent_sku;
-      if (!groupedData.has(parentSku)) {
-        groupedData.set(parentSku, []);
-      }
-      groupedData.get(parentSku)!.push(item);
-    });
-
-    // 为每个记录添加rowSpan信息
-    const processedData: (ParentSkuData & { 
-      parentSkuRowSpan?: number;
-      productStatusRowSpan?: number;
-      listingStatusRowSpan?: number;
-      listingProgressRowSpan?: number;
-    })[] = [];
-    
-    groupedData.forEach((items, parentSku) => {
-      items.forEach((item, index) => {
-        processedData.push({
-          ...item,
-          // 只有第一行显示合并单元格
-          parentSkuRowSpan: index === 0 ? items.length : 0,
-          productStatusRowSpan: index === 0 ? items.length : 0,
-          listingStatusRowSpan: index === 0 ? items.length : 0,
-          listingProgressRowSpan: index === 0 ? items.length : 0,
-        });
-      });
-    });
-
-    return processedData;
   };
 
-  // 表格列配置 - 固定5个主要国家列
+  // 表格列配置
   const getColumns = () => {
-    // 定义5个主要国家
     const mainCountries = ['美国', '加拿大', '英国', '澳大利亚', '阿联酋'];
     
     const baseColumns = [
       {
-        title: <div style={{ textAlign: 'center' }}>母SKU</div>,
-        dataIndex: 'parent_sku',
-        key: 'parent_sku',
-        width: 120,
+        title: <div style={{ textAlign: 'center' }}>SKU</div>,
+        dataIndex: 'sku',
+        key: 'sku',
+        width: 150,
         fixed: 'left' as const,
-        sorter: true,
-        align: 'center' as const,
-        render: (text: string, record: any) => {
-          const obj: any = {
-            children: (
-              <span
-                style={{ 
-                  color: record.weblink ? '#1890ff' : 'inherit',
-                  cursor: record.weblink ? 'pointer' : 'default',
-                  textDecoration: record.weblink ? 'underline' : 'none'
-                }}
-                onClick={() => {
-                  if (record.weblink) {
-                    window.open(record.weblink, '_blank');
-                  }
-                }}
-                title={record.weblink ? '点击打开产品链接' : '无产品链接'}
-              >
-                {text}
-              </span>
-            ),
-            props: {} as any,
-          };
-          
-          // 设置rowSpan
-          if (record.parentSkuRowSpan !== undefined) {
-            obj.props.rowSpan = record.parentSkuRowSpan;
+        render: (text: any, record: ExpandedParentSkuData) => {
+          if (record.isParentRow) {
+            // 母SKU行
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={expandedRowKeys.includes(record.key!) ? <DownOutlined /> : <RightOutlined />}
+                  onClick={() => handleExpand(!expandedRowKeys.includes(record.key!), record)}
+                  style={{ padding: 0, minWidth: 16, height: 16 }}
+                />
+                <span
+                  style={{ 
+                    color: record.weblink ? '#1890ff' : 'inherit',
+                    cursor: record.weblink ? 'pointer' : 'default',
+                    textDecoration: record.weblink ? 'underline' : 'none',
+                    fontWeight: 'bold'
+                  }}
+                  onClick={() => {
+                    if (record.weblink) {
+                      window.open(record.weblink, '_blank');
+                    }
+                  }}
+                  title={record.weblink ? '点击打开产品链接' : '无产品链接'}
+                >
+                  {record.parent_sku}
+                </span>
+              </div>
+            );
+          } else {
+            // 子SKU行
+            return (
+              <div style={{ paddingLeft: 24, fontSize: 12, color: '#666' }}>
+                {record.child_sku}
+              </div>
+            );
           }
-          
-          return obj;
         },
       },
       {
@@ -740,36 +833,28 @@ const Listings: React.FC = () => {
         key: 'product_status',
         width: 100,
         align: 'center' as const,
-        render: (status: string, record: any) => {
-          const obj: any = {
-            children: null,
-            props: {} as any,
-          };
+        render: (status: string, record: ExpandedParentSkuData) => {
+          if (!record.isParentRow) {
+            return null; // 子SKU行不显示状态
+          }
 
           if (!status) {
-            obj.children = <span style={{ color: '#999' }}>-</span>;
-          } else {
-            const statusConfig = {
-              '待审核': { color: 'orange', text: '待审核' },
-              '审核通过': { color: 'green', text: '审核通过' },
-              '审核拒绝': { color: 'red', text: '审核拒绝' },
-              '待处理': { color: 'blue', text: '待处理' },
-              '已处理': { color: 'success', text: '已处理' },
-              '暂停': { color: 'default', text: '暂停' }
-            };
-            
-            const config = statusConfig[status as keyof typeof statusConfig];
-            obj.children = config ? 
-              <Tag color={config.color}>{config.text}</Tag> : 
-              <Tag>{status}</Tag>;
+            return <span style={{ color: '#999' }}>-</span>;
           }
+
+          const statusConfig = {
+            '待审核': { color: 'orange', text: '待审核' },
+            '审核通过': { color: 'green', text: '审核通过' },
+            '审核拒绝': { color: 'red', text: '审核拒绝' },
+            '待处理': { color: 'blue', text: '待处理' },
+            '已处理': { color: 'success', text: '已处理' },
+            '暂停': { color: 'default', text: '暂停' }
+          };
           
-          // 设置rowSpan
-          if (record.productStatusRowSpan !== undefined) {
-            obj.props.rowSpan = record.productStatusRowSpan;
-          }
-          
-          return obj;
+          const config = statusConfig[status as keyof typeof statusConfig];
+          return config ? 
+            <Tag color={config.color}>{config.text}</Tag> : 
+            <Tag>{status}</Tag>;
         },
       },
       {
@@ -778,78 +863,62 @@ const Listings: React.FC = () => {
         key: 'listingStatus',
         width: 100,
         align: 'center' as const,
-        render: (status: string, record: any) => {
-          const obj: any = {
-            children: null,
-            props: {} as any,
-          };
-
-          const statusMap = {
-            'listed': { color: 'success', text: '全部上架' },
-            'partial': { color: 'warning', text: '部分上架' },
-            'unlisted': { color: 'default', text: '未上架' }
-          };
-          const config = statusMap[status as keyof typeof statusMap];
-          obj.children = <Tag color={config.color}>{config.text}</Tag>;
-          
-          // 设置rowSpan
-          if (record.listingStatusRowSpan !== undefined) {
-            obj.props.rowSpan = record.listingStatusRowSpan;
+        render: (status: string, record: ExpandedParentSkuData) => {
+          if (!record.isParentRow) {
+            // 子SKU行显示具体上架状态
+            const statusMap = {
+              'listed': { color: 'success', text: '全部上架' },
+              'partial': { color: 'warning', text: '部分上架' },
+              'unlisted': { color: 'default', text: '未上架' }
+            };
+            const config = statusMap[status as keyof typeof statusMap];
+            return <Tag color={config.color} style={{ fontSize: 11 }}>{config.text}</Tag>;
+          } else {
+            // 母SKU行显示汇总状态
+            const listedCount = record.childSkus?.filter(child => child.listingStatus === 'listed').length || 0;
+            const partialCount = record.childSkus?.filter(child => child.listingStatus === 'partial').length || 0;
+            const totalCount = record.totalSkuCount || 0;
+            
+            return (
+              <div style={{ fontSize: 12 }}>
+                <div style={{ color: '#52c41a' }}>全部上架: {listedCount}</div>
+                <div style={{ color: '#faad14' }}>部分上架: {partialCount}</div>
+                <div style={{ color: '#999' }}>未上架: {totalCount - listedCount - partialCount}</div>
+                <div style={{ fontWeight: 'bold', marginTop: 2 }}>总计: {totalCount}</div>
+              </div>
+            );
           }
-          
-          return obj;
         },
       },
-      {
-        title: <div style={{ textAlign: 'center' }}>子SKU</div>,
-        dataIndex: 'child_sku',
-        key: 'child_sku',
-        width: 120,
-        fixed: 'left' as const,
-        align: 'center' as const,
-      },
-      {
-        title: <div style={{ textAlign: 'center' }}>颜色</div>,
-        dataIndex: 'sellercolorname',
-        key: 'sellercolorname',
-        width: 80,
-        align: 'center' as const,
-        render: (text: string) => text || '-',
-      },
-      {
-        title: <div style={{ textAlign: 'center' }}>尺寸</div>,
-        dataIndex: 'sellersizename', 
-        key: 'sellersizename',
-        width: 80,
-        align: 'center' as const,
-        render: (text: string) => text || '-',
-      }
-    ];
-
-    // 固定生成5个主要国家列
-    const countryColumns = mainCountries.map(country => ({
-      title: <div style={{ textAlign: 'center' }}>{country}</div>,
-      key: `country-${country}`,
-      width: 120,
-      align: 'center' as const,
-      render: (text: any, record: ParentSkuData) => {
-        // 双重安全检查
-        if (!record || !record.countryStatus) {
-          return <span style={{ color: '#ccc', fontSize: 12 }}>-</span>;
-        }
-        return renderCountryStatus(record.countryStatus, record.child_sku || '', country);
-      },
-    }));
-
-    const endColumns = [
       {
         title: <div style={{ textAlign: 'center' }}>上架进度</div>,
         key: 'listingProgress',
         width: 150,
         align: 'center' as const,
-        render: (text: any, record: any) => {
-          const obj: any = {
-            children: (
+        render: (text: any, record: ExpandedParentSkuData) => {
+          if (!record.isParentRow) {
+            // 子SKU行显示具体进度
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Progress
+                  percent={record.listingRate}
+                  size="small"
+                  strokeColor={{
+                    '0%': '#f5222d',
+                    '50%': '#faad14',
+                    '100%': '#52c41a'
+                  }}
+                  showInfo={false}
+                  style={{ flex: 1, minWidth: 40 }}
+                />
+                <span style={{ fontSize: 11, minWidth: 40 }}>
+                  {record.listedCount}/{record.totalCountries}
+                </span>
+              </div>
+            );
+          } else {
+            // 母SKU行显示总体进度
+            return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Progress
                   percent={record.listingRate}
@@ -862,68 +931,113 @@ const Listings: React.FC = () => {
                   showInfo={false}
                   style={{ flex: 1, minWidth: 60 }}
                 />
-                <span style={{ fontSize: 12, minWidth: 60 }}>
-                  {record.listedCount}/{record.totalCountries} ({record.listingRate}%)
+                <span style={{ fontSize: 12, minWidth: 60, fontWeight: 'bold' }}>
+                  {record.listingRate}%
                 </span>
               </div>
-            ),
-            props: {} as any,
-          };
-          
-          // 设置rowSpan
-          if (record.listingProgressRowSpan !== undefined) {
-            obj.props.rowSpan = record.listingProgressRowSpan;
+            );
           }
-          
-          return obj;
         },
       },
+      {
+        title: <div style={{ textAlign: 'center' }}>颜色</div>,
+        dataIndex: 'sellercolorname',
+        key: 'sellercolorname',
+        width: 80,
+        align: 'center' as const,
+        render: (text: string, record: ExpandedParentSkuData) => {
+          if (record.isParentRow) {
+            return <div style={{ fontSize: 12, fontWeight: 'bold', color: '#1890ff' }}>
+              {record.colorCount} 种颜色
+            </div>;
+          }
+          return <span style={{ fontSize: 11 }}>{text || '-'}</span>;
+        },
+      },
+      {
+        title: <div style={{ textAlign: 'center' }}>尺寸</div>,
+        dataIndex: 'sellersizename', 
+        key: 'sellersizename',
+        width: 80,
+        align: 'center' as const,
+        render: (text: string, record: ExpandedParentSkuData) => {
+          if (record.isParentRow) {
+            return <div style={{ fontSize: 12, fontWeight: 'bold', color: '#1890ff' }}>
+              {record.sizeCount} 种尺寸
+            </div>;
+          }
+          return <span style={{ fontSize: 11 }}>{text || '-'}</span>;
+        },
+      }
+    ];
+
+    // 固定生成5个主要国家列
+    const countryColumns = mainCountries.map(country => ({
+      title: <div style={{ textAlign: 'center' }}>{country}</div>,
+      key: `country-${country}`,
+      width: 120,
+      align: 'center' as const,
+      render: (text: any, record: ExpandedParentSkuData) => {
+        return renderCountryStatus(record, country);
+      },
+    }));
+
+    const endColumns = [
       {
         title: <div style={{ textAlign: 'center' }}>操作</div>,
         key: 'actions',
         width: 120,
         fixed: 'right' as const,
         align: 'center' as const,
-        render: (text: any, record: ParentSkuData) => (
-          <Space size="small">
-            <Tooltip title="查看详情">
-              <Button
-                type="text"
-                icon={<EyeOutlined />}
-                onClick={() => handleViewSkuDetail(record)}
-              />
-            </Tooltip>
-            <Tooltip title="添加映射">
-              <Button
-                type="text"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  setSelectedSku(record);
-                  addForm.setFieldsValue({ local_sku: record.child_sku });
-                  setAddMappingVisible(true);
-                }}
-              />
-            </Tooltip>
-          </Space>
-        ),
+        render: (text: any, record: ExpandedParentSkuData) => {
+          if (record.isParentRow) {
+            return (
+              <Space size="small">
+                <Tooltip title="查看产品链接">
+                  <Button
+                    type="text"
+                    icon={<EyeOutlined />}
+                    disabled={!record.weblink}
+                    onClick={() => {
+                      if (record.weblink) {
+                        window.open(record.weblink, '_blank');
+                      }
+                    }}
+                  />
+                </Tooltip>
+              </Space>
+            );
+          } else {
+            return (
+              <Space size="small">
+                <Tooltip title="查看详情">
+                  <Button
+                    type="text"
+                    icon={<EyeOutlined />}
+                    onClick={() => handleViewSkuDetail(record)}
+                  />
+                </Tooltip>
+                <Tooltip title="添加映射">
+                  <Button
+                    type="text"
+                    icon={<PlusOutlined />}
+                    onClick={() => {
+                      setSelectedSku(record);
+                      addForm.setFieldsValue({ local_sku: record.child_sku });
+                      setAddMappingVisible(true);
+                    }}
+                  />
+                </Tooltip>
+              </Space>
+            );
+          }
+        },
       },
     ];
 
     return [...baseColumns, ...countryColumns, ...endColumns];
   };
   
-  // 组件加载时获取数据
-  useEffect(() => {
-    fetchListings();
-    fetchStatistics();
-  }, [fetchListings, fetchStatistics]);
-
-  // 监听产品状态筛选变化，自动刷新显示
-  useEffect(() => {
-    // 产品状态筛选变化时不需要重新请求数据，只是重新处理显示
-    // 因为getProcessedData()函数已经处理了筛选逻辑
-  }, [productStatusFilter]);
-
   // 表格变化处理
   const handleTableChange = (pagination: any, filters: any, sorter: any) => {
     const { field, order } = sorter;
@@ -936,6 +1050,17 @@ const Listings: React.FC = () => {
       }));
     }
   };
+
+  // 组件加载时获取数据
+  useEffect(() => {
+    fetchListings();
+    fetchStatistics();
+  }, [fetchListings, fetchStatistics]);
+
+  // 监听产品状态筛选变化，自动刷新显示
+  useEffect(() => {
+    // 产品状态筛选变化时不需要重新请求数据，只是重新处理显示
+  }, [productStatusFilter]);
 
   return (
     <div className="listings-page">
@@ -1061,17 +1186,20 @@ const Listings: React.FC = () => {
       <Card>
         <Table
           columns={getColumns()}
-          dataSource={getProcessedData()} // 使用处理后的数据支持合并单元格
+          dataSource={getHierarchicalData()}
           loading={loading}
           pagination={false}
           scroll={{ x: 1450 }}
-          rowKey="skuid"
-          rowSelection={handleRowSelection} // 添加行选择
+          rowKey="key"
+          rowSelection={handleRowSelection}
           onChange={handleTableChange}
-          sticky={{ offsetHeader: 64 }} // 固定表头
+          sticky={{ offsetHeader: 64 }}
           locale={{
             emptyText: <Empty description="暂无数据" />
           }}
+          rowClassName={(record: ExpandedParentSkuData) => 
+            record.isParentRow ? 'parent-row' : 'child-row'
+          }
         />
         
         {/* 分页器 */}
@@ -1090,7 +1218,7 @@ const Listings: React.FC = () => {
           />
         </div>
       </Card>
-      
+
       {/* 添加映射弹窗 */}
       <Modal
         title="添加SKU映射"
