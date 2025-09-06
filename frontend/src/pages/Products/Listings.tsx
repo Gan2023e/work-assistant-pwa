@@ -442,8 +442,8 @@ const Listings: React.FC = () => {
           // 查找名为"Template"的工作表
           console.log(`${countryName} - 📋 可用工作表:`, workbook.SheetNames);
           
-          let worksheet = null;
-          let sheetName = null;
+          let worksheet: any = null;
+          let sheetName: string | null = null;
           
           // 优先查找名为"Template"的工作表
           if (workbook.SheetNames.includes('Template')) {
