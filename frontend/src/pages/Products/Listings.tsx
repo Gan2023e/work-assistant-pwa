@@ -441,26 +441,26 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 查找item_sku列和update_delete列
+          // 4. 查找item_sku列和update_delete列（列名在第3行）
           let itemSkuCol = 'A'; // 默认A列
           let updateDeleteCol = 'B'; // 默认B列
           
-          // 遍历前3行寻找表头
-          console.log(`[${countryName}] 开始查找表头列...`);
-          for (let row = 1; row <= 3; row++) {
-            for (let col = 0; col < 20; col++) {
-              const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
-              const cellAddress = `${colLetter}${row}`;
-              const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
-              
-              if (cellValue.includes('item') && cellValue.includes('sku')) {
-                itemSkuCol = colLetter;
-                console.log(`[${countryName}] 找到item_sku列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
-              }
-              if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
-                updateDeleteCol = colLetter;
-                console.log(`[${countryName}] 找到update/delete列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
-              }
+          // 在第3行中查找表头
+          console.log(`[${countryName}] 在第3行查找表头列...`);
+          for (let col = 0; col < 20; col++) {
+            const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
+            const cellAddress = `${colLetter}3`; // 第3行
+            const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
+            
+            console.log(`[${countryName}] 第3行${colLetter}列值: "${worksheet[cellAddress]?.v}"`);
+            
+            if (cellValue.includes('item') && cellValue.includes('sku')) {
+              itemSkuCol = colLetter;
+              console.log(`[${countryName}] 找到item_sku列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
+            }
+            if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
+              updateDeleteCol = colLetter;
+              console.log(`[${countryName}] 找到update/delete列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
             }
           }
           

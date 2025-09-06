@@ -14,22 +14,27 @@ const alternativeImplementation = async (worksheet: any, selectedSkuData: any[],
     existingData.push([]);
   }
   
-  // 3. 查找列索引
+  // 3. 查找列索引（列名在第3行，数组索引为2）
   let itemSkuColIndex = 0; // 默认第0列
   let updateDeleteColIndex = 1; // 默认第1列
   
-  // 在前3行中查找表头
-  for (let row = 0; row < Math.min(3, existingData.length); row++) {
-    const rowData = existingData[row] || [];
-    for (let col = 0; col < rowData.length; col++) {
-      const cellValue = (rowData[col] || '').toString().toLowerCase();
+  // 在第3行（数组索引2）中查找表头
+  const headerRowIndex = 2; // 第3行的数组索引
+  if (existingData.length > headerRowIndex) {
+    const headerRow = existingData[headerRowIndex] || [];
+    console.log(`[${countryName}] 第3行表头数据:`, headerRow);
+    
+    for (let col = 0; col < headerRow.length; col++) {
+      const cellValue = (headerRow[col] || '').toString().toLowerCase();
+      console.log(`[${countryName}] 第3行第${col}列值: "${headerRow[col]}"`);
+      
       if (cellValue.includes('item') && cellValue.includes('sku')) {
         itemSkuColIndex = col;
-        console.log(`[${countryName}] 找到item_sku列索引: ${col} (值: ${rowData[col]})`);
+        console.log(`[${countryName}] 找到item_sku列索引: ${col} (值: ${headerRow[col]})`);
       }
       if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
         updateDeleteColIndex = col;
-        console.log(`[${countryName}] 找到update/delete列索引: ${col} (值: ${rowData[col]})`);
+        console.log(`[${countryName}] 找到update/delete列索引: ${col} (值: ${headerRow[col]})`);
       }
     }
   }
