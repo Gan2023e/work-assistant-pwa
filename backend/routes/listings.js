@@ -959,7 +959,7 @@ router.get('/sku-data', async (req, res) => {
         pw.status as product_status
       FROM listings_sku ls
       LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
-      LEFT JOIN seller_inventory_sku sis ON am.local_sku = sis.child_sku
+      LEFT JOIN sellerinventory_sku sis ON am.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       ${whereClause}
       ORDER BY ${sort_by === 'seller-sku' ? 'ls.`seller-sku`' : sort_by} ${sort_order}
@@ -975,7 +975,7 @@ router.get('/sku-data', async (req, res) => {
       SELECT COUNT(*) as total
       FROM listings_sku ls
       LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
-      LEFT JOIN seller_inventory_sku sis ON am.local_sku = sis.child_sku
+      LEFT JOIN sellerinventory_sku sis ON am.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       ${whereClause}
     `;
