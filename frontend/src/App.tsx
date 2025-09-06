@@ -12,7 +12,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/Auth/LoginPage';
 import HomePage from './pages/Home/HomePage';
 import Purchase from './pages/Products/PurchaseLink';
-import Listings from './pages/Products/Listings';
+import ListingsWithTabs from './pages/Products/ListingsWithTabs';
 
 import PurchaseInvoice from './pages/Products/PurchaseInvoice';
 import ShippingPage from './pages/Shipping/ShippingPage';
@@ -221,7 +221,7 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/products/listings" element={
             <ProtectedRoute>
-              <Listings />
+              <ListingsWithTabs />
             </ProtectedRoute>
           } />
 
