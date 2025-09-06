@@ -185,7 +185,6 @@ export interface ListingsSkuQueryParams {
   site?: string;
   fulfillment_channel?: string;
   status?: string;
-  country?: string;
   sort_by?: string;
   sort_order?: 'ASC' | 'DESC';
 }
@@ -199,15 +198,14 @@ export interface ListingsSkuResponse {
     current: number;
     pageSize: number;
     records: ListingsSkuData[];
-    siteList: string[];
-    countryList: string[];
+    siteList: Array<{site: string; country: string}>;
     fulfillmentChannelList: string[];
     statusList: string[];
     summary: {
       totalListings: number;
       activeListings: number;
       fbaListings: number;
-      fbmListings: number;
+      localShipmentListings: number;
     };
   };
 } 

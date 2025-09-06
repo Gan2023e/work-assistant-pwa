@@ -30,8 +30,7 @@ const ListingsSku: React.FC = () => {
   const [listingsSkuData, setListingsSkuData] = useState<ListingsSkuData[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
-  const [siteList, setSiteList] = useState<string[]>([]);
-  const [countryList, setCountryList] = useState<string[]>([]);
+  const [siteList, setSiteList] = useState<any[]>([]);
   const [fulfillmentChannelList, setFulfillmentChannelList] = useState<string[]>([]);
   const [statusList, setStatusList] = useState<string[]>([]);
   const [summary, setSummary] = useState<any>(null);
@@ -44,7 +43,6 @@ const ListingsSku: React.FC = () => {
     site: 'all',
     fulfillment_channel: 'all',
     status: 'all',
-    country: 'all',
     sort_by: 'seller-sku',
     sort_order: 'ASC'
   });
@@ -67,7 +65,6 @@ const ListingsSku: React.FC = () => {
         setListingsSkuData(result.data.records);
         setTotal(result.data.total);
         setSiteList(result.data.siteList);
-        setCountryList(result.data.countryList || []);
         setFulfillmentChannelList(result.data.fulfillmentChannelList || []);
         setStatusList(result.data.statusList || []);
         setSummary(result.data.summary);
@@ -97,7 +94,6 @@ const ListingsSku: React.FC = () => {
     const csvData = listingsSkuData.map(item => ({
       'Listing ID': item['listing-id'],
       'Seller SKU': item['seller-sku'],
-      '商品名称': item['item-name'],
       '本地SKU': item.local_sku || '',
       '母SKU': item.parent_sku || '',
       '子SKU': item.child_sku || '',
@@ -107,7 +103,6 @@ const ListingsSku: React.FC = () => {
       '履行渠道': item['fulfillment-channel'],
       'ASIN': item.asin1 || '',
       '状态': item.status,
-      '国家': item.country || '',
       '产品链接': item.weblink || '',
       '颜色': item.sellercolorname || '',
       '尺寸': item.sellersizename || ''
@@ -139,18 +134,7 @@ const ListingsSku: React.FC = () => {
         <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#1890ff' }}>{text}</span>
       ),
     },
-    {
-      title: '商品名称',
-      dataIndex: 'item-name',
-      key: 'item-name',
-      width: 300,
-      ellipsis: true,
-      render: (text: string) => (
-        <Tooltip title={text}>
-          <span style={{ fontSize: 12 }}>{text}</span>
-        </Tooltip>
-      ),
-    },
+
     {
       title: '本地SKU',
       dataIndex: 'local_sku',
@@ -224,15 +208,14 @@ const ListingsSku: React.FC = () => {
       width: 120,
       align: 'center' as const,
       render: (channel: string) => {
-        const channelConfig = {
-          'DEFAULT': { color: 'blue', text: 'FBA' },
-          'AMAZON_NA': { color: 'blue', text: 'FBA' },
-          'AMAZON_EU': { color: 'blue', text: 'FBA' },
-          'DEFAULT_FBM': { color: 'orange', text: 'FBM' },
-          'MERCHANT': { color: 'orange', text: 'FBM' }
-        };
-        const config = channelConfig[channel as keyof typeof channelConfig] || { color: 'default', text: channel || '-' };
-        return <Tag color={config.color} style={{ fontSize: 11 }}>{config.text}</Tag>;
+        // 显示原始的fulfillment-channel字段内容
+        let color = 'default';
+        if (channel?.includes('AMAZON')) {
+          color = 'blue'; // FBA渠道
+        } else if (channel === 'DEFAULT') {
+          color = 'orange'; // 本地发货
+        }
+        return <Tag color={color} style={{ fontSize: 11 }}>{channel || '-'}</Tag>;
       },
     },
     {
@@ -278,7 +261,7 @@ const ListingsSku: React.FC = () => {
       {/* 筛选条件 */}
       <div style={{ marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <Search
-          placeholder="搜索Seller SKU/商品名称/Listing ID/ASIN"
+          placeholder="搜索Seller SKU/Listing ID/ASIN"
           value={queryParams.search}
           onChange={(e) => updateQueryParams({ search: e.target.value })}
           onSearch={() => fetchListingsSkuData()}
@@ -292,8 +275,10 @@ const ListingsSku: React.FC = () => {
           style={{ width: 120 }}
         >
           <Option value="all">全部站点</Option>
-          {siteList.map(site => (
-            <Option key={site} value={site}>{site}</Option>
+          {siteList.map((siteItem: any) => (
+            <Option key={siteItem.site} value={siteItem.site}>
+              {siteItem.country}
+            </Option>
           ))}
         </Select>
         
@@ -306,7 +291,7 @@ const ListingsSku: React.FC = () => {
           <Option value="all">全部渠道</Option>
           {fulfillmentChannelList.map(channel => (
             <Option key={channel} value={channel}>
-              {channel === 'DEFAULT' || channel?.includes('AMAZON') ? 'FBA' : 'FBM'}
+              {channel}
             </Option>
           ))}
         </Select>
@@ -323,17 +308,7 @@ const ListingsSku: React.FC = () => {
           ))}
         </Select>
         
-        <Select
-          value={queryParams.country}
-          onChange={(value) => updateQueryParams({ country: value })}
-          placeholder="国家"
-          style={{ width: 120 }}
-        >
-          <Option value="all">全部国家</Option>
-          {countryList.map(country => (
-            <Option key={country} value={country}>{country}</Option>
-          ))}
-        </Select>
+
         
         <Button
           icon={<ReloadOutlined />}
@@ -367,8 +342,8 @@ const ListingsSku: React.FC = () => {
               <div style={{ fontSize: 14, color: '#666' }}>FBA Listing</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 'bold', color: '#fa8c16' }}>{summary.fbmListings}</div>
-              <div style={{ fontSize: 14, color: '#666' }}>FBM Listing</div>
+              <div style={{ fontSize: 24, fontWeight: 'bold', color: '#fa8c16' }}>{summary.localShipmentListings}</div>
+              <div style={{ fontSize: 14, color: '#666' }}>本地发货 Listing</div>
             </div>
           </div>
         </Card>

@@ -919,7 +919,13 @@ router.get('/sku-data', async (req, res) => {
       whereConditions.push(`site = '${site}'`);
     }
     if (fulfillment_channel && fulfillment_channel !== 'all') {
-      whereConditions.push(`\`fulfillment-channel\` = '${fulfillment_channel}'`);
+      if (fulfillment_channel === 'FBA') {
+        // FBA渠道：包含"AMAZON"的
+        whereConditions.push(`\`fulfillment-channel\` LIKE '%AMAZON%'`);
+      } else if (fulfillment_channel === '本地发货') {
+        // 本地发货：为"DEFAULT"的
+        whereConditions.push(`\`fulfillment-channel\` = 'DEFAULT'`);
+      }
     }
     if (status && status !== 'all') {
       whereConditions.push(`status = '${status}'`);
@@ -991,25 +997,46 @@ router.get('/sku-data', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
     
+    // 站点到中文国家名称的映射
+    const siteToCountryMap = {
+      'www.amazon.com': '美国',
+      'www.amazon.ca': '加拿大', 
+      'www.amazon.co.uk': '英国',
+      'www.amazon.com.au': '澳大利亚',
+      'www.amazon.ae': '阿联酋',
+      'www.amazon.de': '德国',
+      'www.amazon.fr': '法国',
+      'www.amazon.it': '意大利',
+      'www.amazon.es': '西班牙',
+      'www.amazon.nl': '荷兰',
+      'www.amazon.se': '瑞典',
+      'www.amazon.pl': '波兰'
+    };
+
     // 获取筛选选项
     const siteListQuery = `SELECT DISTINCT site FROM listings_sku WHERE site IS NOT NULL ORDER BY site`;
-    const fulfillmentChannelQuery = `SELECT DISTINCT \`fulfillment-channel\` FROM listings_sku WHERE \`fulfillment-channel\` IS NOT NULL ORDER BY \`fulfillment-channel\``;
     const statusQuery = `SELECT DISTINCT status FROM listings_sku WHERE status IS NOT NULL ORDER BY status`;
-    const countryQuery = `SELECT DISTINCT country FROM pbi_amzsku_sku WHERE country IS NOT NULL ORDER BY country`;
 
-    const [siteList, fulfillmentChannelList, statusList, countryList] = await Promise.all([
+    const [siteList, statusList] = await Promise.all([
       sequelize.query(siteListQuery, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(fulfillmentChannelQuery, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(statusQuery, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(countryQuery, { type: sequelize.QueryTypes.SELECT })
+      sequelize.query(statusQuery, { type: sequelize.QueryTypes.SELECT })
     ]);
+
+    // 转换站点为中文国家名称
+    const siteListWithChinese = siteList.map(item => ({
+      site: item.site,
+      country: siteToCountryMap[item.site] || item.site
+    }));
+
+    // 渠道筛选选项（固定为FBA和本地发货）
+    const fulfillmentChannelList = ['FBA', '本地发货'];
 
     // 计算统计数据
     const summary = {
       totalListings: countResult.total,
       activeListings: processedRecords.filter(r => r.status === 'Active').length,
-      fbaListings: processedRecords.filter(r => r['fulfillment-channel']?.includes('DEFAULT') || r['fulfillment-channel']?.includes('AMAZON')).length,
-      fbmListings: processedRecords.filter(r => r['fulfillment-channel'] === 'DEFAULT_FBM' || r['fulfillment-channel'] === 'MERCHANT').length
+      fbaListings: processedRecords.filter(r => r['fulfillment-channel']?.includes('AMAZON')).length,
+      localShipmentListings: processedRecords.filter(r => r['fulfillment-channel'] === 'DEFAULT').length
     };
 
     res.json({
@@ -1020,9 +1047,8 @@ router.get('/sku-data', async (req, res) => {
         current: parseInt(page),
         pageSize: parseInt(limit),
         records: processedRecords,
-        siteList: siteList.map(item => item.site),
-        countryList: countryList.map(item => item.country),
-        fulfillmentChannelList: fulfillmentChannelList.map(item => item['fulfillment-channel']),
+        siteList: siteListWithChinese,
+        fulfillmentChannelList: fulfillmentChannelList,
         statusList: statusList.map(item => item.status),
         summary
       }
