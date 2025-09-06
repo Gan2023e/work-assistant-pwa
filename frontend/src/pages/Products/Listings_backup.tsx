@@ -447,66 +447,28 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 显示模板文件结构并查找列位置
-          console.log(`${countryName} - 📋 模板文件结构分析:`);
-          
-          // 显示前5行的完整内容
-          for (let row = 1; row <= 5; row++) {
-            let rowContent = [];
-            for (let col = 0; col < 10; col++) {
-              const colLetter = String.fromCharCode(65 + col);
-              const cellAddress = `${colLetter}${row}`;
-              const rawValue = worksheet[cellAddress]?.v;
-              if (rawValue !== undefined && rawValue !== null) {
-                rowContent.push(`${colLetter}: "${rawValue}"`);
-              }
-            }
-            if (rowContent.length > 0) {
-              console.log(`${countryName} - 第${row}行: ${rowContent.join(', ')}`);
-            }
-          }
-          
-          // 查找item_sku和update_delete列的精确位置 - 在前5行中搜索
+          // 4. 查找item_sku和update_delete列的精确位置 - 只在第3行精确匹配
           let itemSkuCol: string | null = null;
           let updateDeleteCol: string | null = null;
           
-          console.log(`${countryName} - 🔍 查找目标列名...`);
+          console.log(`${countryName} - 在第3行查找列名...`);
           
-          // 在前5行中搜索列名（保持原始大小写和多种可能的格式）
-          for (let row = 1; row <= 5; row++) {
-            for (let col = 0; col < 20; col++) {
-              const colLetter = String.fromCharCode(65 + col);
-              const cellAddress = `${colLetter}${row}`;
-              const rawValue = worksheet[cellAddress]?.v;
-              
-              if (rawValue !== undefined && rawValue !== null) {
-                const cellValue = rawValue.toString().trim();
-                const lowerValue = cellValue.toLowerCase();
-                
-                // 更宽泛的item_sku匹配
-                if (!itemSkuCol && (
-                  lowerValue === 'item_sku' || 
-                  lowerValue === 'item-sku' ||
-                  lowerValue === 'itemsku' ||
-                  lowerValue === 'seller_sku' ||
-                  lowerValue === 'seller-sku'
-                )) {
-                  itemSkuCol = colLetter;
-                  console.log(`${countryName} - ✅ 找到item_sku列: ${cellAddress} = "${cellValue}"`);
-                }
-                
-                // 更宽泛的update_delete匹配
-                if (!updateDeleteCol && (
-                  lowerValue === 'update_delete' || 
-                  lowerValue === 'update-delete' ||
-                  lowerValue === 'update delete' ||
-                  lowerValue === 'action' ||
-                  lowerValue === 'operation'
-                )) {
-                  updateDeleteCol = colLetter;
-                  console.log(`${countryName} - ✅ 找到update_delete列: ${cellAddress} = "${cellValue}"`);
-                }
-              }
+          // 只在第3行精确匹配列名
+          for (let col = 0; col < 20; col++) {
+            const colLetter = String.fromCharCode(65 + col);
+            const cellValue = worksheet[`${colLetter}3`]?.v?.toString()?.toLowerCase() || '';
+            
+            if (cellValue && cellValue.trim()) {
+              console.log(`${countryName} - ${colLetter}3: "${cellValue}"`);
+            }
+            
+            if (cellValue === 'item_sku') {
+              itemSkuCol = colLetter;
+              console.log(`${countryName} - ✅ 找到item_sku列: ${colLetter}`);
+            }
+            if (cellValue === 'update_delete') {
+              updateDeleteCol = colLetter;
+              console.log(`${countryName} - ✅ 找到update_delete列: ${colLetter}`);
             }
           }
           
@@ -623,9 +585,6 @@ const Listings: React.FC = () => {
     // 重置状态并显示对话框
     setGeneratedFiles([]);
     setDeleteDataSheetVisible(true);
-    
-    // 直接开始生成过程
-    await generateDeleteDataSheet();
   };
   
   // 手动下载单个文件
@@ -1834,6 +1793,16 @@ const Listings: React.FC = () => {
             setGeneratedFiles([]);
           }}>
             关闭
+          </Button>,
+          <Button 
+            key="generate" 
+            type="primary" 
+            loading={generateLoading}
+            disabled={generateLoading}
+            onClick={generateDeleteDataSheet}
+            icon={<FileExcelOutlined />}
+          >
+            {generateLoading ? '生成中...' : '开始生成'}
           </Button>
         ]}
       >
@@ -1922,7 +1891,7 @@ const Listings: React.FC = () => {
               backgroundColor: '#fafafa',
               borderRadius: 6
             }}>
-              正在准备生成删除资料表...
+              点击"开始生成"按钮开始生成删除资料表
             </div>
           )}
         </div>
