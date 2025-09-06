@@ -447,67 +447,58 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 显示模板文件结构并查找列位置
-          console.log(`${countryName} - 📋 模板文件结构分析:`);
+          // 4. 调试Excel文件读取 - 重点检查第3行
+          console.log(`${countryName} - 📋 Excel文件调试信息:`);
+          console.log(`${countryName} - 工作表名称: "${sheetName}"`);
+          console.log(`${countryName} - 工作表范围: ${worksheet['!ref']}`);
           
-          // 显示前5行的完整内容
-          for (let row = 1; row <= 5; row++) {
-            let rowContent = [];
-            for (let col = 0; col < 10; col++) {
-              const colLetter = String.fromCharCode(65 + col);
-              const cellAddress = `${colLetter}${row}`;
-              const rawValue = worksheet[cellAddress]?.v;
-              if (rawValue !== undefined && rawValue !== null) {
-                rowContent.push(`${colLetter}: "${rawValue}"`);
-              }
-            }
-            if (rowContent.length > 0) {
-              console.log(`${countryName} - 第${row}行: ${rowContent.join(', ')}`);
+          // 使用XLSX.utils.sheet_to_json来读取数据，验证读取方式
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+          console.log(`${countryName} - 使用sheet_to_json读取的数据:`, jsonData.slice(0, 5));
+          
+          // 直接访问第3行数据（索引为2，因为从0开始）
+          const row3Data = jsonData[2]; // 第3行
+          console.log(`${countryName} - 第3行原始数据:`, row3Data);
+          
+          // 重新用原始方法读取第3行，对比差异
+          console.log(`${countryName} - 原始方法读取第3行:`);
+          let row3Cells = [];
+          for (let col = 0; col < 20; col++) {
+            const colLetter = String.fromCharCode(65 + col);
+            const cellAddress = `${colLetter}3`;
+            const cellValue = worksheet[cellAddress]?.v;
+            if (cellValue !== undefined && cellValue !== null) {
+              row3Cells.push(`${colLetter}: "${cellValue}"`);
             }
           }
+          console.log(`${countryName} - ${row3Cells.join(', ')}`);
           
-          // 查找item_sku和update_delete列的精确位置 - 在前5行中搜索
+          // 查找item_sku和update_delete列的精确位置 - 只在第3行
           let itemSkuCol: string | null = null;
           let updateDeleteCol: string | null = null;
           
-          console.log(`${countryName} - 🔍 查找目标列名...`);
+          console.log(`${countryName} - 🔍 在第3行查找目标列名...`);
           
-          // 在前5行中搜索列名（保持原始大小写和多种可能的格式）
-          for (let row = 1; row <= 5; row++) {
-            for (let col = 0; col < 20; col++) {
-              const colLetter = String.fromCharCode(65 + col);
-              const cellAddress = `${colLetter}${row}`;
-              const rawValue = worksheet[cellAddress]?.v;
-              
-              if (rawValue !== undefined && rawValue !== null) {
-                const cellValue = rawValue.toString().trim();
-                const lowerValue = cellValue.toLowerCase();
+          // 使用sheet_to_json的结果来查找列名
+          if (row3Data && Array.isArray(row3Data)) {
+            row3Data.forEach((cellValue, index) => {
+              if (cellValue !== undefined && cellValue !== null) {
+                const colLetter = String.fromCharCode(65 + index); // A, B, C...
+                const strValue = cellValue.toString().trim().toLowerCase();
                 
-                // 更宽泛的item_sku匹配
-                if (!itemSkuCol && (
-                  lowerValue === 'item_sku' || 
-                  lowerValue === 'item-sku' ||
-                  lowerValue === 'itemsku' ||
-                  lowerValue === 'seller_sku' ||
-                  lowerValue === 'seller-sku'
-                )) {
+                console.log(`${countryName} - ${colLetter}3: "${cellValue}" (${strValue})`);
+                
+                if (!itemSkuCol && strValue === 'item_sku') {
                   itemSkuCol = colLetter;
-                  console.log(`${countryName} - ✅ 找到item_sku列: ${cellAddress} = "${cellValue}"`);
+                  console.log(`${countryName} - ✅ 找到item_sku列: ${colLetter}3 = "${cellValue}"`);
                 }
                 
-                // 更宽泛的update_delete匹配
-                if (!updateDeleteCol && (
-                  lowerValue === 'update_delete' || 
-                  lowerValue === 'update-delete' ||
-                  lowerValue === 'update delete' ||
-                  lowerValue === 'action' ||
-                  lowerValue === 'operation'
-                )) {
+                if (!updateDeleteCol && strValue === 'update_delete') {
                   updateDeleteCol = colLetter;
-                  console.log(`${countryName} - ✅ 找到update_delete列: ${cellAddress} = "${cellValue}"`);
+                  console.log(`${countryName} - ✅ 找到update_delete列: ${colLetter}3 = "${cellValue}"`);
                 }
               }
-            }
+            });
           }
           
           // 如果没找到必要的列，报错
