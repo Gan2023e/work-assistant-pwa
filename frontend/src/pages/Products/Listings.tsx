@@ -100,6 +100,18 @@ const Listings: React.FC = () => {
   const [selectedSku, setSelectedSku] = useState<ParentSkuData | null>(null);
   const [skuMappings, setSkuMappings] = useState<SkuMapping[]>([]);
   
+  // 生成删除资料表弹窗状态
+  const [deleteDataSheetVisible, setDeleteDataSheetVisible] = useState(false);
+  const [generatedFiles, setGeneratedFiles] = useState<Array<{
+    countryName: string;
+    fileName: string;
+    blob: Blob | null;
+    downloadUrl: string;
+    status: 'generating' | 'success' | 'error';
+    errorMessage?: string;
+  }>>([]);
+  const [generateLoading, setGenerateLoading] = useState(false);
+  
   // 表单实例
   const [addForm] = Form.useForm();
 
@@ -311,6 +323,8 @@ const Listings: React.FC = () => {
   // 生成删除资料表的函数 - 使用现有亚马逊资料模板
   const generateDeleteDataSheet = async () => {
     try {
+      setGenerateLoading(true);
+      
       const countryCodeMap = {
         '美国': 'US',
         '加拿大': 'CA', 
@@ -344,14 +358,36 @@ const Listings: React.FC = () => {
       
       if (selectedSkuData.length === 0) {
         message.warning('没有选中要删除的SKU');
+        setGenerateLoading(false);
         return;
       }
       
-      let successCount = 0;
-      let errorCount = 0;
+      // 初始化生成文件状态
+      const initialFiles: Array<{
+        countryName: string;
+        fileName: string;
+        blob: Blob | null;
+        downloadUrl: string;
+        status: 'generating' | 'success' | 'error';
+        errorMessage?: string;
+      }> = Object.keys(countryCodeMap).map(countryName => ({
+        countryName,
+        fileName: `SKU删除资料表_${countryName}_${new Date().toISOString().split('T')[0]}.xlsx`,
+        blob: null,
+        downloadUrl: '',
+        status: 'generating' as 'generating' | 'success' | 'error',
+        errorMessage: undefined
+      }));
+      
+      setGeneratedFiles(initialFiles);
+      
+      const updatedFiles = [...initialFiles];
+      let autoDownloadUrls: string[] = []; // 用于存储自动下载的URL
       
       // 为每个国家生成资料表
-      for (const [countryName, countryCode] of Object.entries(countryCodeMap)) {
+      for (let i = 0; i < Object.entries(countryCodeMap).length; i++) {
+        const [countryName, countryCode] = Object.entries(countryCodeMap)[i];
+        
         try {
           // 1. 获取该国家的模板文件列表
           const templateRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${countryCode}`);
@@ -359,7 +395,12 @@ const Listings: React.FC = () => {
           
           if (!templateResult.data || templateResult.data.length === 0) {
             console.warn(`${countryName} 没有找到亚马逊资料模板，跳过生成`);
-            errorCount++;
+            updatedFiles[i] = {
+              ...updatedFiles[i],
+              status: 'error',
+              errorMessage: '没有找到亚马逊资料模板'
+            };
+            setGeneratedFiles([...updatedFiles]);
             continue;
           }
           
@@ -416,32 +457,59 @@ const Listings: React.FC = () => {
             row.commit();
           });
           
-          // 5. 生成新文件并下载
+          // 5. 生成文件Blob和下载URL
           const buffer = await workbook.xlsx.writeBuffer();
           const blob = new Blob([buffer], { 
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
           });
           
-          const link = document.createElement('a');
           const url = URL.createObjectURL(blob);
-          link.href = url;
-          link.download = `SKU删除资料表_${countryName}_${new Date().toISOString().split('T')[0]}.xlsx`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
           
-          successCount++;
+          // 更新文件状态为成功
+          updatedFiles[i] = {
+            ...updatedFiles[i],
+            status: 'success',
+            blob,
+            downloadUrl: url
+          };
+          
+          // 添加到自动下载列表
+          autoDownloadUrls.push(url);
+          
+          setGeneratedFiles([...updatedFiles]);
           
         } catch (error) {
           console.error(`生成${countryName}删除资料表失败:`, error);
-          errorCount++;
+          updatedFiles[i] = {
+            ...updatedFiles[i],
+            status: 'error',
+            errorMessage: error instanceof Error ? error.message : '未知错误'
+          };
+          setGeneratedFiles([...updatedFiles]);
         }
       }
       
-      // 显示结果
+      // 自动下载所有成功生成的文件
+      setTimeout(() => {
+        const successFiles = updatedFiles.filter(file => file.status === 'success');
+        successFiles.forEach((file, index) => {
+          setTimeout(() => {
+            const link = document.createElement('a');
+            link.href = file.downloadUrl;
+            link.download = file.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }, index * 200); // 每个文件间隔200ms下载，避免浏览器阻止
+        });
+      }, 500);
+      
+      // 显示结果统计
+      const successCount = updatedFiles.filter(file => file.status === 'success').length;
+      const errorCount = updatedFiles.filter(file => file.status === 'error').length;
+      
       if (successCount > 0) {
-        message.success(`成功生成 ${successCount} 个国家的SKU删除资料表`);
+        message.success(`成功生成 ${successCount} 个国家的SKU删除资料表并已自动下载`);
       }
       
       if (errorCount > 0) {
@@ -451,6 +519,8 @@ const Listings: React.FC = () => {
     } catch (error) {
       console.error('生成删除资料表失败:', error);
       message.error('生成删除资料表失败，请重试');
+    } finally {
+      setGenerateLoading(false);
     }
   };
 
@@ -461,14 +531,30 @@ const Listings: React.FC = () => {
       return;
     }
     
-    Modal.confirm({
-      title: '生成SKU删除资料表',
-      content: `确定要为选中的 ${selectedRowKeys.length} 条记录生成SKU删除资料表吗？将为每个国家生成对应的Excel文件。`,
-      icon: <FileExcelOutlined />,
-      okText: '生成',
-      cancelText: '取消',
-      onOk: async () => {
-        await generateDeleteDataSheet();
+    // 重置状态并显示对话框
+    setGeneratedFiles([]);
+    setDeleteDataSheetVisible(true);
+  };
+  
+  // 手动下载单个文件
+  const handleDownloadFile = (file: any) => {
+    if (file.status !== 'success' || !file.downloadUrl) {
+      return;
+    }
+    
+    const link = document.createElement('a');
+    link.href = file.downloadUrl;
+    link.download = file.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  
+  // 清理下载URL
+  const cleanupDownloadUrls = () => {
+    generatedFiles.forEach(file => {
+      if (file.downloadUrl) {
+        URL.revokeObjectURL(file.downloadUrl);
       }
     });
   };
@@ -1638,6 +1724,127 @@ const Listings: React.FC = () => {
         onConfirm={handleBatchImport}
         siteList={siteList}
       />
+
+      {/* 生成删除资料表弹窗 */}
+      <Modal
+        title="生成SKU删除资料表"
+        open={deleteDataSheetVisible}
+        onCancel={() => {
+          setDeleteDataSheetVisible(false);
+          cleanupDownloadUrls();
+          setGeneratedFiles([]);
+        }}
+        width={800}
+        footer={[
+          <Button key="close" onClick={() => {
+            setDeleteDataSheetVisible(false);
+            cleanupDownloadUrls();
+            setGeneratedFiles([]);
+          }}>
+            关闭
+          </Button>,
+          <Button 
+            key="generate" 
+            type="primary" 
+            loading={generateLoading}
+            disabled={generateLoading}
+            onClick={generateDeleteDataSheet}
+            icon={<FileExcelOutlined />}
+          >
+            {generateLoading ? '生成中...' : '开始生成'}
+          </Button>
+        ]}
+      >
+        <div>
+          <p style={{ marginBottom: 16 }}>
+            将为选中的 <strong>{selectedRowKeys.length}</strong> 条记录生成SKU删除资料表，每个国家生成对应的Excel文件。
+          </p>
+          
+          {generatedFiles.length > 0 && (
+            <div>
+              <h4 style={{ marginBottom: 12 }}>生成进度：</h4>
+              <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                {generatedFiles.map((file, index) => (
+                  <div 
+                    key={file.countryName}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      margin: '4px 0',
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      backgroundColor: file.status === 'success' ? '#f6ffed' : 
+                                     file.status === 'error' ? '#fff2f0' : '#f0f0f0'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                        {file.countryName} - {file.fileName}
+                      </div>
+                      {file.status === 'generating' && (
+                        <div style={{ color: '#1890ff', fontSize: 12 }}>
+                          <Spin size="small" style={{ marginRight: 8 }} />
+                          生成中...
+                        </div>
+                      )}
+                      {file.status === 'success' && (
+                        <div style={{ color: '#52c41a', fontSize: 12 }}>
+                          ✅ 生成成功，已自动下载
+                        </div>
+                      )}
+                      {file.status === 'error' && (
+                        <div style={{ color: '#ff4d4f', fontSize: 12 }}>
+                          ❌ 生成失败: {file.errorMessage}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {file.status === 'success' && (
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        onClick={() => handleDownloadFile(file)}
+                      >
+                        重新下载
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {generatedFiles.length > 0 && !generateLoading && (
+                <div style={{ 
+                  marginTop: 16, 
+                  padding: 12, 
+                  backgroundColor: '#f5f5f5', 
+                  borderRadius: 4,
+                  textAlign: 'center' 
+                }}>
+                  <strong>
+                    生成完成 - 成功: {generatedFiles.filter(f => f.status === 'success').length} 个，
+                    失败: {generatedFiles.filter(f => f.status === 'error').length} 个
+                  </strong>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {generatedFiles.length === 0 && !generateLoading && (
+            <div style={{
+              textAlign: 'center',
+              padding: 40,
+              color: '#999',
+              backgroundColor: '#fafafa',
+              borderRadius: 6
+            }}>
+              点击"开始生成"按钮开始生成删除资料表
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* 数据一致性检查结果弹窗 */}
       <Modal
