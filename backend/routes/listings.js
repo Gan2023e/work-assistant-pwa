@@ -898,12 +898,27 @@ router.get('/sku-data', async (req, res) => {
       site,
       fulfillment_channel,
       status,
-      country,
       sort_by = 'seller-sku',
       sort_order = 'ASC'
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    // 中文国家名到站点URL的反向映射
+    const countryToSiteMap = {
+      '美国': 'www.amazon.com',
+      '加拿大': 'www.amazon.ca', 
+      '英国': 'www.amazon.co.uk',
+      '澳大利亚': 'www.amazon.com.au',
+      '阿联酋': 'www.amazon.ae',
+      '德国': 'www.amazon.de',
+      '法国': 'www.amazon.fr',
+      '意大利': 'www.amazon.it',
+      '西班牙': 'www.amazon.es',
+      '荷兰': 'www.amazon.nl',
+      '瑞典': 'www.amazon.se',
+      '波兰': 'www.amazon.pl'
+    };
     
     // 构建查询条件
     let whereConditions = [];
@@ -916,7 +931,9 @@ router.get('/sku-data', async (req, res) => {
       )`);
     }
     if (site && site !== 'all') {
-      whereConditions.push(`site = '${site}'`);
+      // 如果传入的是中文国家名，转换为对应的站点URL
+      const actualSite = countryToSiteMap[site] || site;
+      whereConditions.push(`site = '${actualSite}'`);
     }
     if (fulfillment_channel && fulfillment_channel !== 'all') {
       if (fulfillment_channel === 'FBA') {
