@@ -441,6 +441,26 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
+          // 调试：显示工作表的基本信息
+          console.log(`${countryName} - 📋 工作表名: "${sheetName}"`);
+          console.log(`${countryName} - 📐 工作表范围: ${worksheet['!ref']}`);
+          
+          // 显示前几行的内容以便调试
+          console.log(`${countryName} - 🔍 显示前5行内容:`);
+          for (let row = 1; row <= 5; row++) {
+            let rowContent = [];
+            for (let col = 0; col < 10; col++) {
+              const colLetter = String.fromCharCode(65 + col);
+              const cellValue = worksheet[`${colLetter}${row}`]?.v?.toString() || '';
+              if (cellValue) {
+                rowContent.push(`${colLetter}${row}:"${cellValue}"`);
+              }
+            }
+            if (rowContent.length > 0) {
+              console.log(`${countryName} - 第${row}行: ${rowContent.join(', ')}`);
+            }
+          }
+          
           // 4. 从第4行开始填入数据
           selectedSkuData.forEach((data, index) => {
             const rowNumber = 4 + index; // 从第4行开始
@@ -449,47 +469,128 @@ const Listings: React.FC = () => {
             let itemSkuCol = 'A'; // 默认A列
             let updateDeleteCol = 'B'; // 默认B列
             
-            // 尝试在第3行中找到正确的列（列名在第3行）
-            for (let col = 0; col < 20; col++) {
-              const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
-              const cellAddress = `${colLetter}3`;
-              const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
+            // 尝试在前5行中找到正确的列名
+            console.log(`${countryName} - 开始查找列名...`);
+            
+            let foundItemSku = false;
+            let foundUpdateDelete = false;
+            
+            for (let row = 1; row <= 5 && (!foundItemSku || !foundUpdateDelete); row++) {
+              console.log(`${countryName} - 检查第${row}行...`);
               
-              // 调试信息：显示找到的列名
-              if (cellValue && cellValue.trim()) {
-                console.log(`${countryName} - 第3行${colLetter}列: "${cellValue}"`);
-              }
-              
-              if (cellValue.includes('item') && cellValue.includes('sku')) {
-                itemSkuCol = colLetter;
-                console.log(`${countryName} - 找到item_sku列: ${colLetter}`);
-              }
-              if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
-                updateDeleteCol = colLetter;
-                console.log(`${countryName} - 找到update_delete列: ${colLetter}`);
+              for (let col = 0; col < 20; col++) {
+                const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
+                const cellAddress = `${colLetter}${row}`;
+                const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
+                
+                // 调试信息：显示所有非空单元格
+                if (cellValue && cellValue.trim()) {
+                  console.log(`${countryName} - ${cellAddress}: "${cellValue}"`);
+                }
+                
+                // 更宽松的匹配条件
+                if (!foundItemSku && (
+                  cellValue.includes('item_sku') || 
+                  cellValue.includes('itemsku') ||
+                  (cellValue.includes('item') && cellValue.includes('sku')) ||
+                  cellValue.includes('seller-sku') ||
+                  cellValue.includes('product_id')
+                )) {
+                  itemSkuCol = colLetter;
+                  foundItemSku = true;
+                  console.log(`${countryName} - ✅ 找到item_sku列: ${cellAddress} = "${cellValue}"`);
+                }
+                
+                if (!foundUpdateDelete && (
+                  cellValue.includes('update_delete') || 
+                  cellValue.includes('update-delete') ||
+                  cellValue.includes('action') ||
+                  cellValue.includes('operation') ||
+                  (cellValue.includes('update') || cellValue.includes('delete'))
+                )) {
+                  updateDeleteCol = colLetter;
+                  foundUpdateDelete = true;
+                  console.log(`${countryName} - ✅ 找到update_delete列: ${cellAddress} = "${cellValue}"`);
+                }
               }
             }
             
-            console.log(`${countryName} - 最终使用列: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`);
+            // 如果没找到，尝试常见的列位置
+            if (!foundItemSku || !foundUpdateDelete) {
+              console.log(`${countryName} - ⚠️ 未能完全识别列名，尝试常见位置...`);
+              
+              // 检查A列是否有SKU相关内容
+              const aColSample = worksheet['A4']?.v?.toString() || worksheet['A5']?.v?.toString() || '';
+              if (aColSample && (aColSample.length > 5 || aColSample.includes('-'))) {
+                itemSkuCol = 'A';
+                console.log(`${countryName} - 🎯 A列似乎包含SKU数据: "${aColSample}"`);
+              }
+              
+              // 如果A列不是SKU数据，尝试其他常见位置
+              if (!foundItemSku) {
+                // 检查其他可能的SKU列
+                for (let testCol of ['A', 'B', 'C', 'D', 'E']) {
+                  const testData = worksheet[`${testCol}4`]?.v?.toString() || worksheet[`${testCol}5`]?.v?.toString() || '';
+                  if (testData && (testData.length > 5 || testData.includes('-') || testData.includes('_'))) {
+                    itemSkuCol = testCol;
+                    console.log(`${countryName} - 🔍 在${testCol}列找到可能的SKU数据: "${testData}"`);
+                    break;
+                  }
+                }
+              }
+              
+              // 通常update_delete在SKU列的下一列
+              if (itemSkuCol === 'A') updateDeleteCol = 'B';
+              else if (itemSkuCol === 'B') updateDeleteCol = 'C';
+              else if (itemSkuCol === 'C') updateDeleteCol = 'D';
+              else updateDeleteCol = 'B'; // 默认B列
+            }
+            
+            console.log(`${countryName} - 📍 最终使用列: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`);
             
             // 填入数据
             const itemSkuAddress = `${itemSkuCol}${rowNumber}`;
             const updateDeleteAddress = `${updateDeleteCol}${rowNumber}`;
             
-            worksheet[itemSkuAddress] = { v: data.item_sku, t: 's' };
-            worksheet[updateDeleteAddress] = { v: data.update_delete, t: 's' };
+            // 写入数据前先检查原有内容
+            const existingItemSku = worksheet[itemSkuAddress]?.v || '';
+            const existingUpdateDelete = worksheet[updateDeleteAddress]?.v || '';
+            console.log(`${countryName} - 写入前 ${itemSkuAddress}: "${existingItemSku}", ${updateDeleteAddress}: "${existingUpdateDelete}"`);
             
-            // 调试信息：显示写入的数据
-            console.log(`${countryName} - 第${rowNumber}行数据写入: ${itemSkuAddress}="${data.item_sku}", ${updateDeleteAddress}="${data.update_delete}"`);
+            // 确保写入的数据格式正确
+            worksheet[itemSkuAddress] = { 
+              v: data.item_sku, 
+              t: 's'  // 字符串类型
+            };
+            worksheet[updateDeleteAddress] = { 
+              v: data.update_delete, 
+              t: 's'  // 字符串类型
+            };
+            
+            // 验证数据是否成功写入
+            const verifyItemSku = worksheet[itemSkuAddress]?.v;
+            const verifyUpdateDelete = worksheet[updateDeleteAddress]?.v;
+            
+            console.log(`${countryName} - ✍️ 第${rowNumber}行写入: ${itemSkuAddress}="${data.item_sku}" → "${verifyItemSku}", ${updateDeleteAddress}="${data.update_delete}" → "${verifyUpdateDelete}"`);
+            
+            if (verifyItemSku !== data.item_sku) {
+              console.error(`${countryName} - ❌ item_sku写入失败！期望:"${data.item_sku}", 实际:"${verifyItemSku}"`);
+            }
+            if (verifyUpdateDelete !== data.update_delete) {
+              console.error(`${countryName} - ❌ update_delete写入失败！期望:"${data.update_delete}", 实际:"${verifyUpdateDelete}"`);
+            }
           });
           
           // 更新工作表范围
-          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
           const lastRow = Math.max(range.e.r, 3 + selectedSkuData.length);
+          const lastCol = Math.max(range.e.c, 25); // 至少到Z列
           worksheet['!ref'] = XLSX.utils.encode_range({
             s: { c: 0, r: 0 },
-            e: { c: range.e.c, r: lastRow }
+            e: { c: lastCol, r: lastRow }
           });
+          
+          console.log(`${countryName} - 📊 更新工作表范围: ${worksheet['!ref']}`);
           
           // 5. 生成文件Blob和下载URL
           const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
