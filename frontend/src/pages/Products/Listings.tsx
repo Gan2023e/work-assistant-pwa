@@ -362,6 +362,12 @@ const Listings: React.FC = () => {
         return;
       }
       
+      // 调试：显示选中的SKU数据
+      console.log('📋 选中的SKU数据:', selectedSkuData);
+      selectedSkuData.forEach((data, index) => {
+        console.log(`  ${index + 1}. item_sku: "${data.item_sku}", update_delete: "${data.update_delete}"`);
+      });
+      
       // 生成文件名 - 包含子SKU信息
       const generateFileName = (countryName: string, skuData: any[]) => {
         const currentDate = new Date().toISOString().split('T')[0];
@@ -441,36 +447,55 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 查找item_sku和update_delete列的精确位置
-          let itemSkuCol = 'A'; // 默认A列
-          let updateDeleteCol = 'B'; // 默认B列
+          // 4. 查找item_sku和update_delete列的精确位置 - 只在第3行精确匹配
+          let itemSkuCol = null;
+          let updateDeleteCol = null;
           
-          // 在前5行中精确匹配列名
-          for (let row = 1; row <= 5; row++) {
-            for (let col = 0; col < 20; col++) {
-              const colLetter = String.fromCharCode(65 + col);
-              const cellValue = worksheet[`${colLetter}${row}`]?.v?.toString() || '';
-              
-              if (cellValue === 'item_sku') {
-                itemSkuCol = colLetter;
-              }
-              if (cellValue === 'update_delete') {
-                updateDeleteCol = colLetter;
-              }
+          console.log(`${countryName} - 在第3行查找列名...`);
+          
+          // 只在第3行精确匹配列名
+          for (let col = 0; col < 20; col++) {
+            const colLetter = String.fromCharCode(65 + col);
+            const cellValue = worksheet[`${colLetter}3`]?.v?.toString()?.toLowerCase() || '';
+            
+            if (cellValue && cellValue.trim()) {
+              console.log(`${countryName} - ${colLetter}3: "${cellValue}"`);
+            }
+            
+            if (cellValue === 'item_sku') {
+              itemSkuCol = colLetter;
+              console.log(`${countryName} - ✅ 找到item_sku列: ${colLetter}`);
+            }
+            if (cellValue === 'update_delete') {
+              updateDeleteCol = colLetter;
+              console.log(`${countryName} - ✅ 找到update_delete列: ${colLetter}`);
             }
           }
+          
+          // 如果没找到必要的列，报错
+          if (!itemSkuCol || !updateDeleteCol) {
+            const error = `${countryName} - 列名识别失败: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`;
+            console.error(error);
+            throw new Error(error);
+          }
+          
+          console.log(`${countryName} - 使用列: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`);
           
 
           
           // 5. 从第4行开始填入数据
+          console.log(`${countryName} - 开始填入${selectedSkuData.length}条SKU数据...`);
+          
           selectedSkuData.forEach((data, index) => {
             const rowNumber = 4 + index;
+            
+            console.log(`${countryName} - 写入第${rowNumber}行: item_sku="${data.item_sku}", update_delete="${data.update_delete}"`);
             
             // 填入数据
             worksheet[`${itemSkuCol}${rowNumber}`] = { v: data.item_sku, t: 's' };
             worksheet[`${updateDeleteCol}${rowNumber}`] = { v: data.update_delete, t: 's' };
             
-
+            console.log(`${countryName} - ✍️ 已写入: ${itemSkuCol}${rowNumber}="${data.item_sku}", ${updateDeleteCol}${rowNumber}="${data.update_delete}"`);
           });
           
           // 更新工作表范围
