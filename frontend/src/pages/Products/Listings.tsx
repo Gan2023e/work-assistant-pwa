@@ -100,8 +100,7 @@ const Listings: React.FC = () => {
   const [selectedSku, setSelectedSku] = useState<ParentSkuData | null>(null);
   const [skuMappings, setSkuMappings] = useState<SkuMapping[]>([]);
   
-  // 生成删除资料表弹窗状态
-  const [deleteDataSheetVisible, setDeleteDataSheetVisible] = useState(false);
+  // 生成删除资料表状态（无需弹窗）
   const [generatedFiles, setGeneratedFiles] = useState<Array<{
     countryName: string;
     fileName: string;
@@ -447,28 +446,41 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 查找item_sku和update_delete列的精确位置 - 只在第3行精确匹配
+          // 4. 查找item_sku和update_delete列的精确位置 - 在前10行中查找
           let itemSkuCol: string | null = null;
           let updateDeleteCol: string | null = null;
           
-          console.log(`${countryName} - 在第3行查找列名...`);
+          console.log(`${countryName} - 在前10行查找列名...`);
           
-          // 只在第3行精确匹配列名
-          for (let col = 0; col < 20; col++) {
-            const colLetter = String.fromCharCode(65 + col);
-            const cellValue = worksheet[`${colLetter}3`]?.v?.toString()?.toLowerCase() || '';
-            
-            if (cellValue && cellValue.trim()) {
-              console.log(`${countryName} - ${colLetter}3: "${cellValue}"`);
+          // 显示工作表的前10行内容以便调试
+          for (let row = 1; row <= 10; row++) {
+            let rowContent = [];
+            for (let col = 0; col < 10; col++) {
+              const colLetter = String.fromCharCode(65 + col);
+              const cellValue = worksheet[`${colLetter}${row}`]?.v?.toString() || '';
+              if (cellValue && cellValue.trim()) {
+                rowContent.push(`${colLetter}${row}:"${cellValue}"`);
+              }
             }
-            
-            if (cellValue === 'item_sku') {
-              itemSkuCol = colLetter;
-              console.log(`${countryName} - ✅ 找到item_sku列: ${colLetter}`);
+            if (rowContent.length > 0) {
+              console.log(`${countryName} - 第${row}行: ${rowContent.join(', ')}`);
             }
-            if (cellValue === 'update_delete') {
-              updateDeleteCol = colLetter;
-              console.log(`${countryName} - ✅ 找到update_delete列: ${colLetter}`);
+          }
+          
+          // 在前10行中查找列名
+          for (let row = 1; row <= 10 && (!itemSkuCol || !updateDeleteCol); row++) {
+            for (let col = 0; col < 20; col++) {
+              const colLetter = String.fromCharCode(65 + col);
+              const cellValue = worksheet[`${colLetter}${row}`]?.v?.toString()?.toLowerCase() || '';
+              
+              if (cellValue === 'item_sku' && !itemSkuCol) {
+                itemSkuCol = colLetter;
+                console.log(`${countryName} - ✅ 找到item_sku列: ${colLetter}${row}`);
+              }
+              if (cellValue === 'update_delete' && !updateDeleteCol) {
+                updateDeleteCol = colLetter;
+                console.log(`${countryName} - ✅ 找到update_delete列: ${colLetter}${row}`);
+              }
             }
           }
           
@@ -575,16 +587,15 @@ const Listings: React.FC = () => {
     }
   };
 
-  // 处理生成删除资料表按钮点击
+  // 处理生成删除资料表按钮点击 - 直接开始生成
   const handleGenerateDeleteDataSheet = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要生成删除资料表的记录');
       return;
     }
     
-    // 重置状态并显示对话框
-    setGeneratedFiles([]);
-    setDeleteDataSheetVisible(true);
+    // 直接开始生成，不显示确认对话框
+    generateDeleteDataSheet();
   };
   
   // 手动下载单个文件
@@ -1776,126 +1787,7 @@ const Listings: React.FC = () => {
         siteList={siteList}
       />
 
-      {/* 生成删除资料表弹窗 */}
-      <Modal
-        title="生成SKU删除资料表"
-        open={deleteDataSheetVisible}
-        onCancel={() => {
-          setDeleteDataSheetVisible(false);
-          cleanupDownloadUrls();
-          setGeneratedFiles([]);
-        }}
-        width={800}
-        footer={[
-          <Button key="close" onClick={() => {
-            setDeleteDataSheetVisible(false);
-            cleanupDownloadUrls();
-            setGeneratedFiles([]);
-          }}>
-            关闭
-          </Button>,
-          <Button 
-            key="generate" 
-            type="primary" 
-            loading={generateLoading}
-            disabled={generateLoading}
-            onClick={generateDeleteDataSheet}
-            icon={<FileExcelOutlined />}
-          >
-            {generateLoading ? '生成中...' : '开始生成'}
-          </Button>
-        ]}
-      >
-        <div>
-          <p style={{ marginBottom: 16 }}>
-            将为选中的 <strong>{selectedRowKeys.length}</strong> 条记录生成SKU删除资料表，每个国家生成对应的Excel文件。
-          </p>
-          
-          {generatedFiles.length > 0 && (
-            <div>
-              <h4 style={{ marginBottom: 12 }}>生成进度：</h4>
-              <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                {generatedFiles.map((file, index) => (
-                  <div 
-                    key={file.countryName}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      margin: '4px 0',
-                      border: '1px solid #d9d9d9',
-                      borderRadius: '6px',
-                      backgroundColor: file.status === 'success' ? '#f6ffed' : 
-                                     file.status === 'error' ? '#fff2f0' : '#f0f0f0'
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
-                        {file.countryName} - {file.fileName}
-                      </div>
-                      {file.status === 'generating' && (
-                        <div style={{ color: '#1890ff', fontSize: 12 }}>
-                          <Spin size="small" style={{ marginRight: 8 }} />
-                          生成中...
-                        </div>
-                      )}
-                      {file.status === 'success' && (
-                        <div style={{ color: '#52c41a', fontSize: 12 }}>
-                          ✅ 生成成功，已自动下载
-                        </div>
-                      )}
-                      {file.status === 'error' && (
-                        <div style={{ color: '#ff4d4f', fontSize: 12 }}>
-                          ❌ 生成失败: {file.errorMessage}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {file.status === 'success' && (
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<DownloadOutlined />}
-                        onClick={() => handleDownloadFile(file)}
-                      >
-                        重新下载
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              {generatedFiles.length > 0 && !generateLoading && (
-                <div style={{ 
-                  marginTop: 16, 
-                  padding: 12, 
-                  backgroundColor: '#f5f5f5', 
-                  borderRadius: 4,
-                  textAlign: 'center' 
-                }}>
-                  <strong>
-                    生成完成 - 成功: {generatedFiles.filter(f => f.status === 'success').length} 个，
-                    失败: {generatedFiles.filter(f => f.status === 'error').length} 个
-                  </strong>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {generatedFiles.length === 0 && !generateLoading && (
-            <div style={{
-              textAlign: 'center',
-              padding: 40,
-              color: '#999',
-              backgroundColor: '#fafafa',
-              borderRadius: 6
-            }}>
-              点击"开始生成"按钮开始生成删除资料表
-            </div>
-          )}
-        </div>
-      </Modal>
+
 
       {/* 数据一致性检查结果弹窗 */}
       <Modal
