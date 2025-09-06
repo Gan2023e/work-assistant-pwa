@@ -60,7 +60,11 @@ const ListingsSku: React.FC = () => {
         }
       });
       
-      const response = await fetch(`${API_BASE_URL}/api/listings/sku-data?${params}`);
+      const response = await fetch(`${API_BASE_URL}/api/listings/sku-data?${params}`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       const result: ListingsSkuResponse = await response.json();
       
       if (result.code === 0) {

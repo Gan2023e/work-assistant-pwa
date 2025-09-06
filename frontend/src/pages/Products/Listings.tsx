@@ -126,7 +126,11 @@ const Listings: React.FC = () => {
         }
       });
       
-      const response = await fetch(`${API_BASE_URL}/api/listings?${params}`);
+      const response = await fetch(`${API_BASE_URL}/api/listings?${params}`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       const result: ListingsResponse = await response.json();
       
       if (result.code === 0) {
@@ -160,7 +164,11 @@ const Listings: React.FC = () => {
   // 获取统计数据
   const fetchStatistics = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/listings/statistics`);
+      const response = await fetch(`${API_BASE_URL}/api/listings/statistics`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       const result = await response.json();
       
       if (result.code === 0) {
@@ -174,7 +182,11 @@ const Listings: React.FC = () => {
   // 获取SKU详细映射信息
   const fetchSkuMappings = async (childSku: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/listings/${childSku}/mappings`);
+      const response = await fetch(`${API_BASE_URL}/api/listings/${childSku}/mappings`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       const result = await response.json();
       
       if (result.code === 0) {
@@ -924,7 +936,11 @@ const Listings: React.FC = () => {
   const handleConsistencyCheck = async () => {
     setConsistencyLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/listings/data-consistency-check`);
+      const response = await fetch(`${API_BASE_URL}/api/listings/data-consistency-check`, {
+        headers: {
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        },
+      });
       const result = await response.json();
       
       if (result.code === 0) {
