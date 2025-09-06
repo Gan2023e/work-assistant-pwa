@@ -888,4 +888,147 @@ router.post('/sync-data', async (req, res) => {
   }
 });
 
+// 获取Listings SKU数据（新增接口）
+router.get('/sku-data', async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50, 
+      search, 
+      site,
+      fulfillment_channel,
+      status,
+      country,
+      sort_by = 'seller-sku',
+      sort_order = 'ASC'
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    // 构建查询条件
+    let whereConditions = [];
+    if (search) {
+      whereConditions.push(`(
+        \`seller-sku\` LIKE '%${search}%' OR 
+        \`item-name\` LIKE '%${search}%' OR 
+        \`listing-id\` LIKE '%${search}%' OR
+        asin1 LIKE '%${search}%'
+      )`);
+    }
+    if (site && site !== 'all') {
+      whereConditions.push(`site = '${site}'`);
+    }
+    if (fulfillment_channel && fulfillment_channel !== 'all') {
+      whereConditions.push(`\`fulfillment-channel\` = '${fulfillment_channel}'`);
+    }
+    if (status && status !== 'all') {
+      whereConditions.push(`status = '${status}'`);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // 获取主数据
+    const dataQuery = `
+      SELECT 
+        ls.\`listing-id\`,
+        ls.\`item-name\`,
+        ls.\`item-description\`,
+        ls.\`seller-sku\`,
+        ls.price,
+        ls.quantity,
+        ls.\`open-date\`,
+        ls.\`image-url\`,
+        ls.asin1,
+        ls.asin2,
+        ls.asin3,
+        ls.site,
+        ls.status,
+        ls.\`fulfillment-channel\`,
+        ls.\`price-designation\`,
+        -- 通过映射表获取本地SKU信息
+        am.local_sku,
+        am.country,
+        am.sku_type,
+        -- 通过本地SKU获取产品信息
+        sis.parent_sku,
+        sis.child_sku,
+        sis.sellercolorname,
+        sis.sellersizename,
+        -- 通过母SKU获取产品链接
+        pw.weblink,
+        pw.status as product_status
+      FROM listings_sku ls
+      LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
+      LEFT JOIN seller_inventory_sku sis ON am.local_sku = sis.child_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      ${whereClause}
+      ORDER BY ${sort_by === 'seller-sku' ? 'ls.`seller-sku`' : sort_by} ${sort_order}
+      LIMIT ${parseInt(limit)} OFFSET ${offset}
+    `;
+
+    const records = await sequelize.query(dataQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 获取总数
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM listings_sku ls
+      LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
+      LEFT JOIN seller_inventory_sku sis ON am.local_sku = sis.child_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      ${whereClause}
+    `;
+
+    const [countResult] = await sequelize.query(countQuery, {
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    // 获取筛选选项
+    const siteListQuery = `SELECT DISTINCT site FROM listings_sku WHERE site IS NOT NULL ORDER BY site`;
+    const fulfillmentChannelQuery = `SELECT DISTINCT \`fulfillment-channel\` FROM listings_sku WHERE \`fulfillment-channel\` IS NOT NULL ORDER BY \`fulfillment-channel\``;
+    const statusQuery = `SELECT DISTINCT status FROM listings_sku WHERE status IS NOT NULL ORDER BY status`;
+    const countryQuery = `SELECT DISTINCT country FROM pbi_amzsku_sku WHERE country IS NOT NULL ORDER BY country`;
+
+    const [siteList, fulfillmentChannelList, statusList, countryList] = await Promise.all([
+      sequelize.query(siteListQuery, { type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(fulfillmentChannelQuery, { type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(statusQuery, { type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(countryQuery, { type: sequelize.QueryTypes.SELECT })
+    ]);
+
+    // 计算统计数据
+    const summary = {
+      totalListings: countResult.total,
+      activeListings: records.filter(r => r.status === 'Active').length,
+      fbaListings: records.filter(r => r['fulfillment-channel']?.includes('DEFAULT') || r['fulfillment-channel']?.includes('AMAZON')).length,
+      fbmListings: records.filter(r => r['fulfillment-channel'] === 'DEFAULT_FBM' || r['fulfillment-channel'] === 'MERCHANT').length
+    };
+
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: {
+        total: countResult.total,
+        current: parseInt(page),
+        pageSize: parseInt(limit),
+        records,
+        siteList: siteList.map(item => item.site),
+        countryList: countryList.map(item => item.country),
+        fulfillmentChannelList: fulfillmentChannelList.map(item => item['fulfillment-channel']),
+        statusList: statusList.map(item => item.status),
+        summary
+      }
+    });
+
+  } catch (error) {
+    console.error('获取Listings SKU数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

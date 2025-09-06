@@ -146,4 +146,68 @@ export interface BatchMappingData {
   site: string;
   country: string;
   sku_type?: string;
+}
+
+// Listings SKU数据类型
+export interface ListingsSkuData {
+  'listing-id': string;
+  'item-name'?: string;
+  'item-description'?: string;
+  'seller-sku'?: string;
+  price?: number;
+  quantity?: number;
+  'open-date'?: string;
+  'image-url'?: string;
+  asin1?: string;
+  asin2?: string;
+  asin3?: string;
+  site?: string;
+  status?: string;
+  'fulfillment-channel'?: string;
+  'price-designation'?: string;
+  // 关联的本地SKU信息（通过映射表获取）
+  local_sku?: string;
+  country?: string;
+  parent_sku?: string;
+  child_sku?: string;
+  sellercolorname?: string;
+  sellersizename?: string;
+  weblink?: string;
+  product_status?: string;
+  sku_type?: string;
+}
+
+// Listings SKU查询参数
+export interface ListingsSkuQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  site?: string;
+  fulfillment_channel?: string;
+  status?: string;
+  country?: string;
+  sort_by?: string;
+  sort_order?: 'ASC' | 'DESC';
+}
+
+// Listings SKU API响应类型
+export interface ListingsSkuResponse {
+  code: number;
+  message: string;
+  data: {
+    total: number;
+    current: number;
+    pageSize: number;
+    records: ListingsSkuData[];
+    siteList: string[];
+    countryList: string[];
+    fulfillmentChannelList: string[];
+    statusList: string[];
+    summary: {
+      totalListings: number;
+      activeListings: number;
+      fbaListings: number;
+      fbmListings: number;
+    };
+  };
 } 
