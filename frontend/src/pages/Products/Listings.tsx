@@ -448,8 +448,8 @@ const Listings: React.FC = () => {
           const worksheet = workbook.Sheets[sheetName];
           
           // 4. 查找item_sku和update_delete列的精确位置 - 只在第3行精确匹配
-          let itemSkuCol = null;
-          let updateDeleteCol = null;
+          let itemSkuCol: string | null = null;
+          let updateDeleteCol: string | null = null;
           
           console.log(`${countryName} - 在第3行查找列名...`);
           
