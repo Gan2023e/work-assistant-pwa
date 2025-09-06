@@ -154,8 +154,8 @@ export interface ListingsSkuData {
   'item-name'?: string;
   'item-description'?: string;
   'seller-sku'?: string;
-  price?: number;
-  quantity?: number;
+  price?: number | string;
+  quantity?: number | string;
   'open-date'?: string;
   'image-url'?: string;
   asin1?: string;
