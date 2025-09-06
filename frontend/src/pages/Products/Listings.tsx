@@ -441,35 +441,54 @@ const Listings: React.FC = () => {
           
           const worksheet = workbook.Sheets[sheetName];
           
-          // 4. 从第4行开始填入数据
-          selectedSkuData.forEach((data, index) => {
-            const rowNumber = 4 + index; // 从第4行开始
-            
-            // 查找item_sku列和update_delete列
-            let itemSkuCol = 'A'; // 默认A列
-            let updateDeleteCol = 'B'; // 默认B列
-            
-            // 尝试在第1行中找到正确的列
+          // 4. 查找item_sku列和update_delete列
+          let itemSkuCol = 'A'; // 默认A列
+          let updateDeleteCol = 'B'; // 默认B列
+          
+          // 遍历前3行寻找表头
+          console.log(`[${countryName}] 开始查找表头列...`);
+          for (let row = 1; row <= 3; row++) {
             for (let col = 0; col < 20; col++) {
               const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
-              const cellAddress = `${colLetter}1`;
+              const cellAddress = `${colLetter}${row}`;
               const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
               
               if (cellValue.includes('item') && cellValue.includes('sku')) {
                 itemSkuCol = colLetter;
+                console.log(`[${countryName}] 找到item_sku列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
               }
               if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
                 updateDeleteCol = colLetter;
+                console.log(`[${countryName}] 找到update/delete列: ${colLetter} (值: ${worksheet[cellAddress]?.v})`);
               }
             }
+          }
+          
+          console.log(`[${countryName}] 最终使用列: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`);
+          console.log(`[${countryName}] 准备填入${selectedSkuData.length}条数据`);
+          
+          // 5. 从第4行开始填入数据
+          selectedSkuData.forEach((data, index) => {
+            const rowNumber = 4 + index; // 从第4行开始
             
             // 填入数据
             const itemSkuAddress = `${itemSkuCol}${rowNumber}`;
             const updateDeleteAddress = `${updateDeleteCol}${rowNumber}`;
             
-            worksheet[itemSkuAddress] = { v: data.item_sku, t: 's' };
-            worksheet[updateDeleteAddress] = { v: data.update_delete, t: 's' };
+            // 使用XLSX.utils.aoa_to_sheet的方式更可靠
+            if (!worksheet[itemSkuAddress]) worksheet[itemSkuAddress] = {};
+            if (!worksheet[updateDeleteAddress]) worksheet[updateDeleteAddress] = {};
+            
+            worksheet[itemSkuAddress].v = data.item_sku;
+            worksheet[itemSkuAddress].t = 's';
+            
+            worksheet[updateDeleteAddress].v = data.update_delete;
+            worksheet[updateDeleteAddress].t = 's';
+            
+            console.log(`[${countryName}] 第${rowNumber}行: ${itemSkuAddress}=${data.item_sku}, ${updateDeleteAddress}=${data.update_delete}`);
           });
+          
+          console.log(`[${countryName}] 数据填写完成，开始生成文件...`);
           
           // 更新工作表范围
           const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
