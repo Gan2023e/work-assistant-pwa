@@ -362,6 +362,18 @@ const Listings: React.FC = () => {
         return;
       }
       
+      // 生成文件名 - 包含子SKU信息
+      const generateFileName = (countryName: string, skuData: any[]) => {
+        const currentDate = new Date().toISOString().split('T')[0];
+        if (skuData.length === 1) {
+          // 单个SKU：国家名_子SKU_日期
+          return `SKU删除资料表_${countryName}_${skuData[0].item_sku}_${currentDate}.xlsx`;
+        } else {
+          // 多个SKU：国家名_多个SKU_数量_日期
+          return `SKU删除资料表_${countryName}_多个SKU_${skuData.length}个_${currentDate}.xlsx`;
+        }
+      };
+      
       // 初始化生成文件状态
       const initialFiles: Array<{
         countryName: string;
@@ -372,7 +384,7 @@ const Listings: React.FC = () => {
         errorMessage?: string;
       }> = Object.keys(countryCodeMap).map(countryName => ({
         countryName,
-        fileName: `SKU删除资料表_${countryName}_${new Date().toISOString().split('T')[0]}.xlsx`,
+        fileName: generateFileName(countryName, selectedSkuData),
         blob: null,
         downloadUrl: '',
         status: 'generating' as 'generating' | 'success' | 'error',
@@ -417,48 +429,58 @@ const Listings: React.FC = () => {
           
           const arrayBuffer = await fileRes.arrayBuffer();
           
-          // 3. 使用ExcelJS处理Excel文件
-          const ExcelJS = await import('exceljs');
-          const workbook = new ExcelJS.Workbook();
-          await workbook.xlsx.load(arrayBuffer);
+          // 3. 使用xlsx库处理Excel文件
+          const XLSX = await import('xlsx');
+          const workbook = XLSX.read(arrayBuffer, { type: 'array' });
           
           // 获取第一个工作表
-          const worksheet = workbook.worksheets[0];
-          
-          if (!worksheet) {
+          const sheetName = workbook.SheetNames[0];
+          if (!sheetName) {
             throw new Error(`${countryName}模板文件中没有找到工作表`);
           }
+          
+          const worksheet = workbook.Sheets[sheetName];
           
           // 4. 从第4行开始填入数据
           selectedSkuData.forEach((data, index) => {
             const rowNumber = 4 + index; // 从第4行开始
-            const row = worksheet.getRow(rowNumber);
             
             // 查找item_sku列和update_delete列
-            let itemSkuCol = 1;
-            let updateDeleteCol = 2;
+            let itemSkuCol = 'A'; // 默认A列
+            let updateDeleteCol = 'B'; // 默认B列
             
-            // 尝试在前几列中找到正确的列
-            const headerRow = worksheet.getRow(1);
-            for (let col = 1; col <= 20; col++) {
-              const cellValue = headerRow.getCell(col).value?.toString()?.toLowerCase() || '';
+            // 尝试在第1行中找到正确的列
+            for (let col = 0; col < 20; col++) {
+              const colLetter = String.fromCharCode(65 + col); // A, B, C, ...
+              const cellAddress = `${colLetter}1`;
+              const cellValue = worksheet[cellAddress]?.v?.toString()?.toLowerCase() || '';
+              
               if (cellValue.includes('item') && cellValue.includes('sku')) {
-                itemSkuCol = col;
+                itemSkuCol = colLetter;
               }
               if (cellValue.includes('update') || cellValue.includes('delete') || cellValue.includes('action')) {
-                updateDeleteCol = col;
+                updateDeleteCol = colLetter;
               }
             }
             
             // 填入数据
-            row.getCell(itemSkuCol).value = data.item_sku;
-            row.getCell(updateDeleteCol).value = data.update_delete;
+            const itemSkuAddress = `${itemSkuCol}${rowNumber}`;
+            const updateDeleteAddress = `${updateDeleteCol}${rowNumber}`;
             
-            row.commit();
+            worksheet[itemSkuAddress] = { v: data.item_sku, t: 's' };
+            worksheet[updateDeleteAddress] = { v: data.update_delete, t: 's' };
+          });
+          
+          // 更新工作表范围
+          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+          const lastRow = Math.max(range.e.r, 3 + selectedSkuData.length);
+          worksheet['!ref'] = XLSX.utils.encode_range({
+            s: { c: 0, r: 0 },
+            e: { c: range.e.c, r: lastRow }
           });
           
           // 5. 生成文件Blob和下载URL
-          const buffer = await workbook.xlsx.writeBuffer();
+          const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
           const blob = new Blob([buffer], { 
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
           });
