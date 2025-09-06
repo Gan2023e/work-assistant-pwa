@@ -199,14 +199,11 @@ const ListingsSku: React.FC = () => {
       key: 'price',
       width: 100,
       align: 'center' as const,
-      render: (price: number | string) => {
-        const numericPrice = typeof price === 'string' ? parseFloat(price) : price;
-        return (
-          <span style={{ fontSize: 12, fontWeight: 'bold', color: '#fa8c16' }}>
-            {numericPrice && !isNaN(numericPrice) ? `$${numericPrice.toFixed(2)}` : '-'}
-          </span>
-        );
-      },
+      render: (price: number) => (
+        <span style={{ fontSize: 12, fontWeight: 'bold', color: '#fa8c16' }}>
+          {price && !isNaN(price) ? `$${price.toFixed(2)}` : '-'}
+        </span>
+      ),
     },
     {
       title: '数量',
@@ -214,15 +211,11 @@ const ListingsSku: React.FC = () => {
       key: 'quantity',
       width: 80,
       align: 'center' as const,
-      render: (quantity: number | string) => {
-        const numericQuantity = typeof quantity === 'string' ? parseInt(quantity, 10) : quantity;
-        const finalQuantity = isNaN(numericQuantity) ? 0 : numericQuantity;
-        return (
-          <span style={{ fontSize: 12, color: finalQuantity > 0 ? '#52c41a' : '#ff4d4f' }}>
-            {finalQuantity}
-          </span>
-        );
-      },
+      render: (quantity: number) => (
+        <span style={{ fontSize: 12, color: quantity > 0 ? '#52c41a' : '#ff4d4f' }}>
+          {quantity || 0}
+        </span>
+      ),
     },
     {
       title: '履行渠道',

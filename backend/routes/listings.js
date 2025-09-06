@@ -934,8 +934,8 @@ router.get('/sku-data', async (req, res) => {
         ls.\`item-name\`,
         ls.\`item-description\`,
         ls.\`seller-sku\`,
-        ls.price,
-        ls.quantity,
+        CAST(ls.price AS DECIMAL(12,2)) as price,
+        CAST(ls.quantity AS UNSIGNED) as quantity,
         ls.\`open-date\`,
         ls.\`image-url\`,
         ls.asin1,
@@ -970,6 +970,13 @@ router.get('/sku-data', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
+    // 确保数字字段为正确的数据类型
+    const processedRecords = records.map(record => ({
+      ...record,
+      price: record.price !== null && record.price !== undefined ? parseFloat(record.price) : null,
+      quantity: record.quantity !== null && record.quantity !== undefined ? parseInt(record.quantity, 10) : null
+    }));
+
     // 获取总数
     const countQuery = `
       SELECT COUNT(*) as total
@@ -1000,9 +1007,9 @@ router.get('/sku-data', async (req, res) => {
     // 计算统计数据
     const summary = {
       totalListings: countResult.total,
-      activeListings: records.filter(r => r.status === 'Active').length,
-      fbaListings: records.filter(r => r['fulfillment-channel']?.includes('DEFAULT') || r['fulfillment-channel']?.includes('AMAZON')).length,
-      fbmListings: records.filter(r => r['fulfillment-channel'] === 'DEFAULT_FBM' || r['fulfillment-channel'] === 'MERCHANT').length
+      activeListings: processedRecords.filter(r => r.status === 'Active').length,
+      fbaListings: processedRecords.filter(r => r['fulfillment-channel']?.includes('DEFAULT') || r['fulfillment-channel']?.includes('AMAZON')).length,
+      fbmListings: processedRecords.filter(r => r['fulfillment-channel'] === 'DEFAULT_FBM' || r['fulfillment-channel'] === 'MERCHANT').length
     };
 
     res.json({
@@ -1012,7 +1019,7 @@ router.get('/sku-data', async (req, res) => {
         total: countResult.total,
         current: parseInt(page),
         pageSize: parseInt(limit),
-        records,
+        records: processedRecords,
         siteList: siteList.map(item => item.site),
         countryList: countryList.map(item => item.country),
         fulfillmentChannelList: fulfillmentChannelList.map(item => item['fulfillment-channel']),
