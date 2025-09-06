@@ -345,45 +345,17 @@ const Listings: React.FC = () => {
       
       hierarchicalData.forEach(row => {
         if (selectedRowKeys.includes(row.key!)) {
-          // 为每个国家添加对应的SKU数据
+          // 为每个国家添加对应的母SKU数据（带前缀）
           Object.keys(countryCodeMap).forEach(countryName => {
-            const countryStatus = row.countryStatus[countryName];
-            if (countryStatus && countryStatus.mappings) {
-              // 找到该国家的非FBA SKU
-              const nonFbaSkus = countryStatus.mappings.filter(mapping => !mapping.isFbaSku);
-              
-              if (nonFbaSkus.length > 0) {
-                // 如果有非FBA SKU，使用非FBA SKU
-                nonFbaSkus.forEach(mapping => {
-                  selectedSkuDataMap[countryName].push({
-                    item_sku: mapping.amzSku,
-                    update_delete: 'Delete',
-                    source: `${countryName}-非FBA`,
-                    originalChildSku: row.child_sku
-                  });
-                });
-              } else if (countryStatus.mappings.length > 0) {
-                // 如果没有非FBA SKU，使用第一个SKU作为备选
-                const firstMapping = countryStatus.mappings[0];
-                selectedSkuDataMap[countryName].push({
-                  item_sku: firstMapping.amzSku,
-                  update_delete: 'Delete',
-                  source: `${countryName}-备选`,
-                  originalChildSku: row.child_sku
-                });
-              }
-            }
+            // 确定前缀：美国和加拿大用"US"，其他站点用"UK"
+            const prefix = (countryName === '美国' || countryName === '加拿大') ? 'US' : 'UK';
+            const parentSkuWithPrefix = `${prefix}${row.parent_sku}`;
             
-            // 如果该国家没有映射数据，使用通用的子SKU作为最后备选
-            if (selectedSkuDataMap[countryName].length === 0 || 
-                !selectedSkuDataMap[countryName].some(item => item.originalChildSku === row.child_sku)) {
-              selectedSkuDataMap[countryName].push({
-                item_sku: row.child_sku || row.parent_sku,
-                update_delete: 'Delete',
-                source: `${countryName}-通用`,
-                originalChildSku: row.child_sku
-              });
-            }
+            selectedSkuDataMap[countryName].push({
+              item_sku: parentSkuWithPrefix,
+              update_delete: 'Delete',
+              originalParentSku: row.parent_sku
+            });
           });
         }
       });
@@ -396,15 +368,7 @@ const Listings: React.FC = () => {
         return;
       }
       
-      // 调试：显示每个国家选中的SKU数据
-      console.log('📋 各国家选中的SKU数据:');
-      Object.keys(countryCodeMap).forEach(countryName => {
-        const countrySkuData = selectedSkuDataMap[countryName];
-        console.log(`${countryName} (${countrySkuData.length}条):`);
-        countrySkuData.forEach((data, index) => {
-          console.log(`  ${index + 1}. item_sku: "${data.item_sku}" (${data.source}), child_sku: "${data.originalChildSku}"`);
-        });
-      });
+
       
       // 生成文件名 - 包含子SKU信息
       const generateFileName = (countryName: string, skuData: any[]) => {
@@ -481,8 +445,6 @@ const Listings: React.FC = () => {
           const workbook = XLSX.read(arrayBuffer, { type: 'array' });
           
           // 查找名为"Template"的工作表
-          console.log(`${countryName} - 📋 可用工作表:`, workbook.SheetNames);
-          
           let worksheet: any = null;
           let sheetName: string | null = null;
           
@@ -490,7 +452,6 @@ const Listings: React.FC = () => {
           if (workbook.SheetNames.includes('Template')) {
             sheetName = 'Template';
             worksheet = workbook.Sheets['Template'];
-            console.log(`${countryName} - ✅ 找到Template工作表`);
           } else {
             // 如果没有Template工作表，使用第一个工作表
             sheetName = workbook.SheetNames[0];
@@ -498,39 +459,11 @@ const Listings: React.FC = () => {
               throw new Error(`${countryName}模板文件中没有找到工作表`);
             }
             worksheet = workbook.Sheets[sheetName];
-            console.log(`${countryName} - ⚠️ 未找到Template工作表，使用: ${sheetName}`);
-          }
-          
-          // 专门显示第三行的内容（扩展到50列以覆盖AG、AI等列）
-          console.log(`${countryName} - 🔍 第三行列名内容:`);
-          let row3Content = [];
-          for (let col = 0; col < 50; col++) {
-            let colLetter = '';
-            if (col < 26) {
-              colLetter = String.fromCharCode(65 + col); // A-Z
-            } else {
-              colLetter = 'A' + String.fromCharCode(65 + col - 26); // AA-AX
-            }
-            const cellAddress = `${colLetter}3`;
-            const rawValue = worksheet[cellAddress]?.v;
-            if (rawValue !== undefined && rawValue !== null) {
-              const cellValue = rawValue.toString().trim();
-              row3Content.push(`${colLetter}3: "${cellValue}"`);
-              console.log(`${countryName} - ${colLetter}3 = "${cellValue}"`);
-            }
-          }
-          
-          if (row3Content.length > 0) {
-            console.log(`${countryName} - 📊 第3行汇总: ${row3Content.join(', ')}`);
-          } else {
-            console.log(`${countryName} - ❌ 第3行没有找到任何内容`);
           }
           
           // 查找item_sku和update_delete列的精确位置 - 只在第3行查找
           let itemSkuCol: string | null = null;
           let updateDeleteCol: string | null = null;
-          
-          console.log(`${countryName} - 🔍 在第3行查找目标列名...`);
             
           // 只在第3行查找列名（第3行是列名行）- 扩展到50列覆盖AG、AI等远程列
           for (let col = 0; col < 50; col++) {
@@ -556,7 +489,6 @@ const Listings: React.FC = () => {
                 lowerValue === 'seller-sku'
               )) {
                 itemSkuCol = colLetter;
-                console.log(`${countryName} - ✅ 找到item_sku列: ${cellAddress} = "${cellValue}"`);
               }
               
               // update_delete列匹配
@@ -568,7 +500,6 @@ const Listings: React.FC = () => {
                 lowerValue === 'operation'
               )) {
                 updateDeleteCol = colLetter;
-                console.log(`${countryName} - ✅ 找到update_delete列: ${cellAddress} = "${cellValue}"`);
               }
             }
           }
@@ -580,26 +511,18 @@ const Listings: React.FC = () => {
             throw new Error(error);
           }
           
-          console.log(`${countryName} - 使用列: item_sku=${itemSkuCol}, update_delete=${updateDeleteCol}`);
-          
 
           
           // 获取该国家的SKU数据
           const countrySkuData = selectedSkuDataMap[countryName];
           
           // 5. 从第4行开始填入数据
-          console.log(`${countryName} - 开始填入${countrySkuData.length}条SKU数据...`);
-          
           countrySkuData.forEach((data: any, index: number) => {
             const rowNumber = 4 + index;
-            
-            console.log(`${countryName} - 写入第${rowNumber}行: item_sku="${data.item_sku}" (${data.source}), update_delete="${data.update_delete}"`);
             
             // 填入数据
             worksheet[`${itemSkuCol}${rowNumber}`] = { v: data.item_sku, t: 's' };
             worksheet[`${updateDeleteCol}${rowNumber}`] = { v: data.update_delete, t: 's' };
-            
-            console.log(`${countryName} - ✍️ 已写入: ${itemSkuCol}${rowNumber}="${data.item_sku}", ${updateDeleteCol}${rowNumber}="${data.update_delete}"`);
           });
           
           // 更新工作表范围
