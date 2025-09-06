@@ -266,7 +266,12 @@ const ListingsSku: React.FC = () => {
   // 组件加载时获取数据
   useEffect(() => {
     fetchListingsSkuData();
-  }, [fetchListingsSkuData]);
+  }, []);
+
+  // 监听查询参数变化
+  useEffect(() => {
+    fetchListingsSkuData();
+  }, [queryParams]);
 
   return (
     <div>
