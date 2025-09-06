@@ -343,19 +343,23 @@ const Listings: React.FC = () => {
         selectedSkuDataMap[countryName] = [];
       });
       
-      // 分别收集母SKU和子SKU
-      const selectedParentSkus = new Set<string>();
-      const selectedChildSkus: any[] = [];
+      // 按母SKU分组收集选中的记录
+      const selectedSkusByParent = new Map<string, { parent: boolean, children: any[] }>();
       
       hierarchicalData.forEach(row => {
         if (selectedRowKeys.includes(row.key!)) {
           if (row.isParentRow) {
             // 母SKU记录
-            selectedParentSkus.add(row.parent_sku);
+            if (!selectedSkusByParent.has(row.parent_sku)) {
+              selectedSkusByParent.set(row.parent_sku, { parent: false, children: [] });
+            }
+            selectedSkusByParent.get(row.parent_sku)!.parent = true;
           } else {
             // 子SKU记录
-            selectedChildSkus.push({
-              parent_sku: row.parent_sku,
+            if (!selectedSkusByParent.has(row.parent_sku)) {
+              selectedSkusByParent.set(row.parent_sku, { parent: false, children: [] });
+            }
+            selectedSkusByParent.get(row.parent_sku)!.children.push({
               child_sku: row.child_sku,
               countryStatus: row.countryStatus
             });
@@ -363,31 +367,34 @@ const Listings: React.FC = () => {
         }
       });
       
-      // 为每个国家组织数据：先母SKU，后子SKU
+      // 为每个国家组织数据：母SKU后紧跟其子SKU
       Object.keys(countryCodeMap).forEach(countryName => {
         // 确定前缀：美国和加拿大用"US"，其他站点用"UK"
         const prefix = (countryName === '美国' || countryName === '加拿大') ? 'US' : 'UK';
         
-        // 1. 先添加所有母SKU（带前缀）
-        selectedParentSkus.forEach(parentSku => {
-          const parentSkuWithPrefix = `${prefix}${parentSku}`;
-          selectedSkuDataMap[countryName].push({
-            item_sku: parentSkuWithPrefix,
-            update_delete: 'Delete',
-            type: 'parent',
-            originalSku: parentSku
-          });
-        });
-        
-        // 2. 再添加所有子SKU（带前缀）
-        selectedChildSkus.forEach(childData => {
-          const childSkuWithPrefix = `${prefix}${childData.child_sku}`;
-          selectedSkuDataMap[countryName].push({
-            item_sku: childSkuWithPrefix,
-            update_delete: 'Delete',
-            type: 'child',
-            originalSku: childData.child_sku,
-            parentSku: childData.parent_sku
+        // 按母SKU分组添加数据
+        selectedSkusByParent.forEach((groupData, parentSku) => {
+          // 1. 先添加母SKU（如果被选中）
+          if (groupData.parent) {
+            const parentSkuWithPrefix = `${prefix}${parentSku}`;
+            selectedSkuDataMap[countryName].push({
+              item_sku: parentSkuWithPrefix,
+              update_delete: 'Delete',
+              type: 'parent',
+              originalSku: parentSku
+            });
+          }
+          
+          // 2. 紧接着添加该母SKU的所有子SKU
+          groupData.children.forEach(childData => {
+            const childSkuWithPrefix = `${prefix}${childData.child_sku}`;
+            selectedSkuDataMap[countryName].push({
+              item_sku: childSkuWithPrefix,
+              update_delete: 'Delete',
+              type: 'child',
+              originalSku: childData.child_sku,
+              parentSku: parentSku
+            });
           });
         });
       });
