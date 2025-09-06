@@ -343,21 +343,53 @@ const Listings: React.FC = () => {
         selectedSkuDataMap[countryName] = [];
       });
       
+      // 分别收集母SKU和子SKU
+      const selectedParentSkus = new Set<string>();
+      const selectedChildSkus: any[] = [];
+      
       hierarchicalData.forEach(row => {
         if (selectedRowKeys.includes(row.key!)) {
-          // 为每个国家添加对应的母SKU数据（带前缀）
-          Object.keys(countryCodeMap).forEach(countryName => {
-            // 确定前缀：美国和加拿大用"US"，其他站点用"UK"
-            const prefix = (countryName === '美国' || countryName === '加拿大') ? 'US' : 'UK';
-            const parentSkuWithPrefix = `${prefix}${row.parent_sku}`;
-            
-            selectedSkuDataMap[countryName].push({
-              item_sku: parentSkuWithPrefix,
-              update_delete: 'Delete',
-              originalParentSku: row.parent_sku
+          if (row.isParentRow) {
+            // 母SKU记录
+            selectedParentSkus.add(row.parent_sku);
+          } else {
+            // 子SKU记录
+            selectedChildSkus.push({
+              parent_sku: row.parent_sku,
+              child_sku: row.child_sku,
+              countryStatus: row.countryStatus
             });
-          });
+          }
         }
+      });
+      
+      // 为每个国家组织数据：先母SKU，后子SKU
+      Object.keys(countryCodeMap).forEach(countryName => {
+        // 确定前缀：美国和加拿大用"US"，其他站点用"UK"
+        const prefix = (countryName === '美国' || countryName === '加拿大') ? 'US' : 'UK';
+        
+        // 1. 先添加所有母SKU（带前缀）
+        selectedParentSkus.forEach(parentSku => {
+          const parentSkuWithPrefix = `${prefix}${parentSku}`;
+          selectedSkuDataMap[countryName].push({
+            item_sku: parentSkuWithPrefix,
+            update_delete: 'Delete',
+            type: 'parent',
+            originalSku: parentSku
+          });
+        });
+        
+        // 2. 再添加所有子SKU（带前缀）
+        selectedChildSkus.forEach(childData => {
+          const childSkuWithPrefix = `${prefix}${childData.child_sku}`;
+          selectedSkuDataMap[countryName].push({
+            item_sku: childSkuWithPrefix,
+            update_delete: 'Delete',
+            type: 'child',
+            originalSku: childData.child_sku,
+            parentSku: childData.parent_sku
+          });
+        });
       });
       
       // 检查是否有任何数据
