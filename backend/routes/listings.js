@@ -920,35 +920,57 @@ router.get('/sku-data', async (req, res) => {
       '波兰': 'www.amazon.pl'
     };
     
-    // 构建查询条件
+    // 构建查询条件和参数（使用参数化查询避免SQL注入）
     let whereConditions = [];
+    let queryParams = [];
+    
     if (search) {
       whereConditions.push(`(
-        \`seller-sku\` LIKE '%${search}%' OR 
-        \`item-name\` LIKE '%${search}%' OR 
-        \`listing-id\` LIKE '%${search}%' OR
-        asin1 LIKE '%${search}%'
+        \`seller-sku\` LIKE ? OR 
+        \`item-name\` LIKE ? OR 
+        \`listing-id\` LIKE ? OR
+        asin1 LIKE ?
       )`);
+      const searchPattern = `%${search}%`;
+      queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
+    
     if (site && site !== 'all') {
       // 如果传入的是中文国家名，转换为对应的站点URL
       const actualSite = countryToSiteMap[site] || site;
-      whereConditions.push(`site = '${actualSite}'`);
+      whereConditions.push(`site = ?`);
+      queryParams.push(actualSite);
     }
+    
     if (fulfillment_channel && fulfillment_channel !== 'all') {
       if (fulfillment_channel === 'FBA') {
         // FBA渠道：包含"AMAZON"的
-        whereConditions.push(`\`fulfillment-channel\` LIKE '%AMAZON%'`);
+        whereConditions.push(`\`fulfillment-channel\` LIKE ?`);
+        queryParams.push('%AMAZON%');
       } else if (fulfillment_channel === '本地发货') {
         // 本地发货：为"DEFAULT"的
-        whereConditions.push(`\`fulfillment-channel\` = 'DEFAULT'`);
+        whereConditions.push(`\`fulfillment-channel\` = ?`);
+        queryParams.push('DEFAULT');
       }
     }
+    
     if (status && status !== 'all') {
-      whereConditions.push(`status = '${status}'`);
+      // 支持多选状态：status可能是逗号分隔的字符串
+      const statusArray = status.split(',').map(s => s.trim()).filter(s => s);
+      if (statusArray.length > 0) {
+        const statusPlaceholders = statusArray.map(() => '?').join(',');
+        whereConditions.push(`status IN (${statusPlaceholders})`);
+        queryParams.push(...statusArray);
+      }
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // 验证排序字段，防止SQL注入
+    const allowedSortFields = ['seller-sku', 'site', 'price', 'quantity', 'status', 'listing-id'];
+    const safeSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'seller-sku';
+    const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    const sortField = safeSortBy === 'seller-sku' ? 'ls.`seller-sku`' : `ls.${safeSortBy}`;
 
     // 获取主数据
     const dataQuery = `
@@ -985,11 +1007,15 @@ router.get('/sku-data', async (req, res) => {
       LEFT JOIN sellerinventory_sku sis ON am.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       ${whereClause}
-      ORDER BY ${sort_by === 'seller-sku' ? 'ls.`seller-sku`' : sort_by} ${sort_order}
-      LIMIT ${parseInt(limit)} OFFSET ${offset}
+      ORDER BY ${sortField} ${safeSortOrder}
+      LIMIT ? OFFSET ?
     `;
 
+    // 添加分页参数
+    queryParams.push(parseInt(limit), offset);
+
     const records = await sequelize.query(dataQuery, {
+      replacements: queryParams,
       type: sequelize.QueryTypes.SELECT
     });
 
@@ -1000,7 +1026,8 @@ router.get('/sku-data', async (req, res) => {
       quantity: record.quantity !== null && record.quantity !== undefined ? parseInt(record.quantity, 10) : null
     }));
 
-    // 获取总数
+    // 获取总数（使用相同的条件参数）
+    const countParams = queryParams.slice(0, -2); // 移除LIMIT和OFFSET参数
     const countQuery = `
       SELECT COUNT(*) as total
       FROM listings_sku ls
@@ -1011,6 +1038,7 @@ router.get('/sku-data', async (req, res) => {
     `;
 
     const [countResult] = await sequelize.query(countQuery, {
+      replacements: countParams,
       type: sequelize.QueryTypes.SELECT
     });
     

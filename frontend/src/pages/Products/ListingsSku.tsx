@@ -15,7 +15,7 @@ import {
   ReloadOutlined,
   DownloadOutlined
 } from '@ant-design/icons';
-import { API_BASE_URL } from '../../config/api';
+import { API_BASE_URL, apiClient } from '../../config/api';
 import {
   ListingsSkuData,
   ListingsSkuQueryParams,
@@ -42,7 +42,7 @@ const ListingsSku: React.FC = () => {
     search: '',
     site: 'all',
     fulfillment_channel: 'all',
-    status: 'all',
+    status: ['Active', 'Inactive'], // 默认显示Active和Inactive状态
     sort_by: 'seller-sku',
     sort_order: 'ASC'
   });
@@ -54,12 +54,18 @@ const ListingsSku: React.FC = () => {
       const params = new URLSearchParams();
       Object.entries(queryParams).forEach(([key, value]) => {
         if (value !== undefined && value !== '' && value !== 'all') {
-          params.append(key, String(value));
+          if (key === 'status' && Array.isArray(value)) {
+            // 多选状态处理：将数组转换为逗号分隔的字符串
+            if (value.length > 0) {
+              params.append(key, value.join(','));
+            }
+          } else {
+            params.append(key, String(value));
+          }
         }
       });
       
-      const response = await fetch(`${API_BASE_URL}/api/listings/sku-data?${params}`);
-      const result: ListingsSkuResponse = await response.json();
+      const result: ListingsSkuResponse = await apiClient.get(`/api/listings/sku-data?${params}`);
       
       if (result.code === 0) {
         setListingsSkuData(result.data.records);
@@ -73,7 +79,7 @@ const ListingsSku: React.FC = () => {
       }
     } catch (error) {
       console.error('获取Listings SKU数据失败:', error);
-      message.error('获取数据失败');
+      message.error('获取数据失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -249,12 +255,12 @@ const ListingsSku: React.FC = () => {
   // 组件加载时获取数据
   useEffect(() => {
     fetchListingsSkuData();
-  }, []);
+  }, [fetchListingsSkuData]);
 
-  // 监听查询参数变化
-  useEffect(() => {
-    fetchListingsSkuData();
-  }, [queryParams]);
+  // 移除重复的useEffect - 已经通过fetchListingsSkuData的依赖项处理了queryParams变化
+  // useEffect(() => {
+  //   fetchListingsSkuData();
+  // }, [queryParams]);
 
   return (
     <div>
@@ -297,12 +303,14 @@ const ListingsSku: React.FC = () => {
         </Select>
         
         <Select
-          value={queryParams.status}
-          onChange={(value) => updateQueryParams({ status: value })}
-          placeholder="状态"
-          style={{ width: 100 }}
+          mode="multiple"
+          value={Array.isArray(queryParams.status) ? queryParams.status : []}
+          onChange={(value) => updateQueryParams({ status: value.length > 0 ? value : ['Active', 'Inactive'] })}
+          placeholder="选择状态"
+          style={{ width: 160 }}
+          allowClear
+          maxTagCount="responsive"
         >
-          <Option value="all">全部状态</Option>
           {statusList.map(status => (
             <Option key={status} value={status}>{status}</Option>
           ))}
@@ -312,7 +320,18 @@ const ListingsSku: React.FC = () => {
         
         <Button
           icon={<ReloadOutlined />}
-          onClick={fetchListingsSkuData}
+          onClick={() => {
+            setQueryParams({
+              page: 1,
+              limit: 50,
+              search: '',
+              site: 'all',
+              fulfillment_channel: 'all',
+              status: ['Active', 'Inactive'], // 刷新时重置为默认状态
+              sort_by: 'seller-sku',
+              sort_order: 'ASC'
+            });
+          }}
         >
           刷新
         </Button>

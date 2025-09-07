@@ -184,7 +184,7 @@ export interface ListingsSkuQueryParams {
   search?: string;
   site?: string;
   fulfillment_channel?: string;
-  status?: string;
+  status?: string | string[]; // 支持单选和多选
   sort_by?: string;
   sort_order?: 'ASC' | 'DESC';
 }
