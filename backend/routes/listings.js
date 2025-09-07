@@ -959,7 +959,7 @@ router.get('/sku-data', async (req, res) => {
       const statusArray = status.split(',').map(s => s.trim()).filter(s => s);
       if (statusArray.length > 0) {
         const statusPlaceholders = statusArray.map(() => '?').join(',');
-        whereConditions.push(`status IN (${statusPlaceholders})`);
+        whereConditions.push(`ls.status IN (${statusPlaceholders})`);
         queryParams.push(...statusArray);
       }
     }
