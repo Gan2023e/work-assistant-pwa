@@ -9,7 +9,10 @@ import {
   Card,
   Tag,
   Tooltip,
-  Empty
+  Empty,
+  Modal,
+  Descriptions,
+  Spin
 } from 'antd';
 import {
   ReloadOutlined,
@@ -34,6 +37,16 @@ const ListingsSku: React.FC = () => {
   const [fulfillmentChannelList, setFulfillmentChannelList] = useState<string[]>([]);
   const [statusList, setStatusList] = useState<string[]>([]);
   const [summary, setSummary] = useState<any>(null);
+
+  // FBA库存详情弹窗状态
+  const [fbaDetailModalVisible, setFbaDetailModalVisible] = useState(false);
+  const [fbaDetailLoading, setFbaDetailLoading] = useState(false);
+  const [selectedFbaInfo, setSelectedFbaInfo] = useState<{
+    sellerSku: string;
+    site: string;
+    country: string;
+  } | null>(null);
+  const [fbaInventoryDetail, setFbaInventoryDetail] = useState<any>(null);
 
   // 查询参数
   const [queryParams, setQueryParams] = useState<ListingsSkuQueryParams>({
@@ -93,6 +106,56 @@ const ListingsSku: React.FC = () => {
   // 分页处理
   const handlePageChange = (page: number, pageSize?: number) => {
     setQueryParams(prev => ({ ...prev, page, limit: pageSize || prev.limit }));
+  };
+
+  // 获取FBA库存详情
+  const fetchFbaInventoryDetail = async (sellerSku: string, site: string) => {
+    setFbaDetailLoading(true);
+    try {
+      const result = await apiClient.get(`/api/listings/fba-inventory/${encodeURIComponent(sellerSku)}/${encodeURIComponent(site)}`);
+      
+      if (result.code === 0) {
+        setFbaInventoryDetail(result.data);
+      } else {
+        message.error(result.message || '获取FBA库存详情失败');
+      }
+    } catch (error) {
+      console.error('获取FBA库存详情失败:', error);
+      message.error('获取FBA库存详情失败，请稍后重试');
+    } finally {
+      setFbaDetailLoading(false);
+    }
+  };
+
+  // 打开FBA库存详情弹窗
+  const handleShowFbaDetail = (record: ListingsSkuData) => {
+    if (!record['seller-sku'] || !record.site) {
+      message.error('SKU或站点信息不完整');
+      return;
+    }
+    
+    const siteToCountryMap = {
+      'www.amazon.com': '美国',
+      'www.amazon.ca': '加拿大',
+      'www.amazon.co.uk': '英国',
+      'www.amazon.com.au': '澳大利亚',
+      'www.amazon.ae': '阿联酋',
+      'www.amazon.de': '德国',
+      'www.amazon.fr': '法国',
+      'www.amazon.it': '意大利',
+      'www.amazon.es': '西班牙'
+    };
+    
+    const sellerSku = record['seller-sku'];
+    const site = record.site;
+    
+    setSelectedFbaInfo({
+      sellerSku,
+      site,
+      country: siteToCountryMap[site as keyof typeof siteToCountryMap] || site
+    });
+    setFbaDetailModalVisible(true);
+    fetchFbaInventoryDetail(sellerSku, site);
   };
 
   // 导出数据
@@ -201,11 +264,35 @@ const ListingsSku: React.FC = () => {
       key: 'quantity',
       width: 80,
       align: 'center' as const,
-      render: (quantity: number) => (
-        <span style={{ fontSize: 12, color: quantity > 0 ? '#52c41a' : '#ff4d4f' }}>
-          {quantity || 0}
-        </span>
-      ),
+      render: (quantity: number, record: ListingsSkuData) => {
+        const isFbaChannel = record['fulfillment-channel']?.includes('AMAZON');
+        const quantityValue = quantity || 0;
+        
+        if (isFbaChannel) {
+          return (
+            <Tooltip title="点击查看FBA库存详情">
+              <span 
+                style={{ 
+                  fontSize: 12, 
+                  color: quantityValue > 0 ? '#52c41a' : '#ff4d4f',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textDecorationStyle: 'dashed'
+                }}
+                onClick={() => handleShowFbaDetail(record)}
+              >
+                {quantityValue}
+              </span>
+            </Tooltip>
+          );
+        }
+        
+        return (
+          <span style={{ fontSize: 12, color: quantityValue > 0 ? '#52c41a' : '#ff4d4f' }}>
+            {quantityValue}
+          </span>
+        );
+      },
     },
     {
       title: '履行渠道',
@@ -398,6 +485,106 @@ const ListingsSku: React.FC = () => {
           />
         </div>
       </Card>
+
+      {/* FBA库存详情弹窗 */}
+      <Modal
+        title={
+          <div>
+            <span>FBA库存详情</span>
+            {selectedFbaInfo && (
+              <Tag color="blue" style={{ marginLeft: 8 }}>
+                {selectedFbaInfo.country} - {selectedFbaInfo.sellerSku}
+              </Tag>
+            )}
+          </div>
+        }
+        open={fbaDetailModalVisible}
+        onCancel={() => {
+          setFbaDetailModalVisible(false);
+          setSelectedFbaInfo(null);
+          setFbaInventoryDetail(null);
+        }}
+        width={800}
+        footer={[
+          <Button key="close" onClick={() => {
+            setFbaDetailModalVisible(false);
+            setSelectedFbaInfo(null);
+            setFbaInventoryDetail(null);
+          }}>
+            关闭
+          </Button>
+        ]}
+      >
+        <Spin spinning={fbaDetailLoading}>
+          {fbaInventoryDetail ? (
+            <div>
+              {/* 库存概况 */}
+              <Card title="库存概况" size="small" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>
+                      {fbaInventoryDetail.summary?.totalQuantity || 0}
+                    </div>
+                    <div style={{ color: '#666' }}>总库存</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                      {fbaInventoryDetail.summary?.fulfillableQuantity || 0}
+                    </div>
+                    <div style={{ color: '#666' }}>可售库存</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#fa8c16' }}>
+                      {fbaInventoryDetail.summary?.inboundQuantity || 0}
+                    </div>
+                    <div style={{ color: '#666' }}>在途库存</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ff4d4f' }}>
+                      {fbaInventoryDetail.summary?.unsellableQuantity || 0}
+                    </div>
+                    <div style={{ color: '#666' }}>不可售库存</div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 详细信息 */}
+              <Card title="详细信息" size="small">
+                <Descriptions column={2} size="small">
+                  <Descriptions.Item label="SKU">{fbaInventoryDetail.current?.sku}</Descriptions.Item>
+                  <Descriptions.Item label="站点">{fbaInventoryDetail.current?.site}</Descriptions.Item>
+                  <Descriptions.Item label="可售数量">{fbaInventoryDetail.current?.['afn-fulfillable-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="总数量">{fbaInventoryDetail.current?.['afn-total-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="在途-处理中">{fbaInventoryDetail.current?.['afn-inbound-working-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="在途-已发货">{fbaInventoryDetail.current?.['afn-inbound-shipped-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="在途-接收中">{fbaInventoryDetail.current?.['afn-inbound-receiving-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="预留数量">{fbaInventoryDetail.current?.['afn-reserved-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="不可售数量">{fbaInventoryDetail.current?.['afn-unsellable-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="商品状态">{fbaInventoryDetail.current?.condition || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="单位体积">{fbaInventoryDetail.current?.['per-unit-volume'] || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="店铺">{fbaInventoryDetail.current?.store || '-'}</Descriptions.Item>
+                </Descriptions>
+              </Card>
+
+              {/* 额外信息 */}
+              <Card title="额外信息" size="small" style={{ marginTop: 16 }}>
+                <Descriptions column={2} size="small">
+                  <Descriptions.Item label="AFN仓库数量">{fbaInventoryDetail.current?.['afn-warehouse-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="AFN研究中数量">{fbaInventoryDetail.current?.['afn-researching-quantity'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="本地可售数量">{fbaInventoryDetail.current?.['afn-fulfillable-quantity-local'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="远程可售数量">{fbaInventoryDetail.current?.['afn-fulfillable-quantity-remote'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="未来供应可购买">{fbaInventoryDetail.current?.['afn-future-supply-buyable'] || 0}</Descriptions.Item>
+                  <Descriptions.Item label="预留未来供应">{fbaInventoryDetail.current?.['afn-reserved-future-supply'] || 0}</Descriptions.Item>
+                </Descriptions>
+              </Card>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Empty description="暂无FBA库存数据" />
+            </div>
+          )}
+        </Spin>
+      </Modal>
     </div>
   );
 };

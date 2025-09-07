@@ -926,10 +926,10 @@ router.get('/sku-data', async (req, res) => {
     
     if (search) {
       whereConditions.push(`(
-        \`seller-sku\` LIKE ? OR 
-        \`item-name\` LIKE ? OR 
-        \`listing-id\` LIKE ? OR
-        asin1 LIKE ?
+        ls.\`seller-sku\` LIKE ? OR 
+        ls.\`item-name\` LIKE ? OR 
+        ls.\`listing-id\` LIKE ? OR
+        ls.asin1 LIKE ?
       )`);
       const searchPattern = `%${search}%`;
       queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
@@ -938,18 +938,18 @@ router.get('/sku-data', async (req, res) => {
     if (site && site !== 'all') {
       // 如果传入的是中文国家名，转换为对应的站点URL
       const actualSite = countryToSiteMap[site] || site;
-      whereConditions.push(`site = ?`);
+      whereConditions.push(`ls.site = ?`);
       queryParams.push(actualSite);
     }
     
     if (fulfillment_channel && fulfillment_channel !== 'all') {
       if (fulfillment_channel === 'FBA') {
         // FBA渠道：包含"AMAZON"的
-        whereConditions.push(`\`fulfillment-channel\` LIKE ?`);
+        whereConditions.push(`ls.\`fulfillment-channel\` LIKE ?`);
         queryParams.push('%AMAZON%');
       } else if (fulfillment_channel === '本地发货') {
         // 本地发货：为"DEFAULT"的
-        whereConditions.push(`\`fulfillment-channel\` = ?`);
+        whereConditions.push(`ls.\`fulfillment-channel\` = ?`);
         queryParams.push('DEFAULT');
       }
     }
@@ -980,7 +980,13 @@ router.get('/sku-data', async (req, res) => {
         ls.\`item-description\`,
         ls.\`seller-sku\`,
         CAST(ls.price AS DECIMAL(12,2)) as price,
-        CAST(ls.quantity AS UNSIGNED) as quantity,
+        -- 根据履行渠道选择数量字段：如果包含AMAZON则使用FBA库存，否则使用Listing数量
+        CASE 
+          WHEN ls.\`fulfillment-channel\` LIKE '%AMAZON%' THEN 
+            CAST(COALESCE(fba.\`afn-total-quantity\`, 0) AS UNSIGNED)
+          ELSE 
+            CAST(ls.quantity AS UNSIGNED)
+        END as quantity,
         ls.\`open-date\`,
         ls.\`image-url\`,
         ls.asin1,
@@ -1001,11 +1007,14 @@ router.get('/sku-data', async (req, res) => {
         sis.sellersizename,
         -- 通过母SKU获取产品链接
         pw.weblink,
-        pw.status as product_status
+        pw.status as product_status,
+        -- 添加FBA库存字段用于调试
+        fba.\`afn-total-quantity\` as fba_total_quantity
       FROM listings_sku ls
       LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
       LEFT JOIN sellerinventory_sku sis ON am.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      LEFT JOIN fba_inventory fba ON ls.\`seller-sku\` = fba.sku AND ls.site = fba.site
       ${whereClause}
       ORDER BY ${sortField} ${safeSortOrder}
       LIMIT ? OFFSET ?
@@ -1034,6 +1043,7 @@ router.get('/sku-data', async (req, res) => {
       LEFT JOIN pbi_amzsku_sku am ON ls.\`seller-sku\` = am.amz_sku AND ls.site = am.site
       LEFT JOIN sellerinventory_sku sis ON am.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      LEFT JOIN fba_inventory fba ON ls.\`seller-sku\` = fba.sku AND ls.site = fba.site
       ${whereClause}
     `;
 
@@ -1101,6 +1111,82 @@ router.get('/sku-data', async (req, res) => {
 
   } catch (error) {
     console.error('获取Listings SKU数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取特定SKU的FBA库存详细信息
+router.get('/fba-inventory/:sellerSku/:site', async (req, res) => {
+  try {
+    const { sellerSku, site } = req.params;
+    
+    // 获取FBA库存详细信息
+    const fbaInventoryQuery = `
+      SELECT 
+        sku,
+        site,
+        \`afn-fulfillable-quantity\`,
+        \`afn-inbound-working-quantity\`,
+        \`afn-inbound-shipped-quantity\`,
+        \`afn-inbound-receiving-quantity\`,
+        \`afn-unsellable-quantity\`,
+        \`afn-total-quantity\`,
+        \`per-unit-volume\`,
+        \`afn-reserved-quantity\`,
+        \`afn-future-supply-buyable\`,
+        \`afn-reserved-future-supply\`,
+        \`condition\`,
+        \`store\`
+      FROM fba_inventory 
+      WHERE sku = ? AND site = ?
+      LIMIT 10
+    `;
+    
+    const fbaInventoryData = await sequelize.query(fbaInventoryQuery, {
+      replacements: [sellerSku, site],
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    if (fbaInventoryData.length === 0) {
+      return res.json({
+        code: 0,
+        message: '未找到FBA库存数据',
+        data: null
+      });
+    }
+    
+    // 获取最新的记录
+    const latestRecord = fbaInventoryData[0];
+    
+    // 获取历史记录（最近10条）
+    const historyRecords = fbaInventoryData;
+    
+    res.json({
+      code: 0,
+      message: '查询成功',
+      data: {
+        current: latestRecord,
+        history: historyRecords,
+        summary: {
+          totalQuantity: latestRecord['afn-total-quantity'] || 0,
+          fulfillableQuantity: latestRecord['afn-fulfillable-quantity'] || 0,
+          unsellableQuantity: latestRecord['afn-unsellable-quantity'] || 0,
+          reservedQuantity: latestRecord['afn-reserved-quantity'] || 0,
+          inboundQuantity: (
+            (latestRecord['afn-inbound-working-quantity'] || 0) +
+            (latestRecord['afn-inbound-shipped-quantity'] || 0) +
+            (latestRecord['afn-inbound-receiving-quantity'] || 0)
+          )
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取FBA库存详情失败:', error);
     res.status(500).json({
       code: 1,
       message: '获取失败',
