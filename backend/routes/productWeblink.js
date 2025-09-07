@@ -733,9 +733,53 @@ router.post('/upload-excel-new', (req, res) => {
       if (!hasValidData) {
         return res.status(400).json({ message: 'Excel文件中没有找到有效的数据行。请确保A列填写了SKU信息。' });
       }
-    const newRecords = [];
-    const skippedRecords = [];
-    const errors = [];
+
+      // 先检查Excel内部的重复项
+      const skuSet = new Set();
+      const linkSet = new Set();
+      const duplicateErrors = [];
+      
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (row[0] && row[0].toString().trim()) {
+          const parent_sku = row[0].toString().trim();
+          const weblink = row[1] ? row[1].toString().trim() : '';
+          
+          // 检查SKU重复
+          if (skuSet.has(parent_sku)) {
+            duplicateErrors.push(`第${i+1}行：SKU "${parent_sku}" 在Excel中重复出现`);
+          } else {
+            skuSet.add(parent_sku);
+          }
+          
+          // 检查链接重复（如果链接不为空）
+          if (weblink && linkSet.has(weblink)) {
+            duplicateErrors.push(`第${i+1}行：产品链接在Excel中重复出现`);
+          } else if (weblink) {
+            linkSet.add(weblink);
+          }
+        }
+      }
+      
+      // 如果发现Excel内部重复，直接返回错误
+      if (duplicateErrors.length > 0) {
+        return res.status(400).json({
+          message: 'Excel表中发现重复数据，请修改后重新上传',
+          success: false,
+          data: {
+            successCount: 0,
+            skippedCount: 0,
+            totalRows: data.length,
+            skippedRecords: [],
+            errorMessages: duplicateErrors
+          }
+        });
+      }
+
+      const newRecords = [];
+      const updatedRecords = [];
+      const skippedRecords = [];
+      const errors = [];
     
     // 产品ID提取函数
     const extractProductId = (url) => {
@@ -782,15 +826,34 @@ router.post('/upload-excel-new', (req, res) => {
             });
             
             if (existingProductId) {
-              const skipReason = '产品链接已经存在';
-              errors.push(`第${i+1}行：产品ID ${productId} 已存在于SKU ${existingProductId.parent_sku}`);
-              skippedRecords.push({
-                row: i + 1,
-                sku: parent_sku,
-                link: weblink,
-                reason: skipReason
-              });
-              continue;
+              // 如果状态是"新品一审"，则更新数据并将状态改为"待审核"
+              if (existingProductId.status === '新品一审') {
+                await existingProductId.update({
+                  parent_sku,
+                  weblink,
+                  notice,
+                  update_time: new Date(),
+                  status: '待审核'
+                });
+                updatedRecords.push({
+                  row: i + 1,
+                  sku: parent_sku,
+                  link: weblink,
+                  oldStatus: '新品一审',
+                  newStatus: '待审核'
+                });
+                continue;
+              } else {
+                const skipReason = '产品链接已经存在';
+                errors.push(`第${i+1}行：产品ID ${productId} 已存在于SKU ${existingProductId.parent_sku}，状态为"${existingProductId.status}"`);
+                skippedRecords.push({
+                  row: i + 1,
+                  sku: parent_sku,
+                  link: weblink,
+                  reason: skipReason
+                });
+                continue;
+              }
             }
           }
         }
@@ -822,13 +885,25 @@ router.post('/upload-excel-new', (req, res) => {
       }
     }
 
-          let resultMessage = '';
+      let resultMessage = '';
+      const totalProcessed = newRecords.length + updatedRecords.length;
+      
       if (newRecords.length > 0) {
         await ProductWeblink.bulkCreate(newRecords);
-        resultMessage = `成功上传 ${newRecords.length} 条新记录`;
+      }
+      
+      if (totalProcessed > 0) {
+        const messageParts = [];
+        if (newRecords.length > 0) {
+          messageParts.push(`成功上传 ${newRecords.length} 条新记录`);
+        }
+        if (updatedRecords.length > 0) {
+          messageParts.push(`更新 ${updatedRecords.length} 条"新品一审"记录为"待审核"`);
+        }
+        resultMessage = messageParts.join('，');
         
         // 根据开关状态决定是否发送钉钉通知
-        if (enableDingTalkNotification) {
+        if (enableDingTalkNotification && newRecords.length > 0) {
           try {
             await sendDingTalkNotification(newRecords.length);
           } catch (notificationError) {
@@ -845,9 +920,11 @@ router.post('/upload-excel-new', (req, res) => {
           success: false,
           data: {
             successCount: 0,
+            updatedCount: 0,
             skippedCount: skippedRecords.length,
             totalRows: data.length,
             skippedRecords: skippedRecords,
+            updatedRecords: [],
             errorMessages: errors
           }
         });
@@ -862,9 +939,11 @@ router.post('/upload-excel-new', (req, res) => {
         success: true,
         data: {
           successCount: newRecords.length,
+          updatedCount: updatedRecords.length,
           skippedCount: skippedRecords.length,
           totalRows: data.length,
           skippedRecords: skippedRecords,
+          updatedRecords: updatedRecords,
           errorMessages: errors
         }
       });

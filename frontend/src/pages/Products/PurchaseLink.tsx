@@ -123,6 +123,10 @@ const Purchase: React.FC = () => {
   const [editForm] = Form.useForm<any>();
   const [editModalVisible, setEditModalVisible] = useState(false);
   
+  // 母SKU编辑相关状态
+  const [editingParentSku, setEditingParentSku] = useState<{id: number, currentValue: string} | null>(null);
+  const [parentSkuInputValue, setParentSkuInputValue] = useState<string>('');
+  
   // 行编辑相关状态
   const [editingRecord, setEditingRecord] = useState<ProductRecord | null>(null);
   const [recordEditForm] = Form.useForm<any>();
@@ -170,6 +174,7 @@ const Purchase: React.FC = () => {
   const [uploadResultVisible, setUploadResultVisible] = useState(false);
   const [uploadResult, setUploadResult] = useState<{
     successCount: number;
+    updatedCount?: number;
     skippedCount: number;
     totalRows: number;
     skippedRecords: Array<{
@@ -177,6 +182,13 @@ const Purchase: React.FC = () => {
       sku: string;
       link: string;
       reason: string;
+    }>;
+    updatedRecords?: Array<{
+      row: number;
+      sku: string;
+      link: string;
+      oldStatus: string;
+      newStatus: string;
     }>;
     errorMessages: string[];
   } | null>(null);
@@ -1584,6 +1596,62 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 处理母SKU双击编辑
+  const handleParentSkuDoubleClick = (record: ProductRecord) => {
+    // 只有当母SKU为空时才允许编辑
+    if (!record.parent_sku || record.parent_sku.trim() === '') {
+      setEditingParentSku({id: record.id, currentValue: record.parent_sku || ''});
+      setParentSkuInputValue(record.parent_sku || '');
+    }
+  };
+
+  // 保存母SKU编辑
+  const handleSaveParentSku = async () => {
+    if (!editingParentSku) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/update/${editingParentSku.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parent_sku: parentSkuInputValue.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '更新失败');
+      }
+
+      // 更新本地数据
+      const updateRecord = (records: ProductRecord[]) =>
+        records.map(record =>
+          record.id === editingParentSku.id
+            ? { ...record, parent_sku: parentSkuInputValue.trim() }
+            : record
+        );
+
+      setData(updateRecord);
+      setOriginalData(updateRecord);
+      setFilteredData(updateRecord);
+
+      message.success('母SKU更新成功');
+      setEditingParentSku(null);
+      setParentSkuInputValue('');
+    } catch (error) {
+      console.error('更新母SKU失败:', error);
+      message.error(error instanceof Error ? error.message : '更新失败');
+    }
+  };
+
+  // 取消母SKU编辑
+  const handleCancelParentSkuEdit = () => {
+    setEditingParentSku(null);
+    setParentSkuInputValue('');
+  };
+
   // 新的Excel上传处理（支持SKU, 链接, 备注）
   const handleExcelUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1641,8 +1709,9 @@ const Purchase: React.FC = () => {
             setUploadResult(result.data);
             setUploadResultVisible(true);
             
-            // 如果有成功上传的记录，刷新数据
-            if (result.data.successCount > 0) {
+            // 如果有成功上传或更新的记录，刷新数据
+            const totalProcessed = (result.data.successCount || 0) + (result.data.updatedCount || 0);
+            if (totalProcessed > 0) {
               // 刷新统计信息
               fetchAllDataStatistics();
               
@@ -1706,15 +1775,73 @@ const Purchase: React.FC = () => {
       align: 'center',
       width: 120,
       sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
-      render: (text: string) => (
-        <Button 
-          type="link" 
-          style={{ padding: 0, height: 'auto' }}
-          onClick={() => handleParentSkuClick(text)}
-        >
-          {text}
-        </Button>
-      )
+      render: (text: string, record: ProductRecord) => {
+        // 如果正在编辑这个记录的母SKU
+        if (editingParentSku && editingParentSku.id === record.id) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Input
+                value={parentSkuInputValue}
+                onChange={(e) => setParentSkuInputValue(e.target.value)}
+                onPressEnter={handleSaveParentSku}
+                onBlur={handleSaveParentSku}
+                autoFocus
+                style={{ width: 80 }}
+                size="small"
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={handleSaveParentSku}
+                style={{ color: '#52c41a' }}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={handleCancelParentSkuEdit}
+                style={{ color: '#ff4d4f' }}
+              />
+            </div>
+          );
+        }
+        
+        // 如果母SKU为空，显示可编辑的提示
+        if (!text || text.trim() === '') {
+          return (
+            <div
+              onDoubleClick={() => handleParentSkuDoubleClick(record)}
+              style={{
+                cursor: 'pointer',
+                color: '#999',
+                fontStyle: 'italic',
+                padding: '4px 8px',
+                border: '1px dashed #d9d9d9',
+                borderRadius: '4px',
+                minHeight: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="双击编辑母SKU"
+            >
+              双击编辑
+            </div>
+          );
+        }
+        
+        // 有值时显示按钮链接
+        return (
+          <Button 
+            type="link" 
+            style={{ padding: 0, height: 'auto' }}
+            onClick={() => handleParentSkuClick(text)}
+          >
+            {text}
+          </Button>
+        );
+      }
     },
     { 
       title: '产品链接', 
@@ -4919,7 +5046,7 @@ const Purchase: React.FC = () => {
             {/* 总体统计 */}
             <div>
               <Row gutter={16}>
-                <Col span={8}>
+                <Col span={6}>
                   <Card size="small">
                     <Statistic
                       title="总处理行数"
@@ -4929,17 +5056,27 @@ const Purchase: React.FC = () => {
                     />
                   </Card>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
                   <Card size="small">
                     <Statistic
                       title="成功上传"
-                      value={uploadResult.successCount}
+                      value={uploadResult.successCount || 0}
                       valueStyle={{ color: '#52c41a' }}
                       prefix={<CheckCircleOutlined />}
                     />
                   </Card>
                 </Col>
-                <Col span={8}>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="成功更新"
+                      value={uploadResult.updatedCount || 0}
+                      valueStyle={{ color: '#1890ff' }}
+                      prefix={<EditOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
                   <Card size="small">
                     <Statistic
                       title="跳过记录"
@@ -4954,19 +5091,80 @@ const Purchase: React.FC = () => {
 
             {/* 结果说明 */}
             <div>
-              {uploadResult.successCount > 0 && (
+              {(uploadResult.successCount || 0) > 0 && (
                 <Typography.Text type="success">
                   ✅ 成功上传 {uploadResult.successCount} 条新记录
                 </Typography.Text>
               )}
+              {(uploadResult.updatedCount || 0) > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <Typography.Text style={{ color: '#1890ff' }}>
+                    🔄 成功更新 {uploadResult.updatedCount} 条"新品一审"记录为"待审核"
+                  </Typography.Text>
+                </div>
+              )}
               {uploadResult.skippedCount > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <Typography.Text type="warning">
-                    ⚠️ 跳过 {uploadResult.skippedCount} 条重复记录
+                    ⚠️ 跳过 {uploadResult.skippedCount} 条记录
                   </Typography.Text>
                 </div>
               )}
             </div>
+
+            {/* 更新记录详情 */}
+            {uploadResult.updatedRecords && uploadResult.updatedRecords.length > 0 && (
+              <div>
+                <Typography.Text strong>更新记录详情：</Typography.Text>
+                <Table
+                  size="small"
+                  dataSource={uploadResult.updatedRecords}
+                  columns={[
+                    {
+                      title: '行号',
+                      dataIndex: 'row',
+                      key: 'row',
+                      width: 80,
+                    },
+                    {
+                      title: 'SKU',
+                      dataIndex: 'sku',
+                      key: 'sku',
+                      width: 150,
+                    },
+                    {
+                      title: '链接',
+                      dataIndex: 'link',
+                      key: 'link',
+                      ellipsis: true,
+                      render: (text: string) => (
+                        <Tooltip title={text}>
+                          {text ? (
+                            <a href={text} target="_blank" rel="noopener noreferrer">
+                              {text.length > 30 ? `${text.substring(0, 30)}...` : text}
+                            </a>
+                          ) : '-'}
+                        </Tooltip>
+                      ),
+                    },
+                    {
+                      title: '状态变更',
+                      key: 'statusChange',
+                      render: (record: any) => (
+                        <span>
+                          <Tag color="orange">{record.oldStatus}</Tag>
+                          →
+                          <Tag color="blue">{record.newStatus}</Tag>
+                        </span>
+                      ),
+                    },
+                  ]}
+                  pagination={false}
+                  scroll={{ y: 300 }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
 
             {/* 跳过记录详情 */}
             {uploadResult.skippedRecords && uploadResult.skippedRecords.length > 0 && (
