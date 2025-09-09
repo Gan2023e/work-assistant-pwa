@@ -456,12 +456,12 @@ router.post('/mixed-boxes', async (req, res) => {
       country: pair.country
     }));
 
-    // 查询库存数据 - 只查询待出库状态的记录
+    // 查询库存数据 - 查询待出库和部分出库状态的记录
     const inventoryData = await LocalBox.findAll({
       where: {
         [Op.and]: [
           { [Op.or]: whereConditions },
-          { status: '待出库' },
+          { status: { [Op.in]: ['待出库', '部分出库'] } },
           { total_quantity: { [Op.gt]: 0 } }
         ]
       },
@@ -498,7 +498,7 @@ router.post('/mixed-boxes', async (req, res) => {
           mix_box_num: {
             [Op.in]: Array.from(selectedMixedBoxNums)
           },
-          status: '待出库',
+          status: { [Op.in]: ['待出库', '部分出库'] },
           total_quantity: { [Op.gt]: 0 }
         },
         attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'box_type'],
