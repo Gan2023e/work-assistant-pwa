@@ -465,7 +465,7 @@ router.post('/mixed-boxes', async (req, res) => {
           { total_quantity: { [Op.gt]: 0 } }
         ]
       },
-      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type'],
+      attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'total_boxes', 'box_type', 'shipped_quantity'],
       raw: true
     });
 
@@ -501,7 +501,7 @@ router.post('/mixed-boxes', async (req, res) => {
           status: { [Op.in]: ['待出库', '部分出库'] },
           total_quantity: { [Op.gt]: 0 }
         },
-        attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'box_type'],
+        attributes: ['sku', 'country', 'mix_box_num', 'total_quantity', 'box_type', 'shipped_quantity'],
         raw: true
       });
 
@@ -617,12 +617,13 @@ router.post('/mixed-boxes', async (req, res) => {
       const skuSummaryMap = new Map();
       allMixedBoxItems.forEach(item => {
         const summaryKey = `${item.sku}_${item.country}_${item.mix_box_num}`;
-        const quantity = parseInt(item.total_quantity) || 0;
+        // 计算剩余可用数量：总数量 - 已发货数量
+        const remainingQuantity = (parseInt(item.total_quantity) || 0) - (parseInt(item.shipped_quantity) || 0);
         
         if (skuSummaryMap.has(summaryKey)) {
-          skuSummaryMap.set(summaryKey, skuSummaryMap.get(summaryKey) + quantity);
+          skuSummaryMap.set(summaryKey, skuSummaryMap.get(summaryKey) + remainingQuantity);
         } else {
-          skuSummaryMap.set(summaryKey, quantity);
+          skuSummaryMap.set(summaryKey, remainingQuantity);
         }
       });
 
@@ -799,8 +800,12 @@ router.post('/mixed-boxes', async (req, res) => {
             };
           }
           
-          wholeBoxData[key].total_quantity += parseInt(item.total_quantity) || 0;
-          wholeBoxData[key].total_boxes += parseInt(item.total_boxes) || 0;
+          // 计算剩余可用数量：总数量 - 已发货数量
+          const remainingQuantity = (parseInt(item.total_quantity) || 0) - (parseInt(item.shipped_quantity) || 0);
+          const remainingBoxes = remainingQuantity > 0 ? Math.ceil(remainingQuantity * (parseInt(item.total_boxes) || 0) / (parseInt(item.total_quantity) || 1)) : 0;
+          
+          wholeBoxData[key].total_quantity += remainingQuantity;
+          wholeBoxData[key].total_boxes += remainingBoxes;
         }
       }
     });
