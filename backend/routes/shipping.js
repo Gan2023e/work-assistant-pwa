@@ -532,40 +532,33 @@ router.post('/mixed-boxes', async (req, res) => {
             const uniqueSkus = [...new Set(allMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
             
             for (const skuInfo of uniqueSkus) {
-              // 根据国家确定fulfillment-channel的过滤条件
-              let fulfillmentChannelCondition = '';
-              let orderByCondition = '';
+              // 根据国家确定对应的Amazon站点
+              let siteCondition = '';
               
               switch (skuInfo.country) {
                 case '英国':
                 case 'UK':
-                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_EU'`;
-                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  siteCondition = `AND site = 'www.amazon.co.uk'`;
                   break;
                 case '美国':
                 case 'US':
-                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_NA'`;
-                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  siteCondition = `AND site = 'www.amazon.com'`;
                   break;
                 case '澳大利亚':
                 case 'AU':
-                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_FE'`;
-                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  siteCondition = `AND site = 'www.amazon.com.au'`;
+                  break;
+                case '加拿大':
+                case 'CA':
+                  siteCondition = `AND site = 'www.amazon.ca'`;
+                  break;
+                case '阿联酋':
+                case 'AE':
+                  siteCondition = `AND site = 'www.amazon.ae'`;
                   break;
                 default:
-                  // 其他国家使用原有的通用逻辑
-                  fulfillmentChannelCondition = `AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
-                       OR \`fulfillment-channel\` = 'AMAZON_EU' 
-                       OR \`fulfillment-channel\` = 'AMAZON_FE'
-                       OR \`fulfillment-channel\` LIKE 'AMAZON_%'))`;
-                  orderByCondition = `ORDER BY 
-                    CASE 
-                      WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
-                      WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
-                      WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
-                      ELSE 4
-                    END,
-                    \`seller-sku\``;
+                  // 其他国家使用通用逻辑，优先美国站点
+                  siteCondition = `AND site IN ('www.amazon.com', 'www.amazon.co.uk', 'www.amazon.com.au', 'www.amazon.ca', 'www.amazon.ae')`;
                   break;
               }
 
@@ -576,8 +569,18 @@ router.post('/mixed-boxes', async (req, res) => {
                   site
                 FROM listings_sku 
                 WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                  ${fulfillmentChannelCondition}
-                ${orderByCondition}
+                  ${siteCondition}
+                  AND ((\`fulfillment-channel\` LIKE 'AMAZON_%') OR \`fulfillment-channel\` = 'DEFAULT')
+                ORDER BY 
+                  CASE 
+                    WHEN site = 'www.amazon.com' AND '${skuInfo.country}' IN ('美国', 'US') THEN 1
+                    WHEN site = 'www.amazon.co.uk' AND '${skuInfo.country}' IN ('英国', 'UK') THEN 1
+                    WHEN site = 'www.amazon.com.au' AND '${skuInfo.country}' IN ('澳大利亚', 'AU') THEN 1
+                    WHEN site = 'www.amazon.ca' AND '${skuInfo.country}' IN ('加拿大', 'CA') THEN 1
+                    WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
+                    ELSE 2
+                  END,
+                  \`seller-sku\`
                 LIMIT 1
               `;
               
@@ -684,40 +687,33 @@ router.post('/mixed-boxes', async (req, res) => {
           const uniqueSkus = [...new Set(amzSkuMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
           
           for (const skuInfo of uniqueSkus) {
-            // 根据国家确定fulfillment-channel的过滤条件
-            let fulfillmentChannelCondition = '';
-            let orderByCondition = '';
+            // 根据国家确定对应的Amazon站点
+            let siteCondition = '';
             
             switch (skuInfo.country) {
               case '英国':
               case 'UK':
-                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_EU'`;
-                orderByCondition = `ORDER BY \`seller-sku\``;
+                siteCondition = `AND site = 'www.amazon.co.uk'`;
                 break;
               case '美国':
               case 'US':
-                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_NA'`;
-                orderByCondition = `ORDER BY \`seller-sku\``;
+                siteCondition = `AND site = 'www.amazon.com'`;
                 break;
               case '澳大利亚':
               case 'AU':
-                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_FE'`;
-                orderByCondition = `ORDER BY \`seller-sku\``;
+                siteCondition = `AND site = 'www.amazon.com.au'`;
+                break;
+              case '加拿大':
+              case 'CA':
+                siteCondition = `AND site = 'www.amazon.ca'`;
+                break;
+              case '阿联酋':
+              case 'AE':
+                siteCondition = `AND site = 'www.amazon.ae'`;
                 break;
               default:
-                // 其他国家使用原有的通用逻辑
-                fulfillmentChannelCondition = `AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
-                     OR \`fulfillment-channel\` = 'AMAZON_EU' 
-                     OR \`fulfillment-channel\` = 'AMAZON_FE'
-                     OR \`fulfillment-channel\` LIKE 'AMAZON_%'))`;
-                orderByCondition = `ORDER BY 
-                  CASE 
-                    WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
-                    WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
-                    WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
-                    ELSE 4
-                  END,
-                  \`seller-sku\``;
+                // 其他国家使用通用逻辑，优先美国站点
+                siteCondition = `AND site IN ('www.amazon.com', 'www.amazon.co.uk', 'www.amazon.com.au', 'www.amazon.ca', 'www.amazon.ae')`;
                 break;
             }
 
@@ -728,8 +724,18 @@ router.post('/mixed-boxes', async (req, res) => {
                 site
               FROM listings_sku 
               WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                ${fulfillmentChannelCondition}
-              ${orderByCondition}
+                ${siteCondition}
+                AND ((\`fulfillment-channel\` LIKE 'AMAZON_%') OR \`fulfillment-channel\` = 'DEFAULT')
+              ORDER BY 
+                CASE 
+                  WHEN site = 'www.amazon.com' AND '${skuInfo.country}' IN ('美国', 'US') THEN 1
+                  WHEN site = 'www.amazon.co.uk' AND '${skuInfo.country}' IN ('英国', 'UK') THEN 1
+                  WHEN site = 'www.amazon.com.au' AND '${skuInfo.country}' IN ('澳大利亚', 'AU') THEN 1
+                  WHEN site = 'www.amazon.ca' AND '${skuInfo.country}' IN ('加拿大', 'CA') THEN 1
+                  WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
+                  ELSE 2
+                END,
+                \`seller-sku\`
               LIMIT 1
             `;
             
