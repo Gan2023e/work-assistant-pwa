@@ -580,6 +580,11 @@ router.post('/mixed-boxes', async (req, res) => {
                     WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
                     ELSE 2
                   END,
+                  CASE 
+                    WHEN LENGTH(\`seller-sku\`) < 20 THEN 1
+                    ELSE 2
+                  END,
+                  LENGTH(\`seller-sku\`) ASC,
                   \`seller-sku\`
                 LIMIT 1
               `;
@@ -735,6 +740,11 @@ router.post('/mixed-boxes', async (req, res) => {
                   WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
                   ELSE 2
                 END,
+                CASE 
+                  WHEN LENGTH(\`seller-sku\`) < 20 THEN 1
+                  ELSE 2
+                END,
+                LENGTH(\`seller-sku\`) ASC,
                 \`seller-sku\`
               LIMIT 1
             `;
