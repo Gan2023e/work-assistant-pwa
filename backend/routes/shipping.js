@@ -532,6 +532,43 @@ router.post('/mixed-boxes', async (req, res) => {
             const uniqueSkus = [...new Set(allMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
             
             for (const skuInfo of uniqueSkus) {
+              // 根据国家确定fulfillment-channel的过滤条件
+              let fulfillmentChannelCondition = '';
+              let orderByCondition = '';
+              
+              switch (skuInfo.country) {
+                case '英国':
+                case 'UK':
+                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_EU'`;
+                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  break;
+                case '美国':
+                case 'US':
+                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_NA'`;
+                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  break;
+                case '澳大利亚':
+                case 'AU':
+                  fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_FE'`;
+                  orderByCondition = `ORDER BY \`seller-sku\``;
+                  break;
+                default:
+                  // 其他国家使用原有的通用逻辑
+                  fulfillmentChannelCondition = `AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
+                       OR \`fulfillment-channel\` = 'AMAZON_EU' 
+                       OR \`fulfillment-channel\` = 'AMAZON_FE'
+                       OR \`fulfillment-channel\` LIKE 'AMAZON_%'))`;
+                  orderByCondition = `ORDER BY 
+                    CASE 
+                      WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
+                      WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
+                      WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
+                      ELSE 4
+                    END,
+                    \`seller-sku\``;
+                  break;
+              }
+
               const listingsQuery = `
                 SELECT 
                   \`seller-sku\` as amazon_sku,
@@ -539,20 +576,12 @@ router.post('/mixed-boxes', async (req, res) => {
                   site
                 FROM listings_sku 
                 WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                  AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
-                       OR \`fulfillment-channel\` = 'AMAZON_EU' 
-                       OR \`fulfillment-channel\` = 'AMAZON_FE'
-                       OR \`fulfillment-channel\` LIKE 'AMAZON_%'))
-                ORDER BY 
-                  CASE 
-                    WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
-                    WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
-                    WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
-                    ELSE 4
-                  END,
-                  \`seller-sku\`
+                  ${fulfillmentChannelCondition}
+                ${orderByCondition}
                 LIMIT 1
               `;
+              
+              console.log('\x1b[34m%s\x1b[0m', `🔍 混合箱SKU查询 ${skuInfo.local_sku} (${skuInfo.country}):`, listingsQuery);
               
               const listingsResults = await sequelize.query(listingsQuery, {
                 type: sequelize.QueryTypes.SELECT,
@@ -563,6 +592,9 @@ router.post('/mixed-boxes', async (req, res) => {
                 const result = listingsResults[0];
                 const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
                 mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
+                console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱SKU映射成功: ${skuInfo.local_sku} (${skuInfo.country}) -> ${result.amazon_sku}`);
+              } else {
+                console.log('\x1b[31m%s\x1b[0m', `❌ 混合箱SKU无匹配: ${skuInfo.local_sku} (${skuInfo.country})`);
               }
             }
           }
@@ -652,6 +684,43 @@ router.post('/mixed-boxes', async (req, res) => {
           const uniqueSkus = [...new Set(amzSkuMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
           
           for (const skuInfo of uniqueSkus) {
+            // 根据国家确定fulfillment-channel的过滤条件
+            let fulfillmentChannelCondition = '';
+            let orderByCondition = '';
+            
+            switch (skuInfo.country) {
+              case '英国':
+              case 'UK':
+                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_EU'`;
+                orderByCondition = `ORDER BY \`seller-sku\``;
+                break;
+              case '美国':
+              case 'US':
+                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_NA'`;
+                orderByCondition = `ORDER BY \`seller-sku\``;
+                break;
+              case '澳大利亚':
+              case 'AU':
+                fulfillmentChannelCondition = `AND \`fulfillment-channel\` = 'AMAZON_FE'`;
+                orderByCondition = `ORDER BY \`seller-sku\``;
+                break;
+              default:
+                // 其他国家使用原有的通用逻辑
+                fulfillmentChannelCondition = `AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
+                     OR \`fulfillment-channel\` = 'AMAZON_EU' 
+                     OR \`fulfillment-channel\` = 'AMAZON_FE'
+                     OR \`fulfillment-channel\` LIKE 'AMAZON_%'))`;
+                orderByCondition = `ORDER BY 
+                  CASE 
+                    WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
+                    WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
+                    WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
+                    ELSE 4
+                  END,
+                  \`seller-sku\``;
+                break;
+            }
+
             const listingsQuery = `
               SELECT 
                 \`seller-sku\` as amazon_sku,
@@ -659,20 +728,12 @@ router.post('/mixed-boxes', async (req, res) => {
                 site
               FROM listings_sku 
               WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                AND ((\`fulfillment-channel\` = 'AMAZON_NA' 
-                     OR \`fulfillment-channel\` = 'AMAZON_EU' 
-                     OR \`fulfillment-channel\` = 'AMAZON_FE'
-                     OR \`fulfillment-channel\` LIKE 'AMAZON_%'))
-              ORDER BY 
-                CASE 
-                  WHEN \`fulfillment-channel\` = 'AMAZON_NA' THEN 1
-                  WHEN \`fulfillment-channel\` = 'AMAZON_EU' THEN 2
-                  WHEN \`fulfillment-channel\` = 'AMAZON_FE' THEN 3
-                  ELSE 4
-                END,
-                \`seller-sku\`
+                ${fulfillmentChannelCondition}
+              ${orderByCondition}
               LIMIT 1
             `;
+            
+            console.log('\x1b[34m%s\x1b[0m', `🔍 整箱SKU查询 ${skuInfo.local_sku} (${skuInfo.country}):`, listingsQuery);
             
             const listingsResults = await sequelize.query(listingsQuery, {
               type: sequelize.QueryTypes.SELECT,
@@ -683,6 +744,9 @@ router.post('/mixed-boxes', async (req, res) => {
               const result = listingsResults[0];
               const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
               wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
+              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱SKU映射成功: ${skuInfo.local_sku} (${skuInfo.country}) -> ${result.amazon_sku}`);
+            } else {
+              console.log('\x1b[31m%s\x1b[0m', `❌ 整箱SKU无匹配: ${skuInfo.local_sku} (${skuInfo.country})`);
             }
           }
         }
