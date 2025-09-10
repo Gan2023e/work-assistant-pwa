@@ -359,9 +359,9 @@ router.post('/batch-cpc-test-approved', async (req, res) => {
       return res.status(400).json({ message: '请选择要标记的记录' });
     }
 
-    // 更新选中记录的CPC测试状态为"CPC检测中"
+    // 更新选中记录的CPC测试状态为"CPC样品待采购"
     await ProductWeblink.update(
-      { cpc_status: 'CPC检测中' },
+      { cpc_status: 'CPC样品待采购' },
       {
         where: {
           id: { [Op.in]: ids }
@@ -376,7 +376,7 @@ router.post('/batch-cpc-test-approved', async (req, res) => {
       console.error('钉钉通知发送失败，但不影响数据更新:', notificationError.message);
     }
 
-    res.json({ message: `成功标记 ${ids.length} 条CPC测试申请通过，状态已更新为CPC检测中` });
+    res.json({ message: `成功标记 ${ids.length} 条CPC测试申请通过，状态已更新为CPC样品待采购` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: '服务器错误' });
@@ -664,7 +664,7 @@ async function sendCpcTestApprovedNotification(approvedCount) {
     const message = {
       msgtype: 'text',
       text: {
-        content: `${approvedCount}款产品CPC测试申请已通过，现已进入CPC检测中状态，请及时跟进！@${mobileNumber}`
+        content: `${approvedCount}款产品CPC测试申请已通过，现已进入CPC样品待采购状态，请及时安排样品采购！@${mobileNumber}`
       },
       at: {
         atMobiles: [mobileNumber],
@@ -1284,9 +1284,9 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '申请测试' }
     });
 
-    // 计算CPC检测中的产品数量
+    // 计算CPC样品待采购的产品数量
     const cpcTestingCount = await ProductWeblink.count({
-      where: { cpc_status: 'CPC检测中' }
+      where: { cpc_status: 'CPC样品待采购' }
     });
 
     // 计算CPC已发样品数量

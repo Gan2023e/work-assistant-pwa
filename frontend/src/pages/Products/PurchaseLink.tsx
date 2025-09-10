@@ -1368,7 +1368,7 @@ const Purchase: React.FC = () => {
       setData(prevData => 
         prevData.map(item => 
           selectedRowKeys.includes(item.id) 
-            ? { ...item, cpc_status: 'CPC检测中' }
+            ? { ...item, cpc_status: 'CPC样品待采购' }
             : item
         )
       );
@@ -1376,7 +1376,7 @@ const Purchase: React.FC = () => {
       setOriginalData(prevData => 
         prevData.map(item => 
           selectedRowKeys.includes(item.id) 
-            ? { ...item, cpc_status: 'CPC检测中' }
+            ? { ...item, cpc_status: 'CPC样品待采购' }
             : item
         )
       );
@@ -1384,7 +1384,7 @@ const Purchase: React.FC = () => {
       setFilteredData(prevData => 
         prevData.map(item => 
           selectedRowKeys.includes(item.id) 
-            ? { ...item, cpc_status: 'CPC检测中' }
+            ? { ...item, cpc_status: 'CPC样品待采购' }
             : item
         )
       );
@@ -3707,11 +3707,11 @@ const Purchase: React.FC = () => {
             <Card 
               size="small"
               hoverable 
-              onClick={() => handleCardClick('CPC检测中', 'cpc_status')}
+              onClick={() => handleCardClick('CPC样品待采购', 'cpc_status')}
               style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
-                title="CPC检测中"
+                title="CPC样品待采购"
                 value={statistics.cpcTesting}
                 prefix={<SearchOutlined />}
                 valueStyle={{ color: '#13c2c2', fontSize: '14px' }}
