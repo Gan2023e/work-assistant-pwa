@@ -351,6 +351,38 @@ router.post('/batch-send-cpc-test', async (req, res) => {
   }
 });
 
+// 批量标记CPC测试申请通过
+router.post('/batch-cpc-test-approved', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要标记的记录' });
+    }
+
+    // 更新选中记录的CPC测试状态为"CPC检测中"
+    await ProductWeblink.update(
+      { cpc_status: 'CPC检测中' },
+      {
+        where: {
+          id: { [Op.in]: ids }
+        }
+      }
+    );
+
+    // 发送钉钉通知
+    try {
+      await sendCpcTestApprovedNotification(ids.length);
+    } catch (notificationError) {
+      console.error('钉钉通知发送失败，但不影响数据更新:', notificationError.message);
+    }
+
+    res.json({ message: `成功标记 ${ids.length} 条CPC测试申请通过，状态已更新为CPC检测中` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
 // 批量标记CPC样品已发
 router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
   try {
@@ -595,6 +627,65 @@ async function sendCpcSampleSentNotification(sampleCount) {
     }
   } catch (error) {
     console.error('发送CPC样品已发钉钉通知时出错:', error.message);
+  }
+}
+
+// CPC测试申请通过钉钉通知函数
+async function sendCpcTestApprovedNotification(approvedCount) {
+  try {
+    const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const MOBILE_NUM_MOM = process.env.MOBILE_NUM_MOM;
+    
+    if (!DINGTALK_WEBHOOK) {
+      console.log('钉钉Webhook未配置，跳过通知');
+      return;
+    }
+
+    // 如果有SECRET_KEY，计算签名
+    let webhookUrl = DINGTALK_WEBHOOK;
+    if (SECRET_KEY) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${SECRET_KEY}`;
+      const sign = crypto.createHmac('sha256', SECRET_KEY)
+                        .update(stringToSign)
+                        .digest('base64');
+      
+      // 添加时间戳和签名参数
+      const urlObj = new URL(DINGTALK_WEBHOOK);
+      urlObj.searchParams.append('timestamp', timestamp.toString());
+      urlObj.searchParams.append('sign', encodeURIComponent(sign));
+      webhookUrl = urlObj.toString();
+    }
+
+    // 使用配置的手机号，如果没有配置则使用默认值
+    const mobileNumber = MOBILE_NUM_MOM || '18676689673';
+
+    const message = {
+      msgtype: 'text',
+      text: {
+        content: `${approvedCount}款产品CPC测试申请已通过，现已进入CPC检测中状态，请及时跟进！@${mobileNumber}`
+      },
+      at: {
+        atMobiles: [mobileNumber],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(webhookUrl, message, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    if (response.data.errcode === 0) {
+      console.log('CPC测试申请通过钉钉通知发送成功');
+    } else {
+      console.error('CPC测试申请通过钉钉通知发送失败:', response.data);
+    }
+  } catch (error) {
+    console.error('发送CPC测试申请通过钉钉通知时出错:', error.message);
   }
 }
 
@@ -1195,7 +1286,7 @@ router.get('/statistics', async (req, res) => {
 
     // 计算CPC检测中的产品数量
     const cpcTestingCount = await ProductWeblink.count({
-      where: { cpc_status: '测试中' }
+      where: { cpc_status: 'CPC检测中' }
     });
 
     // 计算CPC已发样品数量

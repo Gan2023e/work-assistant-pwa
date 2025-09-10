@@ -1339,10 +1339,63 @@ const Purchase: React.FC = () => {
       message.error('标记CPC样品已发失败');
     }
   };
+  
+  // 批量标记CPC测试申请通过
+  const handleBatchCpcTestApproved = async (): Promise<void> => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要标记的记录');
+      return;
+    }
 
+    try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-cpc-test-approved`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
 
-
+      const result = await res.json();
+      message.success(result.message);
+      setSelectedRowKeys([]);
+      
+      // 更新本地数据中的CPC状态
+      setData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: 'CPC检测中' }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: 'CPC检测中' }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: 'CPC检测中' }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('标记CPC测试申请通过失败:', e);
+      message.error('标记CPC测试申请通过失败');
+    }
+  };
 
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
@@ -3654,7 +3707,7 @@ const Purchase: React.FC = () => {
             <Card 
               size="small"
               hoverable 
-              onClick={() => handleCardClick('测试中', 'cpc_status')}
+              onClick={() => handleCardClick('CPC检测中', 'cpc_status')}
               style={{ cursor: 'pointer', minHeight: '70px' }}
             >
               <Statistic
@@ -3988,6 +4041,16 @@ const Purchase: React.FC = () => {
                       size="small"
                     >
                       发送CPC测试申请
+                    </Button>
+
+                    <Button 
+                      type="primary"
+                      style={{ backgroundColor: '#fa8c16', borderColor: '#fa8c16' }}
+                      onClick={handleBatchCpcTestApproved}
+                      disabled={selectedRowKeys.length === 0}
+                      size="small"
+                    >
+                      CPC测试申请通过
                     </Button>
 
                     <Button 
