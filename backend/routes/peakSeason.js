@@ -28,19 +28,35 @@ router.get('/summary', async (req, res) => {
       replacements.local_sku = `%${local_sku}%`;
     }
     
-    // 按年度获取所有数据的统计
+    // 修复后的按年度统计查询 - 避免笛卡尔积
     const yearlyStats = await sequelize.query(`
       SELECT 
         YEAR(p.upate_date) as year,
         COUNT(DISTINCT p.local_sku) as total_skus,
         SUM(p.qty) as total_prep_quantity,
-        COUNT(DISTINCT s.卖家货号) as total_shipments,
-        SUM(s.数量) as total_shipped_quantity,
-        COUNT(DISTINCT bp.卖家名称) as total_suppliers,
-        SUM(bp.付款金额) as total_payment_amount
+        COALESCE(shipment_stats.total_shipments, 0) as total_shipments,
+        COALESCE(shipment_stats.total_shipped_quantity, 0) as total_shipped_quantity,
+        COALESCE(payment_stats.total_suppliers, 0) as total_suppliers,
+        COALESCE(payment_stats.total_payment_amount, 0) as total_payment_amount
       FROM peak_season_inventory_prep p
-      LEFT JOIN supplier_shipments_peak_season s ON p.local_sku = s.卖家货号
-      LEFT JOIN bulk_payments_peak_season bp ON 1=1
+      LEFT JOIN (
+        SELECT 
+          YEAR(s.日期) as year,
+          COUNT(DISTINCT s.卖家货号) as total_shipments,
+          SUM(s.数量) as total_shipped_quantity
+        FROM supplier_shipments_peak_season s 
+        WHERE s.日期 IS NOT NULL
+        GROUP BY YEAR(s.日期)
+      ) shipment_stats ON YEAR(p.upate_date) = shipment_stats.year
+      LEFT JOIN (
+        SELECT 
+          YEAR(bp.付款时间) as year,
+          COUNT(DISTINCT bp.卖家名称) as total_suppliers,
+          SUM(bp.付款金额) as total_payment_amount
+        FROM bulk_payments_peak_season bp 
+        WHERE bp.付款时间 IS NOT NULL
+        GROUP BY YEAR(bp.付款时间)
+      ) payment_stats ON YEAR(p.upate_date) = payment_stats.year
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       GROUP BY YEAR(p.upate_date)
       ORDER BY YEAR(p.upate_date) DESC
@@ -88,7 +104,7 @@ router.get('/sku-details', async (req, res) => {
       replacements.local_sku = `%${local_sku}%`;
     }
 
-    // 获取SKU备货详情
+    // 修复SKU详情查询 - 按年份过滤发货数据
     const skuDetails = await sequelize.query(`
       SELECT 
         p.local_sku,
@@ -100,10 +116,12 @@ router.get('/sku-details', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          卖家货号, 
-          SUM(数量) as shipped_quantity
-        FROM supplier_shipments_peak_season 
-        GROUP BY 卖家货号
+          s1.卖家货号, 
+          SUM(s1.数量) as shipped_quantity
+        FROM supplier_shipments_peak_season s1
+        WHERE s1.日期 IS NOT NULL 
+          ${year ? 'AND YEAR(s1.日期) = :year' : ''}
+        GROUP BY s1.卖家货号
       ) s ON p.local_sku = s.卖家货号
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       ORDER BY p.upate_date DESC, p.local_sku
@@ -164,7 +182,7 @@ router.get('/sku-details', async (req, res) => {
   }
 });
 
-// 获取供应商统计
+// 获取供应商统计（这个查询是正确的，保持不变）
 router.get('/supplier-stats', async (req, res) => {
   try {
     const { year } = req.query;
