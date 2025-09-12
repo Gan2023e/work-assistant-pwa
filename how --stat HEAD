@@ -1,0 +1,10 @@
+1ef3e09 - Administrator, 20 minutes ago : 删除SKU映射管理页面
+d8b6666 - Administrator, 4 hours ago : 优化Excel导出文件名：去掉文件名中的UTF-8标识
+54639db - Administrator, 2 days ago : feat: 更新CPC测试申请通过功能
+945233c - Administrator, 2 days ago : feat: 添加CPC测试申请通过按钮功能和钉钉通知
+0d75a5f - Administrator, 3 days ago : 修复数量显示问题：批量发货对话框显示剩余数量而非总数量
+425759d - Administrator, 3 days ago : 修复批量发货功能：支持部分出库状态的记录显示
+253141a - Administrator, 3 days ago : 优化SKU查询逻辑：优先选择字符数少于20的Amazon SKU
+dd38bb1 - Administrator, 3 days ago : 正确修复批量发货整箱确认显示错误国家SKU的问题 - 使用site字段筛选
+da3eafd - Administrator, 3 days ago : 修复批量发货功能中整箱确认显示错误国家Amazon SKU的问题
+b4a1603 - Administrator, 5 days ago : 优化批量上传新品功能和采购链接管理页面功能

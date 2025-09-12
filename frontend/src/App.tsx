@@ -20,7 +20,6 @@ import OrderManagementPage from './pages/Shipping/OrderManagementPage';
 import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
 
 import LogisticsPage from './pages/Logistics/LogisticsPage';
-import SkuMapping from './pages/Inventory/SkuMapping';
 import Summary from './pages/Inventory/Summary';
 import Supplier from './pages/Inventory/Supplier';
 import FbaInventory from './pages/Inventory/FbaInventory';
@@ -115,7 +114,7 @@ const AppContent: React.FC = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings", "/shipping/orders", "/products/purchase-invoice"].includes(path)) return [path];
     if (["/shipping/management", "/shipping/history"].includes(path)) return [path];
-    if (["/inventory/sku-mapping", "/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
+    if (["/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
   };
@@ -138,7 +137,6 @@ const AppContent: React.FC = () => {
       key: 'inventory',
       children: [
         { label: <Link to="/inventory/management">本地库存管理</Link>, key: '/inventory/management' },
-        { label: <Link to="/inventory/sku-mapping">SKU映射管理</Link>, key: '/inventory/sku-mapping' },
         { label: <Link to="/inventory/summary">旺季备货汇总</Link>, key: '/inventory/summary' },
         { label: <Link to="/inventory/supplier">厂家发货与付款</Link>, key: '/inventory/supplier' },
         { label: <Link to="/inventory/fba-inventory">FBA库存</Link>, key: '/inventory/fba-inventory' },
@@ -257,11 +255,7 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
 
-          <Route path="/inventory/sku-mapping" element={
-            <ProtectedRoute>
-              <SkuMapping />
-            </ProtectedRoute>
-          } />
+
           <Route path="/inventory/summary" element={
             <ProtectedRoute>
               <Summary />
