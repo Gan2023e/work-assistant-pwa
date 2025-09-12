@@ -22,6 +22,9 @@ const Invoice = require('./Invoice');
 const TemplateLink = require('./TemplateLink');
 const ProductInformation = require('./ProductInformation');
 const ListingsSku = require('./ListingsSku');
+const PeakSeasonInventoryPrep = require('./PeakSeasonInventoryPrep');
+const SupplierShipmentsPeakSeason = require('./SupplierShipmentsPeakSeason');
+const BulkPaymentsPeakSeason = require('./BulkPaymentsPeakSeason');
 
 // 设置模型关联关系
 
@@ -104,5 +107,8 @@ module.exports = {
   Invoice,
   TemplateLink,
   ProductInformation,
-  ListingsSku
+  ListingsSku,
+  PeakSeasonInventoryPrep,
+  SupplierShipmentsPeakSeason,
+  BulkPaymentsPeakSeason
 };

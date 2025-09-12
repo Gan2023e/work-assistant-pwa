@@ -18,6 +18,7 @@ const purchaseInvoiceRouter = require('./routes/purchaseInvoice');
 const dingtalkRouter = require('./routes/dingtalk');
 const inventoryRouter = require('./routes/inventory');
 const listingsRouter = require('./routes/listings');
+const peakSeasonRouter = require('./routes/peakSeason');
 const { router: authRouter } = require('./routes/auth');
 
 // 强制触发Railway重新部署 - 2025-01-08 - 修复URL配置
@@ -81,6 +82,7 @@ app.use('/api/purchase-invoice', purchaseInvoiceRouter);
 app.use('/api/dingtalk', dingtalkRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/listings', listingsRouter);
+app.use('/api/peak-season', peakSeasonRouter);
 console.log('✅ API routes registered');
 
 // 静态文件服务 - 用于图片访问
