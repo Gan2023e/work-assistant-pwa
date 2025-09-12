@@ -4899,7 +4899,7 @@ router.get('/packing-list/download-filled', async (req, res) => {
 
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file)}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
     
     // 发送文件
     res.sendFile(filePath);
@@ -5087,7 +5087,7 @@ router.get('/packing-list/download', async (req, res) => {
     
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', excelBuffer.length);
     
     console.log('\x1b[32m%s\x1b[0m', '✅ 装箱表下载文件已生成:', filename);

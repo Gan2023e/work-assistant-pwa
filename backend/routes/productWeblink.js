@@ -1955,8 +1955,7 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     
     // 设置响应头
     res.setHeader('Content-Type', result.contentType);
-    const encodedFileName = encodeURIComponent(result.fileName);
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
     res.setHeader('Content-Length', result.size);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
@@ -2346,10 +2345,10 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       console.log(`📋 母SKU列表: ${JSON.stringify(parentSkus)}`);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', excelBuffer.length);
       
-      console.log(`🌐 设置的Content-Disposition: attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+      console.log(`🌐 设置的Content-Disposition: attachment; filename="${fileName}"`);
       
       res.send(excelBuffer);
 
@@ -3446,7 +3445,7 @@ CN
       console.log('📄 生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
