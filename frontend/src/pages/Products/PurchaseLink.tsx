@@ -360,9 +360,11 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 页面加载时获取统计数据
+  // 页面加载时获取统计数据并默认显示可整理资料记录
   React.useEffect(() => {
     fetchAllDataStatistics();
+    // 默认显示可整理资料记录
+    handleCanOrganizeDataClick();
   }, []);
 
 
