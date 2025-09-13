@@ -235,35 +235,21 @@ const PeakSeasonSummary: React.FC = () => {
       params.append('payment_type', paymentType);
 
       console.log('正在获取付款详细记录，参数:', params.toString());
-      // 模拟API调用 - 实际应该调用真实的API
-      // const response = await fetch(`${API_BASE_URL}/api/peak-season/payment-details?${params}`);
-      // const data = await response.json();
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/payment-details?${params}`);
+      const data = await response.json();
       
-      // 暂时使用模拟数据
-      const mockDetails: PaymentDetail[] = [
-        {
-          id: 1,
-          supplier: supplier,
-          payment_type: paymentType,
-          amount: 25000,
-          payment_date: '2025-01-15',
-          description: '第一笔付款'
-        },
-        {
-          id: 2,
-          supplier: supplier,
-          payment_type: paymentType,
-          amount: 15000,
-          payment_date: '2025-02-20',
-          description: '第二笔付款'
-        }
-      ];
-      
-      setPaymentDetails(mockDetails);
-      console.log('设置付款详细记录:', mockDetails);
+      if (data.code === 0) {
+        setPaymentDetails(data.data);
+        console.log('设置付款详细记录:', data.data);
+      } else {
+        console.error('付款详细记录API返回错误:', data.message);
+        message.error(data.message);
+        setPaymentDetails([]);
+      }
     } catch (error) {
       console.error('获取付款详细记录失败:', error);
       message.error('获取付款详细记录失败');
+      setPaymentDetails([]);
     } finally {
       setLoading(false);
     }

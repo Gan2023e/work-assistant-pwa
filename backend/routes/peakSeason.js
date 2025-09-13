@@ -226,6 +226,57 @@ router.get('/supplier-stats', async (req, res) => {
   }
 });
 
+// 获取付款详细记录
+router.get('/payment-details', async (req, res) => {
+  try {
+    const { year, supplier, payment_type } = req.query;
+    
+    if (!supplier || !payment_type) {
+      return res.status(400).json({
+        code: 1,
+        message: '供应商和付款类型不能为空'
+      });
+    }
+    
+    let whereCondition = ' AND bp.卖家名称 = :supplier AND bp.付款类型 = :payment_type';
+    const replacements = { supplier, payment_type };
+    
+    if (year) {
+      whereCondition += ' AND YEAR(bp.付款时间) = :year';
+      replacements.year = year;
+    }
+
+    const paymentDetails = await sequelize.query(`
+      SELECT 
+        bp.序列 as id,
+        bp.卖家名称 as supplier,
+        bp.付款类型 as payment_type,
+        bp.付款金额 as amount,
+        bp.付款时间 as payment_date,
+        bp.备注 as description
+      FROM bulk_payments_peak_season bp
+      WHERE bp.付款时间 IS NOT NULL ${whereCondition}
+      ORDER BY bp.付款时间 DESC
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json({
+      code: 0,
+      data: paymentDetails
+    });
+    
+  } catch (error) {
+    console.error('获取付款详细记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取付款详细记录失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取年份列表
 router.get('/years', async (req, res) => {
   try {
