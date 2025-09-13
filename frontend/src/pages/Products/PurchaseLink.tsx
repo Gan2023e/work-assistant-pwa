@@ -6070,14 +6070,13 @@ const Purchase: React.FC = () => {
         />
       </Modal>
 
-       </div>
-
-            {/* 利润推算器弹窗 */}
+      {/* 利润推算器弹窗 */}
       <ProfitCalculator 
         visible={profitCalculatorVisible}
         onClose={() => setProfitCalculatorVisible(false)}
       />
-    );
-  };
+    </div>
+  );
+};
 
 export default Purchase; 
