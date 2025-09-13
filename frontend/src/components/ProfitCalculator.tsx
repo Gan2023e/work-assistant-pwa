@@ -32,7 +32,7 @@ interface CalculationResult {
 const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose }) => {
   const [form] = Form.useForm();
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
-  const [exchangeRate, setExchangeRate] = useState(7.2); // 默认汇率
+  const [exchangeRate, setExchangeRate] = useState(7.1); // 默认汇率
 
   const calculateProfit = (values: any) => {
     const { sellingPrice, productCost, weight = 1 } = values;
@@ -43,7 +43,7 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
     }
 
     // 常量定义
-    const FBA_FEE = 9; // USD
+    const FBA_FEE = 7; // USD
     const SHIPPING_COST_PER_KG = 10; // RMB
     const AMAZON_FEE_RATE = 0.15; // 15% 亚马逊佣金
     const ADDITIONAL_COSTS_RATE = 0.05; // 5% 其他费用（包装、标签等）
@@ -151,7 +151,7 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
               <Form.Item label="美元汇率">
                 <InputNumber
                   value={exchangeRate}
-                  onChange={(value) => setExchangeRate(value || 7.2)}
+                  onChange={(value) => setExchangeRate(value || 7.1)}
                   style={{ width: '100%' }}
                   min={6}
                   max={8}
@@ -163,14 +163,19 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
           </Card>
 
           <Alert
-            message="费用说明"
+            message="计算方法"
             description={
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                <li>FBA运费：固定 $9.00</li>
-                <li>头程海运：10元/KG</li>
-                <li>亚马逊佣金：15%</li>
-                <li>其他费用：5%（包装、标签等）</li>
-              </ul>
+              <div>
+                <p><strong>净利润 = 销售价格 - 总成本</strong></p>
+                <p><strong>总成本包括：</strong></p>
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  <li>产品成本：人民币成本 ÷ 汇率</li>
+                  <li>头程运费：10元/KG ÷ 汇率</li>
+                  <li>FBA运费：固定 $7.00</li>
+                  <li>亚马逊佣金：销售价格 × 15%</li>
+                  <li>其他费用：销售价格 × 5%（包装、标签等）</li>
+                </ul>
+              </div>
             }
             type="info"
             showIcon
@@ -180,7 +185,7 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
         <Col span={12}>
           <Card title="💰 利润计算结果" size="small">
             {calculation ? (
-              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Space direction="vertical" style={{ width: '100%' }} size="large">
                 <Row gutter={16}>
                   <Col span={12}>
                     <Statistic
@@ -188,34 +193,7 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
                       value={calculation.totalCostUSD}
                       precision={2}
                       prefix="$"
-                      valueStyle={{ color: '#cf1322' }}
-                    />
-                  </Col>
-                  <Col span={12}>
-                    <Statistic
-                      title="毛利润 (USD)"
-                      value={calculation.grossProfit}
-                      precision={2}
-                      prefix="$"
-                      valueStyle={{ 
-                        color: calculation.grossProfit > 0 ? '#3f8600' : '#cf1322' 
-                      }}
-                    />
-                  </Col>
-                </Row>
-
-                <Divider style={{ margin: '12px 0' }} />
-
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Statistic
-                      title="毛利率"
-                      value={calculation.grossProfitMargin}
-                      precision={1}
-                      suffix="%"
-                      valueStyle={{ 
-                        color: calculation.grossProfitMargin > 0 ? '#3f8600' : '#cf1322' 
-                      }}
+                      valueStyle={{ color: '#cf1322', fontSize: '18px' }}
                     />
                   </Col>
                   <Col span={12}>
@@ -225,11 +203,14 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
                       precision={2}
                       prefix="$"
                       valueStyle={{ 
-                        color: calculation.netProfit > 0 ? '#3f8600' : '#cf1322' 
+                        color: calculation.netProfit > 0 ? '#3f8600' : '#cf1322',
+                        fontSize: '18px'
                       }}
                     />
                   </Col>
                 </Row>
+
+                <Divider style={{ margin: '16px 0' }} />
 
                 <Row gutter={16}>
                   <Col span={12}>
@@ -239,7 +220,8 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
                       precision={1}
                       suffix="%"
                       valueStyle={{ 
-                        color: calculation.netProfitMargin > 0 ? '#3f8600' : '#cf1322' 
+                        color: calculation.netProfitMargin > 0 ? '#3f8600' : '#cf1322',
+                        fontSize: '18px'
                       }}
                     />
                   </Col>
@@ -250,7 +232,8 @@ const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({ visible, onClose })
                       precision={2}
                       prefix="¥"
                       valueStyle={{ 
-                        color: calculation.netProfit > 0 ? '#3f8600' : '#cf1322' 
+                        color: calculation.netProfit > 0 ? '#3f8600' : '#cf1322',
+                        fontSize: '18px'
                       }}
                     />
                   </Col>

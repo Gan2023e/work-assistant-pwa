@@ -4000,16 +4000,6 @@ const Purchase: React.FC = () => {
                       利润推算器
                     </Button>
 
-                    <Button 
-                      icon={<CalculatorOutlined />}
-                      onClick={() => setProfitCalculatorVisible(true)}
-                      size="small"
-                      type="primary"
-                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    >
-                      利润推算器
-                    </Button>
-
                     <Popconfirm
                       title="确定要删除选中的记录吗？"
                       onConfirm={handleBatchDelete}
