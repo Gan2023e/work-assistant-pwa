@@ -264,9 +264,15 @@ router.get('/payment-details', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
+    // 确保amount字段为数字类型
+    const processedData = paymentDetails.map(item => ({
+      ...item,
+      amount: parseFloat(item.amount) || 0
+    }));
+
     res.json({
       code: 0,
-      data: paymentDetails
+      data: processedData
     });
     
   } catch (error) {

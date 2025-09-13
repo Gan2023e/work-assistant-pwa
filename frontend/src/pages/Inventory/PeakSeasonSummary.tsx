@@ -915,7 +915,7 @@ const PeakSeasonSummary: React.FC = () => {
               </Table.Summary.Cell>
               <Table.Summary.Cell index={1}>
                 <Text strong style={{ color: '#1890ff' }}>
-                  ¥{paymentDetails.reduce((total, item) => total + item.amount, 0).toLocaleString()}
+                  ¥{paymentDetails.reduce((total, item) => total + Number(item.amount || 0), 0).toLocaleString()}
                 </Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={2} colSpan={2}>
