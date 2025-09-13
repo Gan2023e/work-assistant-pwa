@@ -50,11 +50,13 @@ import {
   CloseCircleOutlined,
   GlobalOutlined,
   PlayCircleOutlined,
-  EditOutlined
+  EditOutlined,
+  CalculatorOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
+import ProfitCalculator from '../../components/ProfitCalculator';
 
 
 const { TextArea } = Input;
@@ -328,6 +330,9 @@ const Purchase: React.FC = () => {
   const colorInputRef = useRef<any>(null);
   const sizeInputRef = useRef<any>(null);
   const qtyInputRef = useRef<any>(null);
+  
+  // 利润推算器相关状态
+  const [profitCalculatorVisible, setProfitCalculatorVisible] = useState(false);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -3985,6 +3990,26 @@ const Purchase: React.FC = () => {
                       批量上传新品
                     </Button>
 
+                    <Button 
+                      icon={<CalculatorOutlined />}
+                      onClick={() => setProfitCalculatorVisible(true)}
+                      size="small"
+                      type="primary"
+                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                    >
+                      利润推算器
+                    </Button>
+
+                    <Button 
+                      icon={<CalculatorOutlined />}
+                      onClick={() => setProfitCalculatorVisible(true)}
+                      size="small"
+                      type="primary"
+                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                    >
+                      利润推算器
+                    </Button>
+
                     <Popconfirm
                       title="确定要删除选中的记录吗？"
                       onConfirm={handleBatchDelete}
@@ -6045,8 +6070,14 @@ const Purchase: React.FC = () => {
         />
       </Modal>
 
-   </div>
-  );
-};
+       </div>
+
+            {/* 利润推算器弹窗 */}
+      <ProfitCalculator 
+        visible={profitCalculatorVisible}
+        onClose={() => setProfitCalculatorVisible(false)}
+      />
+    );
+  };
 
 export default Purchase; 
