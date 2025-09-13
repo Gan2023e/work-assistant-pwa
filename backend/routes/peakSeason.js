@@ -285,13 +285,13 @@ router.get('/payment-details', async (req, res) => {
   }
 });
 
-// 获取年份列表
+// 获取年份列表（基于实际发货数据）
 router.get('/years', async (req, res) => {
   try {
     const years = await sequelize.query(`
-      SELECT DISTINCT YEAR(upate_date) as year 
-      FROM peak_season_inventory_prep 
-      WHERE upate_date IS NOT NULL 
+      SELECT DISTINCT YEAR(日期) as year 
+      FROM supplier_shipments_peak_season 
+      WHERE 日期 IS NOT NULL 
       ORDER BY year DESC
     `, {
       type: sequelize.QueryTypes.SELECT
@@ -339,7 +339,7 @@ router.get('/daily-shipments', async (req, res) => {
       replacements.endDate = endDate;
     }
 
-    // 按日期和SKU汇总的数据透视表视图（含厂家名称三表关联）
+    // 按日期和SKU汇总的数据透视表视图（以主表为准，关联表信息作为补充）
     const dailyShipments = await sequelize.query(`
       SELECT 
         s.日期 as shipment_date,
@@ -350,13 +350,13 @@ router.get('/daily-shipments', async (req, res) => {
         MIN(s.录入日期) as first_entry_date,
         MAX(s.录入日期) as last_entry_date,
         GROUP_CONCAT(DISTINCT s.序号) as record_ids,
-        pw.seller_name as supplier_name,
-        sis.parent_sku
+        COALESCE(pw.seller_name, '') as supplier_name,
+        COALESCE(sis.parent_sku, '') as parent_sku
       FROM supplier_shipments_peak_season s
       LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.日期 IS NOT NULL ${whereCondition}
-      GROUP BY s.日期, s.卖家货号, s.卖家颜色, pw.seller_name, sis.parent_sku
+      GROUP BY s.日期, s.卖家货号, s.卖家颜色
       ORDER BY s.日期 DESC, s.卖家货号, s.卖家颜色
       LIMIT :limit OFFSET :offset
     `, {
@@ -441,7 +441,7 @@ router.get('/daily-shipments-summary', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
-    // 按SKU汇总统计（含厂家名称）
+    // 按SKU汇总统计（以主表为准，关联表信息作为补充）
     const skuSummary = await sequelize.query(`
       SELECT 
         s.卖家货号 as sku,
@@ -450,13 +450,13 @@ router.get('/daily-shipments-summary', async (req, res) => {
         COUNT(*) as total_records,
         MIN(s.日期) as first_ship_date,
         MAX(s.日期) as last_ship_date,
-        pw.seller_name as supplier_name,
-        sis.parent_sku
+        COALESCE(pw.seller_name, '') as supplier_name,
+        COALESCE(sis.parent_sku, '') as parent_sku
       FROM supplier_shipments_peak_season s
       LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.日期 IS NOT NULL ${whereCondition}
-      GROUP BY s.卖家货号, pw.seller_name, sis.parent_sku
+      GROUP BY s.卖家货号
       ORDER BY total_quantity DESC
       LIMIT 20
     `, {
