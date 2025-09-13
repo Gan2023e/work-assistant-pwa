@@ -52,7 +52,7 @@ router.get('/summary', async (req, res) => {
         SELECT 
           YEAR(bp.付款时间) as year,
           COUNT(DISTINCT bp.卖家名称) as total_suppliers,
-          SUM(bp.付款金额) as total_payment_amount
+          CAST(SUM(bp.付款金额) as DECIMAL(16,2)) as total_payment_amount
         FROM bulk_payments_peak_season bp 
         WHERE bp.付款时间 IS NOT NULL
         GROUP BY YEAR(bp.付款时间)
@@ -200,7 +200,7 @@ router.get('/supplier-stats', async (req, res) => {
         bp.卖家名称 as supplier,
         YEAR(bp.付款时间) as year,
         COUNT(DISTINCT bp.序列) as payment_count,
-        SUM(bp.付款金额) as total_payment_amount,
+        CAST(SUM(bp.付款金额) as DECIMAL(16,2)) as total_payment_amount,
         bp.付款类型 as payment_type
       FROM bulk_payments_peak_season bp
       WHERE bp.付款时间 IS NOT NULL ${whereCondition}
@@ -251,9 +251,9 @@ router.get('/payment-details', async (req, res) => {
         bp.序列 as id,
         bp.卖家名称 as supplier,
         bp.付款类型 as payment_type,
-        bp.付款金额 as amount,
+        CAST(bp.付款金额 as DECIMAL(16,2)) as amount,
         bp.付款时间 as payment_date,
-        bp.备注 as description
+        CONCAT(bp.付款类型, ' - 第', ROW_NUMBER() OVER (PARTITION BY bp.卖家名称, bp.付款类型 ORDER BY bp.付款时间), '笔') as description
       FROM bulk_payments_peak_season bp
       WHERE bp.付款时间 IS NOT NULL ${whereCondition}
       ORDER BY bp.付款时间 DESC

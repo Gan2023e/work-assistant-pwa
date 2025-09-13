@@ -209,10 +209,12 @@ const PeakSeasonSummary: React.FC = () => {
       const data = await response.json();
       console.log('供应商统计API响应:', data);
       if (data.code === 0) {
+        console.log('原始供应商数据:', data.data);
         // 处理数据，为表格合并行做准备
         const processedStats = processSupplierStatsForDisplay(data.data);
         setSupplierStats(processedStats);
         console.log('设置处理后的供应商统计数据:', processedStats);
+        console.log('总计金额计算结果:', calculateGrandTotal());
       } else {
         console.error('供应商统计API返回错误:', data.message);
         message.error(data.message);
@@ -264,6 +266,9 @@ const PeakSeasonSummary: React.FC = () => {
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
+      // 确保金额是数值类型
+      item.total_payment_amount = parseFloat(item.total_payment_amount) || 0;
+      item.payment_count = parseInt(item.payment_count) || 0;
       grouped.get(key)!.push(item);
     });
 
@@ -271,8 +276,11 @@ const PeakSeasonSummary: React.FC = () => {
     
     // 处理每个供应商组
     grouped.forEach((items, groupKey) => {
-      // 计算供应商总付款金额
-      const supplierTotal = items.reduce((sum, item) => sum + item.total_payment_amount, 0);
+      // 计算供应商总付款金额 - 确保数值计算
+      const supplierTotal = items.reduce((sum, item) => {
+        const amount = parseFloat(item.total_payment_amount) || 0;
+        return sum + amount;
+      }, 0);
       
       // 按付款类型优先级排序：预付款 -> 阶段付款 -> 尾款 -> 其他
       items.sort((a, b) => {
@@ -282,15 +290,17 @@ const PeakSeasonSummary: React.FC = () => {
           return priorityA - priorityB; // 优先级升序
         }
         // 如果优先级相同，按付款金额降序
-        return b.total_payment_amount - a.total_payment_amount;
+        const amountA = parseFloat(a.total_payment_amount) || 0;
+        const amountB = parseFloat(b.total_payment_amount) || 0;
+        return amountB - amountA;
       });
       
       items.forEach((item, index) => {
         result.push({
           supplier: item.supplier,
           year: item.year,
-          payment_count: item.payment_count,
-          total_payment_amount: item.total_payment_amount,
+          payment_count: parseInt(item.payment_count) || 0,
+          total_payment_amount: parseFloat(item.total_payment_amount) || 0,
           payment_type: item.payment_type,
           rowSpan: index === 0 ? items.length : 0, // 第一行显示rowSpan，其他行为0
           supplier_total: supplierTotal // 每一行都保存供应商总额，但只在第一行显示
@@ -330,12 +340,16 @@ const PeakSeasonSummary: React.FC = () => {
     supplierStats.forEach(item => {
       if (item.rowSpan && item.rowSpan > 0) { // 只计算每个供应商的第一行（有rowSpan的行）
         const key = `${item.supplier}-${item.year}`;
-        supplierTotals.set(key, item.supplier_total || 0);
+        const total = parseFloat(String(item.supplier_total)) || 0;
+        supplierTotals.set(key, total);
       }
     });
     
-    // 计算所有供应商的总额
-    return Array.from(supplierTotals.values()).reduce((total, amount) => total + amount, 0);
+    // 计算所有供应商的总额 - 确保数值相加
+    return Array.from(supplierTotals.values()).reduce((total, amount) => {
+      const numAmount = parseFloat(String(amount)) || 0;
+      return total + numAmount;
+    }, 0);
   };
 
   // 点击付款单数时显示详细记录
