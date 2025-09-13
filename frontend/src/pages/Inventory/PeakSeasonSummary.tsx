@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import * as XLSX from 'xlsx';
+import DailyShipmentsDetail from '../Products/DailyShipmentsDetail';
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -523,6 +524,7 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'supplier',
       fixed: 'left',
       width: 150,
+      align: 'center',
       render: (text, record) => {
         const obj = {
           children: <Text strong>{text}</Text>,
@@ -541,6 +543,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'year',
       key: 'year',
       width: 80,
+      align: 'center',
       render: (text, record) => {
         const obj = {
           children: text,
@@ -559,6 +562,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'payment_type',
       key: 'payment_type',
       width: 150,
+      align: 'center',
       render: (text) => {
         // 给不同付款类型添加颜色标识
         let color = '#108ee9';
@@ -574,6 +578,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'payment_count',
       key: 'payment_count',
       width: 100,
+      align: 'center',
       render: (value, record) => (
         <Button 
           type="link" 
@@ -590,6 +595,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'total_payment_amount',
       key: 'total_payment_amount',
       width: 140,
+      align: 'right',
       render: (value) => value ? `¥${value.toLocaleString()}` : '-'
     },
     {
@@ -597,6 +603,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'supplier_total',
       key: 'supplier_total',
       width: 140,
+      align: 'right',
       render: (value, record) => {
         const obj = {
           children: record.rowSpan ? (
@@ -622,6 +629,7 @@ const PeakSeasonSummary: React.FC = () => {
       title: '序号',
       key: 'index',
       width: 60,
+      align: 'center',
       render: (_, record, index) => index + 1
     },
     {
@@ -629,6 +637,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'amount',
       key: 'amount',
       width: 120,
+      align: 'right',
       render: (value) => `¥${value.toLocaleString()}`
     },
     {
@@ -636,12 +645,14 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'payment_date',
       key: 'payment_date',
       width: 120,
+      align: 'center',
       render: (date) => new Date(date).toLocaleDateString()
     },
     {
       title: '备注',
       dataIndex: 'description',
       key: 'description',
+      align: 'center',
       render: (text) => text || '-'
     }
   ];
@@ -804,9 +815,9 @@ const PeakSeasonSummary: React.FC = () => {
               <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#fafafa', borderRadius: '6px' }}>
                 <Title level={4}>付款类型说明</Title>
                 <ul>
-                  <li><Text style={{ color: '#87d068' }}>1.预付款</Text> - 订单确认后的初期付款（优先级1）</li>
-                  <li><Text style={{ color: '#2db7f5' }}>2.阶段付款</Text> - 生产过程中的分阶段付款（优先级2）</li>
-                  <li><Text style={{ color: '#f50' }}>4.尾款</Text> - 订单完成前的最终付款（优先级3）</li>
+                  <li><Text style={{ color: '#87d068' }}>预付款</Text> - 订单确认后的初期付款（优先级1）</li>
+                  <li><Text style={{ color: '#2db7f5' }}>阶段付款</Text> - 生产过程中的分阶段付款（优先级2）</li>
+                  <li><Text style={{ color: '#f50' }}>尾款</Text> - 订单完成前的最终付款（优先级3）</li>
                   <li><Text style={{ color: '#108ee9' }}>其他</Text> - 其他类型的付款（优先级4）</li>
                 </ul>
                 <p style={{ marginTop: '12px' }}>
@@ -858,6 +869,9 @@ const PeakSeasonSummary: React.FC = () => {
               }}
               size="small"
             />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab="日发货详情" key="daily-shipments">
+            <DailyShipmentsDetail />
           </Tabs.TabPane>
         </Tabs>
       </Card>
