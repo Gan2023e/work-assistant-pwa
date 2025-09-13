@@ -839,10 +839,10 @@ const PeakSeasonSummary: React.FC = () => {
                 bordered
                 summary={() => (
                   <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
-                    <Table.Summary.Cell index={0} colSpan={5}>
+                    <Table.Summary.Cell index={0} colSpan={5} align="center">
                       <Text strong style={{ fontSize: '16px' }}>全部供应商总计</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1}>
+                    <Table.Summary.Cell index={1} align="center">
                       <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
                         ¥{calculateGrandTotal().toLocaleString()}
                       </Text>

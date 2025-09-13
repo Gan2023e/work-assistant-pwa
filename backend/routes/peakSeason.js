@@ -482,4 +482,68 @@ router.get('/daily-shipments-summary', async (req, res) => {
   }
 });
 
+// 测试数据接口 - 检查supplier_shipments_peak_season表数据
+router.get('/test-data', async (req, res) => {
+  try {
+    // 检查supplier_shipments_peak_season表数据
+    const shipmentCount = await sequelize.query(`
+      SELECT COUNT(*) as total 
+      FROM supplier_shipments_peak_season
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 检查最近10条记录
+    const recentRecords = await sequelize.query(`
+      SELECT * 
+      FROM supplier_shipments_peak_season
+      ORDER BY 序号 DESC 
+      LIMIT 10
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 检查sellerinventory_sku表的vendor_sku字段情况
+    const vendorSkuCount = await sequelize.query(`
+      SELECT COUNT(*) as total_records,
+             COUNT(vendor_sku) as vendor_sku_filled
+      FROM sellerinventory_sku
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 检查三表关联的结果
+    const joinTest = await sequelize.query(`
+      SELECT 
+        s.卖家货号,
+        sis.vendor_sku,
+        sis.parent_sku,
+        pw.seller_name
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      LIMIT 10
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json({
+      code: 0,
+      data: {
+        shipmentCount: shipmentCount[0],
+        recentRecords,
+        vendorSkuStatus: vendorSkuCount[0],
+        joinTestResults: joinTest
+      }
+    });
+  } catch (error) {
+    console.error('测试数据查询失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '测试数据查询失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
