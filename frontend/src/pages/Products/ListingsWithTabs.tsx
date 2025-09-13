@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tabs } from 'antd';
 import Listings from './Listings';
 import ListingsSku from './ListingsSku';
+import DailyShipmentsDetail from './DailyShipmentsDetail';
 
 const ListingsWithTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('sku-mapping');
@@ -23,6 +24,11 @@ const ListingsWithTabs: React.FC = () => {
         <Tabs.TabPane tab="Listings SKU数据" key="listings-sku">
           {/* 新的Listings SKU数据内容 */}
           <ListingsSku />
+        </Tabs.TabPane>
+        
+        <Tabs.TabPane tab="日发货详情" key="daily-shipments">
+          {/* 日发货详情数据透视表 */}
+          <DailyShipmentsDetail />
         </Tabs.TabPane>
       </Tabs>
     </div>

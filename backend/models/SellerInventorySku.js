@@ -18,6 +18,11 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
     allowNull: false,
     comment: '子SKU'
   },
+  vendor_sku: {
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    comment: '厂商货号，用于关联发货记录'
+  },
   sellercolorname: {
     type: DataTypes.STRING,
     allowNull: true,

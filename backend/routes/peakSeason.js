@@ -4,7 +4,9 @@ const { sequelize } = require('../models/database');
 const { 
   PeakSeasonInventoryPrep, 
   SupplierShipmentsPeakSeason, 
-  BulkPaymentsPeakSeason 
+  BulkPaymentsPeakSeason,
+  SellerInventorySku,
+  ProductWeblink
 } = require('../models');
 
 // 获取旺季备货汇总统计
@@ -299,6 +301,176 @@ router.get('/years', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取年份列表失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取日发货详情 - 数据透视表视图
+router.get('/daily-shipments', async (req, res) => {
+  try {
+    const { year, startDate, endDate, supplierName } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    let whereCondition = '';
+    const replacements = {};
+    
+    // 年份过滤
+    if (year) {
+      whereCondition += ' AND YEAR(s.日期) = :year';
+      replacements.year = year;
+    }
+    
+    // 日期范围过滤
+    if (startDate) {
+      whereCondition += ' AND s.日期 >= :startDate';
+      replacements.startDate = startDate;
+    }
+    if (endDate) {
+      whereCondition += ' AND s.日期 <= :endDate';
+      replacements.endDate = endDate;
+    }
+
+    // 按日期和SKU汇总的数据透视表视图（含厂家名称三表关联）
+    const dailyShipments = await sequelize.query(`
+      SELECT 
+        s.日期 as shipment_date,
+        s.卖家货号 as sku,
+        s.卖家颜色 as color,
+        SUM(s.数量) as total_quantity,
+        COUNT(*) as record_count,
+        MIN(s.录入日期) as first_entry_date,
+        MAX(s.录入日期) as last_entry_date,
+        GROUP_CONCAT(DISTINCT s.序号) as record_ids,
+        pw.seller_name as supplier_name,
+        sis.parent_sku
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.日期 IS NOT NULL ${whereCondition}
+      GROUP BY s.日期, s.卖家货号, s.卖家颜色, pw.seller_name, sis.parent_sku
+      ORDER BY s.日期 DESC, s.卖家货号, s.卖家颜色
+      LIMIT :limit OFFSET :offset
+    `, {
+      replacements: { ...replacements, limit, offset },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 获取总数
+    const totalResult = await sequelize.query(`
+      SELECT COUNT(*) as total
+      FROM (
+        SELECT s.日期, s.卖家货号, s.卖家颜色
+        FROM supplier_shipments_peak_season s
+        WHERE s.日期 IS NOT NULL ${whereCondition}
+        GROUP BY s.日期, s.卖家货号, s.卖家颜色
+      ) as grouped_data
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    const total = totalResult[0]?.total || 0;
+
+    res.json({
+      code: 0,
+      data: {
+        records: dailyShipments,
+        pagination: {
+          current: page,
+          total: parseInt(total),
+          pageSize: limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取日发货详情失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取日发货详情失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取日发货统计汇总
+router.get('/daily-shipments-summary', async (req, res) => {
+  try {
+    const { year, startDate, endDate } = req.query;
+    
+    let whereCondition = '';
+    const replacements = {};
+    
+    if (year) {
+      whereCondition += ' AND YEAR(s.日期) = :year';
+      replacements.year = year;
+    }
+    
+    if (startDate) {
+      whereCondition += ' AND s.日期 >= :startDate';
+      replacements.startDate = startDate;
+    }
+    if (endDate) {
+      whereCondition += ' AND s.日期 <= :endDate';
+      replacements.endDate = endDate;
+    }
+
+    // 按日期汇总统计
+    const dailySummary = await sequelize.query(`
+      SELECT 
+        s.日期 as date,
+        COUNT(DISTINCT s.卖家货号) as unique_skus,
+        SUM(s.数量) as total_quantity,
+        COUNT(*) as total_records
+      FROM supplier_shipments_peak_season s
+      WHERE s.日期 IS NOT NULL ${whereCondition}
+      GROUP BY s.日期
+      ORDER BY s.日期 DESC
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 按SKU汇总统计（含厂家名称）
+    const skuSummary = await sequelize.query(`
+      SELECT 
+        s.卖家货号 as sku,
+        COUNT(DISTINCT s.日期) as ship_days,
+        SUM(s.数量) as total_quantity,
+        COUNT(*) as total_records,
+        MIN(s.日期) as first_ship_date,
+        MAX(s.日期) as last_ship_date,
+        pw.seller_name as supplier_name,
+        sis.parent_sku
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.日期 IS NOT NULL ${whereCondition}
+      GROUP BY s.卖家货号, pw.seller_name, sis.parent_sku
+      ORDER BY total_quantity DESC
+      LIMIT 20
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json({
+      code: 0,
+      data: {
+        dailySummary,
+        skuSummary
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取日发货统计汇总失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取日发货统计汇总失败',
       error: error.message
     });
   }
