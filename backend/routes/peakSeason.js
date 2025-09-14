@@ -584,29 +584,29 @@ router.get('/supplier-shipments', async (req, res) => {
     const shipmentReplacements = {};
     
     if (year) {
-      shipmentWhereCondition += ' AND YEAR(s.日期) = :year';
+      shipmentWhereCondition += ' AND YEAR(s.date) = :year';
       shipmentReplacements.year = year;
     }
     if (vendorSku) {
-      shipmentWhereCondition += ' AND s.卖家货号 LIKE :vendorSku';
+      shipmentWhereCondition += ' AND s.vendor_sku LIKE :vendorSku';
       shipmentReplacements.vendorSku = `%${vendorSku}%`;
     }
     if (color) {
-      shipmentWhereCondition += ' AND s.卖家颜色 LIKE :color';
+      shipmentWhereCondition += ' AND s.sellercolorname LIKE :color';
       shipmentReplacements.color = `%${color}%`;
     }
 
     const shipmentRecords = await sequelize.query(`
       SELECT 
-        s.序号 as id,
-        s.日期 as date,
-        s.卖家货号 as vendor_sku,
-        s.卖家颜色 as color,
-        s.数量 as quantity,
-        s.录入日期 as create_date
-      FROM supplier_shipments_peak_season s
-      WHERE s.日期 IS NOT NULL ${shipmentWhereCondition}
-      ORDER BY s.日期 DESC, s.卖家货号, s.卖家颜色
+        s.id,
+        s.date,
+        s.vendor_sku,
+        s.sellercolorname as color,
+        s.quantity,
+        s.create_date
+      FROM \`​supplier_shipments_peak_season\` s
+      WHERE s.date IS NOT NULL ${shipmentWhereCondition}
+      ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
     `, {
       replacements: { ...shipmentReplacements, limit, offset },
@@ -616,8 +616,8 @@ router.get('/supplier-shipments', async (req, res) => {
     // 获取总数
     const totalResult = await sequelize.query(`
       SELECT COUNT(*) as total
-      FROM supplier_shipments_peak_season s
-      WHERE s.日期 IS NOT NULL ${shipmentWhereCondition}
+      FROM \`​supplier_shipments_peak_season\` s
+      WHERE s.date IS NOT NULL ${shipmentWhereCondition}
     `, {
       replacements: shipmentReplacements,
       type: sequelize.QueryTypes.SELECT
