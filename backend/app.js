@@ -135,17 +135,14 @@ sequelize.authenticate().then(() => {
       startScheduledTasks();
     });
   } else {
-    // 开发环境才进行数据库同步
-    console.log('🔄 开发环境：同步数据库模型...');
-    return sequelize.sync({ alter: false }).then(() => {
-      console.log('✅ 数据库同步完成');
+    // 开发环境暂时跳过数据库同步
+    console.log('⚠️ 开发环境：跳过数据库模型同步...');
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ 后端服务已启动，端口 ${PORT}`);
       
-      app.listen(PORT, '0.0.0.0', () => {
-        console.log(`✅ 后端服务已启动，端口 ${PORT}`);
-        
-        // 启动定时任务
-        startScheduledTasks();
-      });
+      // 启动定时任务
+      startScheduledTasks();
     });
   }
 }).catch(err => {

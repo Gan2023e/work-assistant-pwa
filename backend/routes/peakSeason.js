@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { sequelize } = require('../models/database');
+const { Op } = require('sequelize');
 const { 
   PeakSeasonInventoryPrep, 
   SupplierShipmentsPeakSeason, 
@@ -43,12 +44,12 @@ router.get('/summary', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          YEAR(s.date) as year,
-          COUNT(DISTINCT s.vendor_sku) as total_shipments,
-          SUM(s.quantity) as total_shipped_quantity
+          YEAR(s.日期) as year,
+          COUNT(DISTINCT s.卖家货号) as total_shipments,
+          SUM(s.数量) as total_shipped_quantity
         FROM supplier_shipments_peak_season s 
-        WHERE s.date IS NOT NULL
-        GROUP BY YEAR(s.date)
+        WHERE s.日期 IS NOT NULL
+        GROUP BY YEAR(s.日期)
       ) shipment_stats ON YEAR(p.upate_date) = shipment_stats.year
       LEFT JOIN (
         SELECT 
@@ -118,13 +119,13 @@ router.get('/sku-details', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          s1.vendor_sku, 
-          SUM(s1.quantity) as shipped_quantity
+          s1.卖家货号, 
+          SUM(s1.数量) as shipped_quantity
         FROM supplier_shipments_peak_season s1
-        WHERE s1.date IS NOT NULL 
-          ${year ? 'AND YEAR(s1.date) = :year' : ''}
-        GROUP BY s1.vendor_sku
-      ) s ON p.local_sku = s.vendor_sku
+        WHERE s1.日期 IS NOT NULL 
+          ${year ? 'AND YEAR(s1.日期) = :year' : ''}
+        GROUP BY s1.卖家货号
+      ) s ON p.local_sku = s.卖家货号
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       ORDER BY p.upate_date DESC, p.local_sku
       LIMIT :limit OFFSET :offset
@@ -289,9 +290,9 @@ router.get('/payment-details', async (req, res) => {
 router.get('/years', async (req, res) => {
   try {
     const years = await sequelize.query(`
-      SELECT DISTINCT YEAR(date) as year 
+      SELECT DISTINCT YEAR(日期) as year 
       FROM supplier_shipments_peak_season 
-      WHERE date IS NOT NULL 
+      WHERE 日期 IS NOT NULL 
       ORDER BY year DESC
     `, {
       type: sequelize.QueryTypes.SELECT
@@ -578,21 +579,37 @@ router.get('/supplier-shipments', async (req, res) => {
       replacements.color = `%${color}%`;
     }
 
-    // 获取供应商发货记录
+    // 获取供应商发货记录 - 使用原始SQL查询
+    let shipmentWhereCondition = '';
+    const shipmentReplacements = {};
+    
+    if (year) {
+      shipmentWhereCondition += ' AND YEAR(s.日期) = :year';
+      shipmentReplacements.year = year;
+    }
+    if (vendorSku) {
+      shipmentWhereCondition += ' AND s.卖家货号 LIKE :vendorSku';
+      shipmentReplacements.vendorSku = `%${vendorSku}%`;
+    }
+    if (color) {
+      shipmentWhereCondition += ' AND s.卖家颜色 LIKE :color';
+      shipmentReplacements.color = `%${color}%`;
+    }
+
     const shipmentRecords = await sequelize.query(`
       SELECT 
-        s.id,
-        s.date,
-        s.vendor_sku,
-        s.sellercolorname as color,
-        s.quantity,
-        s.create_date
+        s.序号 as id,
+        s.日期 as date,
+        s.卖家货号 as vendor_sku,
+        s.卖家颜色 as color,
+        s.数量 as quantity,
+        s.录入日期 as create_date
       FROM supplier_shipments_peak_season s
-      WHERE s.date IS NOT NULL ${whereCondition}
-      ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
+      WHERE s.日期 IS NOT NULL ${shipmentWhereCondition}
+      ORDER BY s.日期 DESC, s.卖家货号, s.卖家颜色
       LIMIT :limit OFFSET :offset
     `, {
-      replacements: { ...replacements, limit, offset },
+      replacements: { ...shipmentReplacements, limit, offset },
       type: sequelize.QueryTypes.SELECT
     });
 
@@ -600,9 +617,9 @@ router.get('/supplier-shipments', async (req, res) => {
     const totalResult = await sequelize.query(`
       SELECT COUNT(*) as total
       FROM supplier_shipments_peak_season s
-      WHERE s.date IS NOT NULL ${whereCondition}
+      WHERE s.日期 IS NOT NULL ${shipmentWhereCondition}
     `, {
-      replacements,
+      replacements: shipmentReplacements,
       type: sequelize.QueryTypes.SELECT
     });
 
