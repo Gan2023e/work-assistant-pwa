@@ -43,12 +43,12 @@ router.get('/summary', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          YEAR(s.日期) as year,
-          COUNT(DISTINCT s.卖家货号) as total_shipments,
-          SUM(s.数量) as total_shipped_quantity
+          YEAR(s.date) as year,
+          COUNT(DISTINCT s.vendor_sku) as total_shipments,
+          SUM(s.quantity) as total_shipped_quantity
         FROM supplier_shipments_peak_season s 
-        WHERE s.日期 IS NOT NULL
-        GROUP BY YEAR(s.日期)
+        WHERE s.date IS NOT NULL
+        GROUP BY YEAR(s.date)
       ) shipment_stats ON YEAR(p.upate_date) = shipment_stats.year
       LEFT JOIN (
         SELECT 
@@ -118,13 +118,13 @@ router.get('/sku-details', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          s1.卖家货号, 
-          SUM(s1.数量) as shipped_quantity
+          s1.vendor_sku, 
+          SUM(s1.quantity) as shipped_quantity
         FROM supplier_shipments_peak_season s1
-        WHERE s1.日期 IS NOT NULL 
-          ${year ? 'AND YEAR(s1.日期) = :year' : ''}
-        GROUP BY s1.卖家货号
-      ) s ON p.local_sku = s.卖家货号
+        WHERE s1.date IS NOT NULL 
+          ${year ? 'AND YEAR(s1.date) = :year' : ''}
+        GROUP BY s1.vendor_sku
+      ) s ON p.local_sku = s.vendor_sku
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       ORDER BY p.upate_date DESC, p.local_sku
       LIMIT :limit OFFSET :offset
@@ -289,9 +289,9 @@ router.get('/payment-details', async (req, res) => {
 router.get('/years', async (req, res) => {
   try {
     const years = await sequelize.query(`
-      SELECT DISTINCT YEAR(日期) as year 
+      SELECT DISTINCT YEAR(date) as year 
       FROM supplier_shipments_peak_season 
-      WHERE 日期 IS NOT NULL 
+      WHERE date IS NOT NULL 
       ORDER BY year DESC
     `, {
       type: sequelize.QueryTypes.SELECT
@@ -342,22 +342,22 @@ router.get('/daily-shipments', async (req, res) => {
     // 按日期和SKU汇总的数据透视表视图（以主表为准，关联表信息作为补充）
     const dailyShipments = await sequelize.query(`
       SELECT 
-        s.日期 as shipment_date,
-        s.卖家货号 as sku,
-        s.卖家颜色 as color,
-        SUM(s.数量) as total_quantity,
+        s.date as shipment_date,
+        s.vendor_sku as sku,
+        s.sellercolorname as color,
+        SUM(s.quantity) as total_quantity,
         COUNT(*) as record_count,
-        MIN(s.录入日期) as first_entry_date,
-        MAX(s.录入日期) as last_entry_date,
-        GROUP_CONCAT(DISTINCT s.序号) as record_ids,
+        MIN(s.create_date) as first_entry_date,
+        MAX(s.create_date) as last_entry_date,
+        GROUP_CONCAT(DISTINCT s.id) as record_ids,
         COALESCE(pw.seller_name, '') as supplier_name,
         COALESCE(sis.parent_sku, '') as parent_sku
       FROM supplier_shipments_peak_season s
-      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE s.日期 IS NOT NULL ${whereCondition}
-      GROUP BY s.日期, s.卖家货号, s.卖家颜色
-      ORDER BY s.日期 DESC, s.卖家货号, s.卖家颜色
+      WHERE s.date IS NOT NULL ${whereCondition}
+      GROUP BY s.date, s.vendor_sku, s.sellercolorname
+      ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
     `, {
       replacements: { ...replacements, limit, offset },
@@ -368,10 +368,10 @@ router.get('/daily-shipments', async (req, res) => {
     const totalResult = await sequelize.query(`
       SELECT COUNT(*) as total
       FROM (
-        SELECT s.日期, s.卖家货号, s.卖家颜色
+        SELECT s.date, s.vendor_sku, s.sellercolorname
         FROM supplier_shipments_peak_season s
-        WHERE s.日期 IS NOT NULL ${whereCondition}
-        GROUP BY s.日期, s.卖家货号, s.卖家颜色
+        WHERE s.date IS NOT NULL ${whereCondition}
+        GROUP BY s.date, s.vendor_sku, s.sellercolorname
       ) as grouped_data
     `, {
       replacements,
@@ -428,14 +428,14 @@ router.get('/daily-shipments-summary', async (req, res) => {
     // 按日期汇总统计
     const dailySummary = await sequelize.query(`
       SELECT 
-        s.日期 as date,
-        COUNT(DISTINCT s.卖家货号) as unique_skus,
-        SUM(s.数量) as total_quantity,
+        s.date as date,
+        COUNT(DISTINCT s.vendor_sku) as unique_skus,
+        SUM(s.quantity) as total_quantity,
         COUNT(*) as total_records
       FROM supplier_shipments_peak_season s
-      WHERE s.日期 IS NOT NULL ${whereCondition}
-      GROUP BY s.日期
-      ORDER BY s.日期 DESC
+      WHERE s.date IS NOT NULL ${whereCondition}
+      GROUP BY s.date
+      ORDER BY s.date DESC
     `, {
       replacements,
       type: sequelize.QueryTypes.SELECT
@@ -444,19 +444,19 @@ router.get('/daily-shipments-summary', async (req, res) => {
     // 按SKU汇总统计（以主表为准，关联表信息作为补充）
     const skuSummary = await sequelize.query(`
       SELECT 
-        s.卖家货号 as sku,
-        COUNT(DISTINCT s.日期) as ship_days,
-        SUM(s.数量) as total_quantity,
+        s.vendor_sku as sku,
+        COUNT(DISTINCT s.date) as ship_days,
+        SUM(s.quantity) as total_quantity,
         COUNT(*) as total_records,
-        MIN(s.日期) as first_ship_date,
-        MAX(s.日期) as last_ship_date,
+        MIN(s.date) as first_ship_date,
+        MAX(s.date) as last_ship_date,
         COALESCE(pw.seller_name, '') as supplier_name,
         COALESCE(sis.parent_sku, '') as parent_sku
       FROM supplier_shipments_peak_season s
-      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE s.日期 IS NOT NULL ${whereCondition}
-      GROUP BY s.卖家货号
+      WHERE s.date IS NOT NULL ${whereCondition}
+      GROUP BY s.vendor_sku
       ORDER BY total_quantity DESC
       LIMIT 20
     `, {
@@ -497,7 +497,7 @@ router.get('/test-data', async (req, res) => {
     const recentRecords = await sequelize.query(`
       SELECT * 
       FROM supplier_shipments_peak_season
-      ORDER BY 序号 DESC 
+      ORDER BY id DESC 
       LIMIT 10
     `, {
       type: sequelize.QueryTypes.SELECT
@@ -515,12 +515,12 @@ router.get('/test-data', async (req, res) => {
     // 检查三表关联的结果
     const joinTest = await sequelize.query(`
       SELECT 
-        s.卖家货号,
+        s.vendor_sku,
         sis.vendor_sku,
         sis.parent_sku,
         pw.seller_name
       FROM supplier_shipments_peak_season s
-      LEFT JOIN sellerinventory_sku sis ON s.卖家货号 = sis.vendor_sku
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       LIMIT 10
     `, {
@@ -541,6 +541,95 @@ router.get('/test-data', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '测试数据查询失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取供应商发货记录详情
+router.get('/supplier-shipments', async (req, res) => {
+  try {
+    const { year, startDate, endDate, vendorSku, color } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    let whereCondition = '';
+    const replacements = {};
+
+    if (year) {
+      whereCondition += ' AND YEAR(s.date) = :year';
+      replacements.year = year;
+    }
+    if (startDate) {
+      whereCondition += ' AND s.date >= :startDate';
+      replacements.startDate = startDate;
+    }
+    if (endDate) {
+      whereCondition += ' AND s.date <= :endDate';
+      replacements.endDate = endDate;
+    }
+    if (vendorSku) {
+      whereCondition += ' AND s.vendor_sku LIKE :vendorSku';
+      replacements.vendorSku = `%${vendorSku}%`;
+    }
+    if (color) {
+      whereCondition += ' AND s.sellercolorname LIKE :color';
+      replacements.color = `%${color}%`;
+    }
+
+    // 获取供应商发货记录
+    const shipmentRecords = await sequelize.query(`
+      SELECT 
+        s.id,
+        s.date,
+        s.vendor_sku,
+        s.sellercolorname as color,
+        s.quantity,
+        s.create_date,
+        COALESCE(pw.seller_name, '') as supplier_name,
+        COALESCE(sis.parent_sku, '') as parent_sku
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL ${whereCondition}
+      ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
+      LIMIT :limit OFFSET :offset
+    `, {
+      replacements: { ...replacements, limit, offset },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 获取总数
+    const totalResult = await sequelize.query(`
+      SELECT COUNT(*) as total
+      FROM supplier_shipments_peak_season s
+      WHERE s.date IS NOT NULL ${whereCondition}
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    const total = totalResult[0]?.total || 0;
+
+    res.json({
+      code: 0,
+      data: {
+        records: shipmentRecords,
+        pagination: {
+          current: page,
+          pageSize: limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('获取供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取供应商发货记录失败',
       error: error.message
     });
   }

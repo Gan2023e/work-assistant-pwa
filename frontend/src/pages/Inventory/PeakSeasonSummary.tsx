@@ -75,6 +75,18 @@ interface PaymentDetail {
   description?: string;
 }
 
+// 供应商发货记录接口
+interface SupplierShipmentRecord {
+  id: number;
+  date: string;
+  vendor_sku: string;
+  color: string;
+  quantity: number;
+  create_date: string;
+  supplier_name: string;
+  parent_sku: string;
+}
+
 const PeakSeasonSummary: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [yearlyStats, setYearlyStats] = useState<YearlyStats[]>([]);
@@ -95,6 +107,19 @@ const PeakSeasonSummary: React.FC = () => {
     paymentType: string;
     count: number;
   } | null>(null);
+
+  // 供应商发货记录状态
+  const [supplierShipments, setSupplierShipments] = useState<SupplierShipmentRecord[]>([]);
+  const [shipmentPagination, setShipmentPagination] = useState({
+    current: 1,
+    pageSize: 50,
+    total: 0
+  });
+  const [shipmentFilters, setShipmentFilters] = useState({
+    year: 2025 as number | undefined,
+    vendorSku: '',
+    color: ''
+  });
 
   // 筛选条件
   const [filters, setFilters] = useState({
@@ -257,6 +282,41 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
+  // 获取供应商发货记录
+  const fetchSupplierShipments = async (page: number = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (shipmentFilters.year) params.append('year', shipmentFilters.year.toString());
+      if (shipmentFilters.vendorSku) params.append('vendorSku', shipmentFilters.vendorSku);
+      if (shipmentFilters.color) params.append('color', shipmentFilters.color);
+      params.append('page', page.toString());
+      params.append('limit', shipmentPagination.pageSize.toString());
+
+      console.log('正在获取供应商发货记录，参数:', params.toString());
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments?${params}`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setSupplierShipments(data.data.records);
+        setShipmentPagination(prev => ({
+          ...prev,
+          current: data.data.pagination.current,
+          total: data.data.pagination.total
+        }));
+        console.log('设置供应商发货记录:', data.data);
+      } else {
+        console.error('供应商发货记录API返回错误:', data.message);
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('获取供应商发货记录失败:', error);
+      message.error('获取供应商发货记录失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理供应商统计数据，计算rowSpan用于表格合并显示，并按付款类型优先级排序
   const processSupplierStatsForDisplay = (rawData: any[]): SupplierStats[] => {
     // 先按供应商和年份分组
@@ -387,6 +447,8 @@ const PeakSeasonSummary: React.FC = () => {
       fetchSkuDetails(1);
     } else if (key === 'supplier-stats') {
       fetchSupplierStats();
+    } else if (key === 'supplier-shipments') {
+      fetchSupplierShipments(1);
     }
   };
 
@@ -397,6 +459,8 @@ const PeakSeasonSummary: React.FC = () => {
       fetchSkuDetails(1);
     } else if (activeTab === 'supplier-stats') {
       fetchSupplierStats();
+    } else if (activeTab === 'supplier-shipments') {
+      fetchSupplierShipments(1);
     }
   };
 
@@ -627,6 +691,66 @@ const PeakSeasonSummary: React.FC = () => {
         }
         return obj;
       }
+    }
+  ];
+
+  // 供应商发货记录表格列
+  const shipmentColumns: ColumnsType<SupplierShipmentRecord> = [
+    {
+      title: '发货日期',
+      dataIndex: 'date',
+      key: 'date',
+      width: 120,
+      align: 'center',
+      sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    },
+    {
+      title: '卖家货号',
+      dataIndex: 'vendor_sku',
+      key: 'vendor_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => <Text strong>{text}</Text>
+    },
+    {
+      title: '颜色',
+      dataIndex: 'color',
+      key: 'color',
+      width: 120,
+      align: 'center',
+    },
+    {
+      title: '数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 100,
+      align: 'center',
+      sorter: (a, b) => a.quantity - b.quantity,
+      render: (value) => <Text strong style={{ color: '#1890ff' }}>{value?.toLocaleString()}</Text>
+    },
+    {
+      title: '供应商',
+      dataIndex: 'supplier_name',
+      key: 'supplier_name',
+      width: 150,
+      align: 'center',
+      render: (text) => text || '-'
+    },
+    {
+      title: '父SKU',
+      dataIndex: 'parent_sku',
+      key: 'parent_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => text || '-'
+    },
+    {
+      title: '录入时间',
+      dataIndex: 'create_date',
+      key: 'create_date',
+      width: 150,
+      align: 'center',
+      render: (value) => value ? new Date(value).toLocaleString() : '-'
     }
   ];
 
@@ -873,6 +997,64 @@ const PeakSeasonSummary: React.FC = () => {
                 showTotal: (total, range) => 
                   `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
                 onChange: fetchSkuDetails
+              }}
+              size="small"
+            />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab="供应商发货记录" key="supplier-shipments">
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Input
+                  placeholder="卖家货号"
+                  value={shipmentFilters.vendorSku}
+                  onChange={(e) => setShipmentFilters(prev => ({ ...prev, vendorSku: e.target.value }))}
+                  style={{ width: 150 }}
+                />
+                <Input
+                  placeholder="颜色"
+                  value={shipmentFilters.color}
+                  onChange={(e) => setShipmentFilters(prev => ({ ...prev, color: e.target.value }))}
+                  style={{ width: 120 }}
+                />
+                <Select
+                  placeholder="选择年份"
+                  value={shipmentFilters.year}
+                  onChange={(value) => setShipmentFilters(prev => ({ ...prev, year: value }))}
+                  style={{ width: 120 }}
+                  allowClear
+                >
+                  {availableYears.map(year => (
+                    <Option key={year} value={year}>{year}年</Option>
+                  ))}
+                </Select>
+                <Button
+                  type="primary"
+                  icon={<SearchOutlined />}
+                  onClick={() => fetchSupplierShipments(1)}
+                >
+                  搜索
+                </Button>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={() => fetchSupplierShipments(shipmentPagination.current)}
+                >
+                  刷新
+                </Button>
+              </Space>
+            </div>
+            <Table
+              columns={shipmentColumns}
+              dataSource={supplierShipments}
+              rowKey="id"
+              loading={loading}
+              scroll={{ x: 1000 }}
+              pagination={{
+                ...shipmentPagination,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total, range) => 
+                  `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                onChange: fetchSupplierShipments
               }}
               size="small"
             />

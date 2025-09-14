@@ -2,33 +2,33 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
 const SupplierShipmentsPeakSeason = sequelize.define('SupplierShipmentsPeakSeason', {
-  序号: {
+  id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
     comment: '序号ID'
   },
-  日期: {
+  date: {
     type: DataTypes.DATEONLY,
     allowNull: false,
     comment: '日期'
   },
-  卖家货号: {
+  vendor_sku: {
     type: DataTypes.STRING(15),
     allowNull: false,
     comment: '卖家货号'
   },
-  卖家颜色: {
+  sellercolorname: {
     type: DataTypes.STRING(15),
     allowNull: false,
     comment: '卖家颜色'
   },
-  数量: {
+  quantity: {
     type: DataTypes.INTEGER,
     allowNull: false,
     comment: '数量'
   },
-  录入日期: {
+  create_date: {
     type: DataTypes.DATE,
     allowNull: true,
     comment: '录入日期'
@@ -38,13 +38,13 @@ const SupplierShipmentsPeakSeason = sequelize.define('SupplierShipmentsPeakSeaso
   timestamps: false,
   indexes: [
     {
-      fields: ['序号']
+      fields: ['id']
     },
     {
-      fields: ['卖家货号']
+      fields: ['vendor_sku']
     },
     {
-      fields: ['日期']
+      fields: ['date']
     }
   ]
 });
