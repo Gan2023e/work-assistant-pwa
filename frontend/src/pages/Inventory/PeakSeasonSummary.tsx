@@ -83,8 +83,6 @@ interface SupplierShipmentRecord {
   color: string;
   quantity: number;
   create_date: string;
-  supplier_name: string;
-  parent_sku: string;
 }
 
 const PeakSeasonSummary: React.FC = () => {
@@ -697,6 +695,14 @@ const PeakSeasonSummary: React.FC = () => {
   // 供应商发货记录表格列
   const shipmentColumns: ColumnsType<SupplierShipmentRecord> = [
     {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 80,
+      align: 'center',
+      sorter: (a, b) => a.id - b.id,
+    },
+    {
       title: '发货日期',
       dataIndex: 'date',
       key: 'date',
@@ -727,22 +733,6 @@ const PeakSeasonSummary: React.FC = () => {
       align: 'center',
       sorter: (a, b) => a.quantity - b.quantity,
       render: (value) => <Text strong style={{ color: '#1890ff' }}>{value?.toLocaleString()}</Text>
-    },
-    {
-      title: '供应商',
-      dataIndex: 'supplier_name',
-      key: 'supplier_name',
-      width: 150,
-      align: 'center',
-      render: (text) => text || '-'
-    },
-    {
-      title: '父SKU',
-      dataIndex: 'parent_sku',
-      key: 'parent_sku',
-      width: 150,
-      align: 'center',
-      render: (text) => text || '-'
     },
     {
       title: '录入时间',
@@ -1047,7 +1037,7 @@ const PeakSeasonSummary: React.FC = () => {
               dataSource={supplierShipments}
               rowKey="id"
               loading={loading}
-              scroll={{ x: 1000 }}
+              scroll={{ x: 700 }}
               pagination={{
                 ...shipmentPagination,
                 showSizeChanger: true,
