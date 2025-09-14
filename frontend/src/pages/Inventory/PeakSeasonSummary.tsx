@@ -30,7 +30,6 @@ import {
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import * as XLSX from 'xlsx';
-import DailyShipmentsDetail from '../Products/DailyShipmentsDetail';
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -452,25 +451,29 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'local_sku',
       fixed: 'left',
       width: 120,
+      align: 'center',
       render: (text) => <Text strong>{text}</Text>
     },
     {
       title: '国家',
       dataIndex: 'country',
       key: 'country',
-      width: 100
+      width: 100,
+      align: 'center'
     },
     {
       title: '年份',
       dataIndex: 'year',
       key: 'year',
-      width: 80
+      width: 80,
+      align: 'center'
     },
     {
       title: '备货数量',
       dataIndex: 'prep_quantity',
       key: 'prep_quantity',
       width: 100,
+      align: 'center',
       render: (value) => value?.toLocaleString()
     },
     {
@@ -478,6 +481,7 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'upate_date',
       key: 'upate_date',
       width: 120,
+      align: 'center',
       render: (date) => date ? new Date(date).toLocaleDateString() : '-'
     },
     {
@@ -485,12 +489,14 @@ const PeakSeasonSummary: React.FC = () => {
       dataIndex: 'shipped_quantity',
       key: 'shipped_quantity',
       width: 120,
+      align: 'center',
       render: (value) => value?.toLocaleString() || 0
     },
     {
       title: '发货完成率',
       key: 'completion_rate',
       width: 120,
+      align: 'center',
       render: (_, record) => {
         const rate = record.prep_quantity > 0 ? 
           (record.shipped_quantity / record.prep_quantity * 100) : 0;
@@ -508,6 +514,7 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'action',
       fixed: 'right',
       width: 80,
+      align: 'center',
       render: (_, record) => (
         <Button type="link" size="small">
           详情
@@ -869,9 +876,6 @@ const PeakSeasonSummary: React.FC = () => {
               }}
               size="small"
             />
-          </Tabs.TabPane>
-          <Tabs.TabPane tab="日发货详情" key="daily-shipments">
-            <DailyShipmentsDetail />
           </Tabs.TabPane>
         </Tabs>
       </Card>

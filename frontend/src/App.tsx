@@ -21,7 +21,6 @@ import ShipmentHistoryPage from './pages/Shipping/ShipmentHistoryPage';
 
 import LogisticsPage from './pages/Logistics/LogisticsPage';
 import Summary from './pages/Inventory/Summary';
-import Supplier from './pages/Inventory/Supplier';
 import FbaInventory from './pages/Inventory/FbaInventory';
 import InventoryManagement from './pages/Inventory/InventoryManagement';
 
@@ -114,7 +113,7 @@ const AppContent: React.FC = () => {
     const path = location.pathname;
     if (["/products/purchase", "/products/listings", "/shipping/orders", "/products/purchase-invoice"].includes(path)) return [path];
     if (["/shipping/management", "/shipping/history"].includes(path)) return [path];
-    if (["/inventory/summary", "/inventory/supplier", "/inventory/fba-inventory"].includes(path)) return [path];
+    if (["/inventory/summary", "/inventory/fba-inventory"].includes(path)) return [path];
     if (["/user-manage", "/profile"].includes(path)) return [path];
     return [path];
   };
@@ -138,7 +137,6 @@ const AppContent: React.FC = () => {
       children: [
         { label: <Link to="/inventory/management">本地库存管理</Link>, key: '/inventory/management' },
         { label: <Link to="/inventory/summary">旺季备货汇总</Link>, key: '/inventory/summary' },
-        { label: <Link to="/inventory/supplier">厂家发货与付款</Link>, key: '/inventory/supplier' },
         { label: <Link to="/inventory/fba-inventory">FBA库存</Link>, key: '/inventory/fba-inventory' },
       ],
     },
@@ -259,11 +257,6 @@ const AppContent: React.FC = () => {
           <Route path="/inventory/summary" element={
             <ProtectedRoute>
               <Summary />
-            </ProtectedRoute>
-          } />
-          <Route path="/inventory/supplier" element={
-            <ProtectedRoute>
-              <Supplier />
             </ProtectedRoute>
           } />
           <Route path="/inventory/fba-inventory" element={

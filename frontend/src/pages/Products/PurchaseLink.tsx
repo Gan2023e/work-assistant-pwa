@@ -5404,7 +5404,7 @@ const Purchase: React.FC = () => {
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
                             borderRight: '1px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#262626'
@@ -5413,7 +5413,7 @@ const Purchase: React.FC = () => {
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
                             borderRight: '1px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#262626'
@@ -5422,7 +5422,7 @@ const Purchase: React.FC = () => {
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
                             borderRight: '1px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#262626'
@@ -5431,7 +5431,7 @@ const Purchase: React.FC = () => {
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
                             borderRight: '1px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#262626'
@@ -5440,7 +5440,7 @@ const Purchase: React.FC = () => {
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
                             borderRight: '1px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#262626'
@@ -5448,7 +5448,7 @@ const Purchase: React.FC = () => {
                           <th style={{
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
-                            textAlign: 'left',
+                            textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
                             color: '#1890ff'
@@ -5493,7 +5493,8 @@ const Purchase: React.FC = () => {
                                 borderRight: '1px solid #f0f0f0',
                                 fontSize: '14px',
                                 color: '#262626',
-                                fontWeight: '500'
+                                fontWeight: '500',
+                                textAlign: 'center'
                               }}>
                                 {item.parentSku}
                               </td>
@@ -5503,7 +5504,8 @@ const Purchase: React.FC = () => {
                                 padding: '12px 16px',
                                 borderRight: '1px solid #f0f0f0',
                                 fontSize: '14px',
-                                color: '#595959'
+                                color: '#595959',
+                                textAlign: 'center'
                               }}>
                                 {item.childSku}
                                 <Form.Item name={`local_sku_${index}`} style={{ display: 'none' }}>
@@ -5516,7 +5518,8 @@ const Purchase: React.FC = () => {
                                 padding: '12px 16px',
                                 borderRight: '1px solid #f0f0f0',
                                 fontSize: '14px',
-                                color: '#595959'
+                                color: '#595959',
+                                textAlign: 'center'
                               }}>
                                 {site}
                                 <Form.Item name={`site_${index}`} style={{ display: 'none' }}>
@@ -5529,7 +5532,8 @@ const Purchase: React.FC = () => {
                                 padding: '12px 16px',
                                 borderRight: '1px solid #f0f0f0',
                                 fontSize: '14px',
-                                color: '#595959'
+                                color: '#595959',
+                                textAlign: 'center'
                               }}>
                                 {country}
                                 <Form.Item name={`country_${index}`} style={{ display: 'none' }}>
@@ -5542,7 +5546,8 @@ const Purchase: React.FC = () => {
                                 padding: '12px 16px',
                                 borderRight: '1px solid #f0f0f0',
                                 fontSize: '14px',
-                                color: '#595959'
+                                color: '#595959',
+                                textAlign: 'center'
                               }}>
                                 Local SKU
                                 <Form.Item name={`sku_type_${index}`} style={{ display: 'none' }}>
@@ -5553,7 +5558,8 @@ const Purchase: React.FC = () => {
                               {/* Amazon SKU - 可编辑 */}
                               <td style={{
                                 padding: '8px 16px',
-                                fontSize: '14px'
+                                fontSize: '14px',
+                                textAlign: 'center'
                               }}>
                                 <Form.Item
                                   name={`amz_sku_${index}`}
@@ -5961,18 +5967,21 @@ const Purchase: React.FC = () => {
               dataIndex: 'skuid',
               key: 'skuid',
               width: 180,
+              align: 'center',
             },
             {
               title: '子SKU',
               dataIndex: 'child_sku',
               key: 'child_sku',
               width: 150,
+              align: 'center',
             },
             {
               title: '卖家颜色名称',
               dataIndex: 'sellercolorname',
               key: 'sellercolorname',
               width: 200,
+              align: 'center',
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -5981,6 +5990,7 @@ const Purchase: React.FC = () => {
                     size="small" 
                     defaultValue={record.sellercolorname || ''}
                     key={`sellercolorname-${record.skuid}`}
+                    style={{ textAlign: 'center' }}
                   />
                 ) : (
                   <span>{text || '-'}</span>
@@ -5992,6 +6002,7 @@ const Purchase: React.FC = () => {
               dataIndex: 'sellersizename',
               key: 'sellersizename',
               width: 150,
+              align: 'center',
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -6000,6 +6011,7 @@ const Purchase: React.FC = () => {
                     size="small" 
                     defaultValue={record.sellersizename || ''}
                     key={`sellersizename-${record.skuid}`}
+                    style={{ textAlign: 'center' }}
                   />
                 ) : (
                   <span>{text || '-'}</span>
@@ -6011,6 +6023,7 @@ const Purchase: React.FC = () => {
               dataIndex: 'qty_per_box',
               key: 'qty_per_box',
               width: 120,
+              align: 'center',
               render: (text: number, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -6020,6 +6033,7 @@ const Purchase: React.FC = () => {
                     type="number" 
                     defaultValue={record.qty_per_box?.toString() || '0'}
                     key={`qty_per_box-${record.skuid}`}
+                    style={{ textAlign: 'center' }}
                   />
                 ) : (
                   <span>{text || '-'}</span>
@@ -6030,6 +6044,7 @@ const Purchase: React.FC = () => {
               title: '操作',
               key: 'action',
               width: 120,
+              align: 'center',
               render: (text: any, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
