@@ -695,14 +695,6 @@ const PeakSeasonSummary: React.FC = () => {
   // 供应商发货记录表格列
   const shipmentColumns: ColumnsType<SupplierShipmentRecord> = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      align: 'center',
-      sorter: (a, b) => a.id - b.id,
-    },
-    {
       title: '发货日期',
       dataIndex: 'date',
       key: 'date',
