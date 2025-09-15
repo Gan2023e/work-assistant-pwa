@@ -368,15 +368,20 @@ const PeakSeasonSummary: React.FC = () => {
         quantity: values.quantity
       };
       
-      // 提示用户关于其他字段
+      // 提示用户关于其他字段的修改
+      const warnings = [];
       if (values.supplier_name && values.supplier_name !== editingRecord.supplier_name) {
-        message.info('供应商信息的更新需要在产品链接表中维护，建议到产品管理页面修改');
+        warnings.push('供应商信息');
       }
       if (values.parent_sku && values.parent_sku !== editingRecord.parent_sku) {
-        message.info('Parent SKU的更新需要在相关产品表中维护');
+        warnings.push('Parent SKU');
       }
       if (values.child_sku && values.child_sku !== editingRecord.child_sku) {
-        message.info('Child SKU的更新需要在库存表中维护');
+        warnings.push('Child SKU');
+      }
+      
+      if (warnings.length > 0) {
+        message.warning(`注意：${warnings.join('、')} 的修改仅影响当前记录显示，建议到相关管理页面进行源数据维护`);
       }
 
       const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingRecord.id}`, {
@@ -455,13 +460,53 @@ const PeakSeasonSummary: React.FC = () => {
         }
       } else if (editingCell.field === 'supplier_name') {
         // 供应商字段比较特殊，需要通过parent_sku关联更新
-        message.info('供应商信息通过Parent SKU关联，建议直接修改对应的产品链接表');
-        setEditingCell(null);
+        Modal.confirm({
+          title: '修改供应商信息',
+          content: (
+            <div>
+              <p>供应商信息是通过Parent SKU关联的产品链接表维护的。</p>
+              <p>直接修改可能会影响使用相同Parent SKU的其他记录。</p>
+              <p><strong>建议操作：</strong></p>
+              <ul style={{ paddingLeft: '20px', marginTop: '8px' }}>
+                <li>到"产品管理 → 产品链接"页面修改</li>
+                <li>或者修改对应的Parent SKU信息</li>
+              </ul>
+              <p style={{ marginTop: '12px' }}>是否仍要继续修改当前显示的供应商名称？</p>
+            </div>
+          ),
+          okText: '继续修改',
+          cancelText: '取消',
+          onOk: () => {
+            // 如果用户确认要修改，给出更新说明
+            message.info('注意：此修改仅影响当前记录的显示，不会更新产品链接表中的原始数据');
+            // 这里可以添加实际的更新逻辑，但只更新显示
+            setEditingCell(null);
+            setEditingValue('');
+          },
+          onCancel: () => {
+            setEditingCell(null);
+            setEditingValue('');
+          }
+        });
         return;
       } else if (editingCell.field === 'parent_sku' || editingCell.field === 'child_sku') {
         // 这些字段在另外的表中，暂时不支持直接编辑
-        message.info('Parent SKU和Child SKU在其他表中维护，建议到相关页面修改');
-        setEditingCell(null);
+        Modal.info({
+          title: '字段说明',
+          content: (
+            <div>
+              <p><strong>{editingCell.field === 'parent_sku' ? 'Parent SKU' : 'Child SKU'}</strong> 在其他数据表中维护：</p>
+              <ul style={{ paddingLeft: '20px', marginTop: '8px' }}>
+                <li>{editingCell.field === 'parent_sku' ? 'Parent SKU：在"产品管理 → 产品链接"页面维护' : 'Child SKU：在"库存管理"相关页面维护'}</li>
+                <li>修改后会自动关联到发货记录</li>
+              </ul>
+            </div>
+          ),
+          onOk: () => {
+            setEditingCell(null);
+            setEditingValue('');
+          }
+        });
         return;
       }
 
@@ -1872,9 +1917,55 @@ const PeakSeasonSummary: React.FC = () => {
             <Form.Item
               name="supplier_name"
               label="供应商"
-              tooltip="供应商信息通过Parent SKU关联，修改后需要确保数据一致性"
+              tooltip={{
+                title: (
+                  <div>
+                    <div>供应商信息维护说明：</div>
+                    <div>• 数据源：产品链接表(product_weblink)</div>
+                    <div>• 关联字段：Parent SKU</div>
+                    <div>• 建议操作：到"产品管理→产品链接"页面修改</div>
+                    <div>• 此处修改仅影响当前记录显示</div>
+                  </div>
+                ),
+                overlayStyle: { maxWidth: '300px' }
+              }}
             >
-              <Input placeholder="供应商名称，留空则显示为'无供应商信息'" />
+              <Input 
+                placeholder="供应商名称，留空则显示为'无供应商信息'" 
+                suffix={
+                  <Tooltip title="点击查看详细说明">
+                    <Button 
+                      type="link" 
+                      size="small" 
+                      icon={<EyeOutlined />}
+                      onClick={() => {
+                        Modal.info({
+                          title: '供应商信息维护说明',
+                          content: (
+                            <div>
+                              <p><strong>数据关联说明：</strong></p>
+                              <ul style={{ paddingLeft: '20px' }}>
+                                <li>供应商信息存储在产品链接表(product_weblink)中</li>
+                                <li>通过Parent SKU字段进行关联</li>
+                                <li>一个Parent SKU对应一个供应商</li>
+                              </ul>
+                              <p><strong>推荐修改方式：</strong></p>
+                              <ol style={{ paddingLeft: '20px' }}>
+                                <li>到"产品管理 → 产品链接"页面</li>
+                                <li>找到对应的Parent SKU记录</li>
+                                <li>修改seller_name字段</li>
+                                <li>系统会自动同步到所有相关记录</li>
+                              </ol>
+                              <p><strong>注意：</strong>在此处修改仅影响当前记录的显示，不会更新源数据</p>
+                            </div>
+                          ),
+                          width: 600
+                        });
+                      }}
+                    />
+                  </Tooltip>
+                }
+              />
             </Form.Item>
 
             <Row gutter={16}>
@@ -1882,18 +1973,72 @@ const PeakSeasonSummary: React.FC = () => {
                 <Form.Item
                   name="parent_sku"
                   label="Parent SKU"
-                  tooltip="Parent SKU在产品链接表中维护"
+                  tooltip="Parent SKU在产品链接表中维护，关联供应商信息"
                 >
-                  <Input />
+                  <Input 
+                    suffix={
+                      <Tooltip title="查看详细说明">
+                        <Button 
+                          type="link" 
+                          size="small" 
+                          icon={<EyeOutlined />}
+                          onClick={() => {
+                            Modal.info({
+                              title: 'Parent SKU说明',
+                              content: (
+                                <div>
+                                  <p><strong>字段说明：</strong></p>
+                                  <ul style={{ paddingLeft: '20px' }}>
+                                    <li>Parent SKU是产品的父级标识</li>
+                                    <li>存储在产品链接表(product_weblink)中</li>
+                                    <li>关联供应商信息(seller_name)</li>
+                                  </ul>
+                                  <p><strong>修改建议：</strong></p>
+                                  <p>到"产品管理 → 产品链接"页面进行维护</p>
+                                </div>
+                              )
+                            });
+                          }}
+                        />
+                      </Tooltip>
+                    }
+                  />
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item
                   name="child_sku"
                   label="Child SKU"
-                  tooltip="Child SKU在库存表中维护"
+                  tooltip="Child SKU在库存表中维护，通过卖家货号+颜色关联"
                 >
-                  <Input />
+                  <Input 
+                    suffix={
+                      <Tooltip title="查看详细说明">
+                        <Button 
+                          type="link" 
+                          size="small" 
+                          icon={<EyeOutlined />}
+                          onClick={() => {
+                            Modal.info({
+                              title: 'Child SKU说明',
+                              content: (
+                                <div>
+                                  <p><strong>字段说明：</strong></p>
+                                  <ul style={{ paddingLeft: '20px' }}>
+                                    <li>Child SKU是产品的子级标识</li>
+                                    <li>存储在库存表(sellerinventory_sku)中</li>
+                                    <li>通过卖家货号+颜色进行关联</li>
+                                  </ul>
+                                  <p><strong>修改建议：</strong></p>
+                                  <p>到"库存管理"相关页面进行维护</p>
+                                </div>
+                              )
+                            });
+                          }}
+                        />
+                      </Tooltip>
+                    }
+                  />
                 </Form.Item>
               </Col>
             </Row>
