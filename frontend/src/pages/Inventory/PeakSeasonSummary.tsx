@@ -85,6 +85,7 @@ interface SupplierShipmentRecord {
   create_date: string;
   parent_sku?: string;
   child_sku?: string;
+  supplier_name?: string;
 }
 
 interface ShipmentSummaryData {
@@ -743,6 +744,31 @@ const PeakSeasonSummary: React.FC = () => {
   // 供应商发货记录表格列
   const shipmentColumns: ColumnsType<SupplierShipmentRecord> = [
     {
+      title: '供应商',
+      dataIndex: 'supplier_name',
+      key: 'supplier_name',
+      width: 150,
+      align: 'center',
+      fixed: 'left',
+      render: (text) => text ? <Text strong style={{ color: '#f50' }}>{text}</Text> : <Text type="secondary">-</Text>
+    },
+    {
+      title: 'Parent SKU',
+      dataIndex: 'parent_sku',
+      key: 'parent_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => text ? <Text style={{ color: '#1890ff' }}>{text}</Text> : <Text type="secondary">-</Text>
+    },
+    {
+      title: 'Child SKU',
+      dataIndex: 'child_sku',
+      key: 'child_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => text ? <Text style={{ color: '#52c41a' }}>{text}</Text> : <Text type="secondary">-</Text>
+    },
+    {
       title: '发货日期',
       dataIndex: 'date',
       key: 'date',
@@ -764,22 +790,6 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'color',
       width: 120,
       align: 'center',
-    },
-    {
-      title: 'Parent SKU',
-      dataIndex: 'parent_sku',
-      key: 'parent_sku',
-      width: 150,
-      align: 'center',
-      render: (text) => text ? <Text style={{ color: '#1890ff' }}>{text}</Text> : <Text type="secondary">-</Text>
-    },
-    {
-      title: 'Child SKU',
-      dataIndex: 'child_sku',
-      key: 'child_sku',
-      width: 150,
-      align: 'center',
-      render: (text) => text ? <Text style={{ color: '#52c41a' }}>{text}</Text> : <Text type="secondary">-</Text>
     },
     {
       title: '数量',
@@ -1134,7 +1144,7 @@ const PeakSeasonSummary: React.FC = () => {
               dataSource={supplierShipments}
               rowKey="id"
               loading={loading}
-              scroll={{ x: 700 }}
+              scroll={{ x: 850 }}
               pagination={{
                 ...shipmentPagination,
                 showSizeChanger: true,

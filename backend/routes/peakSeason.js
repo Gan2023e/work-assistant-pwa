@@ -605,9 +605,11 @@ router.get('/supplier-shipments', async (req, res) => {
         s.quantity,
         s.create_date,
         sis.parent_sku,
-        sis.child_sku
+        sis.child_sku,
+        pw.seller_name as supplier_name
       FROM \`​supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL ${shipmentWhereCondition}
       ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
