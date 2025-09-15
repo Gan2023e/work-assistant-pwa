@@ -143,7 +143,7 @@ const PeakSeasonSummary: React.FC = () => {
     local_sku: ''
   });
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('supplier-stats');
 
   // 付款类型优先级映射
   const getPaymentTypePriority = (paymentType: string): number => {
@@ -1041,27 +1041,9 @@ const PeakSeasonSummary: React.FC = () => {
         )}
       </div>
 
-      {/* 详细数据表格 - 调整tab顺序，付款统计放在第二位 */}
+      {/* 详细数据表格 */}
       <Card>
         <Tabs activeKey={activeTab} onChange={handleTabChange}>
-          <Tabs.TabPane tab="概览" key="overview">
-            <div>
-              <p>请切换到"付款统计"或"SKU详情"标签页查看详细数据。</p>
-              <p>当前数据状态：年度统计 {yearlyStats.length} 条记录</p>
-              <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#fafafa', borderRadius: '6px' }}>
-                <Title level={4}>付款类型说明</Title>
-                <ul>
-                  <li><Text style={{ color: '#87d068' }}>预付款</Text> - 订单确认后的初期付款（优先级1）</li>
-                  <li><Text style={{ color: '#2db7f5' }}>阶段付款</Text> - 生产过程中的分阶段付款（优先级2）</li>
-                  <li><Text style={{ color: '#f50' }}>尾款</Text> - 订单完成前的最终付款（优先级3）</li>
-                  <li><Text style={{ color: '#108ee9' }}>其他</Text> - 其他类型的付款（优先级4）</li>
-                </ul>
-                <p style={{ marginTop: '12px' }}>
-                  <Text type="secondary">💡 提示: 点击"付款单数"列的数字可以查看该付款类型的详细记录</Text>
-                </p>
-              </div>
-            </div>
-          </Tabs.TabPane>
           <Tabs.TabPane tab="付款统计" key="supplier-stats">
             <div>
               <Table
@@ -1200,15 +1182,22 @@ const PeakSeasonSummary: React.FC = () => {
                 <Text strong style={{ color: '#f5222d' }}>红色加粗</Text> 为数据缺失记录
               </Text>
             </div>
+            <div style={{ 
+              height: '800px', 
+              overflowY: 'auto',
+              border: '1px solid #f0f0f0',
+              borderRadius: '6px'
+            }}>
             <Table
               columns={createSummaryColumns()}
               dataSource={shipmentSummary}
               rowKey="child_sku"
               loading={loading}
-              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800), y: 500 }}
+              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800) }}
               pagination={false}
               size="small"
               bordered
+              sticky={{ offsetHeader: 0 }}
               summary={() => {
                 // 计算每日总计和整体总计
                 const dailyTotals: { [date: string]: number } = {};
@@ -1227,9 +1216,15 @@ const PeakSeasonSummary: React.FC = () => {
                 });
                 
                 return (
-                  <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
+                  <Table.Summary.Row style={{ 
+                    backgroundColor: '#fafafa', 
+                    position: 'sticky', 
+                    bottom: 0, 
+                    zIndex: 10,
+                    borderTop: '2px solid #1890ff'
+                  }}>
                     <Table.Summary.Cell index={0}>
-                      <Text strong>日期合计</Text>
+                      <Text strong style={{ fontSize: '14px' }}>日期合计</Text>
                     </Table.Summary.Cell>
                     {summaryDates.map((date, index) => (
                       <Table.Summary.Cell key={date} index={index + 1}>
@@ -1247,6 +1242,7 @@ const PeakSeasonSummary: React.FC = () => {
                 );
               }}
             />
+            </div>
           </Tabs.TabPane>
         </Tabs>
       </Card>
