@@ -1041,7 +1041,7 @@ const PeakSeasonSummary: React.FC = () => {
         )}
       </div>
 
-      {/* 详细数据表格 */}
+      {/* 详细数据表格 - 调整tab顺序，付款统计放在第二位 */}
       <Card>
         <Tabs activeKey={activeTab} onChange={handleTabChange}>
           <Tabs.TabPane tab="付款统计" key="supplier-stats">
@@ -1182,22 +1182,16 @@ const PeakSeasonSummary: React.FC = () => {
                 <Text strong style={{ color: '#f5222d' }}>红色加粗</Text> 为数据缺失记录
               </Text>
             </div>
-            <div style={{ 
-              height: '800px', 
-              overflowY: 'auto',
-              border: '1px solid #f0f0f0',
-              borderRadius: '6px'
-            }}>
             <Table
               columns={createSummaryColumns()}
               dataSource={shipmentSummary}
               rowKey="child_sku"
               loading={loading}
-              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800) }}
+              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800), y: 500 }}
               pagination={false}
               size="small"
               bordered
-              sticky={{ offsetHeader: 0 }}
+              sticky={{ offsetHeader: 64, offsetSummary: 0 }}
               summary={() => {
                 // 计算每日总计和整体总计
                 const dailyTotals: { [date: string]: number } = {};
@@ -1216,25 +1210,19 @@ const PeakSeasonSummary: React.FC = () => {
                 });
                 
                 return (
-                  <Table.Summary.Row style={{ 
-                    backgroundColor: '#fafafa', 
-                    position: 'sticky', 
-                    bottom: 0, 
-                    zIndex: 10,
-                    borderTop: '2px solid #1890ff'
-                  }}>
+                  <Table.Summary.Row style={{ backgroundColor: '#fafafa', position: 'sticky', bottom: 0, zIndex: 1 }}>
                     <Table.Summary.Cell index={0}>
                       <Text strong style={{ fontSize: '14px' }}>日期合计</Text>
                     </Table.Summary.Cell>
                     {summaryDates.map((date, index) => (
                       <Table.Summary.Cell key={date} index={index + 1}>
-                        <Text strong style={{ color: '#1890ff' }}>
+                        <Text strong style={{ color: '#1890ff', fontSize: '14px' }}>
                           {dailyTotals[date].toLocaleString()}
                         </Text>
                       </Table.Summary.Cell>
                     ))}
                     <Table.Summary.Cell index={summaryDates.length + 1}>
-                      <Text strong style={{ color: '#f5222d' }}>
+                      <Text strong style={{ color: '#f5222d', fontSize: '14px' }}>
                         {grandTotal.toLocaleString()}
                       </Text>
                     </Table.Summary.Cell>
@@ -1242,7 +1230,6 @@ const PeakSeasonSummary: React.FC = () => {
                 );
               }}
             />
-            </div>
           </Tabs.TabPane>
         </Tabs>
       </Card>
