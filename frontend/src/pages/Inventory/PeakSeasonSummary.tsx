@@ -368,23 +368,66 @@ const PeakSeasonSummary: React.FC = () => {
         quantity: values.quantity
       };
       
-      // 提示用户关于其他字段的修改
-      const warnings = [];
-      if (values.supplier_name && values.supplier_name !== editingRecord.supplier_name) {
-        warnings.push('供应商信息');
-      }
-      if (values.parent_sku && values.parent_sku !== editingRecord.parent_sku) {
-        warnings.push('Parent SKU');
-      }
-      if (values.child_sku && values.child_sku !== editingRecord.child_sku) {
-        warnings.push('Child SKU');
+      // 检查供应商信息是否修改
+      const supplierNameChanged = values.supplier_name && values.supplier_name !== editingRecord.supplier_name;
+      
+      if (supplierNameChanged) {
+        // 如果供应商信息被修改，需要用户确认
+        Modal.confirm({
+          title: '确认修改供应商信息',
+          content: (
+            <div>
+              <p>检测到您修改了供应商信息：</p>
+              <p><strong>原供应商：</strong>{editingRecord.supplier_name || '无供应商信息'}</p>
+              <p><strong>新供应商：</strong>{values.supplier_name || '无供应商信息'}</p>
+              <p style={{ color: '#fa8c16', fontWeight: 'bold' }}>注意：这将影响所有使用相同Parent SKU的记录</p>
+              <p>是否确定要修改供应商信息？</p>
+            </div>
+          ),
+          okText: '确定修改',
+          cancelText: '仅修改基本信息',
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            // 包含供应商信息的完整更新
+            updateData.supplier_name = values.supplier_name;
+            await performUpdate(updateData, true);
+          },
+          onCancel: async () => {
+            // 不包含供应商信息的更新
+            await performUpdate(updateData, false);
+          }
+        });
+      } else {
+        // 检查其他字段的修改
+        const warnings = [];
+        if (values.parent_sku && values.parent_sku !== editingRecord.parent_sku) {
+          warnings.push('Parent SKU');
+        }
+        if (values.child_sku && values.child_sku !== editingRecord.child_sku) {
+          warnings.push('Child SKU');
+        }
+        
+        if (warnings.length > 0) {
+          message.warning(`注意：${warnings.join('、')} 在其他数据表中维护，此处修改不会生效。建议到相关管理页面进行维护。`);
+        }
+        
+        // 没有修改供应商信息，直接更新基本信息
+        if (values.supplier_name !== editingRecord.supplier_name) {
+          updateData.supplier_name = values.supplier_name;
+        }
+        await performUpdate(updateData, false);
       }
       
-      if (warnings.length > 0) {
-        message.warning(`注意：${warnings.join('、')} 的修改仅影响当前记录显示，建议到相关管理页面进行源数据维护`);
-      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error('更新失败');
+    }
+  };
 
-      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingRecord.id}`, {
+  // 执行更新操作
+  const performUpdate = async (updateData: any, includesSupplierUpdate: boolean) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingRecord!.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -395,7 +438,11 @@ const PeakSeasonSummary: React.FC = () => {
       const data = await response.json();
       
       if (data.code === 0) {
-        message.success('基本信息更新成功（发货日期、卖家货号、颜色、数量）');
+        if (includesSupplierUpdate) {
+          message.success(data.message || '更新成功，供应商信息已同步更新');
+        } else {
+          message.success('基本信息更新成功');
+        }
         setEditModalVisible(false);
         setEditingRecord(null);
         fetchSupplierShipments(shipmentPagination.current);
@@ -405,6 +452,7 @@ const PeakSeasonSummary: React.FC = () => {
     } catch (error) {
       console.error('更新失败:', error);
       message.error('更新失败');
+      throw error;
     }
   };
 
@@ -465,23 +513,60 @@ const PeakSeasonSummary: React.FC = () => {
           content: (
             <div>
               <p>供应商信息是通过Parent SKU关联的产品链接表维护的。</p>
-              <p>直接修改可能会影响使用相同Parent SKU的其他记录。</p>
-              <p><strong>建议操作：</strong></p>
+              <p><strong style={{ color: '#fa8c16' }}>重要提醒：</strong>修改供应商信息会影响所有使用相同Parent SKU的记录。</p>
+              <p><strong>系统将执行以下操作：</strong></p>
               <ul style={{ paddingLeft: '20px', marginTop: '8px' }}>
-                <li>到"产品管理 → 产品链接"页面修改</li>
-                <li>或者修改对应的Parent SKU信息</li>
+                <li>更新产品链接表中对应Parent SKU的供应商信息</li>
+                <li>所有相关记录的供应商信息会自动同步更新</li>
               </ul>
-              <p style={{ marginTop: '12px' }}>是否仍要继续修改当前显示的供应商名称？</p>
+              <p style={{ marginTop: '12px' }}>确定要将供应商名称修改为：<strong style={{ color: '#1890ff' }}>"{editingValue}"</strong> 吗？</p>
             </div>
           ),
-          okText: '继续修改',
+          okText: '确定修改',
           cancelText: '取消',
-          onOk: () => {
-            // 如果用户确认要修改，给出更新说明
-            message.info('注意：此修改仅影响当前记录的显示，不会更新产品链接表中的原始数据');
-            // 这里可以添加实际的更新逻辑，但只更新显示
-            setEditingCell(null);
-            setEditingValue('');
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            // 执行实际的更新操作
+            const record = supplierShipments.find(r => r.id === editingCell.recordId);
+            if (!record) {
+              message.error('记录未找到');
+              setEditingCell(null);
+              setEditingValue('');
+              return;
+            }
+
+            try {
+              const updateData = {
+                date: record.date,
+                vendor_sku: record.vendor_sku,
+                color: record.color,
+                quantity: record.quantity,
+                supplier_name: editingValue || null
+              };
+
+              const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingCell.recordId}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+              });
+              
+              const data = await response.json();
+              
+              if (data.code === 0) {
+                message.success(data.message || '供应商信息更新成功');
+                setEditingCell(null);
+                setEditingValue('');
+                // 刷新页面数据
+                fetchSupplierShipments(shipmentPagination.current);
+              } else {
+                message.error(data.message || '更新失败');
+              }
+            } catch (error) {
+              console.error('更新供应商信息失败:', error);
+              message.error('更新失败，请重试');
+            }
           },
           onCancel: () => {
             setEditingCell(null);

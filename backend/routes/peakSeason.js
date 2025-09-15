@@ -896,7 +896,7 @@ router.get('/supplier-shipments-summary', async (req, res) => {
 router.put('/supplier-shipments/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, vendor_sku, color, quantity } = req.body;
+    const { date, vendor_sku, color, quantity, supplier_name } = req.body;
     
     // 验证必填字段
     if (!date || !vendor_sku || !color || quantity === undefined || quantity === null) {
@@ -914,30 +914,81 @@ router.put('/supplier-shipments/:id', async (req, res) => {
       });
     }
 
-    const updateResult = await sequelize.query(`
-      UPDATE \`​supplier_shipments_peak_season\` 
-      SET 
-        date = :date,
-        vendor_sku = :vendor_sku,
-        sellercolorname = :color,
-        quantity = :quantity
-      WHERE id = :id
-    `, {
-      replacements: { id, date, vendor_sku, color, quantity },
-      type: sequelize.QueryTypes.UPDATE
-    });
-
-    if (updateResult[1] === 0) {
-      return res.status(404).json({
-        code: 1,
-        message: '记录未找到'
+    // 开始数据库事务
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // 更新基本发货记录信息
+      const updateResult = await sequelize.query(`
+        UPDATE \`​supplier_shipments_peak_season\` 
+        SET 
+          date = :date,
+          vendor_sku = :vendor_sku,
+          sellercolorname = :color,
+          quantity = :quantity
+        WHERE id = :id
+      `, {
+        replacements: { id, date, vendor_sku, color, quantity },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
       });
-    }
 
-    res.json({
-      code: 0,
-      message: '更新成功'
-    });
+      if (updateResult[1] === 0) {
+        await transaction.rollback();
+        return res.status(404).json({
+          code: 1,
+          message: '记录未找到'
+        });
+      }
+
+      // 如果提供了supplier_name，需要更新相关的product_weblink表
+      if (supplier_name !== undefined) {
+        // 首先获取当前记录的parent_sku
+        const currentRecord = await sequelize.query(`
+          SELECT sis.parent_sku
+          FROM \`​supplier_shipments_peak_season\` s
+          LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+          WHERE s.id = :id
+        `, {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT,
+          transaction
+        });
+
+        if (currentRecord.length > 0 && currentRecord[0].parent_sku) {
+          const parentSku = currentRecord[0].parent_sku;
+          
+          // 更新product_weblink表中对应的seller_name
+          await sequelize.query(`
+            UPDATE product_weblink 
+            SET seller_name = :supplier_name 
+            WHERE parent_sku = :parent_sku
+          `, {
+            replacements: { 
+              supplier_name: supplier_name || null, 
+              parent_sku: parentSku 
+            },
+            type: sequelize.QueryTypes.UPDATE,
+            transaction
+          });
+          
+          console.log(`更新了Parent SKU "${parentSku}" 的供应商信息为 "${supplier_name}"`);
+        } else {
+          console.log('未找到对应的Parent SKU，跳过供应商信息更新');
+        }
+      }
+
+      await transaction.commit();
+      
+      res.json({
+        code: 0,
+        message: supplier_name !== undefined ? '更新成功，供应商信息已同步更新' : '更新成功'
+      });
+
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
 
   } catch (error) {
     console.error('更新供应商发货记录失败:', error);
