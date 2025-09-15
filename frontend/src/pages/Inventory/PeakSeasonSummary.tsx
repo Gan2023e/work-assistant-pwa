@@ -361,7 +361,7 @@ const PeakSeasonSummary: React.FC = () => {
     if (!editingRecord) return;
     
     try {
-      const updateData = {
+      const updateData: any = {
         date: values.date.format('YYYY-MM-DD'),
         vendor_sku: values.vendor_sku,
         color: values.color,
@@ -389,8 +389,8 @@ const PeakSeasonSummary: React.FC = () => {
           okButtonProps: { danger: true },
           onOk: async () => {
             // 包含供应商信息的完整更新
-            updateData.supplier_name = values.supplier_name;
-            await performUpdate(updateData, true);
+            const updateDataWithSupplier = { ...updateData, supplier_name: values.supplier_name };
+            await performUpdate(updateDataWithSupplier, true);
           },
           onCancel: async () => {
             // 不包含供应商信息的更新
@@ -412,10 +412,11 @@ const PeakSeasonSummary: React.FC = () => {
         }
         
         // 没有修改供应商信息，直接更新基本信息
+        let finalUpdateData = updateData;
         if (values.supplier_name !== editingRecord.supplier_name) {
-          updateData.supplier_name = values.supplier_name;
+          finalUpdateData = { ...updateData, supplier_name: values.supplier_name };
         }
-        await performUpdate(updateData, false);
+        await performUpdate(finalUpdateData, false);
       }
       
     } catch (error) {
@@ -1097,7 +1098,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1148,7 +1149,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1182,7 +1183,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1218,7 +1219,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1252,7 +1253,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1286,7 +1287,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
@@ -1321,7 +1322,7 @@ const PeakSeasonSummary: React.FC = () => {
               value={editingValue}
               onChange={(value) => setEditingValue(value)}
               onPressEnter={handleSaveInlineEdit}
-              onBlur={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   handleCancelInlineEdit();
