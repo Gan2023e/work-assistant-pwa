@@ -13,7 +13,11 @@ import {
   Tabs,
   Space,
   Progress,
-  Modal
+  Modal,
+  Form,
+  DatePicker,
+  InputNumber,
+  Popconfirm
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -26,10 +30,13 @@ import {
   ExportOutlined,
   CalendarOutlined,
   TagsOutlined,
-  EyeOutlined
+  EyeOutlined,
+  EditOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import { API_BASE_URL } from '../../config/api';
 import * as XLSX from 'xlsx';
+import dayjs from 'dayjs';
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -138,6 +145,10 @@ const PeakSeasonSummary: React.FC = () => {
     vendorSkus: [] as string[],
     colors: [] as string[]
   });
+
+  // 编辑相关状态
+  const [editingRecord, setEditingRecord] = useState<SupplierShipmentRecord | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
   // 供应商发货汇总状态
   const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummaryData[]>([]);
@@ -322,6 +333,71 @@ const PeakSeasonSummary: React.FC = () => {
       }
     } catch (error) {
       console.error('获取筛选选项失败:', error);
+    }
+  };
+
+  // 双击单元格编辑
+  const handleCellDoubleClick = (record: SupplierShipmentRecord, field: string) => {
+    // 只允许编辑特定字段
+    const editableFields = ['date', 'vendor_sku', 'color', 'quantity'];
+    if (editableFields.includes(field)) {
+      setEditingRecord(record);
+      setEditModalVisible(true);
+    }
+  };
+
+  // 更新记录
+  const handleUpdateRecord = async (values: any) => {
+    if (!editingRecord) return;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingRecord.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          date: values.date.format('YYYY-MM-DD'),
+          vendor_sku: values.vendor_sku,
+          color: values.color,
+          quantity: values.quantity
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success('更新成功');
+        setEditModalVisible(false);
+        setEditingRecord(null);
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error('更新失败');
+    }
+  };
+
+  // 删除记录
+  const handleDeleteRecord = async (id: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${id}`, {
+        method: 'DELETE'
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success('删除成功');
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('删除失败:', error);
+      message.error('删除失败');
     }
   };
 
@@ -809,6 +885,10 @@ const PeakSeasonSummary: React.FC = () => {
       width: 120,
       align: 'center',
       sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'date')
+      }),
+      render: (text) => <Text style={{ cursor: 'pointer' }}>{text}</Text>
     },
     {
       title: '卖家货号',
@@ -816,7 +896,10 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'vendor_sku',
       width: 150,
       align: 'center',
-      render: (text) => <Text strong>{text}</Text>
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'vendor_sku')
+      }),
+      render: (text) => <Text strong style={{ cursor: 'pointer' }}>{text}</Text>
     },
     {
       title: '颜色',
@@ -824,6 +907,10 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'color',
       width: 120,
       align: 'center',
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'color')
+      }),
+      render: (text) => <Text style={{ cursor: 'pointer' }}>{text}</Text>
     },
     {
       title: '数量',
@@ -832,7 +919,10 @@ const PeakSeasonSummary: React.FC = () => {
       width: 100,
       align: 'center',
       sorter: (a, b) => a.quantity - b.quantity,
-      render: (value) => <Text strong style={{ color: '#1890ff' }}>{value?.toLocaleString()}</Text>
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'quantity')
+      }),
+      render: (value) => <Text strong style={{ color: '#1890ff', cursor: 'pointer' }}>{value?.toLocaleString()}</Text>
     },
     {
       title: '录入时间',
@@ -841,6 +931,38 @@ const PeakSeasonSummary: React.FC = () => {
       width: 150,
       align: 'center',
       render: (value) => value ? new Date(value).toLocaleString() : '-'
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      align: 'center',
+      fixed: 'right',
+      render: (_, record) => (
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleCellDoubleClick(record, 'edit')}
+            title="编辑"
+          />
+          <Popconfirm
+            title="确定要删除这条记录吗？"
+            onConfirm={() => handleDeleteRecord(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<DeleteOutlined />}
+              danger
+              title="删除"
+            />
+          </Popconfirm>
+        </Space>
+      )
     }
   ];
 
@@ -1217,7 +1339,19 @@ const PeakSeasonSummary: React.FC = () => {
                 </Button>
                 <Button
                   icon={<ReloadOutlined />}
-                  onClick={() => fetchSupplierShipments(shipmentPagination.current)}
+                  onClick={() => {
+                    // 重置筛选状态
+                    setShipmentFilters({
+                      year: undefined,
+                      supplierName: '',
+                      vendorSku: [],
+                      color: []
+                    });
+                    // 重新获取筛选选项
+                    fetchFilterOptions();
+                    // 刷新数据
+                    fetchSupplierShipments(1);
+                  }}
                 >
                   刷新
                 </Button>
@@ -1228,7 +1362,7 @@ const PeakSeasonSummary: React.FC = () => {
               dataSource={supplierShipments}
               rowKey="id"
               loading={loading}
-              scroll={{ x: 850 }}
+              scroll={{ x: 1000 }}
               pagination={{
                 ...shipmentPagination,
                 showSizeChanger: true,
@@ -1376,6 +1510,82 @@ const PeakSeasonSummary: React.FC = () => {
             </Table.Summary.Row>
           )}
         />
+      </Modal>
+
+      {/* 编辑记录模态框 */}
+      <Modal
+        title="编辑发货记录"
+        open={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false);
+          setEditingRecord(null);
+        }}
+        footer={null}
+        width={600}
+      >
+        {editingRecord && (
+          <Form
+            initialValues={{
+              date: editingRecord.date ? dayjs(editingRecord.date) : undefined,
+              vendor_sku: editingRecord.vendor_sku,
+              color: editingRecord.color,
+              quantity: editingRecord.quantity
+            }}
+            onFinish={handleUpdateRecord}
+            layout="vertical"
+          >
+            <Form.Item
+              name="date"
+              label="发货日期"
+              rules={[{ required: true, message: '请选择发货日期' }]}
+            >
+              <DatePicker style={{ width: '100%' }} />
+            </Form.Item>
+            
+            <Form.Item
+              name="vendor_sku"
+              label="卖家货号"
+              rules={[{ required: true, message: '请输入卖家货号' }]}
+            >
+              <Input />
+            </Form.Item>
+            
+            <Form.Item
+              name="color"
+              label="颜色"
+              rules={[{ required: true, message: '请输入颜色' }]}
+            >
+              <Input />
+            </Form.Item>
+            
+            <Form.Item
+              name="quantity"
+              label="数量"
+              rules={[
+                { required: true, message: '请输入数量' },
+                { type: 'number', min: 0, message: '数量不能为负数' }
+              ]}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  保存
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setEditModalVisible(false);
+                    setEditingRecord(null);
+                  }}
+                >
+                  取消
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        )}
       </Modal>
     </div>
   );

@@ -552,14 +552,23 @@ router.get('/supplier-shipments-filters', async (req, res) => {
   try {
     const { supplierName, vendorSku } = req.query;
     
-    // 获取所有供应商
+    // 获取所有供应商（包括无供应商信息的记录）
     const suppliersQuery = `
-      SELECT DISTINCT pw.seller_name as supplier_name
+      SELECT DISTINCT 
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+          ELSE pw.seller_name 
+        END as supplier_name
       FROM \`​supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE s.date IS NOT NULL AND pw.seller_name IS NOT NULL AND pw.seller_name != ''
-      ORDER BY pw.seller_name ASC
+      WHERE s.date IS NOT NULL
+      ORDER BY 
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN 1 
+          ELSE 0 
+        END,
+        pw.seller_name ASC
     `;
     
     // 获取年份
@@ -581,8 +590,12 @@ router.get('/supplier-shipments-filters', async (req, res) => {
     const vendorSkuReplacements = {};
     
     if (supplierName) {
-      vendorSkuQuery += ' AND pw.seller_name = :supplierName';
-      vendorSkuReplacements.supplierName = supplierName;
+      if (supplierName === '无供应商信息') {
+        vendorSkuQuery += ' AND (pw.seller_name IS NULL OR pw.seller_name = \'\')';
+      } else {
+        vendorSkuQuery += ' AND pw.seller_name = :supplierName';
+        vendorSkuReplacements.supplierName = supplierName;
+      }
     }
     
     vendorSkuQuery += ' ORDER BY s.vendor_sku ASC';
@@ -598,8 +611,12 @@ router.get('/supplier-shipments-filters', async (req, res) => {
     const colorsReplacements = {};
     
     if (supplierName) {
-      colorsQuery += ' AND pw.seller_name = :supplierName';
-      colorsReplacements.supplierName = supplierName;
+      if (supplierName === '无供应商信息') {
+        colorsQuery += ' AND (pw.seller_name IS NULL OR pw.seller_name = \'\')';
+      } else {
+        colorsQuery += ' AND pw.seller_name = :supplierName';
+        colorsReplacements.supplierName = supplierName;
+      }
     }
     
     if (vendorSku) {
@@ -687,8 +704,12 @@ router.get('/supplier-shipments', async (req, res) => {
     
     // 支持供应商筛选
     if (supplierName && supplierName.trim() !== '') {
-      whereCondition += ' AND pw.seller_name = :supplierName';
-      replacements.supplierName = supplierName;
+      if (supplierName === '无供应商信息') {
+        whereCondition += ' AND (pw.seller_name IS NULL OR pw.seller_name = \'\')';
+      } else {
+        whereCondition += ' AND pw.seller_name = :supplierName';
+        replacements.supplierName = supplierName;
+      }
     }
 
     const shipmentRecords = await sequelize.query(`
@@ -701,7 +722,10 @@ router.get('/supplier-shipments', async (req, res) => {
         s.create_date,
         sis.parent_sku,
         sis.child_sku,
-        pw.seller_name as supplier_name
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+          ELSE pw.seller_name 
+        END as supplier_name
       FROM \`​supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
@@ -863,6 +887,98 @@ router.get('/supplier-shipments-summary', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取供应商发货汇总失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新供应商发货记录
+router.put('/supplier-shipments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, vendor_sku, color, quantity } = req.body;
+    
+    // 验证必填字段
+    if (!date || !vendor_sku || !color || quantity === undefined || quantity === null) {
+      return res.status(400).json({
+        code: 1,
+        message: '缺少必填字段：日期、卖家货号、颜色、数量'
+      });
+    }
+    
+    // 验证数量必须为正数
+    if (isNaN(quantity) || quantity < 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '数量必须为非负数字'
+      });
+    }
+
+    const updateResult = await sequelize.query(`
+      UPDATE \`​supplier_shipments_peak_season\` 
+      SET 
+        date = :date,
+        vendor_sku = :vendor_sku,
+        sellercolorname = :color,
+        quantity = :quantity
+      WHERE id = :id
+    `, {
+      replacements: { id, date, vendor_sku, color, quantity },
+      type: sequelize.QueryTypes.UPDATE
+    });
+
+    if (updateResult[1] === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录未找到'
+      });
+    }
+
+    res.json({
+      code: 0,
+      message: '更新成功'
+    });
+
+  } catch (error) {
+    console.error('更新供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除供应商发货记录
+router.delete('/supplier-shipments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deleteResult = await sequelize.query(`
+      DELETE FROM \`​supplier_shipments_peak_season\` 
+      WHERE id = :id
+    `, {
+      replacements: { id },
+      type: sequelize.QueryTypes.DELETE
+    });
+
+    if (deleteResult[1] === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录未找到'
+      });
+    }
+
+    res.json({
+      code: 0,
+      message: '删除成功'
+    });
+
+  } catch (error) {
+    console.error('删除供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
       error: error.message
     });
   }
