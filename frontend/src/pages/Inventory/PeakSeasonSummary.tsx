@@ -125,9 +125,18 @@ const PeakSeasonSummary: React.FC = () => {
     total: 0
   });
   const [shipmentFilters, setShipmentFilters] = useState({
-    year: 2025 as number | undefined,
-    vendorSku: '',
-    color: ''
+    year: undefined as number | undefined,
+    supplierName: '',
+    vendorSku: [] as string[],
+    color: [] as string[]
+  });
+
+  // 筛选选项状态
+  const [filterOptions, setFilterOptions] = useState({
+    suppliers: [] as string[],
+    years: [] as number[],
+    vendorSkus: [] as string[],
+    colors: [] as string[]
   });
 
   // 供应商发货汇总状态
@@ -298,14 +307,37 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
+  // 获取筛选选项
+  const fetchFilterOptions = async (supplierName?: string, vendorSku?: string[]) => {
+    try {
+      const params = new URLSearchParams();
+      if (supplierName) params.append('supplierName', supplierName);
+      if (vendorSku && vendorSku.length > 0) params.append('vendorSku', vendorSku.join(','));
+      
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments-filters?${params}`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setFilterOptions(data.data);
+      }
+    } catch (error) {
+      console.error('获取筛选选项失败:', error);
+    }
+  };
+
   // 获取供应商发货记录
   const fetchSupplierShipments = async (page: number = 1) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (shipmentFilters.year) params.append('year', shipmentFilters.year.toString());
-      if (shipmentFilters.vendorSku) params.append('vendorSku', shipmentFilters.vendorSku);
-      if (shipmentFilters.color) params.append('color', shipmentFilters.color);
+      if (shipmentFilters.supplierName) params.append('supplierName', shipmentFilters.supplierName);
+      if (shipmentFilters.vendorSku && shipmentFilters.vendorSku.length > 0) {
+        params.append('vendorSku', shipmentFilters.vendorSku.join(','));
+      }
+      if (shipmentFilters.color && shipmentFilters.color.length > 0) {
+        params.append('color', shipmentFilters.color.join(','));
+      }
       params.append('page', page.toString());
       params.append('limit', shipmentPagination.pageSize.toString());
 
@@ -467,6 +499,7 @@ const PeakSeasonSummary: React.FC = () => {
   useEffect(() => {
     console.log('组件初始化，开始获取数据...');
     fetchYears();
+    fetchFilterOptions(); // 获取筛选选项
     // 立即尝试获取统计数据
     fetchYearlyStats();
   }, []);
@@ -491,6 +524,7 @@ const PeakSeasonSummary: React.FC = () => {
     } else if (key === 'supplier-stats') {
       fetchSupplierStats();
     } else if (key === 'supplier-shipments') {
+      fetchFilterOptions(); // 获取筛选选项
       fetchSupplierShipments(1);
     } else if (key === 'supplier-shipments-summary') {
       fetchShipmentSummary();
@@ -1100,19 +1134,69 @@ const PeakSeasonSummary: React.FC = () => {
           </Tabs.TabPane>
           <Tabs.TabPane tab="供应商发货记录" key="supplier-shipments">
             <div style={{ marginBottom: 16 }}>
-              <Space>
-                <Input
-                  placeholder="卖家货号"
-                  value={shipmentFilters.vendorSku}
-                  onChange={(e) => setShipmentFilters(prev => ({ ...prev, vendorSku: e.target.value }))}
+              <Space wrap>
+                <Select
+                  placeholder="选择供应商"
+                  value={shipmentFilters.supplierName || undefined}
+                  onChange={(value) => {
+                    setShipmentFilters(prev => ({ 
+                      ...prev, 
+                      supplierName: value || '',
+                      vendorSku: [], // 清空卖家货号
+                      color: [] // 清空颜色
+                    }));
+                    // 根据选择的供应商更新筛选选项
+                    fetchFilterOptions(value);
+                  }}
                   style={{ width: 150 }}
-                />
-                <Input
-                  placeholder="颜色"
+                  allowClear
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                >
+                  {filterOptions.suppliers.map(supplier => (
+                    <Option key={supplier} value={supplier}>{supplier}</Option>
+                  ))}
+                </Select>
+                <Select
+                  mode="multiple"
+                  placeholder="选择卖家货号"
+                  value={shipmentFilters.vendorSku}
+                  onChange={(value) => {
+                    setShipmentFilters(prev => ({ 
+                      ...prev, 
+                      vendorSku: value,
+                      color: [] // 清空颜色
+                    }));
+                    // 根据选择的卖家货号更新颜色选项
+                    fetchFilterOptions(shipmentFilters.supplierName || undefined, value);
+                  }}
+                  style={{ width: 200 }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                >
+                  {filterOptions.vendorSkus.map(sku => (
+                    <Option key={sku} value={sku}>{sku}</Option>
+                  ))}
+                </Select>
+                <Select
+                  mode="multiple"
+                  placeholder="选择颜色"
                   value={shipmentFilters.color}
-                  onChange={(e) => setShipmentFilters(prev => ({ ...prev, color: e.target.value }))}
-                  style={{ width: 120 }}
-                />
+                  onChange={(value) => setShipmentFilters(prev => ({ ...prev, color: value }))}
+                  style={{ width: 180 }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                >
+                  {filterOptions.colors.map(color => (
+                    <Option key={color} value={color}>{color}</Option>
+                  ))}
+                </Select>
                 <Select
                   placeholder="选择年份"
                   value={shipmentFilters.year}
@@ -1120,7 +1204,7 @@ const PeakSeasonSummary: React.FC = () => {
                   style={{ width: 120 }}
                   allowClear
                 >
-                  {availableYears.map(year => (
+                  {filterOptions.years.map(year => (
                     <Option key={year} value={year}>{year}年</Option>
                   ))}
                 </Select>

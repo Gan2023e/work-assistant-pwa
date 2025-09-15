@@ -547,10 +547,106 @@ router.get('/test-data', async (req, res) => {
   }
 });
 
+// 获取供应商发货记录筛选选项
+router.get('/supplier-shipments-filters', async (req, res) => {
+  try {
+    const { supplierName, vendorSku } = req.query;
+    
+    // 获取所有供应商
+    const suppliersQuery = `
+      SELECT DISTINCT pw.seller_name as supplier_name
+      FROM \`​supplier_shipments_peak_season\` s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL AND pw.seller_name IS NOT NULL AND pw.seller_name != ''
+      ORDER BY pw.seller_name ASC
+    `;
+    
+    // 获取年份
+    const yearsQuery = `
+      SELECT DISTINCT YEAR(s.date) as year
+      FROM \`​supplier_shipments_peak_season\` s
+      WHERE s.date IS NOT NULL
+      ORDER BY year DESC
+    `;
+    
+    // 获取卖家货号（根据供应商筛选）
+    let vendorSkuQuery = `
+      SELECT DISTINCT s.vendor_sku
+      FROM \`​supplier_shipments_peak_season\` s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL AND s.vendor_sku IS NOT NULL AND s.vendor_sku != ''
+    `;
+    const vendorSkuReplacements = {};
+    
+    if (supplierName) {
+      vendorSkuQuery += ' AND pw.seller_name = :supplierName';
+      vendorSkuReplacements.supplierName = supplierName;
+    }
+    
+    vendorSkuQuery += ' ORDER BY s.vendor_sku ASC';
+    
+    // 获取颜色（根据供应商和卖家货号筛选）
+    let colorsQuery = `
+      SELECT DISTINCT s.sellercolorname as color
+      FROM \`​supplier_shipments_peak_season\` s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL AND s.sellercolorname IS NOT NULL AND s.sellercolorname != ''
+    `;
+    const colorsReplacements = {};
+    
+    if (supplierName) {
+      colorsQuery += ' AND pw.seller_name = :supplierName';
+      colorsReplacements.supplierName = supplierName;
+    }
+    
+    if (vendorSku) {
+      colorsQuery += ' AND s.vendor_sku IN (:vendorSku)';
+      colorsReplacements.vendorSku = Array.isArray(vendorSku) ? vendorSku : vendorSku.split(',');
+    }
+    
+    colorsQuery += ' ORDER BY s.sellercolorname ASC';
+    
+    // 执行查询
+    const [suppliers, years, vendorSkus, colors] = await Promise.all([
+      sequelize.query(suppliersQuery, { type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(yearsQuery, { type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(vendorSkuQuery, { 
+        replacements: vendorSkuReplacements, 
+        type: sequelize.QueryTypes.SELECT 
+      }),
+      sequelize.query(colorsQuery, { 
+        replacements: colorsReplacements, 
+        type: sequelize.QueryTypes.SELECT 
+      })
+    ]);
+
+    res.json({
+      code: 0,
+      data: {
+        suppliers: suppliers.map(item => item.supplier_name).filter(Boolean),
+        years: years.map(item => item.year).filter(Boolean),
+        vendorSkus: vendorSkus.map(item => item.vendor_sku).filter(Boolean),
+        colors: colors.map(item => item.color).filter(Boolean)
+      }
+    });
+
+  } catch (error) {
+    console.error('获取筛选选项失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取筛选选项失败',
+      error: error.message
+    });
+  }
+});
+
 // 获取供应商发货记录详情
 router.get('/supplier-shipments', async (req, res) => {
   try {
-    const { year, startDate, endDate, vendorSku, color } = req.query;
+    const { year, startDate, endDate, vendorSku, color, supplierName } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
@@ -570,30 +666,29 @@ router.get('/supplier-shipments', async (req, res) => {
       whereCondition += ' AND s.date <= :endDate';
       replacements.endDate = endDate;
     }
-    if (vendorSku) {
-      whereCondition += ' AND s.vendor_sku LIKE :vendorSku';
-      replacements.vendorSku = `%${vendorSku}%`;
-    }
-    if (color) {
-      whereCondition += ' AND s.sellercolorname LIKE :color';
-      replacements.color = `%${color}%`;
-    }
-
-    // 获取供应商发货记录 - 使用原始SQL查询
-    let shipmentWhereCondition = '';
-    const shipmentReplacements = {};
     
-    if (year) {
-      shipmentWhereCondition += ' AND YEAR(s.date) = :year';
-      shipmentReplacements.year = year;
+    // 支持多选卖家货号
+    if (vendorSku && vendorSku.trim() !== '') {
+      const vendorSkuArray = Array.isArray(vendorSku) ? vendorSku : vendorSku.split(',').map(s => s.trim()).filter(s => s);
+      if (vendorSkuArray.length > 0) {
+        whereCondition += ' AND s.vendor_sku IN (:vendorSkuArray)';
+        replacements.vendorSkuArray = vendorSkuArray;
+      }
     }
-    if (vendorSku) {
-      shipmentWhereCondition += ' AND s.vendor_sku LIKE :vendorSku';
-      shipmentReplacements.vendorSku = `%${vendorSku}%`;
+    
+    // 支持多选颜色
+    if (color && color.trim() !== '') {
+      const colorArray = Array.isArray(color) ? color : color.split(',').map(s => s.trim()).filter(s => s);
+      if (colorArray.length > 0) {
+        whereCondition += ' AND s.sellercolorname IN (:colorArray)';
+        replacements.colorArray = colorArray;
+      }
     }
-    if (color) {
-      shipmentWhereCondition += ' AND s.sellercolorname LIKE :color';
-      shipmentReplacements.color = `%${color}%`;
+    
+    // 支持供应商筛选
+    if (supplierName && supplierName.trim() !== '') {
+      whereCondition += ' AND pw.seller_name = :supplierName';
+      replacements.supplierName = supplierName;
     }
 
     const shipmentRecords = await sequelize.query(`
@@ -610,11 +705,11 @@ router.get('/supplier-shipments', async (req, res) => {
       FROM \`​supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE s.date IS NOT NULL ${shipmentWhereCondition}
+      WHERE s.date IS NOT NULL ${whereCondition}
       ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
     `, {
-      replacements: { ...shipmentReplacements, limit, offset },
+      replacements: { ...replacements, limit, offset },
       type: sequelize.QueryTypes.SELECT
     });
 
@@ -622,9 +717,11 @@ router.get('/supplier-shipments', async (req, res) => {
     const totalResult = await sequelize.query(`
       SELECT COUNT(*) as total
       FROM \`​supplier_shipments_peak_season\` s
-      WHERE s.date IS NOT NULL ${shipmentWhereCondition}
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL ${whereCondition}
     `, {
-      replacements: shipmentReplacements,
+      replacements,
       type: sequelize.QueryTypes.SELECT
     });
 
