@@ -17,7 +17,8 @@ import {
   Form,
   DatePicker,
   InputNumber,
-  Popconfirm
+  Popconfirm,
+  Tooltip
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -149,6 +150,10 @@ const PeakSeasonSummary: React.FC = () => {
   // 编辑相关状态
   const [editingRecord, setEditingRecord] = useState<SupplierShipmentRecord | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  
+  // 行内编辑状态
+  const [editingCell, setEditingCell] = useState<{recordId: number, field: string} | null>(null);
+  const [editingValue, setEditingValue] = useState<any>('');
 
   // 供应商发货汇总状态
   const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummaryData[]>([]);
@@ -338,11 +343,16 @@ const PeakSeasonSummary: React.FC = () => {
 
   // 双击单元格编辑
   const handleCellDoubleClick = (record: SupplierShipmentRecord, field: string) => {
-    // 只允许编辑特定字段
-    const editableFields = ['date', 'vendor_sku', 'color', 'quantity'];
+    // 允许编辑的字段
+    const editableFields = ['date', 'vendor_sku', 'color', 'quantity', 'supplier_name', 'parent_sku', 'child_sku'];
     if (editableFields.includes(field)) {
-      setEditingRecord(record);
-      setEditModalVisible(true);
+      setEditingCell({ recordId: record.id, field });
+      // 设置当前编辑值
+      let currentValue = record[field as keyof SupplierShipmentRecord];
+      if (field === 'date') {
+        currentValue = currentValue ? new Date(currentValue as string).toISOString().split('T')[0] : '';
+      }
+      setEditingValue(currentValue || '');
     }
   };
 
@@ -351,23 +361,36 @@ const PeakSeasonSummary: React.FC = () => {
     if (!editingRecord) return;
     
     try {
+      const updateData = {
+        date: values.date.format('YYYY-MM-DD'),
+        vendor_sku: values.vendor_sku,
+        color: values.color,
+        quantity: values.quantity
+      };
+      
+      // 提示用户关于其他字段
+      if (values.supplier_name && values.supplier_name !== editingRecord.supplier_name) {
+        message.info('供应商信息的更新需要在产品链接表中维护，建议到产品管理页面修改');
+      }
+      if (values.parent_sku && values.parent_sku !== editingRecord.parent_sku) {
+        message.info('Parent SKU的更新需要在相关产品表中维护');
+      }
+      if (values.child_sku && values.child_sku !== editingRecord.child_sku) {
+        message.info('Child SKU的更新需要在库存表中维护');
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingRecord.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          date: values.date.format('YYYY-MM-DD'),
-          vendor_sku: values.vendor_sku,
-          color: values.color,
-          quantity: values.quantity
-        })
+        body: JSON.stringify(updateData)
       });
       
       const data = await response.json();
       
       if (data.code === 0) {
-        message.success('更新成功');
+        message.success('基本信息更新成功（发货日期、卖家货号、颜色、数量）');
         setEditModalVisible(false);
         setEditingRecord(null);
         fetchSupplierShipments(shipmentPagination.current);
@@ -399,6 +422,77 @@ const PeakSeasonSummary: React.FC = () => {
       console.error('删除失败:', error);
       message.error('删除失败');
     }
+  };
+
+  // 保存行内编辑
+  const handleSaveInlineEdit = async () => {
+    if (!editingCell) return;
+    
+    const record = supplierShipments.find(r => r.id === editingCell.recordId);
+    if (!record) return;
+
+    try {
+      // 构建更新数据
+      const updateData: any = {
+        date: record.date,
+        vendor_sku: record.vendor_sku,
+        color: record.color,
+        quantity: record.quantity
+      };
+      
+      // 更新特定字段
+      if (editingCell.field === 'date') {
+        updateData.date = editingValue;
+      } else if (editingCell.field === 'vendor_sku') {
+        updateData.vendor_sku = editingValue;
+      } else if (editingCell.field === 'color') {
+        updateData.color = editingValue;
+      } else if (editingCell.field === 'quantity') {
+        updateData.quantity = parseInt(editingValue);
+        if (isNaN(updateData.quantity) || updateData.quantity < 0) {
+          message.error('数量必须为非负数字');
+          return;
+        }
+      } else if (editingCell.field === 'supplier_name') {
+        // 供应商字段比较特殊，需要通过parent_sku关联更新
+        message.info('供应商信息通过Parent SKU关联，建议直接修改对应的产品链接表');
+        setEditingCell(null);
+        return;
+      } else if (editingCell.field === 'parent_sku' || editingCell.field === 'child_sku') {
+        // 这些字段在另外的表中，暂时不支持直接编辑
+        message.info('Parent SKU和Child SKU在其他表中维护，建议到相关页面修改');
+        setEditingCell(null);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${editingCell.recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success('更新成功');
+        setEditingCell(null);
+        setEditingValue('');
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error('更新失败');
+    }
+  };
+
+  // 取消行内编辑
+  const handleCancelInlineEdit = () => {
+    setEditingCell(null);
+    setEditingValue('');
   };
 
   // 获取供应商发货记录
@@ -860,7 +954,51 @@ const PeakSeasonSummary: React.FC = () => {
       width: 150,
       align: 'center',
       fixed: 'left',
-      render: (text) => text ? <Text strong style={{ color: '#f50' }}>{text}</Text> : <Text type="secondary">-</Text>
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'supplier_name')
+      }),
+      render: (text, record) => {
+        // 检查是否正在编辑这个单元格
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'supplier_name';
+        
+        if (isEditing) {
+          return (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        if (!text || text === '-') {
+          return <Text type="secondary" style={{ cursor: 'pointer' }}>-</Text>;
+        }
+        const isNoSupplier = text === '无供应商信息';
+        return (
+          <Text 
+            strong 
+            style={{ 
+              color: isNoSupplier ? '#faad14' : '#f50',
+              cursor: 'pointer',
+              backgroundColor: isNoSupplier ? '#fffbe6' : 'transparent',
+              padding: isNoSupplier ? '2px 6px' : '0',
+              borderRadius: isNoSupplier ? '4px' : '0'
+            }}
+          >
+            {text}
+          </Text>
+        );
+      }
     },
     {
       title: 'Parent SKU',
@@ -868,7 +1006,33 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'parent_sku',
       width: 150,
       align: 'center',
-      render: (text) => text ? <Text style={{ color: '#1890ff' }}>{text}</Text> : <Text type="secondary">-</Text>
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'parent_sku')
+      }),
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'parent_sku';
+        
+        if (isEditing) {
+          return (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return text ? <Text style={{ color: '#1890ff', cursor: 'pointer' }}>{text}</Text> : <Text type="secondary" style={{ cursor: 'pointer' }}>-</Text>;
+      }
     },
     {
       title: 'Child SKU',
@@ -876,7 +1040,33 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'child_sku',
       width: 150,
       align: 'center',
-      render: (text) => text ? <Text style={{ color: '#52c41a' }}>{text}</Text> : <Text type="secondary">-</Text>
+      onCell: (record) => ({
+        onDoubleClick: () => handleCellDoubleClick(record, 'child_sku')
+      }),
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'child_sku';
+        
+        if (isEditing) {
+          return (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return text ? <Text style={{ color: '#52c41a', cursor: 'pointer' }}>{text}</Text> : <Text type="secondary" style={{ cursor: 'pointer' }}>-</Text>;
+      }
     },
     {
       title: '发货日期',
@@ -888,7 +1078,31 @@ const PeakSeasonSummary: React.FC = () => {
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'date')
       }),
-      render: (text) => <Text style={{ cursor: 'pointer' }}>{text}</Text>
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'date';
+        
+        if (isEditing) {
+          return (
+            <Input
+              type="date"
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return <Text style={{ cursor: 'pointer' }}>{text}</Text>;
+      }
     },
     {
       title: '卖家货号',
@@ -899,7 +1113,30 @@ const PeakSeasonSummary: React.FC = () => {
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'vendor_sku')
       }),
-      render: (text) => <Text strong style={{ cursor: 'pointer' }}>{text}</Text>
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'vendor_sku';
+        
+        if (isEditing) {
+          return (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return <Text strong style={{ cursor: 'pointer' }}>{text}</Text>;
+      }
     },
     {
       title: '颜色',
@@ -910,7 +1147,30 @@ const PeakSeasonSummary: React.FC = () => {
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'color')
       }),
-      render: (text) => <Text style={{ cursor: 'pointer' }}>{text}</Text>
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'color';
+        
+        if (isEditing) {
+          return (
+            <Input
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return <Text style={{ cursor: 'pointer' }}>{text}</Text>;
+      }
     },
     {
       title: '数量',
@@ -922,7 +1182,31 @@ const PeakSeasonSummary: React.FC = () => {
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'quantity')
       }),
-      render: (value) => <Text strong style={{ color: '#1890ff', cursor: 'pointer' }}>{value?.toLocaleString()}</Text>
+      render: (value, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'quantity';
+        
+        if (isEditing) {
+          return (
+            <InputNumber
+              value={editingValue}
+              onChange={(value) => setEditingValue(value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleSaveInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              min={0}
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return <Text strong style={{ color: '#1890ff', cursor: 'pointer' }}>{value?.toLocaleString()}</Text>;
+      }
     },
     {
       title: '录入时间',
@@ -944,7 +1228,10 @@ const PeakSeasonSummary: React.FC = () => {
             type="link"
             size="small"
             icon={<EditOutlined />}
-            onClick={() => handleCellDoubleClick(record, 'edit')}
+            onClick={() => {
+              setEditingRecord(record);
+              setEditModalVisible(true);
+            }}
             title="编辑"
           />
           <Popconfirm
@@ -1529,45 +1816,87 @@ const PeakSeasonSummary: React.FC = () => {
               date: editingRecord.date ? dayjs(editingRecord.date) : undefined,
               vendor_sku: editingRecord.vendor_sku,
               color: editingRecord.color,
-              quantity: editingRecord.quantity
+              quantity: editingRecord.quantity,
+              supplier_name: editingRecord.supplier_name,
+              parent_sku: editingRecord.parent_sku,
+              child_sku: editingRecord.child_sku
             }}
             onFinish={handleUpdateRecord}
             layout="vertical"
           >
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="date"
+                  label="发货日期"
+                  rules={[{ required: true, message: '请选择发货日期' }]}
+                >
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="quantity"
+                  label="数量"
+                  rules={[
+                    { required: true, message: '请输入数量' },
+                    { type: 'number', min: 0, message: '数量不能为负数' }
+                  ]}
+                >
+                  <InputNumber min={0} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="vendor_sku"
+                  label="卖家货号"
+                  rules={[{ required: true, message: '请输入卖家货号' }]}
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="color"
+                  label="颜色"
+                  rules={[{ required: true, message: '请输入颜色' }]}
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
+
             <Form.Item
-              name="date"
-              label="发货日期"
-              rules={[{ required: true, message: '请选择发货日期' }]}
+              name="supplier_name"
+              label="供应商"
+              tooltip="供应商信息通过Parent SKU关联，修改后需要确保数据一致性"
             >
-              <DatePicker style={{ width: '100%' }} />
+              <Input placeholder="供应商名称，留空则显示为'无供应商信息'" />
             </Form.Item>
-            
-            <Form.Item
-              name="vendor_sku"
-              label="卖家货号"
-              rules={[{ required: true, message: '请输入卖家货号' }]}
-            >
-              <Input />
-            </Form.Item>
-            
-            <Form.Item
-              name="color"
-              label="颜色"
-              rules={[{ required: true, message: '请输入颜色' }]}
-            >
-              <Input />
-            </Form.Item>
-            
-            <Form.Item
-              name="quantity"
-              label="数量"
-              rules={[
-                { required: true, message: '请输入数量' },
-                { type: 'number', min: 0, message: '数量不能为负数' }
-              ]}
-            >
-              <InputNumber min={0} style={{ width: '100%' }} />
-            </Form.Item>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="parent_sku"
+                  label="Parent SKU"
+                  tooltip="Parent SKU在产品链接表中维护"
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="child_sku"
+                  label="Child SKU"
+                  tooltip="Child SKU在库存表中维护"
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
             
             <Form.Item>
               <Space>
