@@ -37,6 +37,11 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
     type: DataTypes.INTEGER,
     allowNull: true,
     comment: '单箱产品数量'
+  },
+  price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: '产品价格'
   }
 }, {
   tableName: 'sellerinventory_sku',

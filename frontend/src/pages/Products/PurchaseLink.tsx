@@ -91,6 +91,7 @@ interface SellerInventorySkuRecord {
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
+  price?: number;
 }
 
 interface CpcFile {
@@ -330,6 +331,7 @@ const Purchase: React.FC = () => {
   const colorInputRef = useRef<any>(null);
   const sizeInputRef = useRef<any>(null);
   const qtyInputRef = useRef<any>(null);
+  const priceInputRef = useRef<any>(null);
   
   // 利润推算器相关状态
   const [profitCalculatorVisible, setProfitCalculatorVisible] = useState(false);
@@ -3520,7 +3522,8 @@ const Purchase: React.FC = () => {
       const updateData = {
         sellercolorname: colorInputRef.current?.input?.value || '',
         sellersizename: sizeInputRef.current?.input?.value || '',
-        qty_per_box: parseInt(qtyInputRef.current?.input?.value) || 0
+        qty_per_box: parseInt(qtyInputRef.current?.input?.value) || 0,
+        price: parseFloat(priceInputRef.current?.input?.value) || null
       };
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuid)}`, {
@@ -6037,6 +6040,30 @@ const Purchase: React.FC = () => {
                   />
                 ) : (
                   <span>{text || '-'}</span>
+                );
+              },
+            },
+            {
+              title: '价格',
+              dataIndex: 'price',
+              key: 'price',
+              width: 120,
+              align: 'center',
+              render: (value: number, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Input 
+                    ref={priceInputRef}
+                    size="small" 
+                    type="number" 
+                    step="0.01"
+                    defaultValue={record.price?.toString() || ''}
+                    key={`price-${record.skuid}`}
+                    style={{ textAlign: 'center' }}
+                    placeholder="输入价格"
+                  />
+                ) : (
+                  <span>{value ? `¥${value}` : '-'}</span>
                 );
               },
             },
