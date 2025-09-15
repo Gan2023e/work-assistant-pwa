@@ -603,8 +603,11 @@ router.get('/supplier-shipments', async (req, res) => {
         s.vendor_sku,
         s.sellercolorname as color,
         s.quantity,
-        s.create_date
+        s.create_date,
+        sis.parent_sku,
+        sis.child_sku
       FROM \`​supplier_shipments_peak_season\` s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       WHERE s.date IS NOT NULL ${shipmentWhereCondition}
       ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
@@ -643,6 +646,124 @@ router.get('/supplier-shipments', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取供应商发货记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取供应商发货汇总数据
+router.get('/supplier-shipments-summary', async (req, res) => {
+  try {
+    const { year } = req.query;
+    
+    let whereCondition = '';
+    const replacements = {};
+    
+    if (year) {
+      whereCondition += ' AND YEAR(s.date) = :year';
+      replacements.year = year;
+    }
+
+    // 获取所有发货记录 - 排除数量为0或空的记录
+    const shipmentRecords = await sequelize.query(`
+      SELECT 
+        s.date,
+        s.vendor_sku,
+        s.sellercolorname,
+        sis.child_sku,
+        s.quantity
+      FROM \`​supplier_shipments_peak_season\` s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      WHERE s.date IS NOT NULL 
+        AND s.quantity IS NOT NULL 
+        AND s.quantity > 0 
+        ${whereCondition}
+      ORDER BY s.date ASC, s.vendor_sku, s.sellercolorname
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 处理数据，生成汇总结构
+    const summaryMap = new Map();
+    const datesSet = new Set();
+
+    console.log('Raw shipment records count:', shipmentRecords.length);
+    
+    shipmentRecords.forEach((record, index) => {
+      const date = record.date.split('T')[0]; // 只取日期部分
+      const quantity = Number(record.quantity);
+      
+      // 调试日志 - 显示前几条记录的详细信息
+      if (index < 5) {
+        console.log(`Record ${index}:`, {
+          vendor_sku: record.vendor_sku,
+          sellercolorname: record.sellercolorname,
+          child_sku: record.child_sku,
+          quantity: quantity,
+          date: date
+        });
+      }
+      
+      let displaySku;
+      if (record.child_sku) {
+        // 有真正的子SKU
+        displaySku = record.child_sku;
+      } else {
+        // 构建vendor_sku-颜色组合，处理空值情况
+        const vendorSku = record.vendor_sku && record.vendor_sku !== 'None' ? record.vendor_sku : '未知货号';
+        const colorName = record.sellercolorname && record.sellercolorname !== 'None' ? record.sellercolorname : '未知颜色';
+        
+        // 如果两个都是未知，则显示为"数据缺失"
+        if (vendorSku === '未知货号' && colorName === '未知颜色') {
+          displaySku = '数据缺失';
+          console.log(`Data missing record found: quantity=${quantity}, vendor_sku=${record.vendor_sku}, color=${record.sellercolorname}`);
+        } else {
+          displaySku = `${vendorSku}-${colorName}`;
+        }
+      }
+      
+      datesSet.add(date);
+      
+      if (!summaryMap.has(displaySku)) {
+        summaryMap.set(displaySku, {
+          child_sku: displaySku,
+          is_real_child_sku: !!record.child_sku, // 标记是否为真正的子SKU
+          is_data_missing: (!record.vendor_sku || record.vendor_sku === 'None') && 
+                          (!record.sellercolorname || record.sellercolorname === 'None') && 
+                          !record.child_sku, // 标记是否为数据缺失
+          dates: {},
+          total: 0
+        });
+      }
+      
+      const summary = summaryMap.get(displaySku);
+      if (!summary.dates[date]) {
+        summary.dates[date] = 0;
+      }
+      summary.dates[date] += quantity;
+      summary.total += quantity;
+    });
+
+    // 转换为数组并排序
+    const dates = Array.from(datesSet).sort();
+    const summary = Array.from(summaryMap.values()).sort((a, b) => 
+      a.child_sku.localeCompare(b.child_sku)
+    );
+
+    res.json({
+      code: 0,
+      data: {
+        summary,
+        dates
+      }
+    });
+
+  } catch (error) {
+    console.error('获取供应商发货汇总失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取供应商发货汇总失败',
       error: error.message
     });
   }

@@ -83,6 +83,16 @@ interface SupplierShipmentRecord {
   color: string;
   quantity: number;
   create_date: string;
+  parent_sku?: string;
+  child_sku?: string;
+}
+
+interface ShipmentSummaryData {
+  child_sku: string;
+  is_real_child_sku: boolean;
+  is_data_missing: boolean;
+  dates: { [date: string]: number };
+  total: number;
 }
 
 const PeakSeasonSummary: React.FC = () => {
@@ -117,6 +127,13 @@ const PeakSeasonSummary: React.FC = () => {
     year: 2025 as number | undefined,
     vendorSku: '',
     color: ''
+  });
+
+  // 供应商发货汇总状态
+  const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummaryData[]>([]);
+  const [summaryDates, setSummaryDates] = useState<string[]>([]);
+  const [summaryFilters, setSummaryFilters] = useState({
+    year: 2025 as number | undefined
   });
 
   // 筛选条件
@@ -315,6 +332,33 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
+  // 获取供应商发货汇总数据
+  const fetchShipmentSummary = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (summaryFilters.year) params.append('year', summaryFilters.year.toString());
+
+      console.log('正在获取供应商发货汇总数据，参数:', params.toString());
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments-summary?${params}`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setShipmentSummary(data.data.summary);
+        setSummaryDates(data.data.dates);
+        console.log('设置供应商发货汇总数据:', data.data);
+      } else {
+        console.error('供应商发货汇总API返回错误:', data.message);
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('获取供应商发货汇总失败:', error);
+      message.error('获取供应商发货汇总失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理供应商统计数据，计算rowSpan用于表格合并显示，并按付款类型优先级排序
   const processSupplierStatsForDisplay = (rawData: any[]): SupplierStats[] => {
     // 先按供应商和年份分组
@@ -447,6 +491,8 @@ const PeakSeasonSummary: React.FC = () => {
       fetchSupplierStats();
     } else if (key === 'supplier-shipments') {
       fetchSupplierShipments(1);
+    } else if (key === 'supplier-shipments-summary') {
+      fetchShipmentSummary();
     }
   };
 
@@ -459,6 +505,8 @@ const PeakSeasonSummary: React.FC = () => {
       fetchSupplierStats();
     } else if (activeTab === 'supplier-shipments') {
       fetchSupplierShipments(1);
+    } else if (activeTab === 'supplier-shipments-summary') {
+      fetchShipmentSummary();
     }
   };
 
@@ -718,6 +766,22 @@ const PeakSeasonSummary: React.FC = () => {
       align: 'center',
     },
     {
+      title: 'Parent SKU',
+      dataIndex: 'parent_sku',
+      key: 'parent_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => text ? <Text style={{ color: '#1890ff' }}>{text}</Text> : <Text type="secondary">-</Text>
+    },
+    {
+      title: 'Child SKU',
+      dataIndex: 'child_sku',
+      key: 'child_sku',
+      width: 150,
+      align: 'center',
+      render: (text) => text ? <Text style={{ color: '#52c41a' }}>{text}</Text> : <Text type="secondary">-</Text>
+    },
+    {
       title: '数量',
       dataIndex: 'quantity',
       key: 'quantity',
@@ -735,6 +799,65 @@ const PeakSeasonSummary: React.FC = () => {
       render: (value) => value ? new Date(value).toLocaleString() : '-'
     }
   ];
+
+  // 汇总表格列定义（动态生成）
+  const createSummaryColumns = (): ColumnsType<ShipmentSummaryData> => {
+    const columns: ColumnsType<ShipmentSummaryData> = [
+      {
+        title: 'Child SKU',
+        dataIndex: 'child_sku',
+        key: 'child_sku',
+        width: 150,
+        align: 'center',
+        fixed: 'left',
+        render: (text, record) => {
+          if (record.is_real_child_sku) {
+            // 真正的子SKU，显示为蓝色加粗
+            return <Text strong style={{ color: '#1890ff' }}>{text}</Text>;
+          } else if (record.is_data_missing) {
+            // 数据缺失，显示为红色警告
+            return <Text style={{ color: '#f5222d', fontWeight: 'bold' }}>{text}</Text>;
+          } else {
+            // Vendor SKU + 颜色组合，显示为橙色斜体
+            return <Text style={{ color: '#fa8c16', fontStyle: 'italic' }}>{text}</Text>;
+          }
+        }
+      }
+    ];
+
+    // 动态添加日期列
+    summaryDates.forEach(date => {
+      columns.push({
+        title: date,
+        key: date,
+        width: 100,
+        align: 'center',
+        render: (_, record) => {
+          const quantity = record.dates[date] || 0;
+          return quantity > 0 ? (
+            <Text style={{ color: '#52c41a', fontWeight: 'bold' }}>
+              {quantity.toLocaleString()}
+            </Text>
+          ) : (
+            <Text type="secondary">-</Text>
+          );
+        }
+      });
+    });
+
+    // 添加合计列
+    columns.push({
+      title: '合计',
+      dataIndex: 'total',
+      key: 'total',
+      width: 100,
+      align: 'center',
+      fixed: 'right',
+      render: (value) => <Text strong style={{ color: '#f5222d' }}>{value.toLocaleString()}</Text>
+    });
+
+    return columns;
+  };
 
   // 付款详细记录表格列
   const paymentDetailColumns: ColumnsType<PaymentDetail> = [
@@ -1039,6 +1162,90 @@ const PeakSeasonSummary: React.FC = () => {
                 onChange: fetchSupplierShipments
               }}
               size="small"
+            />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab="供应商发货汇总" key="supplier-shipments-summary">
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Select
+                  placeholder="选择年份"
+                  value={summaryFilters.year}
+                  onChange={(value) => setSummaryFilters(prev => ({ ...prev, year: value }))}
+                  style={{ width: 120 }}
+                  allowClear
+                >
+                  {availableYears.map(year => (
+                    <Option key={year} value={year}>{year}年</Option>
+                  ))}
+                </Select>
+                <Button
+                  type="primary"
+                  icon={<SearchOutlined />}
+                  onClick={fetchShipmentSummary}
+                >
+                  查询
+                </Button>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={fetchShipmentSummary}
+                >
+                  刷新
+                </Button>
+              </Space>
+            </div>
+            <div style={{ marginBottom: 12, padding: '8px 12px', backgroundColor: '#f6f8fa', borderRadius: '4px' }}>
+              <Text style={{ fontSize: '12px', color: '#666' }}>
+                说明：<Text strong style={{ color: '#1890ff' }}>蓝色加粗</Text> 为真实子SKU，
+                <Text style={{ color: '#fa8c16', fontStyle: 'italic' }}>橙色斜体</Text> 为卖家货号-颜色组合，
+                <Text strong style={{ color: '#f5222d' }}>红色加粗</Text> 为数据缺失记录
+              </Text>
+            </div>
+            <Table
+              columns={createSummaryColumns()}
+              dataSource={shipmentSummary}
+              rowKey="child_sku"
+              loading={loading}
+              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800), y: 500 }}
+              pagination={false}
+              size="small"
+              bordered
+              summary={() => {
+                // 计算每日总计和整体总计
+                const dailyTotals: { [date: string]: number } = {};
+                let grandTotal = 0;
+                
+                summaryDates.forEach(date => {
+                  dailyTotals[date] = 0;
+                });
+                
+                shipmentSummary.forEach(record => {
+                  summaryDates.forEach(date => {
+                    const qty = record.dates[date] || 0;
+                    dailyTotals[date] += qty;
+                  });
+                  grandTotal += record.total;
+                });
+                
+                return (
+                  <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
+                    <Table.Summary.Cell index={0}>
+                      <Text strong>日期合计</Text>
+                    </Table.Summary.Cell>
+                    {summaryDates.map((date, index) => (
+                      <Table.Summary.Cell key={date} index={index + 1}>
+                        <Text strong style={{ color: '#1890ff' }}>
+                          {dailyTotals[date].toLocaleString()}
+                        </Text>
+                      </Table.Summary.Cell>
+                    ))}
+                    <Table.Summary.Cell index={summaryDates.length + 1}>
+                      <Text strong style={{ color: '#f5222d' }}>
+                        {grandTotal.toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
             />
           </Tabs.TabPane>
         </Tabs>
