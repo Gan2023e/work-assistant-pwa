@@ -365,7 +365,8 @@ const PeakSeasonSummary: React.FC = () => {
         date: values.date.format('YYYY-MM-DD'),
         vendor_sku: values.vendor_sku,
         color: values.color,
-        quantity: values.quantity
+        quantity: values.quantity,
+        parent_sku: values.parent_sku || editingRecord.parent_sku
       };
       
       // 检查供应商信息是否修改
@@ -491,7 +492,8 @@ const PeakSeasonSummary: React.FC = () => {
         date: record.date,
         vendor_sku: record.vendor_sku,
         color: record.color,
-        quantity: record.quantity
+        quantity: record.quantity,
+        parent_sku: record.parent_sku
       };
       
       // 更新特定字段
@@ -542,6 +544,7 @@ const PeakSeasonSummary: React.FC = () => {
                 vendor_sku: record.vendor_sku,
                 color: record.color,
                 quantity: record.quantity,
+                parent_sku: record.parent_sku,
                 supplier_name: editingValue || null
               };
 
