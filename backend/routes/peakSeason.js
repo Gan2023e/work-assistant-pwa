@@ -44,12 +44,12 @@ router.get('/summary', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          YEAR(s.日期) as year,
-          COUNT(DISTINCT s.卖家货号) as total_shipments,
-          SUM(s.数量) as total_shipped_quantity
+          YEAR(s.date) as year,
+          COUNT(DISTINCT s.vendor_sku) as total_shipments,
+          SUM(s.quantity) as total_shipped_quantity
         FROM supplier_shipments_peak_season s 
-        WHERE s.日期 IS NOT NULL
-        GROUP BY YEAR(s.日期)
+        WHERE s.date IS NOT NULL
+        GROUP BY YEAR(s.date)
       ) shipment_stats ON YEAR(p.upate_date) = shipment_stats.year
       LEFT JOIN (
         SELECT 
@@ -119,13 +119,13 @@ router.get('/sku-details', async (req, res) => {
       FROM peak_season_inventory_prep p
       LEFT JOIN (
         SELECT 
-          s1.卖家货号, 
-          SUM(s1.数量) as shipped_quantity
+          s1.vendor_sku, 
+          SUM(s1.quantity) as shipped_quantity
         FROM supplier_shipments_peak_season s1
-        WHERE s1.日期 IS NOT NULL 
-          ${year ? 'AND YEAR(s1.日期) = :year' : ''}
-        GROUP BY s1.卖家货号
-      ) s ON p.local_sku = s.卖家货号
+        WHERE s1.date IS NOT NULL 
+          ${year ? 'AND YEAR(s1.date) = :year' : ''}
+        GROUP BY s1.vendor_sku
+      ) s ON p.local_sku = s.vendor_sku
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       ORDER BY p.upate_date DESC, p.local_sku
       LIMIT :limit OFFSET :offset
@@ -290,9 +290,9 @@ router.get('/payment-details', async (req, res) => {
 router.get('/years', async (req, res) => {
   try {
     const years = await sequelize.query(`
-      SELECT DISTINCT YEAR(日期) as year 
+      SELECT DISTINCT YEAR(date) as year 
       FROM supplier_shipments_peak_season 
-      WHERE 日期 IS NOT NULL 
+      WHERE date IS NOT NULL 
       ORDER BY year DESC
     `, {
       type: sequelize.QueryTypes.SELECT
@@ -326,17 +326,17 @@ router.get('/daily-shipments', async (req, res) => {
     
     // 年份过滤
     if (year) {
-      whereCondition += ' AND YEAR(s.日期) = :year';
+      whereCondition += ' AND YEAR(s.date) = :year';
       replacements.year = year;
     }
     
     // 日期范围过滤
     if (startDate) {
-      whereCondition += ' AND s.日期 >= :startDate';
+      whereCondition += ' AND s.date >= :startDate';
       replacements.startDate = startDate;
     }
     if (endDate) {
-      whereCondition += ' AND s.日期 <= :endDate';
+      whereCondition += ' AND s.date <= :endDate';
       replacements.endDate = endDate;
     }
 
@@ -413,16 +413,16 @@ router.get('/daily-shipments-summary', async (req, res) => {
     const replacements = {};
     
     if (year) {
-      whereCondition += ' AND YEAR(s.日期) = :year';
+      whereCondition += ' AND YEAR(s.date) = :year';
       replacements.year = year;
     }
     
     if (startDate) {
-      whereCondition += ' AND s.日期 >= :startDate';
+      whereCondition += ' AND s.date >= :startDate';
       replacements.startDate = startDate;
     }
     if (endDate) {
-      whereCondition += ' AND s.日期 <= :endDate';
+      whereCondition += ' AND s.date <= :endDate';
       replacements.endDate = endDate;
     }
 
