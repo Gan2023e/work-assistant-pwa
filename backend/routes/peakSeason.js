@@ -1019,24 +1019,47 @@ router.put('/supplier-shipments/:id', async (req, res) => {
 router.delete('/supplier-shipments/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
-    console.log('删除供应商发货记录，ID:', id);
+    console.log('删除供应商发货记录，前端传入的ID:', id);
 
-    // 使用ORM方法删除记录
-    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
-      where: {
-        id: parseInt(id)
-      }
+    // 先查询要删除的记录是否存在
+    const existingRecord = await sequelize.query(`
+      SELECT * FROM supplier_shipments_peak_season 
+      ORDER BY date DESC, vendor_sku, sellercolorname 
+      LIMIT 1 OFFSET :offset
+    `, {
+      replacements: { offset: parseInt(id) - 1 },
+      type: sequelize.QueryTypes.SELECT
     });
 
-    console.log('删除结果:', deleteResult);
-
-    if (deleteResult === 0) {
+    if (existingRecord.length === 0) {
       return res.status(404).json({
         code: 1,
         message: '记录未找到'
       });
     }
+
+    const record = existingRecord[0];
+    console.log('找到要删除的记录:', record);
+
+    // 基于唯一的字段组合删除记录
+    const deleteResult = await sequelize.query(`
+      DELETE FROM supplier_shipments_peak_season 
+      WHERE date = :date 
+        AND vendor_sku = :vendor_sku 
+        AND sellercolorname = :sellercolorname 
+        AND quantity = :quantity
+      LIMIT 1
+    `, {
+      replacements: {
+        date: record.date,
+        vendor_sku: record.vendor_sku,
+        sellercolorname: record.sellercolorname,
+        quantity: record.quantity
+      },
+      type: sequelize.QueryTypes.DELETE
+    });
+
+    console.log('删除结果:', deleteResult);
 
     res.json({
       code: 0,
@@ -1065,33 +1088,69 @@ router.post('/supplier-shipments/batch-delete', async (req, res) => {
       });
     }
 
-    // 验证所有ID都是数字
-    const validIds = ids.filter(id => Number.isInteger(id) && id > 0);
-    if (validIds.length !== ids.length) {
-      return res.status(400).json({
-        code: 1,
-        message: '提供的ID格式无效'
-      });
+    console.log('批量删除供应商发货记录，前端传入的IDs:', ids);
+
+    let deletedCount = 0;
+    const errors = [];
+
+    // 逐个删除记录
+    for (const id of ids) {
+      try {
+        // 查询要删除的记录
+        const existingRecord = await sequelize.query(`
+          SELECT * FROM supplier_shipments_peak_season 
+          ORDER BY date DESC, vendor_sku, sellercolorname 
+          LIMIT 1 OFFSET :offset
+        `, {
+          replacements: { offset: parseInt(id) - 1 },
+          type: sequelize.QueryTypes.SELECT
+        });
+
+        if (existingRecord.length > 0) {
+          const record = existingRecord[0];
+          
+          // 删除记录
+          await sequelize.query(`
+            DELETE FROM supplier_shipments_peak_season 
+            WHERE date = :date 
+              AND vendor_sku = :vendor_sku 
+              AND sellercolorname = :sellercolorname 
+              AND quantity = :quantity
+            LIMIT 1
+          `, {
+            replacements: {
+              date: record.date,
+              vendor_sku: record.vendor_sku,
+              sellercolorname: record.sellercolorname,
+              quantity: record.quantity
+            },
+            type: sequelize.QueryTypes.DELETE
+          });
+
+          deletedCount++;
+          console.log(`成功删除记录 ID ${id}:`, record);
+        } else {
+          errors.push(`记录 ${id} 未找到`);
+        }
+      } catch (error) {
+        console.error(`删除记录 ${id} 失败:`, error);
+        errors.push(`删除记录 ${id} 失败: ${error.message}`);
+      }
     }
 
-    console.log('批量删除供应商发货记录，IDs:', validIds);
+    console.log(`批量删除完成，成功删除 ${deletedCount} 条记录`);
 
-    // 使用ORM方法批量删除记录
-    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
-      where: {
-        id: {
-          [Op.in]: validIds
-        }
-      }
-    });
-
-    console.log('批量删除结果:', deleteResult);
+    if (errors.length > 0) {
+      console.log('删除过程中的错误:', errors);
+    }
 
     res.json({
       code: 0,
-      message: `成功删除 ${deleteResult} 条记录`,
+      message: `批量删除完成，成功删除 ${deletedCount} 条记录`,
       data: {
-        deletedCount: deleteResult
+        deletedCount,
+        totalRequested: ids.length,
+        errors: errors.length > 0 ? errors : undefined
       }
     });
 
