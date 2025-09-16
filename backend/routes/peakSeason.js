@@ -1019,14 +1019,18 @@ router.put('/supplier-shipments/:id', async (req, res) => {
 router.delete('/supplier-shipments/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    console.log('删除供应商发货记录，ID:', id);
 
     const deleteResult = await sequelize.query(`
-      DELETE FROM \`​supplier_shipments_peak_season\` 
+      DELETE FROM supplier_shipments_peak_season 
       WHERE id = :id
     `, {
-      replacements: { id },
+      replacements: { id: parseInt(id) },
       type: sequelize.QueryTypes.DELETE
     });
+
+    console.log('删除结果:', deleteResult);
 
     if (deleteResult[1] === 0) {
       return res.status(404).json({
@@ -1071,13 +1075,17 @@ router.post('/supplier-shipments/batch-delete', async (req, res) => {
       });
     }
 
+    console.log('批量删除供应商发货记录，IDs:', validIds);
+
     const deleteResult = await sequelize.query(`
-      DELETE FROM \`​supplier_shipments_peak_season\` 
+      DELETE FROM supplier_shipments_peak_season 
       WHERE id IN (:ids)
     `, {
       replacements: { ids: validIds },
       type: sequelize.QueryTypes.DELETE
     });
+
+    console.log('批量删除结果:', deleteResult);
 
     res.json({
       code: 0,
