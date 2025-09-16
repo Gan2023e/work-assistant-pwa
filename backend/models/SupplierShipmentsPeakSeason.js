@@ -2,42 +2,36 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('./database');
 
 const SupplierShipmentsPeakSeason = sequelize.define('SupplierShipmentsPeakSeason', {
+  date: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+    comment: '日期'
+  },
+  vendor_sku: {
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    comment: '卖家货号'
+  },
+  sellercolorname: {
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    comment: '卖家颜色'
+  },
+  quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    comment: '数量'
+  },
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
-    comment: '序号ID',
-    field: 'id' // 映射到数据库的id字段
+    comment: '序号ID'
   },
-  日期: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-    comment: '日期',
-    field: 'date' // 映射到数据库的date字段
-  },
-  卖家货号: {
-    type: DataTypes.STRING(15),
-    allowNull: false,
-    comment: '卖家货号',
-    field: 'vendor_sku' // 映射到数据库的vendor_sku字段
-  },
-  卖家颜色: {
-    type: DataTypes.STRING(15),
-    allowNull: false,
-    comment: '卖家颜色',
-    field: 'sellercolorname' // 映射到数据库的sellercolorname字段
-  },
-  数量: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: '数量',
-    field: 'quantity' // 映射到数据库的quantity字段
-  },
-  录入日期: {
+  create_date: {
     type: DataTypes.DATE,
     allowNull: true,
-    comment: '录入日期',
-    field: 'create_date' // 映射到数据库的create_date字段
+    comment: '录入日期'
   }
 }, {
   tableName: 'supplier_shipments_peak_season',
@@ -47,10 +41,10 @@ const SupplierShipmentsPeakSeason = sequelize.define('SupplierShipmentsPeakSeaso
       fields: ['id']
     },
     {
-      fields: ['vendor_sku'] // 使用实际数据库字段名
+      fields: ['vendor_sku']
     },
     {
-      fields: ['date'] // 使用实际数据库字段名
+      fields: ['date']
     }
   ]
 });
