@@ -203,7 +203,6 @@ router.get('/supplier-stats', async (req, res) => {
     }
 
     // 获取付款统计
-    console.log('执行付款统计查询...');
     const supplierStats = await sequelize.query(`
       SELECT 
         bp.卖家名称 as supplier,
@@ -219,10 +218,8 @@ router.get('/supplier-stats', async (req, res) => {
       replacements,
       type: sequelize.QueryTypes.SELECT
     });
-    console.log(`付款统计查询完成，获得 ${supplierStats.length} 条记录`);
 
     // 获取备货总金额统计
-    console.log('执行备货总金额统计查询...');
     let prepAmountStats = [];
     try {
       prepAmountStats = await sequelize.query(`
@@ -240,14 +237,12 @@ router.get('/supplier-stats', async (req, res) => {
         replacements,
         type: sequelize.QueryTypes.SELECT
       });
-      console.log(`备货总金额统计查询完成，获得 ${prepAmountStats.length} 条记录`);
     } catch (prepError) {
       console.error('备货总金额统计查询失败:', prepError.message);
       // 如果此查询失败，使用空数组继续执行
     }
 
     // 获取已发金额统计
-    console.log('执行已发金额统计查询...');
     let shippedAmountStats = [];
     try {
       shippedAmountStats = await sequelize.query(`
@@ -267,7 +262,6 @@ router.get('/supplier-stats', async (req, res) => {
         replacements,
         type: sequelize.QueryTypes.SELECT
       });
-      console.log(`已发金额统计查询完成，获得 ${shippedAmountStats.length} 条记录`);
     } catch (shippedError) {
       console.error('已发金额统计查询失败:', shippedError.message);
       // 如果此查询失败，使用空数组继续执行
@@ -922,24 +916,10 @@ router.get('/supplier-shipments-summary', async (req, res) => {
     // 处理数据，生成汇总结构
     const summaryMap = new Map();
     const datesSet = new Set();
-
-    console.log('Raw shipment records count:', shipmentRecords.length);
-    console.log('Prep records count:', prepRecords.length);
     
     shipmentRecords.forEach((record, index) => {
       const date = record.date.split('T')[0]; // 只取日期部分
       const quantity = Number(record.quantity);
-      
-      // 调试日志 - 显示前几条记录的详细信息
-      if (index < 5) {
-        console.log(`Record ${index}:`, {
-          vendor_sku: record.vendor_sku,
-          sellercolorname: record.sellercolorname,
-          child_sku: record.child_sku,
-          quantity: quantity,
-          date: date
-        });
-      }
       
       let displaySku;
       if (record.child_sku) {
@@ -953,7 +933,6 @@ router.get('/supplier-shipments-summary', async (req, res) => {
         // 如果两个都是未知，则显示为"数据缺失"
         if (vendorSku === '未知货号' && colorName === '未知颜色') {
           displaySku = '数据缺失';
-          console.log(`Data missing record found: quantity=${quantity}, vendor_sku=${record.vendor_sku}, color=${record.sellercolorname}`);
         } else {
           displaySku = `${vendorSku}-${colorName}`;
         }
