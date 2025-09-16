@@ -327,12 +327,14 @@ const Purchase: React.FC = () => {
   // 批量设置相关状态
   const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([]);
   const [batchQtyPerBox, setBatchQtyPerBox] = useState<number | undefined>(undefined);
+  const [batchVendorSku, setBatchVendorSku] = useState<string>('');
   const [batchLoading, setBatchLoading] = useState(false);
   // 用于获取输入框值的refs
   const colorInputRef = useRef<any>(null);
   const sizeInputRef = useRef<any>(null);
   const qtyInputRef = useRef<any>(null);
   const priceInputRef = useRef<any>(null);
+  const vendorSkuInputRef = useRef<any>(null);
   
   // 利润推算器相关状态
   const [profitCalculatorVisible, setProfitCalculatorVisible] = useState(false);
@@ -3521,6 +3523,7 @@ const Purchase: React.FC = () => {
   const handleSellerSkuSave = async (skuid: string) => {
     try {
       const updateData = {
+        vendor_sku: vendorSkuInputRef.current?.input?.value || '',
         sellercolorname: colorInputRef.current?.input?.value || '',
         sellersizename: sizeInputRef.current?.input?.value || '',
         qty_per_box: parseInt(qtyInputRef.current?.input?.value) || 0,
@@ -3608,6 +3611,57 @@ const Purchase: React.FC = () => {
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchQtyPerBox(undefined);
+      } else {
+        message.error('批量设置失败');
+      }
+    } catch (error) {
+      console.error('批量设置失败:', error);
+      message.error('批量设置失败');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  const handleBatchSetVendorSku = async () => {
+    if (selectedSkuIds.length === 0) {
+      message.warning('请先选择要设置的子SKU');
+      return;
+    }
+    
+    if (!batchVendorSku.trim()) {
+      message.warning('请输入卖家货号');
+      return;
+    }
+
+    setBatchLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const skuId of selectedSkuIds) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendor_sku: batchVendorSku }),
+          });
+
+          if (res.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`更新SKU ${skuId} 失败:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        message.success(`批量设置成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
+        await loadSellerSkuData(currentParentSku);
+        setSelectedSkuIds([]);
+        setBatchVendorSku('');
       } else {
         message.error('批量设置失败');
       }
@@ -5908,38 +5962,63 @@ const Purchase: React.FC = () => {
           setSellerSkuModalVisible(false);
           setSelectedSkuIds([]);
           setBatchQtyPerBox(undefined);
+          setBatchVendorSku('');
         }}
-        width={1200}
+        width={1400}
+        style={{ height: '80vh' }}
+        bodyStyle={{ height: 'calc(80vh - 110px)', overflow: 'auto' }}
         footer={null}
       >
         {/* 批量操作区域 */}
         <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
-          <Space align="center">
-            <Text strong>批量设置:</Text>
-            <InputNumber
-              placeholder="单箱产品数量"
-              value={batchQtyPerBox}
-              onChange={(value) => setBatchQtyPerBox(value ?? undefined)}
-              min={1}
-              style={{ width: 120 }}
-            />
-            <Button
-              type="primary"
-              onClick={handleBatchSetQtyPerBox}
-              loading={batchLoading}
-              disabled={selectedSkuIds.length === 0}
-            >
-              设置数量 ({selectedSkuIds.length})
-            </Button>
-            <Button
-              onClick={() => {
-                setSelectedSkuIds([]);
-                setBatchQtyPerBox(undefined);
-              }}
-              disabled={selectedSkuIds.length === 0}
-            >
-              清除选择
-            </Button>
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space align="center" wrap>
+              <Text strong>批量设置数量:</Text>
+              <InputNumber
+                placeholder="单箱产品数量"
+                value={batchQtyPerBox}
+                onChange={(value) => setBatchQtyPerBox(value ?? undefined)}
+                min={1}
+                style={{ width: 120 }}
+              />
+              <Button
+                type="primary"
+                onClick={handleBatchSetQtyPerBox}
+                loading={batchLoading}
+                disabled={selectedSkuIds.length === 0}
+              >
+                设置数量 ({selectedSkuIds.length})
+              </Button>
+            </Space>
+            <Space align="center" wrap>
+              <Text strong>批量设置卖家货号:</Text>
+              <Input
+                placeholder="卖家货号"
+                value={batchVendorSku}
+                onChange={(e) => setBatchVendorSku(e.target.value)}
+                style={{ width: 200 }}
+              />
+              <Button
+                type="primary"
+                onClick={handleBatchSetVendorSku}
+                loading={batchLoading}
+                disabled={selectedSkuIds.length === 0}
+              >
+                设置货号 ({selectedSkuIds.length})
+              </Button>
+            </Space>
+            <Space align="center">
+              <Button
+                onClick={() => {
+                  setSelectedSkuIds([]);
+                  setBatchQtyPerBox(undefined);
+                  setBatchVendorSku('');
+                }}
+                disabled={selectedSkuIds.length === 0}
+              >
+                清除选择
+              </Button>
+            </Space>
           </Space>
         </div>
 
@@ -5949,7 +6028,7 @@ const Purchase: React.FC = () => {
           rowKey="skuid"
           size="small"
           pagination={false}
-          scroll={{ y: 500 }}
+          scroll={{ y: 400, x: 1200 }}
           rowSelection={{
             type: 'checkbox',
             selectedRowKeys: selectedSkuIds,
@@ -5986,7 +6065,20 @@ const Purchase: React.FC = () => {
               key: 'vendor_sku',
               width: 150,
               align: 'center',
-              render: (text: string) => text || '-',
+              render: (text: string, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Input 
+                    ref={vendorSkuInputRef}
+                    size="small" 
+                    defaultValue={record.vendor_sku || ''}
+                    key={`vendor_sku-${record.skuid}`}
+                    style={{ textAlign: 'center' }}
+                  />
+                ) : (
+                  <span>{text || '-'}</span>
+                );
+              },
             },
             {
               title: '卖家颜色名称',
