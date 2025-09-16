@@ -1022,17 +1022,16 @@ router.delete('/supplier-shipments/:id', async (req, res) => {
     
     console.log('删除供应商发货记录，ID:', id);
 
-    const deleteResult = await sequelize.query(`
-      DELETE FROM supplier_shipments_peak_season 
-      WHERE id = :id
-    `, {
-      replacements: { id: parseInt(id) },
-      type: sequelize.QueryTypes.DELETE
+    // 使用ORM方法删除记录
+    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
+      where: {
+        id: parseInt(id)
+      }
     });
 
     console.log('删除结果:', deleteResult);
 
-    if (deleteResult[1] === 0) {
+    if (deleteResult === 0) {
       return res.status(404).json({
         code: 1,
         message: '记录未找到'
@@ -1077,21 +1076,22 @@ router.post('/supplier-shipments/batch-delete', async (req, res) => {
 
     console.log('批量删除供应商发货记录，IDs:', validIds);
 
-    const deleteResult = await sequelize.query(`
-      DELETE FROM supplier_shipments_peak_season 
-      WHERE id IN (:ids)
-    `, {
-      replacements: { ids: validIds },
-      type: sequelize.QueryTypes.DELETE
+    // 使用ORM方法批量删除记录
+    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
+      where: {
+        id: {
+          [Op.in]: validIds
+        }
+      }
     });
 
     console.log('批量删除结果:', deleteResult);
 
     res.json({
       code: 0,
-      message: `成功删除 ${deleteResult[1]} 条记录`,
+      message: `成功删除 ${deleteResult} 条记录`,
       data: {
-        deletedCount: deleteResult[1]
+        deletedCount: deleteResult
       }
     });
 
