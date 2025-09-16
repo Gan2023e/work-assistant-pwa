@@ -69,8 +69,12 @@ interface SupplierStats {
   payment_count: number;
   total_payment_amount: number;
   payment_type: string;
+  prep_total_amount: number; // 备货总金额
+  shipped_total_amount: number; // 已发金额
   rowSpan?: number; // 用于表格合并行显示
   supplier_total?: number; // 供应商总付款金额
+  supplier_prep_total?: number; // 供应商备货总金额
+  supplier_shipped_total?: number; // 供应商已发金额
 }
 
 // 付款详细记录接口
@@ -102,6 +106,7 @@ interface ShipmentSummaryData {
   is_data_missing: boolean;
   dates: { [date: string]: number };
   total: number;
+  prep_quantity: number; // 备货合计
 }
 
 const PeakSeasonSummary: React.FC = () => {
@@ -759,6 +764,12 @@ const PeakSeasonSummary: React.FC = () => {
         return sum + amount;
       }, 0);
       
+      // 计算供应商备货总金额 - 从第一个item中获取（每个供应商的所有记录都有相同的备货总金额）
+      const supplierPrepTotal = parseFloat(items[0]?.prep_total_amount) || 0;
+      
+      // 计算供应商已发金额 - 从第一个item中获取（每个供应商的所有记录都有相同的已发金额）
+      const supplierShippedTotal = parseFloat(items[0]?.shipped_total_amount) || 0;
+      
       // 按付款类型优先级排序：预付款 -> 阶段付款 -> 尾款 -> 其他
       items.sort((a, b) => {
         const priorityA = getPaymentTypePriority(a.payment_type);
@@ -779,8 +790,12 @@ const PeakSeasonSummary: React.FC = () => {
           payment_count: parseInt(item.payment_count) || 0,
           total_payment_amount: parseFloat(item.total_payment_amount) || 0,
           payment_type: item.payment_type,
+          prep_total_amount: parseFloat(item.prep_total_amount) || 0, // 备货总金额
+          shipped_total_amount: parseFloat(item.shipped_total_amount) || 0, // 已发金额
           rowSpan: index === 0 ? items.length : 0, // 第一行显示rowSpan，其他行为0
-          supplier_total: supplierTotal // 每一行都保存供应商总额，但只在第一行显示
+          supplier_total: supplierTotal, // 每一行都保存供应商总付款金额，但只在第一行显示
+          supplier_prep_total: supplierPrepTotal, // 每一行都保存供应商备货总金额，但只在第一行显示
+          supplier_shipped_total: supplierShippedTotal // 每一行都保存供应商已发金额，但只在第一行显示
         });
       });
     });
@@ -827,6 +842,61 @@ const PeakSeasonSummary: React.FC = () => {
       const numAmount = parseFloat(String(amount)) || 0;
       return total + numAmount;
     }, 0);
+  };
+
+  // 计算备货总金额总计
+  const calculatePrepGrandTotal = (): number => {
+    const supplierPrepTotals = new Map<string, number>();
+    
+    // 收集每个供应商的备货总额，避免重复计算
+    supplierStats.forEach(item => {
+      if (item.rowSpan && item.rowSpan > 0) { // 只计算每个供应商的第一行（有rowSpan的行）
+        const key = `${item.supplier}-${item.year}`;
+        const total = parseFloat(String(item.supplier_prep_total)) || 0;
+        supplierPrepTotals.set(key, total);
+      }
+    });
+    
+    // 计算所有供应商的备货总额
+    return Array.from(supplierPrepTotals.values()).reduce((total, amount) => {
+      const numAmount = parseFloat(String(amount)) || 0;
+      return total + numAmount;
+    }, 0);
+  };
+
+  // 计算已发金额总计
+  const calculateShippedGrandTotal = (): number => {
+    const supplierShippedTotals = new Map<string, number>();
+    
+    // 收集每个供应商的已发金额，避免重复计算
+    supplierStats.forEach(item => {
+      if (item.rowSpan && item.rowSpan > 0) { // 只计算每个供应商的第一行（有rowSpan的行）
+        const key = `${item.supplier}-${item.year}`;
+        const total = parseFloat(String(item.supplier_shipped_total)) || 0;
+        supplierShippedTotals.set(key, total);
+      }
+    });
+    
+    // 计算所有供应商的已发金额总计
+    return Array.from(supplierShippedTotals.values()).reduce((total, amount) => {
+      const numAmount = parseFloat(String(amount)) || 0;
+      return total + numAmount;
+    }, 0);
+  };
+
+  // 计算备货剩余总计（备货总额 - 已发金额）
+  const calculatePrepRemainingGrandTotal = (): number => {
+    return calculatePrepGrandTotal() - calculateShippedGrandTotal();
+  };
+
+  // 计算已发已付差额总计（已发金额 - 已付总额）
+  const calculateShippedPaidDifferenceGrandTotal = (): number => {
+    return calculateShippedGrandTotal() - calculateGrandTotal();
+  };
+
+  // 计算剩余金额总计（备货总额 - 已付总额）
+  const calculateRemainingGrandTotal = (): number => {
+    return calculatePrepGrandTotal() - calculateGrandTotal();
   };
 
   // 点击付款单数时显示详细记录
@@ -1052,6 +1122,82 @@ const PeakSeasonSummary: React.FC = () => {
       }
     },
     {
+      title: <div style={{ textAlign: 'center' }}>备货总额</div>,
+      dataIndex: 'supplier_prep_total',
+      key: 'supplier_prep_total',
+      width: 140,
+      align: 'right',
+      render: (value, record) => {
+        const obj = {
+          children: record.rowSpan ? (
+            <Text strong style={{ color: '#52c41a' }}>
+              ¥{value?.toLocaleString() || '0'}
+            </Text>
+          ) : null,
+          props: {} as any,
+        };
+        if (record.rowSpan) {
+          obj.props.rowSpan = record.rowSpan;
+        } else {
+          obj.props.rowSpan = 0;
+        }
+        return obj;
+      }
+    },
+    {
+      title: <div style={{ textAlign: 'center' }}>备货剩余</div>,
+      key: 'prep_remaining_amount',
+      width: 140,
+      align: 'right',
+      render: (_, record) => {
+        const obj = {
+          children: record.rowSpan ? (() => {
+            const remaining = (record.supplier_prep_total || 0) - (record.supplier_shipped_total || 0);
+            return (
+              <Text 
+                strong 
+                style={{ 
+                  color: remaining > 0 ? '#f5222d' : remaining < 0 ? '#52c41a' : '#666666' 
+                }}
+              >
+                ¥{remaining.toLocaleString()}
+              </Text>
+            );
+          })() : null,
+          props: {} as any,
+        };
+        if (record.rowSpan) {
+          obj.props.rowSpan = record.rowSpan;
+        } else {
+          obj.props.rowSpan = 0;
+        }
+        return obj;
+      }
+    },
+    {
+      title: <div style={{ textAlign: 'center' }}>已发金额</div>,
+      dataIndex: 'supplier_shipped_total',
+      key: 'supplier_shipped_total',
+      width: 140,
+      align: 'right',
+      render: (value, record) => {
+        const obj = {
+          children: record.rowSpan ? (
+            <Text strong style={{ color: '#722ed1' }}>
+              ¥{value?.toLocaleString() || '0'}
+            </Text>
+          ) : null,
+          props: {} as any,
+        };
+        if (record.rowSpan) {
+          obj.props.rowSpan = record.rowSpan;
+        } else {
+          obj.props.rowSpan = 0;
+        }
+        return obj;
+      }
+    },
+    {
       title: '付款类型',
       dataIndex: 'payment_type',
       key: 'payment_type',
@@ -1085,7 +1231,7 @@ const PeakSeasonSummary: React.FC = () => {
       )
     },
     {
-      title: '付款金额',
+      title: <div style={{ textAlign: 'center' }}>付款金额</div>,
       dataIndex: 'total_payment_amount',
       key: 'total_payment_amount',
       width: 140,
@@ -1093,7 +1239,7 @@ const PeakSeasonSummary: React.FC = () => {
       render: (value) => value ? `¥${value.toLocaleString()}` : '-'
     },
     {
-      title: '总额',
+      title: <div style={{ textAlign: 'center' }}>已付总额</div>,
       dataIndex: 'supplier_total',
       key: 'supplier_total',
       width: 140,
@@ -1105,6 +1251,36 @@ const PeakSeasonSummary: React.FC = () => {
               ¥{value?.toLocaleString() || '-'}
             </Text>
           ) : null,
+          props: {} as any,
+        };
+        if (record.rowSpan) {
+          obj.props.rowSpan = record.rowSpan;
+        } else {
+          obj.props.rowSpan = 0;
+        }
+        return obj;
+      }
+    },
+    {
+      title: <div style={{ textAlign: 'center' }}>已发已付差额</div>,
+      key: 'shipped_paid_difference',
+      width: 140,
+      align: 'right',
+      render: (_, record) => {
+        const obj = {
+          children: record.rowSpan ? (() => {
+                         const difference = (record.supplier_shipped_total || 0) - (record.supplier_total || 0);
+             return (
+               <Text 
+                 strong 
+                 style={{ 
+                   color: difference !== 0 ? '#f5222d' : '#52c41a' 
+                 }}
+               >
+                 ¥{difference.toLocaleString()}
+               </Text>
+             );
+          })() : null,
           props: {} as any,
         };
         if (record.rowSpan) {
@@ -1447,6 +1623,19 @@ const PeakSeasonSummary: React.FC = () => {
             return <Text style={{ color: '#fa8c16', fontStyle: 'italic' }}>{text}</Text>;
           }
         }
+      },
+      {
+        title: '备货合计',
+        dataIndex: 'prep_quantity',
+        key: 'prep_quantity',
+        width: 100,
+        align: 'center',
+        fixed: 'left',
+        render: (value) => (
+          <Text strong style={{ color: '#1890ff' }}>
+            {(value || 0).toLocaleString()}
+          </Text>
+        )
       }
     ];
 
@@ -1470,15 +1659,37 @@ const PeakSeasonSummary: React.FC = () => {
       });
     });
 
-    // 添加合计列
+    // 添加发货合计列
     columns.push({
-      title: '合计',
+      title: '发货合计',
       dataIndex: 'total',
       key: 'total',
       width: 100,
       align: 'center',
       fixed: 'right',
       render: (value) => <Text strong style={{ color: '#f5222d' }}>{value.toLocaleString()}</Text>
+    });
+
+    // 添加剩余合计列
+    columns.push({
+      title: '剩余合计',
+      key: 'remaining',
+      width: 100,
+      align: 'center',
+      fixed: 'right',
+      render: (_, record) => {
+        const remaining = (record.prep_quantity || 0) - (record.total || 0);
+        return (
+          <Text 
+            strong 
+            style={{ 
+              color: remaining > 0 ? '#52c41a' : remaining < 0 ? '#f5222d' : '#666666' 
+            }}
+          >
+            {remaining.toLocaleString()}
+          </Text>
+        );
+      }
     });
 
     return columns;
@@ -1682,12 +1893,47 @@ const PeakSeasonSummary: React.FC = () => {
                 bordered
                 summary={() => (
                   <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
-                    <Table.Summary.Cell index={0} colSpan={5} align="center">
-                      <Text strong style={{ fontSize: '16px' }}>全部供应商总计</Text>
+                    <Table.Summary.Cell index={0} colSpan={2} align="center">
+                      <Text strong style={{ fontSize: '16px' }}>总计</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="center">
+                    <Table.Summary.Cell index={1} align="right">
+                      <Text strong style={{ fontSize: '16px', color: '#52c41a' }}>
+                        ¥{calculatePrepGrandTotal().toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <Text 
+                        strong 
+                        style={{ 
+                          fontSize: '16px',
+                          color: calculatePrepRemainingGrandTotal() > 0 ? '#f5222d' : calculatePrepRemainingGrandTotal() < 0 ? '#52c41a' : '#666666'
+                        }}
+                      >
+                        ¥{calculatePrepRemainingGrandTotal().toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">
+                      <Text strong style={{ fontSize: '16px', color: '#722ed1' }}>
+                        ¥{calculateShippedGrandTotal().toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} colSpan={3} align="center">
+                      <Text type="secondary" style={{ fontSize: '14px' }}>明细汇总</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="right">
                       <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
                         ¥{calculateGrandTotal().toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="right">
+                      <Text 
+                        strong 
+                        style={{ 
+                          fontSize: '16px',
+                          color: calculateShippedPaidDifferenceGrandTotal() !== 0 ? '#f5222d' : '#52c41a'
+                        }}
+                      >
+                        ¥{calculateShippedPaidDifferenceGrandTotal().toLocaleString()}
                       </Text>
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
@@ -1896,15 +2142,17 @@ const PeakSeasonSummary: React.FC = () => {
               dataSource={shipmentSummary}
               rowKey="child_sku"
               loading={loading}
-              scroll={{ x: Math.max(300 + summaryDates.length * 100, 800), y: 500 }}
+              scroll={{ x: Math.max(500 + summaryDates.length * 100, 1000), y: 500 }}
               pagination={false}
               size="small"
               bordered
               sticky={{ offsetHeader: 64, offsetSummary: 0 }}
               summary={() => {
-                // 计算每日总计和整体总计
+                // 计算每日总计、备货合计、发货合计和剩余合计
                 const dailyTotals: { [date: string]: number } = {};
                 let grandTotal = 0;
+                let prepGrandTotal = 0;
+                let remainingGrandTotal = 0;
                 
                 summaryDates.forEach(date => {
                   dailyTotals[date] = 0;
@@ -1916,23 +2164,42 @@ const PeakSeasonSummary: React.FC = () => {
                     dailyTotals[date] += qty;
                   });
                   grandTotal += record.total;
+                  prepGrandTotal += (record.prep_quantity || 0);
                 });
+                
+                remainingGrandTotal = prepGrandTotal - grandTotal;
                 
                 return (
                   <Table.Summary.Row style={{ backgroundColor: '#fafafa', position: 'sticky', bottom: 0, zIndex: 1 }}>
                     <Table.Summary.Cell index={0}>
-                      <Text strong style={{ fontSize: '14px' }}>日期合计</Text>
+                      <Text strong style={{ fontSize: '14px' }}>汇总合计</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1}>
+                      <Text strong style={{ color: '#1890ff', fontSize: '14px' }}>
+                        {prepGrandTotal.toLocaleString()}
+                      </Text>
                     </Table.Summary.Cell>
                     {summaryDates.map((date, index) => (
-                      <Table.Summary.Cell key={date} index={index + 1}>
+                      <Table.Summary.Cell key={date} index={index + 2}>
                         <Text strong style={{ color: '#1890ff', fontSize: '14px' }}>
                           {dailyTotals[date].toLocaleString()}
                         </Text>
                       </Table.Summary.Cell>
                     ))}
-                    <Table.Summary.Cell index={summaryDates.length + 1}>
+                    <Table.Summary.Cell index={summaryDates.length + 2}>
                       <Text strong style={{ color: '#f5222d', fontSize: '14px' }}>
                         {grandTotal.toLocaleString()}
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={summaryDates.length + 3}>
+                      <Text 
+                        strong 
+                        style={{ 
+                          color: remainingGrandTotal > 0 ? '#52c41a' : remainingGrandTotal < 0 ? '#f5222d' : '#666666',
+                          fontSize: '14px'
+                        }}
+                      >
+                        {remainingGrandTotal.toLocaleString()}
                       </Text>
                     </Table.Summary.Cell>
                   </Table.Summary.Row>

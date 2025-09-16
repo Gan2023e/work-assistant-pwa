@@ -185,19 +185,22 @@ router.get('/sku-details', async (req, res) => {
   }
 });
 
-// 获取供应商统计（这个查询是正确的，保持不变）
+// 获取供应商统计（包含备货总金额计算）
 router.get('/supplier-stats', async (req, res) => {
   try {
     const { year } = req.query;
     
     let whereCondition = '';
+    let prepWhereCondition = '';
     const replacements = {};
     
     if (year) {
       whereCondition += ' AND YEAR(bp.付款时间) = :year';
+      prepWhereCondition += ' AND YEAR(prep.upate_date) = :year';
       replacements.year = year;
     }
 
+    // 获取付款统计
     const supplierStats = await sequelize.query(`
       SELECT 
         bp.卖家名称 as supplier,
@@ -214,9 +217,71 @@ router.get('/supplier-stats', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
+    // 获取备货总金额统计
+    const prepAmountStats = await sequelize.query(`
+      SELECT 
+        pw.seller_name as supplier,
+        YEAR(prep.upate_date) as year,
+        CAST(SUM(prep.qty * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as prep_total_amount
+      FROM peak_season_inventory_prep prep
+      LEFT JOIN sellerinventory_sku sis ON prep.local_sku = sis.child_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE prep.upate_date IS NOT NULL 
+        AND pw.seller_name IS NOT NULL ${prepWhereCondition}
+      GROUP BY pw.seller_name, YEAR(prep.upate_date)
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 获取已发金额统计
+    const shippedAmountStats = await sequelize.query(`
+      SELECT 
+        pw.seller_name as supplier,
+        YEAR(s.date) as year,
+        CAST(SUM(s.quantity * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as shipped_total_amount
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL 
+        AND s.quantity IS NOT NULL 
+        AND s.quantity > 0
+        AND pw.seller_name IS NOT NULL ${whereCondition}
+      GROUP BY pw.seller_name, YEAR(s.date)
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 创建备货总金额映射
+    const prepAmountMap = new Map();
+    prepAmountStats.forEach(item => {
+      const key = `${item.supplier}-${item.year}`;
+      prepAmountMap.set(key, parseFloat(item.prep_total_amount) || 0);
+    });
+
+    // 创建已发金额映射
+    const shippedAmountMap = new Map();
+    shippedAmountStats.forEach(item => {
+      const key = `${item.supplier}-${item.year}`;
+      shippedAmountMap.set(key, parseFloat(item.shipped_total_amount) || 0);
+    });
+
+    // 合并数据，为每个供应商付款记录添加备货总金额和已发金额
+    const enhancedStats = supplierStats.map(item => {
+      const key = `${item.supplier}-${item.year}`;
+      const prepAmount = prepAmountMap.get(key) || 0;
+      const shippedAmount = shippedAmountMap.get(key) || 0;
+      return {
+        ...item,
+        prep_total_amount: prepAmount,
+        shipped_total_amount: shippedAmount
+      };
+    });
+
     res.json({
       code: 0,
-      data: supplierStats
+      data: enhancedStats
     });
     
   } catch (error) {
@@ -807,11 +872,39 @@ router.get('/supplier-shipments-summary', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
+    // 获取备货数据 - 按local_sku汇总
+    let prepWhereCondition = '';
+    const prepReplacements = {};
+    
+    if (year) {
+      prepWhereCondition += ' WHERE YEAR(upate_date) = :year';
+      prepReplacements.year = year;
+    }
+
+    const prepRecords = await sequelize.query(`
+      SELECT 
+        local_sku,
+        SUM(qty) as prep_quantity
+      FROM peak_season_inventory_prep
+      ${prepWhereCondition}
+      GROUP BY local_sku
+    `, {
+      replacements: prepReplacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 创建备货数据映射 (local_sku -> prep_quantity)
+    const prepMap = new Map();
+    prepRecords.forEach(record => {
+      prepMap.set(record.local_sku, Number(record.prep_quantity || 0));
+    });
+
     // 处理数据，生成汇总结构
     const summaryMap = new Map();
     const datesSet = new Set();
 
     console.log('Raw shipment records count:', shipmentRecords.length);
+    console.log('Prep records count:', prepRecords.length);
     
     shipmentRecords.forEach((record, index) => {
       const date = record.date.split('T')[0]; // 只取日期部分
@@ -849,6 +942,13 @@ router.get('/supplier-shipments-summary', async (req, res) => {
       datesSet.add(date);
       
       if (!summaryMap.has(displaySku)) {
+        // 获取对应的备货数量 - 通过child_sku对应local_sku查找
+        let prepQuantity = 0;
+        if (record.child_sku) {
+          // 如果有真实的child_sku，直接用child_sku作为local_sku查找备货数量
+          prepQuantity = prepMap.get(record.child_sku) || 0;
+        }
+        
         summaryMap.set(displaySku, {
           child_sku: displaySku,
           is_real_child_sku: !!record.child_sku, // 标记是否为真正的子SKU
@@ -856,7 +956,8 @@ router.get('/supplier-shipments-summary', async (req, res) => {
                           (!record.sellercolorname || record.sellercolorname === 'None') && 
                           !record.child_sku, // 标记是否为数据缺失
           dates: {},
-          total: 0
+          total: 0,
+          prep_quantity: prepQuantity // 备货合计
         });
       }
       
