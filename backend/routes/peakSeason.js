@@ -1050,4 +1050,51 @@ router.delete('/supplier-shipments/:id', async (req, res) => {
   }
 });
 
+// 批量删除供应商发货记录
+router.post('/supplier-shipments/batch-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供有效的记录ID列表'
+      });
+    }
+
+    // 验证所有ID都是数字
+    const validIds = ids.filter(id => Number.isInteger(id) && id > 0);
+    if (validIds.length !== ids.length) {
+      return res.status(400).json({
+        code: 1,
+        message: '提供的ID格式无效'
+      });
+    }
+
+    const deleteResult = await sequelize.query(`
+      DELETE FROM \`​supplier_shipments_peak_season\` 
+      WHERE id IN (:ids)
+    `, {
+      replacements: { ids: validIds },
+      type: sequelize.QueryTypes.DELETE
+    });
+
+    res.json({
+      code: 0,
+      message: `成功删除 ${deleteResult[1]} 条记录`,
+      data: {
+        deletedCount: deleteResult[1]
+      }
+    });
+
+  } catch (error) {
+    console.error('批量删除供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

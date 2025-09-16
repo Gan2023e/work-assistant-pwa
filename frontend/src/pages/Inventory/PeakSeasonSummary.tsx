@@ -155,6 +155,9 @@ const PeakSeasonSummary: React.FC = () => {
   const [editingCell, setEditingCell] = useState<{recordId: number, field: string} | null>(null);
   const [editingValue, setEditingValue] = useState<any>('');
 
+  // 选中行状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+
   // 供应商发货汇总状态
   const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummaryData[]>([]);
   const [summaryDates, setSummaryDates] = useState<string[]>([]);
@@ -469,6 +472,8 @@ const PeakSeasonSummary: React.FC = () => {
       
       if (data.code === 0) {
         message.success('删除成功');
+        // 清空选中状态
+        setSelectedRowKeys([]);
         fetchSupplierShipments(shipmentPagination.current);
       } else {
         message.error(data.message);
@@ -476,6 +481,39 @@ const PeakSeasonSummary: React.FC = () => {
     } catch (error) {
       console.error('删除失败:', error);
       message.error('删除失败');
+    }
+  };
+
+  // 批量删除记录
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的记录');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/batch-delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ids: selectedRowKeys
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
+        setSelectedRowKeys([]);
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      message.error('批量删除失败');
     }
   };
 
@@ -1776,6 +1814,22 @@ const PeakSeasonSummary: React.FC = () => {
                 >
                   刷新
                 </Button>
+                <Popconfirm
+                  title={`确定要删除选中的 ${selectedRowKeys.length} 条记录吗？`}
+                  onConfirm={handleBatchDelete}
+                  okText="确定"
+                  cancelText="取消"
+                  disabled={selectedRowKeys.length === 0}
+                >
+                  <Button
+                    type="primary"
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={selectedRowKeys.length === 0}
+                  >
+                    批量删除 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
+                  </Button>
+                </Popconfirm>
               </Space>
             </div>
             <Table
@@ -1791,6 +1845,12 @@ const PeakSeasonSummary: React.FC = () => {
                 showTotal: (total, range) => 
                   `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
                 onChange: fetchSupplierShipments
+              }}
+              rowSelection={{
+                selectedRowKeys,
+                onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as number[]),
+                type: 'checkbox',
+                fixed: true,
               }}
               size="small"
             />
