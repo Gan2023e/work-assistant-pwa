@@ -559,7 +559,7 @@ router.get('/supplier-shipments-filters', async (req, res) => {
           WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
           ELSE pw.seller_name 
         END as supplier_name
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL
@@ -574,7 +574,7 @@ router.get('/supplier-shipments-filters', async (req, res) => {
     // 获取年份
     const yearsQuery = `
       SELECT DISTINCT YEAR(s.date) as year
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       WHERE s.date IS NOT NULL
       ORDER BY year DESC
     `;
@@ -582,7 +582,7 @@ router.get('/supplier-shipments-filters', async (req, res) => {
     // 获取卖家货号（根据供应商筛选）
     let vendorSkuQuery = `
       SELECT DISTINCT s.vendor_sku
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL AND s.vendor_sku IS NOT NULL AND s.vendor_sku != ''
@@ -603,7 +603,7 @@ router.get('/supplier-shipments-filters', async (req, res) => {
     // 获取颜色（根据供应商和卖家货号筛选）
     let colorsQuery = `
       SELECT DISTINCT s.sellercolorname as color
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL AND s.sellercolorname IS NOT NULL AND s.sellercolorname != ''
@@ -726,7 +726,7 @@ router.get('/supplier-shipments', async (req, res) => {
           WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
           ELSE pw.seller_name 
         END as supplier_name
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL ${whereCondition}
@@ -740,7 +740,7 @@ router.get('/supplier-shipments', async (req, res) => {
     // 获取总数
     const totalResult = await sequelize.query(`
       SELECT COUNT(*) as total
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE s.date IS NOT NULL ${whereCondition}
@@ -795,7 +795,7 @@ router.get('/supplier-shipments-summary', async (req, res) => {
         s.sellercolorname,
         sis.child_sku,
         s.quantity
-      FROM \`​supplier_shipments_peak_season\` s
+      FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       WHERE s.date IS NOT NULL 
         AND s.quantity IS NOT NULL 
@@ -920,7 +920,7 @@ router.put('/supplier-shipments/:id', async (req, res) => {
     try {
       // 首先检查记录是否存在
       const existingRecord = await sequelize.query(`
-        SELECT id FROM \`​supplier_shipments_peak_season\` WHERE id = :id
+        SELECT id FROM \`supplier_shipments_peak_season\` WHERE id = :id
       `, {
         replacements: { id },
         type: sequelize.QueryTypes.SELECT,
@@ -937,7 +937,7 @@ router.put('/supplier-shipments/:id', async (req, res) => {
 
       // 更新基本发货记录信息
       await sequelize.query(`
-        UPDATE \`​supplier_shipments_peak_season\` 
+        UPDATE \`supplier_shipments_peak_season\` 
         SET 
           date = :date,
           vendor_sku = :vendor_sku,
@@ -958,7 +958,7 @@ router.put('/supplier-shipments/:id', async (req, res) => {
         if (!parentSku) {
           const currentRecord = await sequelize.query(`
             SELECT sis.parent_sku
-            FROM \`​supplier_shipments_peak_season\` s
+            FROM \`supplier_shipments_peak_season\` s
             LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
             WHERE s.id = :id
           `, {
