@@ -1019,58 +1019,24 @@ router.put('/supplier-shipments/:id', async (req, res) => {
 router.delete('/supplier-shipments/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
-    console.log('删除供应商发货记录，ID:', id);
 
-    // 首先用原生SQL查询检查记录是否存在
-    const existingRecord = await sequelize.query(`
-      SELECT * FROM supplier_shipments_peak_season WHERE id = :id LIMIT 1
-    `, {
-      replacements: { id: parseInt(id) },
-      type: sequelize.QueryTypes.SELECT
+    // 使用ORM方法删除记录
+    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
+      where: {
+        id: parseInt(id)
+      }
     });
 
-    console.log('查询到的记录:', existingRecord);
-
-    if (existingRecord.length === 0) {
-      console.log('记录不存在，尝试查看表结构');
-      
-      // 查看表结构
-      const tableStructure = await sequelize.query(`
-        DESCRIBE supplier_shipments_peak_season
-      `, {
-        type: sequelize.QueryTypes.SELECT
-      });
-      
-      console.log('表结构:', tableStructure);
-      
+    if (deleteResult === 0) {
       return res.status(404).json({
         code: 1,
-        message: '记录未找到',
-        debug: {
-          searchId: id,
-          tableStructure: tableStructure
-        }
+        message: '记录未找到'
       });
     }
 
-    // 使用原生SQL删除记录
-    const deleteResult = await sequelize.query(`
-      DELETE FROM supplier_shipments_peak_season WHERE id = :id
-    `, {
-      replacements: { id: parseInt(id) },
-      type: sequelize.QueryTypes.DELETE
-    });
-
-    console.log('原生SQL删除结果:', deleteResult);
-
     res.json({
       code: 0,
-      message: '删除成功',
-      debug: {
-        deletedRecord: existingRecord[0],
-        deleteResult: deleteResult
-      }
+      message: '删除成功'
     });
 
   } catch (error) {
@@ -1104,46 +1070,20 @@ router.post('/supplier-shipments/batch-delete', async (req, res) => {
       });
     }
 
-    console.log('批量删除供应商发货记录，IDs:', validIds);
-
-    // 首先检查有多少记录存在
-    const existingRecords = await sequelize.query(`
-      SELECT id FROM supplier_shipments_peak_season WHERE id IN (:ids)
-    `, {
-      replacements: { ids: validIds },
-      type: sequelize.QueryTypes.SELECT
-    });
-
-    console.log('找到的记录:', existingRecords);
-
-    if (existingRecords.length === 0) {
-      return res.status(404).json({
-        code: 1,
-        message: '没有找到要删除的记录',
-        debug: {
-          requestIds: validIds,
-          foundCount: 0
+    // 使用ORM方法批量删除记录
+    const deleteResult = await SupplierShipmentsPeakSeason.destroy({
+      where: {
+        id: {
+          [Op.in]: validIds
         }
-      });
-    }
-
-    // 使用原生SQL批量删除记录
-    const deleteResult = await sequelize.query(`
-      DELETE FROM supplier_shipments_peak_season WHERE id IN (:ids)
-    `, {
-      replacements: { ids: validIds },
-      type: sequelize.QueryTypes.DELETE
+      }
     });
-
-    console.log('批量删除结果:', deleteResult);
 
     res.json({
       code: 0,
-      message: `成功删除 ${existingRecords.length} 条记录`,
+      message: `成功删除 ${deleteResult} 条记录`,
       data: {
-        deletedCount: existingRecords.length,
-        requestedCount: validIds.length,
-        deletedIds: existingRecords.map(r => r.id)
+        deletedCount: deleteResult
       }
     });
 
