@@ -88,6 +88,7 @@ interface SellerInventorySkuRecord {
   skuid: string;
   parent_sku: string;
   child_sku: string;
+  vendor_sku?: string;
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
@@ -5978,6 +5979,14 @@ const Purchase: React.FC = () => {
               key: 'child_sku',
               width: 150,
               align: 'center',
+            },
+            {
+              title: '卖家货号',
+              dataIndex: 'vendor_sku',
+              key: 'vendor_sku',
+              width: 150,
+              align: 'center',
+              render: (text: string) => text || '-',
             },
             {
               title: '卖家颜色名称',
