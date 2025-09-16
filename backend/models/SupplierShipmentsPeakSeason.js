@@ -47,10 +47,10 @@ const SupplierShipmentsPeakSeason = sequelize.define('SupplierShipmentsPeakSeaso
       fields: ['id']
     },
     {
-      fields: ['卖家货号']
+      fields: ['vendor_sku'] // 使用实际数据库字段名
     },
     {
-      fields: ['日期']
+      fields: ['date'] // 使用实际数据库字段名
     }
   ]
 });
