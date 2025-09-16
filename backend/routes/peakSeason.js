@@ -192,15 +192,18 @@ router.get('/supplier-stats', async (req, res) => {
     
     let whereCondition = '';
     let prepWhereCondition = '';
+    let shippedWhereCondition = '';
     const replacements = {};
     
     if (year) {
       whereCondition += ' AND YEAR(bp.付款时间) = :year';
       prepWhereCondition += ' AND YEAR(prep.upate_date) = :year';
+      shippedWhereCondition += ' AND YEAR(s.date) = :year';
       replacements.year = year;
     }
 
     // 获取付款统计
+    console.log('执行付款统计查询...');
     const supplierStats = await sequelize.query(`
       SELECT 
         bp.卖家名称 as supplier,
@@ -216,42 +219,59 @@ router.get('/supplier-stats', async (req, res) => {
       replacements,
       type: sequelize.QueryTypes.SELECT
     });
+    console.log(`付款统计查询完成，获得 ${supplierStats.length} 条记录`);
 
     // 获取备货总金额统计
-    const prepAmountStats = await sequelize.query(`
-      SELECT 
-        pw.seller_name as supplier,
-        YEAR(prep.upate_date) as year,
-        CAST(SUM(prep.qty * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as prep_total_amount
-      FROM peak_season_inventory_prep prep
-      LEFT JOIN sellerinventory_sku sis ON prep.local_sku = sis.child_sku
-      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE prep.upate_date IS NOT NULL 
-        AND pw.seller_name IS NOT NULL ${prepWhereCondition}
-      GROUP BY pw.seller_name, YEAR(prep.upate_date)
-    `, {
-      replacements,
-      type: sequelize.QueryTypes.SELECT
-    });
+    console.log('执行备货总金额统计查询...');
+    let prepAmountStats = [];
+    try {
+      prepAmountStats = await sequelize.query(`
+        SELECT 
+          pw.seller_name as supplier,
+          YEAR(prep.upate_date) as year,
+          CAST(SUM(prep.qty * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as prep_total_amount
+        FROM peak_season_inventory_prep prep
+        LEFT JOIN sellerinventory_sku sis ON prep.local_sku = sis.child_sku
+        LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+        WHERE prep.upate_date IS NOT NULL 
+          AND pw.seller_name IS NOT NULL ${prepWhereCondition}
+        GROUP BY pw.seller_name, YEAR(prep.upate_date)
+      `, {
+        replacements,
+        type: sequelize.QueryTypes.SELECT
+      });
+      console.log(`备货总金额统计查询完成，获得 ${prepAmountStats.length} 条记录`);
+    } catch (prepError) {
+      console.error('备货总金额统计查询失败:', prepError.message);
+      // 如果此查询失败，使用空数组继续执行
+    }
 
     // 获取已发金额统计
-    const shippedAmountStats = await sequelize.query(`
-      SELECT 
-        pw.seller_name as supplier,
-        YEAR(s.date) as year,
-        CAST(SUM(s.quantity * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as shipped_total_amount
-      FROM supplier_shipments_peak_season s
-      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
-      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
-      WHERE s.date IS NOT NULL 
-        AND s.quantity IS NOT NULL 
-        AND s.quantity > 0
-        AND pw.seller_name IS NOT NULL ${whereCondition}
-      GROUP BY pw.seller_name, YEAR(s.date)
-    `, {
-      replacements,
-      type: sequelize.QueryTypes.SELECT
-    });
+    console.log('执行已发金额统计查询...');
+    let shippedAmountStats = [];
+    try {
+      shippedAmountStats = await sequelize.query(`
+        SELECT 
+          pw.seller_name as supplier,
+          YEAR(s.date) as year,
+          CAST(SUM(s.quantity * COALESCE(sis.price, 0)) as DECIMAL(16,2)) as shipped_total_amount
+        FROM supplier_shipments_peak_season s
+        LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+        LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+        WHERE s.date IS NOT NULL 
+          AND s.quantity IS NOT NULL 
+          AND s.quantity > 0
+          AND pw.seller_name IS NOT NULL ${shippedWhereCondition}
+        GROUP BY pw.seller_name, YEAR(s.date)
+      `, {
+        replacements,
+        type: sequelize.QueryTypes.SELECT
+      });
+      console.log(`已发金额统计查询完成，获得 ${shippedAmountStats.length} 条记录`);
+    } catch (shippedError) {
+      console.error('已发金额统计查询失败:', shippedError.message);
+      // 如果此查询失败，使用空数组继续执行
+    }
 
     // 创建备货总金额映射
     const prepAmountMap = new Map();
