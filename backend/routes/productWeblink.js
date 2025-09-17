@@ -1955,60 +1955,33 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
       return res.status(400).json({ message: '缺少文件名参数' });
     }
 
-    // 检查OSS配置
-    const { checkOSSConfig, downloadTemplateFromOSS } = require('../utils/oss');
-    if (!checkOSSConfig()) {
-      console.error('❌ OSS配置不完整，无法下载文件');
-      return res.status(500).json({ message: 'OSS配置不完整，请联系管理员' });
-    }
+    const { downloadTemplateFromOSS } = require('../utils/oss');
     
-    console.log(`🔄 开始从OSS下载文件: ${objectName}`);
     const result = await downloadTemplateFromOSS(objectName);
     
     if (!result.success) {
-      console.error(`❌ OSS下载失败:`, {
-        objectName,
-        message: result.message,
-        error: result.error
-      });
-      return res.status(404).json({ 
-        message: result.message || '模板文件不存在',
-        error: result.error
-      });
+      console.error(`❌ 下载失败: ${result.message}`);
+      return res.status(404).json({ message: result.message || '模板文件不存在' });
     }
 
     console.log(`📤 准备发送文件: ${result.fileName} (${result.size} 字节)`);
     
-    // 验证下载内容
-    if (!result.content || result.size === 0) {
-      console.error('❌ 下载的文件内容为空');
-      return res.status(500).json({ message: '文件内容为空' });
+    // 设置响应头，使用更安全的文件名编码
+    const safeFileName = encodeURIComponent(result.fileName);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${safeFileName}`);
+    res.setHeader('Content-Length', result.size);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+    
+    // 发送文件内容
+    if (Buffer.isBuffer(result.content)) {
+      res.end(result.content);
+    } else {
+      res.end(Buffer.from(result.content));
     }
     
-    try {
-      // 设置响应头，使用更安全的文件名编码
-      const safeFileName = encodeURIComponent(result.fileName);
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${safeFileName}`);
-      res.setHeader('Content-Length', result.size);
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Pragma', 'no-cache');
-      
-      // 发送文件内容
-      if (Buffer.isBuffer(result.content)) {
-        res.end(result.content);
-      } else {
-        res.end(Buffer.from(result.content));
-      }
-      
-      console.log(`✅ 文件下载完成: ${result.fileName}`);
-      
-    } catch (sendError) {
-      console.error('❌ 发送文件时出错:', sendError);
-      if (!res.headersSent) {
-        res.status(500).json({ message: '文件传输失败: ' + sendError.message });
-      }
-    }
+    console.log(`✅ 文件下载完成: ${result.fileName}`);
 
   } catch (error) {
     console.error('❌ 下载亚马逊模板失败:', error);
