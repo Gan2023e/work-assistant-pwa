@@ -3186,6 +3186,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         if (actualCountry === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
         }
+        // 阿联酋站点特殊处理：liter转换为Liters
+        if (actualCountry === 'AE' && storageVolumeUnit.toLowerCase() === 'liter') {
+          storageVolumeUnit = 'Liters';
+        }
         data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
       }
       if (storageVolumeCol !== -1) data[currentRowIndex][storageVolumeCol] = recordData.storage_volume || '';
@@ -4122,6 +4126,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
         if (country === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
         }
+        // 阿联酋站点特殊处理：liter转换为Liters
+        if (country === 'AE' && storageVolumeUnit.toLowerCase() === 'liter') {
+          storageVolumeUnit = 'Liters';
+        }
         updatedData[rowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
       }
       if (storageVolumeCol !== -1) {
@@ -4918,6 +4926,10 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         // 英国站点特殊处理：Liters转换为liter
         if (targetCountry === 'UK' && storageVolumeUnit === 'Liters') {
           storageVolumeUnit = 'liter';
+        }
+        // 阿联酋站点特殊处理：liter转换为Liters
+        if (targetCountry === 'AE' && storageVolumeUnit.toLowerCase() === 'liter') {
+          storageVolumeUnit = 'Liters';
         }
         data[currentRowIndex][storageVolumeUnitOfMeasureCol] = storageVolumeUnit;
       }
