@@ -1883,43 +1883,6 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
   }
 });
 
-// 测试OSS连接状态
-router.get('/amazon-templates/test-oss', async (req, res) => {
-  try {
-    const { checkOSSConfig } = require('../utils/oss');
-    
-    if (!checkOSSConfig()) {
-      return res.status(500).json({
-        success: false,
-        message: 'OSS配置不完整',
-        config: {
-          hasAccessKeyId: !!process.env.OSS_ACCESS_KEY_ID,
-          hasAccessKeySecret: !!process.env.OSS_ACCESS_KEY_SECRET,
-          hasBucket: !!process.env.OSS_BUCKET,
-          hasEndpoint: !!process.env.OSS_ENDPOINT,
-          region: process.env.OSS_REGION || 'oss-cn-hangzhou'
-        }
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'OSS配置正常',
-      config: {
-        region: process.env.OSS_REGION || 'oss-cn-hangzhou',
-        bucket: process.env.OSS_BUCKET,
-        endpoint: process.env.OSS_ENDPOINT
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ OSS配置测试失败:', error);
-    res.status(500).json({
-      success: false,
-      message: 'OSS配置测试失败: ' + error.message
-    });
-  }
-});
 
 // 获取亚马逊模板列表
 router.get('/amazon-templates', async (req, res) => {

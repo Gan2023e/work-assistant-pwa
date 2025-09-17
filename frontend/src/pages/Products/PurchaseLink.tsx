@@ -2261,77 +2261,7 @@ const Purchase: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const testOSSConnection = async () => {
-    try {
-      setGlobalTemplateLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/test-oss`);
-      const result = await res.json();
-      
-      if (result.success) {
-        message.success('OSS连接正常！');
-        console.log('OSS配置信息:', result.config);
-      } else {
-        message.error(`OSS连接失败: ${result.message}`);
-        console.error('OSS配置问题:', result);
-      }
-    } catch (error) {
-      console.error('测试OSS连接失败:', error);
-      message.error('测试OSS连接失败');
-    } finally {
-      setGlobalTemplateLoading(false);
-    }
-  };
 
-  const debugTemplateDownload = async (objectName: string, fileName: string) => {
-    try {
-      console.log(`🔍 开始调试下载: ${fileName}`);
-      console.log(`📄 对象名称: ${objectName}`);
-      console.log(`🔗 下载URL: ${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`);
-      
-      // 先测试OSS连接
-      const ossTestRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/test-oss`);
-      const ossTestResult = await ossTestRes.json();
-      
-      if (!ossTestResult.success) {
-        message.error(`OSS连接失败: ${ossTestResult.message}`);
-        console.error('OSS测试失败:', ossTestResult);
-        return;
-      }
-      
-      console.log('✅ OSS连接正常，开始下载文件...');
-      
-      // 尝试下载文件
-      const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
-      const response = await fetch(downloadUrl);
-      
-      console.log(`📊 下载响应状态: ${response.status} ${response.statusText}`);
-      console.log(`📋 响应头:`, Object.fromEntries(response.headers.entries()));
-      
-      if (response.ok) {
-        message.success('调试下载成功！检查控制台查看详细信息');
-        
-        // 实际触发下载
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-      } else {
-        const errorText = await response.text();
-        console.error('❌ 下载失败响应:', errorText);
-        message.error(`下载失败: ${response.status} ${response.statusText}`);
-      }
-      
-    } catch (error) {
-      console.error('❌ 调试下载过程中出错:', error);
-      message.error('调试下载失败，请检查控制台');
-    }
-  };
 
   const handleOpenTemplateModal = () => {
     setTemplateModalVisible(true);
@@ -2407,16 +2337,6 @@ const Purchase: React.FC = () => {
                       style={{ color: '#1677ff' }}
                     >
                       下载
-                    </Button>,
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<div style={{ display: 'inline-block', fontSize: '12px' }}>🐛</div>}
-                      onClick={() => debugTemplateDownload(file.name, file.fileName)}
-                      style={{ color: '#f56a00' }}
-                      title="调试下载 - 提供详细下载日志"
-                    >
-                      调试
                     </Button>,
                     <Popconfirm
                       title="确定要删除这个模板吗？"
@@ -4815,28 +4735,6 @@ const Purchase: React.FC = () => {
          footer={null}
          width={1000}
        >
-         {/* OSS连接测试区域 */}
-         <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f6f8fa', borderRadius: '6px', border: '1px solid #e1e8ed' }}>
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-             <div>
-               <Text strong style={{ color: '#1677ff' }}>系统状态检查</Text>
-               <div style={{ marginTop: '4px' }}>
-                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                   如果下载遇到问题，请先测试OSS连接状态
-                 </Text>
-               </div>
-             </div>
-             <Button
-               type="primary"
-               size="small"
-               icon={<div style={{ display: 'inline-block', marginRight: '4px' }}>🔧</div>}
-               onClick={testOSSConnection}
-               loading={globalTemplateLoading}
-             >
-               测试OSS连接
-             </Button>
-           </div>
-         </div>
          
          <Tabs
            activeKey={activeTabKey}

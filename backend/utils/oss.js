@@ -452,37 +452,21 @@ async function downloadTemplateFromOSS(objectName) {
   const maxRetries = 3;
   let lastError;
 
-  console.log(`🔍 开始下载文件流程: ${objectName}`);
-
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`📥 开始下载文件 (尝试 ${attempt}/${maxRetries}): ${objectName}`);
       
-      let client;
-      try {
-        client = createOSSClient();
-        console.log(`✅ OSS客户端创建成功`);
-      } catch (clientError) {
-        console.error(`❌ OSS客户端创建失败:`, clientError);
-        throw new Error(`OSS客户端创建失败: ${clientError.message}`);
-      }
+      const client = createOSSClient();
       
       // 检查文件是否存在并获取元数据
       let headResult;
       try {
-        console.log(`🔍 检查文件是否存在: ${objectName}`);
         headResult = await client.head(objectName);
         console.log(`✅ 文件存在: ${objectName}`);
         console.log(`📊 文件大小: ${headResult.res.headers['content-length']} 字节`);
-        console.log(`📋 Content-Type: ${headResult.res.headers['content-type']}`);
       } catch (error) {
-        console.error(`❌ 文件头信息检查失败:`, {
-          objectName,
-          errorCode: error.code,
-          errorMessage: error.message,
-          errorStatus: error.status
-        });
         if (error.code === 'NoSuchKey') {
+          console.error(`❌ 文件不存在: ${objectName}`);
           return { success: false, message: '模板文件不存在' };
         }
         throw error;
