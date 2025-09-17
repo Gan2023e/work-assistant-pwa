@@ -452,21 +452,37 @@ async function downloadTemplateFromOSS(objectName) {
   const maxRetries = 3;
   let lastError;
 
+  console.log(`🔍 开始下载文件流程: ${objectName}`);
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`📥 开始下载文件 (尝试 ${attempt}/${maxRetries}): ${objectName}`);
       
-      const client = createOSSClient();
+      let client;
+      try {
+        client = createOSSClient();
+        console.log(`✅ OSS客户端创建成功`);
+      } catch (clientError) {
+        console.error(`❌ OSS客户端创建失败:`, clientError);
+        throw new Error(`OSS客户端创建失败: ${clientError.message}`);
+      }
       
       // 检查文件是否存在并获取元数据
       let headResult;
       try {
+        console.log(`🔍 检查文件是否存在: ${objectName}`);
         headResult = await client.head(objectName);
         console.log(`✅ 文件存在: ${objectName}`);
         console.log(`📊 文件大小: ${headResult.res.headers['content-length']} 字节`);
+        console.log(`📋 Content-Type: ${headResult.res.headers['content-type']}`);
       } catch (error) {
+        console.error(`❌ 文件头信息检查失败:`, {
+          objectName,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorStatus: error.status
+        });
         if (error.code === 'NoSuchKey') {
-          console.error(`❌ 文件不存在: ${objectName}`);
           return { success: false, message: '模板文件不存在' };
         }
         throw error;
@@ -481,11 +497,23 @@ async function downloadTemplateFromOSS(objectName) {
       };
       
       console.log(`🔄 开始下载文件内容 (尝试 ${attempt}/${maxRetries})...`);
-      const result = await client.get(objectName, downloadOptions);
-      
-      console.log(`📥 下载完成: ${objectName}`);
-      console.log(`📋 Content-Type: ${result.res.headers['content-type']}`);
-      console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
+      let result;
+      try {
+        result = await client.get(objectName, downloadOptions);
+        console.log(`📥 下载完成: ${objectName}`);
+        console.log(`📋 响应Content-Type: ${result.res.headers['content-type']}`);
+        console.log(`📦 实际下载大小: ${result.content?.length || 'unknown'} 字节`);
+        console.log(`📋 响应状态码: ${result.res.status}`);
+      } catch (downloadError) {
+        console.error(`❌ 文件内容下载失败:`, {
+          objectName,
+          attempt,
+          errorCode: downloadError.code,
+          errorMessage: downloadError.message,
+          errorStatus: downloadError.status
+        });
+        throw downloadError;
+      }
       
       // 确保content是Buffer格式
       let content = result.content;
