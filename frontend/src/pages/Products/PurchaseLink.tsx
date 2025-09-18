@@ -1418,6 +1418,79 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 批量取消CPC检测
+  const handleBatchCancelCpcDetection = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要取消检测的记录');
+      return;
+    }
+
+    // 检查选中的记录中是否有CPC测试情况为"CPC样品待采购"的记录
+    const currentData = filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange ? filteredData : data;
+    const selectedRecords = currentData.filter(record => selectedRowKeys.includes(record.id));
+    const eligibleRecords = selectedRecords.filter(record => record.cpc_status === 'CPC样品待采购');
+    
+    if (eligibleRecords.length === 0) {
+      message.warning('选中的记录中没有CPC测试情况为"CPC样品待采购"的记录');
+      return;
+    }
+
+    if (eligibleRecords.length < selectedRecords.length) {
+      const ineligibleCount = selectedRecords.length - eligibleRecords.length;
+      message.warning(`已忽略 ${ineligibleCount} 条不符合条件的记录（只能取消CPC测试情况为"CPC样品待采购"的记录）`);
+    }
+
+    try {
+      // 只处理符合条件的记录
+      const ids = eligibleRecords.map(record => Number(record.id));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-cancel-cpc-detection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(`成功取消 ${eligibleRecords.length} 条记录的CPC检测`);
+      setSelectedRowKeys([]);
+      
+      // 更新本地数据中的CPC状态，将符合条件的记录设置为空字符串
+      const eligibleIds = eligibleRecords.map(record => record.id);
+      setData(prevData => 
+        prevData.map(item => 
+          eligibleIds.includes(item.id) 
+            ? { ...item, cpc_status: '' }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          eligibleIds.includes(item.id) 
+            ? { ...item, cpc_status: '' }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          eligibleIds.includes(item.id) 
+            ? { ...item, cpc_status: '' }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('取消CPC检测失败:', e);
+      message.error('取消CPC检测失败');
+    }
+  };
+
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
@@ -4548,6 +4621,17 @@ const Purchase: React.FC = () => {
                       size="small"
                     >
                       标记CPC样品已发
+                    </Button>
+
+                    <Button 
+                      type="primary"
+                      danger
+                      onClick={handleBatchCancelCpcDetection}
+                      disabled={selectedRowKeys.length === 0}
+                      size="small"
+                      title="只能取消CPC测试情况为'CPC样品待采购'的记录"
+                    >
+                      取消检测
                     </Button>
                   </Space>
                 </div>

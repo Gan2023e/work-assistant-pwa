@@ -417,6 +417,57 @@ router.post('/batch-mark-cpc-sample-sent', async (req, res) => {
   }
 });
 
+// 批量取消CPC检测
+router.post('/batch-cancel-cpc-detection', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要取消检测的记录' });
+    }
+
+    // 先查询哪些记录的CPC测试状态为"CPC样品待采购"
+    const eligibleRecords = await ProductWeblink.findAll({
+      where: {
+        id: { [Op.in]: ids },
+        cpc_status: 'CPC样品待采购'
+      },
+      attributes: ['id', 'parent_sku']
+    });
+
+    if (eligibleRecords.length === 0) {
+      return res.status(400).json({ message: '选中的记录中没有CPC测试情况为"CPC样品待采购"的记录' });
+    }
+
+    const eligibleIds = eligibleRecords.map(record => record.id);
+
+    // 更新符合条件的记录，将CPC测试状态设置为空
+    await ProductWeblink.update(
+      { cpc_status: '' },
+      {
+        where: {
+          id: { [Op.in]: eligibleIds }
+        }
+      }
+    );
+
+    // 发送钉钉通知（如果需要的话）
+    try {
+      await sendCpcCancelNotification(eligibleRecords.length);
+    } catch (notificationError) {
+      console.error('钉钉通知发送失败，但不影响数据更新:', notificationError.message);
+    }
+
+    res.json({ 
+      message: `成功取消 ${eligibleRecords.length} 条记录的CPC检测`,
+      processedCount: eligibleRecords.length,
+      totalCount: ids.length
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
 // 批量删除
 router.post('/batch-delete', async (req, res) => {
   try {
@@ -688,6 +739,65 @@ async function sendCpcTestApprovedNotification(approvedCount) {
     }
   } catch (error) {
     console.error('发送CPC测试申请通过钉钉通知时出错:', error.message);
+  }
+}
+
+// CPC检测取消钉钉通知函数
+async function sendCpcCancelNotification(cancelCount) {
+  try {
+    const DINGTALK_WEBHOOK = process.env.DINGTALK_WEBHOOK;
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const MOBILE_NUM_GERRY = process.env.MOBILE_NUM_GERRY;
+    
+    if (!DINGTALK_WEBHOOK) {
+      console.log('钉钉Webhook未配置，跳过通知');
+      return;
+    }
+
+    // 如果有SECRET_KEY，计算签名
+    let webhookUrl = DINGTALK_WEBHOOK;
+    if (SECRET_KEY) {
+      const timestamp = Date.now();
+      const stringToSign = `${timestamp}\n${SECRET_KEY}`;
+      const sign = crypto.createHmac('sha256', SECRET_KEY)
+                        .update(stringToSign)
+                        .digest('base64');
+      
+      // 添加时间戳和签名参数
+      const urlObj = new URL(DINGTALK_WEBHOOK);
+      urlObj.searchParams.append('timestamp', timestamp.toString());
+      urlObj.searchParams.append('sign', encodeURIComponent(sign));
+      webhookUrl = urlObj.toString();
+    }
+
+    // 使用配置的手机号，如果没有配置则使用默认值
+    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+
+    const message = {
+      msgtype: 'text',
+      text: {
+        content: `已取消${cancelCount}款产品的CPC检测，CPC测试情况已清空！@${mobileNumber}`
+      },
+      at: {
+        atMobiles: [mobileNumber],
+        isAtAll: false
+      }
+    };
+
+    const response = await axios.post(webhookUrl, message, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    if (response.data.errcode === 0) {
+      console.log('CPC检测取消钉钉通知发送成功');
+    } else {
+      console.error('CPC检测取消钉钉通知发送失败:', response.data);
+    }
+  } catch (error) {
+    console.error('发送CPC检测取消钉钉通知时出错:', error.message);
   }
 }
 
