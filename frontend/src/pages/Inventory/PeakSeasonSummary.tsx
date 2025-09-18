@@ -87,6 +87,25 @@ interface PaymentDetail {
   description?: string;
 }
 
+// 备货/发货明细记录接口
+interface AmountDetail {
+  local_sku?: string;
+  vendor_sku?: string;
+  country?: string;
+  prep_quantity?: number;
+  shipped_quantity?: number;
+  upate_date?: string;
+  shipment_date?: string;
+  unit_price: number;
+  amount: number;
+  supplier: string;
+  parent_sku?: string;
+  child_sku?: string;
+  color_name?: string;
+  source_type: string;
+  supplier_name?: string;
+}
+
 // 供应商发货记录接口
 interface SupplierShipmentRecord {
   id: number;
@@ -178,6 +197,15 @@ const PeakSeasonSummary: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState('supplier-stats');
+
+  // 金额明细模态框状态
+  const [amountDetailVisible, setAmountDetailVisible] = useState(false);
+  const [amountDetails, setAmountDetails] = useState<AmountDetail[]>([]);
+  const [selectedAmountInfo, setSelectedAmountInfo] = useState<{
+    supplier: string;
+    type: 'prep' | 'shipped';
+    amount: number;
+  } | null>(null);
 
   // 付款类型优先级映射
   const getPaymentTypePriority = (paymentType: string): number => {
@@ -326,6 +354,72 @@ const PeakSeasonSummary: React.FC = () => {
       console.error('获取付款详细记录失败:', error);
       message.error('获取付款详细记录失败');
       setPaymentDetails([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 获取备货总额明细记录
+  const fetchPrepAmountDetails = async (supplier: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filters.year) params.append('year', filters.year.toString());
+      params.append('supplier', supplier);
+
+      console.log('正在获取备货总额明细记录，参数:', params.toString());
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/prep-amount-details?${params}`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setAmountDetails(data.data.records);
+        setSelectedAmountInfo({
+          supplier: supplier,
+          type: 'prep',
+          amount: data.data.totalAmount
+        });
+        setAmountDetailVisible(true);
+        console.log('设置备货总额明细记录:', data.data);
+      } else {
+        console.error('备货总额明细API返回错误:', data.message);
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('获取备货总额明细失败:', error);
+      message.error('获取备货总额明细失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 获取已发金额明细记录
+  const fetchShippedAmountDetails = async (supplier: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filters.year) params.append('year', filters.year.toString());
+      params.append('supplier', supplier);
+
+      console.log('正在获取已发金额明细记录，参数:', params.toString());
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/shipped-amount-details?${params}`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setAmountDetails(data.data.records);
+        setSelectedAmountInfo({
+          supplier: supplier,
+          type: 'shipped',
+          amount: data.data.totalAmount
+        });
+        setAmountDetailVisible(true);
+        console.log('设置已发金额明细记录:', data.data);
+      } else {
+        console.error('已发金额明细API返回错误:', data.message);
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('获取已发金额明细失败:', error);
+      message.error('获取已发金额明细失败');
     } finally {
       setLoading(false);
     }
@@ -1130,9 +1224,20 @@ const PeakSeasonSummary: React.FC = () => {
       render: (value, record) => {
         const obj = {
           children: record.rowSpan ? (
-            <Text strong style={{ color: '#52c41a' }}>
+            <Button 
+              type="link" 
+              style={{ 
+                padding: 0, 
+                color: '#52c41a', 
+                fontWeight: 'bold',
+                fontSize: '14px',
+                height: 'auto'
+              }}
+              onClick={() => fetchPrepAmountDetails(record.supplier)}
+              disabled={!value || value === 0}
+            >
               ¥{value?.toLocaleString() || '0'}
-            </Text>
+            </Button>
           ) : null,
           props: {} as any,
         };
@@ -1183,9 +1288,20 @@ const PeakSeasonSummary: React.FC = () => {
       render: (value, record) => {
         const obj = {
           children: record.rowSpan ? (
-            <Text strong style={{ color: '#722ed1' }}>
+            <Button 
+              type="link" 
+              style={{ 
+                padding: 0, 
+                color: '#722ed1', 
+                fontWeight: 'bold',
+                fontSize: '14px',
+                height: 'auto'
+              }}
+              onClick={() => fetchShippedAmountDetails(record.supplier)}
+              disabled={!value || value === 0}
+            >
               ¥{value?.toLocaleString() || '0'}
-            </Text>
+            </Button>
           ) : null,
           props: {} as any,
         };
@@ -1693,6 +1809,128 @@ const PeakSeasonSummary: React.FC = () => {
     });
 
     return columns;
+  };
+
+  // 金额明细记录表格列
+  const createAmountDetailColumns = (): ColumnsType<AmountDetail> => {
+    const baseColumns: ColumnsType<AmountDetail> = [
+      {
+        title: 'SKU',
+        key: 'sku',
+        width: 120,
+        align: 'center',
+        render: (_, record) => {
+          return record.local_sku || record.vendor_sku || '-';
+        }
+      }
+    ];
+
+    if (selectedAmountInfo?.type === 'prep') {
+      // 备货记录的列
+      baseColumns.push(
+        {
+          title: '国家',
+          dataIndex: 'country',
+          key: 'country',
+          width: 80,
+          align: 'center'
+        },
+        {
+          title: '备货数量',
+          dataIndex: 'prep_quantity',
+          key: 'prep_quantity',
+          width: 100,
+          align: 'center',
+          render: (value) => value?.toLocaleString() || 0
+        },
+        {
+          title: '备货日期',
+          dataIndex: 'upate_date',
+          key: 'upate_date',
+          width: 120,
+          align: 'center',
+          render: (value) => value ? dayjs(value).format('YYYY-MM-DD') : '-'
+        }
+      );
+    } else {
+      // 发货记录的列
+      baseColumns.push(
+        {
+          title: '颜色',
+          dataIndex: 'color_name',
+          key: 'color_name',
+          width: 100,
+          align: 'center',
+          render: (value) => value || '-'
+        },
+        {
+          title: '发货数量',
+          dataIndex: 'shipped_quantity',
+          key: 'shipped_quantity',
+          width: 100,
+          align: 'center',
+          render: (value) => value?.toLocaleString() || 0
+        },
+        {
+          title: '发货日期',
+          dataIndex: 'shipment_date',
+          key: 'shipment_date',
+          width: 120,
+          align: 'center',
+          render: (value) => value ? dayjs(value).format('YYYY-MM-DD') : '-'
+        },
+        {
+          title: '供应商名称',
+          dataIndex: 'supplier_name',
+          key: 'supplier_name',
+          width: 150,
+          align: 'center',
+          render: (value) => value || '-'
+        }
+      );
+    }
+
+    // 共通列
+    baseColumns.push(
+      {
+        title: 'Parent SKU',
+        dataIndex: 'parent_sku',
+        key: 'parent_sku',
+        width: 120,
+        align: 'center',
+        render: (value) => value || '-'
+      },
+      {
+        title: 'Child SKU',
+        dataIndex: 'child_sku',
+        key: 'child_sku',
+        width: 120,
+        align: 'center',
+        render: (value) => value || '-'
+      },
+      {
+        title: '单价',
+        dataIndex: 'unit_price',
+        key: 'unit_price',
+        width: 100,
+        align: 'right',
+        render: (value) => `¥${(value || 0).toLocaleString()}`
+      },
+      {
+        title: '金额',
+        dataIndex: 'amount',
+        key: 'amount',
+        width: 120,
+        align: 'right',
+        render: (value) => (
+          <Text strong style={{ color: '#1890ff' }}>
+            ¥{(value || 0).toLocaleString()}
+          </Text>
+        )
+      }
+    );
+
+    return baseColumns;
   };
 
   // 付款详细记录表格列
@@ -2476,6 +2714,69 @@ const PeakSeasonSummary: React.FC = () => {
             </Form.Item>
           </Form>
         )}
+      </Modal>
+
+      {/* 金额明细模态框 */}
+      <Modal
+        title={
+          <div>
+            <EyeOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+            {selectedAmountInfo?.type === 'prep' ? '备货总额明细' : '已发金额明细'}
+            {selectedAmountInfo && (
+              <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
+                供应商：{selectedAmountInfo.supplier} | 
+                总金额：¥{selectedAmountInfo.amount.toLocaleString()}
+              </div>
+            )}
+          </div>
+        }
+        open={amountDetailVisible}
+        onCancel={() => {
+          setAmountDetailVisible(false);
+          setAmountDetails([]);
+          setSelectedAmountInfo(null);
+        }}
+        footer={[
+          <Button key="close" onClick={() => {
+            setAmountDetailVisible(false);
+            setAmountDetails([]);
+            setSelectedAmountInfo(null);
+          }}>
+            关闭
+          </Button>
+        ]}
+        width={1000}
+      >
+        <Table
+          columns={createAmountDetailColumns()}
+          dataSource={amountDetails}
+          rowKey={(record, index) => `${record.source_type}-${index}`}
+          loading={loading}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => 
+              `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+          }}
+          size="small"
+          bordered
+          summary={() => (
+            <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
+              <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 4 : 5}>
+                <Text strong>合计</Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={1}>
+                <Text strong style={{ color: '#1890ff' }}>
+                  ¥{amountDetails.reduce((total, item) => total + Number(item.amount || 0), 0).toLocaleString()}
+                </Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={2} colSpan={2}>
+                <Text type="secondary">共 {amountDetails.length} 条记录</Text>
+              </Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
       </Modal>
     </div>
   );

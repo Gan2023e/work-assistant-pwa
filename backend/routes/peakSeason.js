@@ -1197,4 +1197,151 @@ router.post('/supplier-shipments/batch-delete', async (req, res) => {
   }
 });
 
+// 获取备货总额明细记录
+router.get('/prep-amount-details', async (req, res) => {
+  try {
+    const { year, supplier } = req.query;
+    
+    if (!supplier) {
+      return res.status(400).json({
+        code: 1,
+        message: '供应商名称不能为空'
+      });
+    }
+    
+    let whereCondition = ' AND pw.seller_name = :supplier';
+    const replacements = { supplier };
+    
+    if (year) {
+      whereCondition += ' AND YEAR(prep.upate_date) = :year';
+      replacements.year = year;
+    }
+
+    const prepDetails = await sequelize.query(`
+      SELECT 
+        prep.local_sku,
+        prep.country,
+        prep.qty as prep_quantity,
+        prep.upate_date,
+        COALESCE(sis.price, 0) as unit_price,
+        CAST(prep.qty * COALESCE(sis.price, 0) as DECIMAL(16,2)) as amount,
+        pw.seller_name as supplier,
+        sis.parent_sku,
+        sis.vendor_sku,
+        sis.sellercolorname as color_name,
+        '备货记录' as source_type
+      FROM peak_season_inventory_prep prep
+      LEFT JOIN sellerinventory_sku sis ON prep.local_sku = sis.child_sku
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE prep.upate_date IS NOT NULL 
+        AND pw.seller_name IS NOT NULL ${whereCondition}
+      ORDER BY prep.upate_date DESC, prep.local_sku
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 计算总金额
+    const totalAmount = prepDetails.reduce((sum, item) => {
+      return sum + (parseFloat(item.amount) || 0);
+    }, 0);
+
+    res.json({
+      code: 0,
+      data: {
+        records: prepDetails.map(item => ({
+          ...item,
+          amount: parseFloat(item.amount) || 0,
+          unit_price: parseFloat(item.unit_price) || 0
+        })),
+        totalAmount: totalAmount,
+        recordCount: prepDetails.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取备货总额明细失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取备货总额明细失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取已发金额明细记录
+router.get('/shipped-amount-details', async (req, res) => {
+  try {
+    const { year, supplier } = req.query;
+    
+    if (!supplier) {
+      return res.status(400).json({
+        code: 1,
+        message: '供应商名称不能为空'
+      });
+    }
+    
+    let whereCondition = ' AND pw.seller_name = :supplier';
+    const replacements = { supplier };
+    
+    if (year) {
+      whereCondition += ' AND YEAR(s.date) = :year';
+      replacements.year = year;
+    }
+
+    const shippedDetails = await sequelize.query(`
+      SELECT 
+        s.vendor_sku,
+        s.color as color_name,
+        s.quantity as shipped_quantity,
+        s.date as shipment_date,
+        s.supplier_name,
+        COALESCE(sis.price, 0) as unit_price,
+        CAST(s.quantity * COALESCE(sis.price, 0) as DECIMAL(16,2)) as amount,
+        pw.seller_name as supplier,
+        sis.parent_sku,
+        sis.child_sku,
+        s.sellercolorname,
+        '发货记录' as source_type
+      FROM supplier_shipments_peak_season s
+      LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE s.date IS NOT NULL 
+        AND s.quantity IS NOT NULL 
+        AND s.quantity > 0
+        AND pw.seller_name IS NOT NULL ${whereCondition}
+      ORDER BY s.date DESC, s.vendor_sku
+    `, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 计算总金额
+    const totalAmount = shippedDetails.reduce((sum, item) => {
+      return sum + (parseFloat(item.amount) || 0);
+    }, 0);
+
+    res.json({
+      code: 0,
+      data: {
+        records: shippedDetails.map(item => ({
+          ...item,
+          amount: parseFloat(item.amount) || 0,
+          unit_price: parseFloat(item.unit_price) || 0
+        })),
+        totalAmount: totalAmount,
+        recordCount: shippedDetails.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取已发金额明细失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取已发金额明细失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
