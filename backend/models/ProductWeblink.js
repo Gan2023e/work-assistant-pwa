@@ -27,6 +27,17 @@ const ProductWeblink = sequelize.define('ProductWeblink', {
   cpc_files: {
     type: DataTypes.TEXT,
     comment: 'CPC文件信息，JSON格式存储多个文件'
+  },
+  // 新增重点款字段
+  is_key_product: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: '是否为重点款'
+  },
+  // 新增竞争对手链接字段
+  competitor_links: {
+    type: DataTypes.TEXT,
+    comment: '竞争对手链接，JSON格式存储多个链接'
   }
 }, {
   tableName: 'product_weblink',

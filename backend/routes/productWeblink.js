@@ -272,7 +272,9 @@ router.post('/search', async (req, res) => {
         'no_inventory_rate',
         'sales_30days',
         'seller_name',
-        'cpc_files'
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
       ]
     });
 
@@ -1314,6 +1316,11 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
+    // 计算重点款数量
+    const keyProductsCount = await ProductWeblink.count({
+      where: { is_key_product: true }
+    });
+
     res.json({
       statistics: {
         newProductFirstReview: newProductFirstReviewCount,
@@ -1324,7 +1331,8 @@ router.get('/statistics', async (req, res) => {
         cpcTestPending: cpcTestPendingCount,
         cpcTesting: cpcTestingCount,
         cpcSampleSent: cpcSampleSentCount,
-        cpcPendingListing: cpcPendingListingCount
+        cpcPendingListing: cpcPendingListingCount,
+        keyProducts: keyProductsCount
       },
       statusStats: statusStats.map(item => ({
         value: item.status,
@@ -6221,6 +6229,44 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
       code: 1,
       message: '更新失败: ' + error.message
     });
+  }
+});
+
+// 筛选重点款记录
+router.post('/filter-key-products', async (req, res) => {
+  try {
+    const result = await ProductWeblink.findAll({
+      where: {
+        is_key_product: true
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
+      ],
+      order: [['update_time', 'DESC']]
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error('筛选重点款失败:', err);
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 

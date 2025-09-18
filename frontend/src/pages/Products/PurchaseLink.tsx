@@ -82,6 +82,9 @@ interface ProductRecord {
   sales_30days: string;
   seller_name: string;
   cpc_files?: string;
+  // 新增字段
+  is_key_product?: boolean;
+  competitor_links?: string;
 }
 
 interface SellerInventorySkuRecord {
@@ -219,7 +222,8 @@ const Purchase: React.FC = () => {
     cpcTestPending: 0,
     cpcTesting: 0,
     cpcSampleSent: 0,
-    cpcPendingListing: 0
+    cpcPendingListing: 0,
+    keyProducts: 0  // 新增重点款统计
   });
   
   // 生成其他站点资料表相关状态
@@ -338,6 +342,11 @@ const Purchase: React.FC = () => {
   
   // 利润推算器相关状态
   const [profitCalculatorVisible, setProfitCalculatorVisible] = useState(false);
+  
+  // 竞争对手链接管理相关状态
+  const [competitorLinksModalVisible, setCompetitorLinksModalVisible] = useState(false);
+  const [currentCompetitorRecord, setCurrentCompetitorRecord] = useState<ProductRecord | null>(null);
+  const [competitorLinksInput, setCompetitorLinksInput] = useState('');
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1923,6 +1932,88 @@ const Purchase: React.FC = () => {
       ) : ''
     },
     { 
+      title: '竞争对手ASIN', 
+      dataIndex: 'competitor_links', 
+      key: 'competitor_links', 
+      align: 'center',
+      width: 200,
+      render: (text: string, record: ProductRecord) => {
+        let asins: string[] = [];
+        try {
+          if (text) {
+            asins = JSON.parse(text);
+          }
+        } catch {
+          asins = [];
+        }
+        
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {asins.length > 0 ? (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: 'center' }}>
+                  {asins.map((asin, index) => (
+                    <div key={index} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: '4px',
+                      padding: '2px 6px',
+                      fontSize: '12px'
+                    }}>
+                      <span style={{ marginRight: '4px' }}>{asin}</span>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        style={{ 
+                          width: '16px', 
+                          height: '16px', 
+                          minWidth: '16px',
+                          color: '#ff4d4f',
+                          padding: 0
+                        }}
+                        onClick={() => handleDeleteCompetitorAsin(record, index)}
+                        title="删除此ASIN"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Space size={4}>
+                  <Button 
+                    size="small" 
+                    type="link"
+                    onClick={() => handleAddCompetitorLinks(record)}
+                    icon={<PlusOutlined />}
+                  >
+                    添加
+                  </Button>
+                  <Button 
+                    size="small" 
+                    type="primary"
+                    onClick={() => handleBatchOpenCompetitorLinks(record)}
+                    icon={<LinkOutlined />}
+                  >
+                    批量打开
+                  </Button>
+                </Space>
+              </>
+            ) : (
+              <Button 
+                size="small" 
+                type="dashed"
+                onClick={() => handleAddCompetitorLinks(record)}
+                icon={<PlusOutlined />}
+                style={{ fontSize: '12px' }}
+              >
+                添加ASIN
+              </Button>
+            )}
+          </div>
+        );
+      }
+    },
+    { 
       title: '上传时间', 
       dataIndex: 'update_time', 
       key: 'update_time', 
@@ -1947,6 +2038,31 @@ const Purchase: React.FC = () => {
       align: 'center',
       width: 100,
       sorter: (a, b) => (a.status || '').localeCompare(b.status || '')
+    },
+    { 
+      title: '重点款', 
+      dataIndex: 'is_key_product', 
+      key: 'is_key_product', 
+      align: 'center',
+      width: 80,
+      render: (value: boolean, record: ProductRecord) => (
+        <div
+          onDoubleClick={() => handleKeyProductToggle(record)}
+          style={{
+            cursor: 'pointer',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            textAlign: 'center',
+            backgroundColor: value ? '#f6ffed' : '#fff2e8',
+            border: `1px solid ${value ? '#52c41a' : '#d9d9d9'}`,
+            color: value ? '#52c41a' : '#999'
+          }}
+          title="双击切换重点款状态"
+        >
+          {value ? '是' : '否'}
+        </div>
+      ),
+      sorter: (a, b) => (a.is_key_product ? 1 : 0) - (b.is_key_product ? 1 : 0)
     },
     { 
       title: '备注', 
@@ -3675,6 +3791,280 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 重点款相关处理函数
+  const handleKeyProductToggle = async (record: ProductRecord) => {
+    try {
+      const newValue = !record.is_key_product;
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_key_product: newValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success(newValue ? '已设为重点款' : '已取消重点款');
+      
+      // 更新本地数据
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, is_key_product: newValue }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, is_key_product: newValue }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, is_key_product: newValue }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('更新重点款状态失败:', e);
+      message.error('更新失败');
+    }
+  };
+
+  // 点击重点款卡片显示重点款记录
+  const handleKeyProductsClick = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-key-products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新筛选状态
+      setFilters({ 
+        status: '',
+        cpc_status: '',
+        cpc_submit: '',
+        seller_name: '',
+        dateRange: null
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条重点款记录`);
+    } catch (e) {
+      console.error('筛选重点款失败:', e);
+      message.error('筛选重点款失败');
+    }
+  };
+
+  // 竞争对手链接相关处理函数
+  const handleAddCompetitorLinks = (record: ProductRecord) => {
+    setCurrentCompetitorRecord(record);
+    setCompetitorLinksInput('');
+    setCompetitorLinksModalVisible(true);
+  };
+
+  const handleViewCompetitorLinks = (record: ProductRecord) => {
+    let asins: string[] = [];
+    try {
+      if (record.competitor_links) {
+        asins = JSON.parse(record.competitor_links);
+      }
+    } catch {
+      asins = [];
+    }
+    
+    Modal.info({
+      title: `${record.parent_sku} 的竞争对手ASIN`,
+      content: (
+        <div>
+          {asins.map((asin, index) => (
+            <div key={index} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 'bold' }}>ASIN: {asin}</span>
+                <a 
+                  href={`https://www.amazon.com/dp/${asin}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: '#1890ff' }}
+                >
+                  查看产品
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+      width: 600
+    });
+  };
+
+  const handleBatchOpenCompetitorLinks = (record: ProductRecord) => {
+    let asins: string[] = [];
+    try {
+      if (record.competitor_links) {
+        asins = JSON.parse(record.competitor_links);
+      }
+    } catch {
+      asins = [];
+    }
+
+    if (asins.length === 0) {
+      message.warning('没有竞争对手ASIN');
+      return;
+    }
+
+    asins.forEach((asin, index) => {
+      setTimeout(() => {
+        window.open(`https://www.amazon.com/dp/${asin}`, '_blank', 'noopener,noreferrer');
+      }, index * 100);
+    });
+
+    message.success(`正在打开 ${asins.length} 个竞争对手产品页面`);
+  };
+
+  const handleSaveCompetitorLinks = async () => {
+    if (!currentCompetitorRecord) return;
+
+    // 解析ASIN输入，支持多种格式
+    const asins = competitorLinksInput
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        // 如果是完整的Amazon链接，提取ASIN
+        const asinMatch = line.match(/\/dp\/([A-Z0-9]{10})/i);
+        if (asinMatch) {
+          return asinMatch[1].toUpperCase();
+        }
+        // 如果看起来像ASIN格式（10位字母数字）
+        if (/^[A-Z0-9]{10}$/i.test(line)) {
+          return line.toUpperCase();
+        }
+        return null;
+      })
+      .filter(Boolean) as string[];
+
+    if (asins.length === 0) {
+      message.warning('请输入有效的ASIN（10位字母数字组合）');
+      return;
+    }
+
+    // 获取现有的ASIN
+    let existingAsins: string[] = [];
+    try {
+      if (currentCompetitorRecord.competitor_links) {
+        existingAsins = JSON.parse(currentCompetitorRecord.competitor_links);
+      }
+    } catch {
+      existingAsins = [];
+    }
+
+    // 合并并去重
+    const allAsins = [...new Set([...existingAsins, ...asins])];
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${currentCompetitorRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ competitor_links: JSON.stringify(allAsins) }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success(`成功添加 ${asins.length} 个竞争对手ASIN，总计 ${allAsins.length} 个`);
+      setCompetitorLinksModalVisible(false);
+      setCompetitorLinksInput('');
+      
+      // 更新本地数据
+      const updateLocalData = (prevData: ProductRecord[]) => 
+        prevData.map(item => 
+          item.id === currentCompetitorRecord.id 
+            ? { ...item, competitor_links: JSON.stringify(allAsins) }
+            : item
+        );
+      
+      setData(updateLocalData);
+      setOriginalData(updateLocalData);
+      setFilteredData(updateLocalData);
+      
+    } catch (e) {
+      console.error('保存竞争对手ASIN失败:', e);
+      message.error('保存失败');
+    }
+  };
+
+  // 删除单个竞争对手ASIN
+  const handleDeleteCompetitorAsin = async (record: ProductRecord, index: number) => {
+    try {
+      let asins: string[] = [];
+      try {
+        if (record.competitor_links) {
+          asins = JSON.parse(record.competitor_links);
+        }
+      } catch {
+        asins = [];
+      }
+
+      if (index < 0 || index >= asins.length) {
+        message.error('无效的索引');
+        return;
+      }
+
+      const deletedAsin = asins[index];
+      const updatedAsins = asins.filter((_, i) => i !== index);
+
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ competitor_links: JSON.stringify(updatedAsins) }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success(`已删除竞争对手ASIN: ${deletedAsin}`);
+      
+      // 更新本地数据
+      const updateLocalData = (prevData: ProductRecord[]) => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, competitor_links: JSON.stringify(updatedAsins) }
+            : item
+        );
+      
+      setData(updateLocalData);
+      setOriginalData(updateLocalData);
+      setFilteredData(updateLocalData);
+      
+    } catch (e) {
+      console.error('删除竞争对手ASIN失败:', e);
+      message.error('删除失败');
+    }
+  };
+
   return (
     <div style={{ padding: '16px' }}>
             {/* 统计卡片区域 */}
@@ -3812,6 +4202,25 @@ const Purchase: React.FC = () => {
                 value={statistics.cpcPendingListing}
                 prefix={<SearchOutlined />}
                 valueStyle={{ color: '#722ed1', fontSize: '14px' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+        
+        {/* 第二行统计卡片 - 重点款 */}
+        <Row gutter={4} style={{ marginBottom: '8px' }}>
+          <Col span={3}>
+            <Card 
+              size="small"
+              hoverable 
+              onClick={handleKeyProductsClick}
+              style={{ cursor: 'pointer', minHeight: '70px' }}
+            >
+              <Statistic
+                title="重点款"
+                value={statistics.keyProducts}
+                prefix={<CheckCircleOutlined />}
+                valueStyle={{ color: '#f5222d', fontSize: '14px' }}
               />
             </Card>
           </Col>
@@ -6211,6 +6620,54 @@ const Purchase: React.FC = () => {
         visible={profitCalculatorVisible}
         onClose={() => setProfitCalculatorVisible(false)}
       />
+
+      {/* 竞争对手ASIN管理弹窗 */}
+      <Modal
+        title={`管理竞争对手ASIN - ${currentCompetitorRecord?.parent_sku || ''}`}
+        open={competitorLinksModalVisible}
+        onOk={handleSaveCompetitorLinks}
+        onCancel={() => {
+          setCompetitorLinksModalVisible(false);
+          setCurrentCompetitorRecord(null);
+          setCompetitorLinksInput('');
+        }}
+        okText="添加"
+        cancelText="取消"
+        width={600}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <Text strong>请输入竞争对手ASIN（每行一个）：</Text>
+          </div>
+          <div style={{ 
+            marginBottom: '12px', 
+            padding: '8px', 
+            backgroundColor: '#e6f7ff', 
+            borderRadius: '4px',
+            fontSize: '12px'
+          }}>
+            <Text type="secondary">
+              💡 <strong>使用说明：</strong><br />
+              • 每行输入一个ASIN（10位字母数字组合）<br />
+              • 也可以粘贴完整的Amazon产品链接，系统会自动提取ASIN<br />
+              • 支持批量打开功能，方便对比分析<br />
+              • 可以在表格中单独删除不需要的ASIN
+            </Text>
+          </div>
+          <TextArea
+            value={competitorLinksInput}
+            onChange={(e) => setCompetitorLinksInput(e.target.value)}
+            placeholder="请每行输入一个ASIN，例如：&#10;B08XXXX123&#10;B09YYYY456&#10;或完整链接：https://www.amazon.com/dp/B08XXXX123&#10;..."
+            rows={8}
+            style={{ fontFamily: 'monospace' }}
+          />
+          <div>
+            <Text type="secondary">
+              {competitorLinksInput.split('\n').filter(line => line.trim()).length} 个输入行
+            </Text>
+          </div>
+        </Space>
+      </Modal>
     </div>
   );
 };
