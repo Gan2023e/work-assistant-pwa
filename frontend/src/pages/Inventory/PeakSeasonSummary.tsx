@@ -2795,6 +2795,8 @@ const PeakSeasonSummary: React.FC = () => {
           </Button>
         ]}
         width={1000}
+        style={{ top: 20 }}
+        bodyStyle={{ padding: '20px', maxHeight: '80vh', overflow: 'hidden' }}
       >
         <Table
           columns={createAmountDetailColumns()}
@@ -2802,11 +2804,18 @@ const PeakSeasonSummary: React.FC = () => {
           rowKey={(record, index) => `${record.source_type}-${index}`}
           loading={loading}
           pagination={false}
-          scroll={{ y: 800 }}
+          scroll={{ y: 'calc(80vh - 200px)' }}
           size="small"
           bordered
+          sticky={{ offsetHeader: 0, offsetSummary: 0 }}
           summary={() => (
-            <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
+            <Table.Summary.Row style={{ 
+              backgroundColor: '#fafafa',
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 1000,
+              borderTop: '2px solid #d9d9d9'
+            }}>
               <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 3 : 5}>
                 <Text strong>合计</Text>
               </Table.Summary.Cell>
