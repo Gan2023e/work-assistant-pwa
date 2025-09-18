@@ -1819,9 +1819,11 @@ const PeakSeasonSummary: React.FC = () => {
         key: 'sku',
         width: 120,
         align: 'center',
-        render: (_, record) => {
-          return record.local_sku || record.vendor_sku || '-';
-        }
+        render: (_, record) => (
+          <div style={{ textAlign: 'center' }}>
+            {record.local_sku || record.vendor_sku || '-'}
+          </div>
+        )
       }
     ];
 
@@ -1834,7 +1836,11 @@ const PeakSeasonSummary: React.FC = () => {
           key: 'prep_quantity',
           width: 100,
           align: 'center',
-          render: (value) => value?.toLocaleString() || 0
+          render: (value) => (
+            <div style={{ textAlign: 'center' }}>
+              {value?.toLocaleString() || 0}
+            </div>
+          )
         },
         {
           title: '备货日期',
@@ -1842,7 +1848,11 @@ const PeakSeasonSummary: React.FC = () => {
           key: 'upate_date',
           width: 120,
           align: 'center',
-          render: (value) => value ? dayjs(value).format('YYYY-MM-DD') : '-'
+          render: (value) => (
+            <div style={{ textAlign: 'center' }}>
+              {value ? dayjs(value).format('YYYY-MM-DD') : '-'}
+            </div>
+          )
         }
       );
     } else {
@@ -1891,7 +1901,11 @@ const PeakSeasonSummary: React.FC = () => {
         key: 'parent_sku',
         width: 120,
         align: 'center',
-        render: (value) => value || '-'
+        render: (value) => (
+          <div style={{ textAlign: 'center' }}>
+            {value || '-'}
+          </div>
+        )
       },
       {
         title: '单价',
@@ -1899,7 +1913,11 @@ const PeakSeasonSummary: React.FC = () => {
         key: 'unit_price',
         width: 100,
         align: 'right',
-        render: (value) => `¥${(value || 0).toLocaleString()}`
+        render: (value) => (
+          <div style={{ textAlign: 'right' }}>
+            ¥{(value || 0).toLocaleString()}
+          </div>
+        )
       },
       {
         title: '金额',
@@ -1908,9 +1926,11 @@ const PeakSeasonSummary: React.FC = () => {
         width: 120,
         align: 'right',
         render: (value) => (
-          <Text strong style={{ color: '#1890ff' }}>
-            ¥{(value || 0).toLocaleString()}
-          </Text>
+          <div style={{ textAlign: 'right' }}>
+            <Text strong style={{ color: '#1890ff' }}>
+              ¥{(value || 0).toLocaleString()}
+            </Text>
+          </div>
         )
       }
     );
@@ -2730,7 +2750,7 @@ const PeakSeasonSummary: React.FC = () => {
             关闭
           </Button>
         ]}
-        width={2000}
+        width={1000}
       >
         <Table
           columns={createAmountDetailColumns()}
@@ -2738,7 +2758,7 @@ const PeakSeasonSummary: React.FC = () => {
           rowKey={(record, index) => `${record.source_type}-${index}`}
           loading={loading}
           pagination={false}
-          scroll={{ y: 400 }}
+          scroll={{ y: 800 }}
           size="small"
           bordered
           summary={() => (
