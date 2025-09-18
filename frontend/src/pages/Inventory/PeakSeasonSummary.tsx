@@ -2807,13 +2807,29 @@ const PeakSeasonSummary: React.FC = () => {
           bordered
           summary={() => (
             <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
-              <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 5 : 7}>
+              <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 3 : 5}>
                 <Text strong>合计</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={1}>
-                <Text strong style={{ color: '#1890ff' }}>
-                  ¥{amountDetails.reduce((total, item) => total + Number(item.amount || 0), 0).toLocaleString()}
-                </Text>
+              {selectedAmountInfo?.type === 'prep' && (
+                <Table.Summary.Cell index={1}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text strong style={{ color: '#52c41a' }}>
+                      {amountDetails.reduce((total, item) => total + Number(item.prep_quantity || 0), 0).toLocaleString()}
+                    </Text>
+                  </div>
+                </Table.Summary.Cell>
+              )}
+              <Table.Summary.Cell index={selectedAmountInfo?.type === 'prep' ? 2 : 1}>
+                <div style={{ textAlign: 'center' }}>
+                  <Text type="secondary">-</Text>
+                </div>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={selectedAmountInfo?.type === 'prep' ? 3 : 2}>
+                <div style={{ textAlign: 'right' }}>
+                  <Text strong style={{ color: '#1890ff' }}>
+                    ¥{amountDetails.reduce((total, item) => total + Number(item.amount || 0), 0).toLocaleString()}
+                  </Text>
+                </div>
               </Table.Summary.Cell>
             </Table.Summary.Row>
           )}
