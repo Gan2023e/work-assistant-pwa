@@ -2730,7 +2730,7 @@ const PeakSeasonSummary: React.FC = () => {
             关闭
           </Button>
         ]}
-        width={1000}
+        width={2000}
       >
         <Table
           columns={createAmountDetailColumns()}
