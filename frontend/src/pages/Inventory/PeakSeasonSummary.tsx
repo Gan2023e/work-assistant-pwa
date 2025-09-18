@@ -1899,7 +1899,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '发货日期',
           dataIndex: 'shipment_date',
           key: 'shipment_date',
-          width: 120,
+          width: 130,
           align: 'center',
           render: (value) => (
             <div style={{ textAlign: 'center' }}>
@@ -1911,7 +1911,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: 'Parent SKU',
           dataIndex: 'parent_sku',
           key: 'parent_sku',
-          width: 120,
+          width: 140,
           align: 'center',
           render: (value) => (
             <div style={{ textAlign: 'center' }}>
@@ -1923,7 +1923,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '子SKU',
           dataIndex: 'child_sku',
           key: 'child_sku',
-          width: 120,
+          width: 140,
           align: 'center',
           render: (value) => (
             <div style={{ textAlign: 'center' }}>
@@ -1934,7 +1934,7 @@ const PeakSeasonSummary: React.FC = () => {
         {
           title: '卖家货号',
           key: 'sku',
-          width: 120,
+          width: 130,
           align: 'center',
           render: (_, record) => (
             <div style={{ textAlign: 'center' }}>
@@ -1946,7 +1946,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '颜色',
           dataIndex: 'color_name',
           key: 'color_name',
-          width: 100,
+          width: 150,
           align: 'center',
           render: (value) => value || '-'
         },
@@ -1954,7 +1954,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '发货数量',
           dataIndex: 'shipped_quantity',
           key: 'shipped_quantity',
-          width: 100,
+          width: 110,
           align: 'center',
           render: (value) => value?.toLocaleString() || 0
         },
@@ -1962,7 +1962,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '单价',
           dataIndex: 'unit_price',
           key: 'unit_price',
-          width: 100,
+          width: 120,
           align: 'right',
           render: (value) => (
             <div style={{ textAlign: 'right' }}>
@@ -1974,7 +1974,7 @@ const PeakSeasonSummary: React.FC = () => {
           title: '金额',
           dataIndex: 'amount',
           key: 'amount',
-          width: 120,
+          width: 140,
           align: 'right',
           render: (value) => (
             <div style={{ textAlign: 'right' }}>
@@ -2802,7 +2802,7 @@ const PeakSeasonSummary: React.FC = () => {
             关闭
           </Button>
         ]}
-        width={1000}
+        width={1600}
         style={{ top: 20 }}
         bodyStyle={{ padding: '20px', maxHeight: '80vh', overflow: 'hidden' }}
       >
