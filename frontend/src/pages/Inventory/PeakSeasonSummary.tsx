@@ -2737,18 +2737,8 @@ const PeakSeasonSummary: React.FC = () => {
           dataSource={amountDetails}
           rowKey={(record, index) => `${record.source_type}-${index}`}
           loading={loading}
-          pagination={{
-            pageSize: 20,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            pageSizeOptions: ['10', '20', '50', '100'],
-            showTotal: (total, range) => 
-              `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-            onShowSizeChange: (current, pageSize) => {
-              // 页面大小改变时的处理逻辑
-              console.log('页面大小改变:', current, pageSize);
-            }
-          }}
+          pagination={false}
+          scroll={{ y: 400 }}
           size="small"
           bordered
           summary={() => (
