@@ -1829,13 +1829,6 @@ const PeakSeasonSummary: React.FC = () => {
       // 备货记录的列
       baseColumns.push(
         {
-          title: '国家',
-          dataIndex: 'country',
-          key: 'country',
-          width: 80,
-          align: 'center'
-        },
-        {
           title: '备货数量',
           dataIndex: 'prep_quantity',
           key: 'prep_quantity',
@@ -1896,14 +1889,6 @@ const PeakSeasonSummary: React.FC = () => {
         title: 'Parent SKU',
         dataIndex: 'parent_sku',
         key: 'parent_sku',
-        width: 120,
-        align: 'center',
-        render: (value) => value || '-'
-      },
-      {
-        title: 'Child SKU',
-        dataIndex: 'child_sku',
-        key: 'child_sku',
         width: 120,
         align: 'center',
         render: (value) => value || '-'

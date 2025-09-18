@@ -1220,22 +1220,24 @@ router.get('/prep-amount-details', async (req, res) => {
     const prepDetails = await sequelize.query(`
       SELECT 
         prep.local_sku,
-        prep.country,
-        prep.qty as prep_quantity,
-        prep.upate_date,
+        SUM(prep.qty) as prep_quantity,
+        MAX(prep.upate_date) as upate_date,
         COALESCE(sis.price, 0) as unit_price,
-        CAST(prep.qty * COALESCE(sis.price, 0) as DECIMAL(16,2)) as amount,
+        CAST(SUM(prep.qty) * COALESCE(sis.price, 0) as DECIMAL(16,2)) as amount,
         pw.seller_name as supplier,
         sis.parent_sku,
+        sis.child_sku,
         sis.vendor_sku,
         sis.sellercolorname as color_name,
-        '备货记录' as source_type
+        '备货记录' as source_type,
+        GROUP_CONCAT(DISTINCT prep.country ORDER BY prep.country) as countries
       FROM peak_season_inventory_prep prep
       LEFT JOIN sellerinventory_sku sis ON prep.local_sku = sis.child_sku
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
       WHERE prep.upate_date IS NOT NULL 
         AND pw.seller_name IS NOT NULL ${whereCondition}
-      ORDER BY prep.upate_date DESC, prep.local_sku
+      GROUP BY prep.local_sku, sis.parent_sku, sis.vendor_sku, sis.sellercolorname, pw.seller_name, sis.price
+      ORDER BY MAX(prep.upate_date) DESC, prep.local_sku
     `, {
       replacements,
       type: sequelize.QueryTypes.SELECT
