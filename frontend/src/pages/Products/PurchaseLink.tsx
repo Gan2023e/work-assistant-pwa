@@ -3980,7 +3980,8 @@ const Purchase: React.FC = () => {
     }
 
     // 合并并去重
-    const allAsins = [...new Set([...existingAsins, ...asins])];
+    const combinedAsins = [...existingAsins, ...asins];
+    const allAsins = combinedAsins.filter((asin, index) => combinedAsins.indexOf(asin) === index);
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${currentCompetitorRecord.id}`, {
