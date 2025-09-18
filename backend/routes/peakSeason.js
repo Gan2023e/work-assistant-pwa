@@ -1294,10 +1294,13 @@ router.get('/shipped-amount-details', async (req, res) => {
     const shippedDetails = await sequelize.query(`
       SELECT 
         s.vendor_sku,
-        s.color as color_name,
+        s.sellercolorname as color_name,
         s.quantity as shipped_quantity,
         s.date as shipment_date,
-        s.supplier_name,
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+          ELSE pw.seller_name 
+        END as supplier_name,
         COALESCE(sis.price, 0) as unit_price,
         CAST(s.quantity * COALESCE(sis.price, 0) as DECIMAL(16,2)) as amount,
         pw.seller_name as supplier,

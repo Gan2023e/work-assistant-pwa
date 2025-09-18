@@ -1893,10 +1893,46 @@ const PeakSeasonSummary: React.FC = () => {
         }
       ];
     } else {
-      // 发货记录的列 - 保持原有顺序
+      // 发货记录的列 - 按新的顺序：发货日期、Parent SKU、子SKU、SKU、颜色、发货数量、单价、金额
       baseColumns = [
         {
-          title: 'SKU',
+          title: '发货日期',
+          dataIndex: 'shipment_date',
+          key: 'shipment_date',
+          width: 120,
+          align: 'center',
+          render: (value) => (
+            <div style={{ textAlign: 'center' }}>
+              {value ? dayjs(value).format('YYYY-MM-DD') : '-'}
+            </div>
+          )
+        },
+        {
+          title: 'Parent SKU',
+          dataIndex: 'parent_sku',
+          key: 'parent_sku',
+          width: 120,
+          align: 'center',
+          render: (value) => (
+            <div style={{ textAlign: 'center' }}>
+              {value || '-'}
+            </div>
+          )
+        },
+        {
+          title: '子SKU',
+          dataIndex: 'child_sku',
+          key: 'child_sku',
+          width: 120,
+          align: 'center',
+          render: (value) => (
+            <div style={{ textAlign: 'center' }}>
+              {value || '-'}
+            </div>
+          )
+        },
+        {
+          title: '卖家货号',
           key: 'sku',
           width: 120,
           align: 'center',
@@ -1921,34 +1957,6 @@ const PeakSeasonSummary: React.FC = () => {
           width: 100,
           align: 'center',
           render: (value) => value?.toLocaleString() || 0
-        },
-        {
-          title: '发货日期',
-          dataIndex: 'shipment_date',
-          key: 'shipment_date',
-          width: 120,
-          align: 'center',
-          render: (value) => value ? dayjs(value).format('YYYY-MM-DD') : '-'
-        },
-        {
-          title: '供应商名称',
-          dataIndex: 'supplier_name',
-          key: 'supplier_name',
-          width: 150,
-          align: 'center',
-          render: (value) => value || '-'
-        },
-        {
-          title: 'Parent SKU',
-          dataIndex: 'parent_sku',
-          key: 'parent_sku',
-          width: 120,
-          align: 'center',
-          render: (value) => (
-            <div style={{ textAlign: 'center' }}>
-              {value || '-'}
-            </div>
-          )
         },
         {
           title: '单价',
@@ -2816,7 +2824,7 @@ const PeakSeasonSummary: React.FC = () => {
               zIndex: 1000,
               borderTop: '2px solid #d9d9d9'
             }}>
-              <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 3 : 5}>
+              <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 3 : 7}>
                 <Text strong>合计</Text>
               </Table.Summary.Cell>
               {selectedAmountInfo?.type === 'prep' && (
@@ -2828,12 +2836,14 @@ const PeakSeasonSummary: React.FC = () => {
                   </div>
                 </Table.Summary.Cell>
               )}
-              <Table.Summary.Cell index={selectedAmountInfo?.type === 'prep' ? 2 : 1}>
-                <div style={{ textAlign: 'center' }}>
-                  <Text type="secondary">-</Text>
-                </div>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={selectedAmountInfo?.type === 'prep' ? 3 : 2}>
+              {selectedAmountInfo?.type === 'prep' && (
+                <Table.Summary.Cell index={2}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text type="secondary">-</Text>
+                  </div>
+                </Table.Summary.Cell>
+              )}
+              <Table.Summary.Cell index={selectedAmountInfo?.type === 'prep' ? 3 : 1}>
                 <div style={{ textAlign: 'right' }}>
                   <Text strong style={{ color: '#1890ff' }}>
                     ¥{amountDetails.reduce((total, item) => total + Number(item.amount || 0), 0).toLocaleString()}
