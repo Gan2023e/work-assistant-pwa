@@ -791,13 +791,13 @@ router.post('/mixed-boxes', async (req, res) => {
             
 
             
-            wholeBoxData[key] = {
-              amazon_sku: amazonSku, // 只使用amazon_sku，优先listings映射
-              local_sku: item.sku,
-              country: item.country,
-              total_quantity: 0,
-              total_boxes: 0
-            };
+                      wholeBoxData[key] = {
+            amz_sku: amazonSku, // 修改为amz_sku，与mixed_boxes保持一致
+            local_sku: item.sku,
+            country: item.country,
+            total_quantity: 0,
+            total_boxes: 0
+          };
           }
           
           // 计算剩余可用数量：总数量 - 已发货数量

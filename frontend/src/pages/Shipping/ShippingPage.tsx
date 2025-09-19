@@ -135,7 +135,7 @@ interface ShippingConfirmData {
 }
 
 interface WholeBoxConfirmData {
-  amazon_sku: string; // 只使用来自listings_sku的seller-sku
+  amz_sku: string; // 修改为amz_sku，与后端和mixed_boxes保持一致
   total_quantity: number;
   total_boxes: number;
   confirm_boxes: number;
@@ -1695,7 +1695,7 @@ const ShippingPage: React.FC = () => {
           if (!existsInShippingData) {
             newShippingData.push({
               box_num: boxNumber,
-              amz_sku: item.amazon_sku,
+              amz_sku: item.amz_sku,
               quantity: Math.floor(item.confirm_quantity / item.confirm_boxes)
             });
           }
@@ -2809,9 +2809,9 @@ const ShippingPage: React.FC = () => {
                     if (confirmedWholeBoxes.length > 0) {
                       console.log('📦 处理整箱数据:', confirmedWholeBoxes);
                       confirmedWholeBoxes.forEach((wholeItem: WholeBoxConfirmData) => {
-                        const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === wholeItem.amazon_sku || row.amazon_sku === wholeItem.amazon_sku);
+                        const selectedRecord = selectedRows.find((row: MergedShippingData) => row.amz_sku === wholeItem.amz_sku || row.amazon_sku === wholeItem.amz_sku);
                         updateItems.push({
-                          sku: selectedRecord?.local_sku || wholeItem.amazon_sku,
+                          sku: selectedRecord?.local_sku || wholeItem.amz_sku,
                           quantity: wholeItem.confirm_quantity,
                           total_boxes: wholeItem.confirm_boxes,
                           country: selectedRecord?.country || '美国',
@@ -2819,7 +2819,7 @@ const ShippingPage: React.FC = () => {
                           // 添加需求记录信息
                           record_num: selectedRecord?.record_num,
                           need_num: selectedRecord?.need_num,
-                          amz_sku: selectedRecord?.amz_sku || wholeItem.amazon_sku,
+                          amz_sku: selectedRecord?.amz_sku || wholeItem.amz_sku,
                           marketplace: selectedRecord?.marketplace || '亚马逊'
                         });
                       });
@@ -3891,7 +3891,7 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
         <Table
           dataSource={confirmData}
           columns={[
-            { title: 'Amazon SKU', dataIndex: 'amazon_sku', key: 'amazon_sku' },
+            { title: 'Amazon SKU', dataIndex: 'amz_sku', key: 'amz_sku' },
             { title: '总数量', dataIndex: 'total_quantity', key: 'total_quantity' },
             { title: '总箱数', dataIndex: 'total_boxes', key: 'total_boxes' },
             {
