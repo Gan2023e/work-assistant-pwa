@@ -108,14 +108,16 @@ router.get('/sku-details', async (req, res) => {
       replacements.local_sku = `%${local_sku}%`;
     }
 
-    // 修复SKU详情查询 - 按年份过滤发货数据
+    // 修复SKU详情查询 - 按年份过滤发货数据，并增加旺季备货发货记录统计
     const skuDetails = await sequelize.query(`
       SELECT 
         p.local_sku,
         p.country,
         p.qty as prep_quantity,
         p.upate_date,
-        COALESCE(s.shipped_quantity, 0) as shipped_quantity,
+        COALESCE(s.shipped_quantity, 0) as supplier_shipped_quantity,
+        COALESCE(si.shipment_quantity, 0) as shipment_quantity,
+        (COALESCE(s.shipped_quantity, 0) + COALESCE(si.shipment_quantity, 0)) as total_shipped_quantity,
         YEAR(p.upate_date) as year
       FROM peak_season_inventory_prep p
       LEFT JOIN (
@@ -127,6 +129,17 @@ router.get('/sku-details', async (req, res) => {
           ${year ? 'AND YEAR(s1.date) = :year' : ''}
         GROUP BY s1.vendor_sku
       ) s ON p.local_sku = s.vendor_sku
+      LEFT JOIN (
+        SELECT 
+          si1.local_sku,
+          SUM(si1.shipped_quantity) as shipment_quantity
+        FROM shipment_items si1
+        INNER JOIN shipment_records sr1 ON si1.shipment_id = sr1.shipment_id
+        WHERE si1.pre_type = '旺季备货'
+          AND sr1.status = '已发货'
+          ${year ? 'AND YEAR(si1.created_at) = :year' : ''}
+        GROUP BY si1.local_sku
+      ) si ON p.local_sku = si.local_sku
       WHERE p.upate_date IS NOT NULL ${whereCondition}
       ORDER BY p.upate_date DESC, p.local_sku
       LIMIT :limit OFFSET :offset

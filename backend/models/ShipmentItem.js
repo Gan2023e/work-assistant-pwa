@@ -78,6 +78,12 @@ const ShipmentItem = sequelize.define('ShipmentItem', {
     allowNull: true,
     comment: '箱号列表(JSON格式)'
   },
+  pre_type: {
+    type: DataTypes.ENUM('平时备货', '旺季备货'),
+    defaultValue: '平时备货',
+    allowNull: false,
+    comment: '备货类型'
+  },
   created_at: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,

@@ -60,7 +60,9 @@ interface SkuDetail {
   country: string;
   prep_quantity: number;
   upate_date: string;
-  shipped_quantity: number;
+  supplier_shipped_quantity: number; // 供应商发货数量
+  shipment_quantity: number; // 仓库发货数量
+  total_shipped_quantity: number; // 总发货数量
   year: number;
 }
 
@@ -1388,7 +1390,9 @@ const PeakSeasonSummary: React.FC = () => {
         年份: item.year,
         备货数量: item.prep_quantity,
         更新日期: item.upate_date,
-        已发货数量: item.shipped_quantity
+        供应商发货数量: item.supplier_shipped_quantity,
+        仓库发货数量: item.shipment_quantity,
+        总发货数量: item.total_shipped_quantity
       }));
       filename = `旺季备货SKU详情_${filters.year || '全部'}.xlsx`;
     } else if (activeTab === 'supplier-stats') {
@@ -1451,12 +1455,28 @@ const PeakSeasonSummary: React.FC = () => {
       render: (date) => date ? new Date(date).toLocaleDateString() : '-'
     },
     {
-      title: '已发货数量',
-      dataIndex: 'shipped_quantity',
-      key: 'shipped_quantity',
-      width: 120,
+      title: '供应商发货',
+      dataIndex: 'supplier_shipped_quantity',
+      key: 'supplier_shipped_quantity',
+      width: 100,
       align: 'center',
       render: (value) => value?.toLocaleString() || 0
+    },
+    {
+      title: '仓库发货',
+      dataIndex: 'shipment_quantity',
+      key: 'shipment_quantity',
+      width: 100,
+      align: 'center',
+      render: (value) => value?.toLocaleString() || 0
+    },
+    {
+      title: '总发货量',
+      dataIndex: 'total_shipped_quantity',
+      key: 'total_shipped_quantity',
+      width: 100,
+      align: 'center',
+      render: (value) => <Text strong>{value?.toLocaleString() || 0}</Text>
     },
     {
       title: '发货完成率',
@@ -1465,12 +1485,13 @@ const PeakSeasonSummary: React.FC = () => {
       align: 'center',
       render: (_, record) => {
         const rate = record.prep_quantity > 0 ? 
-          (record.shipped_quantity / record.prep_quantity * 100) : 0;
+          (record.total_shipped_quantity / record.prep_quantity * 100) : 0;
         return (
           <Progress 
             percent={Math.min(rate, 100)} 
             size="small" 
             format={() => `${rate.toFixed(1)}%`}
+            status={rate >= 100 ? 'success' : rate >= 50 ? 'active' : 'exception'}
           />
         );
       }

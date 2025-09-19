@@ -343,6 +343,7 @@ const ShippingPage: React.FC = () => {
 
   // 1. 顶部state
   const [logisticsProvider, setLogisticsProvider] = useState<string>('裕盛泰');
+  const [preType, setPreType] = useState<string>('平时备货'); // 新增：备货类型状态
   const logisticsProviderOptions = [
     { label: '裕盛泰', value: '裕盛泰' },
     { label: '东方瑞达', value: '东方瑞达' },
@@ -2692,6 +2693,17 @@ const ShippingPage: React.FC = () => {
                         placeholder="选择物流商"
                       />
                       
+                      <Text strong>备货类型：</Text>
+                      <Select
+                        style={{ width: 120 }}
+                        value={preType}
+                        onChange={setPreType}
+                        placeholder="选择备货类型"
+                      >
+                        <Option value="平时备货">平时备货</Option>
+                        <Option value="旺季备货">旺季备货</Option>
+                      </Select>
+                      
                       {hasInvoiceTemplate ? (
                         <Button 
                           icon={<DownloadOutlined />} 
@@ -2845,7 +2857,8 @@ const ShippingPage: React.FC = () => {
                       updateItems: updateItems,
                       shipping_method: selectedRows[0]?.shipping_method || '',
                       logistics_provider: logisticsProvider || '',
-                      remark: shippingRemark.trim() || `批量发货 - ${new Date().toLocaleString('zh-CN')}`
+                      remark: shippingRemark.trim() || `批量发货 - ${new Date().toLocaleString('zh-CN')}`,
+                      pre_type: preType || '平时备货' // 新增：备货类型
                     };
                     
                     console.log('📋 完整的请求体:', requestBody);
