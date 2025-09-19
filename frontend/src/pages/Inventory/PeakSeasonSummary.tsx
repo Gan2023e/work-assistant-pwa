@@ -443,6 +443,60 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
+  // 获取合并行数据
+  const getMergedShipmentData = () => {
+    // 多级排序：1.发货日期降序 2.供应商名称 3.Child SKU升序
+    const sortedData = [...supplierShipments].sort((a, b) => {
+      // 第一级：发货日期降序（最新的在前面）
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateA !== dateB) {
+        return dateB - dateA; // 降序
+      }
+      
+      // 第二级：同一天按供应商名称排序
+      const supplierA = a.supplier_name || '';
+      const supplierB = b.supplier_name || '';
+      if (supplierA !== supplierB) {
+        return supplierA.localeCompare(supplierB);
+      }
+      
+      // 第三级：同一天同一供应商内部按Child SKU升序
+      const childSkuA = a.child_sku || '';
+      const childSkuB = b.child_sku || '';
+      return childSkuA.localeCompare(childSkuB);
+    });
+
+    // 计算合并行的数据结构
+    const mergedData = sortedData.map((item, index) => {
+      const key = `${item.supplier_name || ''}-${item.date}`;
+      let supplierRowSpan = 0;
+      let dateRowSpan = 0;
+
+      if (index === 0 || key !== `${sortedData[index - 1].supplier_name || ''}-${sortedData[index - 1].date}`) {
+        // 计算相同供应商和日期的连续记录数
+        let count = 1;
+        for (let i = index + 1; i < sortedData.length; i++) {
+          if (`${sortedData[i].supplier_name || ''}-${sortedData[i].date}` === key) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        supplierRowSpan = count;
+        dateRowSpan = count;
+      }
+
+      return {
+        ...item,
+        supplierRowSpan,
+        dateRowSpan
+      };
+    });
+
+    return mergedData;
+  };
+
   // 双击单元格编辑
   const handleCellDoubleClick = (record: SupplierShipmentRecord, field: string) => {
     // 允许编辑的字段
@@ -1412,15 +1466,78 @@ const PeakSeasonSummary: React.FC = () => {
   // 供应商发货记录表格列
   const shipmentColumns: ColumnsType<SupplierShipmentRecord> = [
     {
+      title: '发货日期',
+      dataIndex: 'date',
+      key: 'date',
+      width: 120,
+      align: 'center',
+      fixed: 'left',
+      defaultSortOrder: 'descend',
+      sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      onCell: (record, index) => {
+        // 检查合并行逻辑
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        if (currentItem && currentItem.dateRowSpan > 0) {
+          return {
+            rowSpan: currentItem.dateRowSpan,
+            onDoubleClick: () => handleCellDoubleClick(record, 'date')
+          };
+        } else if (currentItem && currentItem.dateRowSpan === 0) {
+          return { rowSpan: 0 };
+        }
+        return {
+          onDoubleClick: () => handleCellDoubleClick(record, 'date')
+        };
+      },
+      render: (text, record) => {
+        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'date';
+        
+        if (isEditing) {
+          return (
+            <Input
+              type="date"
+              value={editingValue}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onPressEnter={handleSaveInlineEdit}
+              onBlur={handleCancelInlineEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCancelInlineEdit();
+                }
+              }}
+              autoFocus
+              size="small"
+              style={{ width: '100%' }}
+            />
+          );
+        }
+
+        return <Text style={{ cursor: 'pointer' }}>{text}</Text>;
+      }
+    },
+    {
       title: '供应商',
       dataIndex: 'supplier_name',
       key: 'supplier_name',
       width: 150,
       align: 'center',
-      fixed: 'left',
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'supplier_name')
-      }),
+      onCell: (record, index) => {
+        // 检查合并行逻辑
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        if (currentItem && currentItem.supplierRowSpan > 0) {
+          return {
+            rowSpan: currentItem.supplierRowSpan,
+            onDoubleClick: () => handleCellDoubleClick(record, 'supplier_name')
+          };
+        } else if (currentItem && currentItem.supplierRowSpan === 0) {
+          return { rowSpan: 0 };
+        }
+        return {
+          onDoubleClick: () => handleCellDoubleClick(record, 'supplier_name')
+        };
+      },
       render: (text, record) => {
         // 检查是否正在编辑这个单元格
         const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'supplier_name';
@@ -1504,6 +1621,12 @@ const PeakSeasonSummary: React.FC = () => {
       key: 'child_sku',
       width: 150,
       align: 'center',
+      sorter: (a, b) => {
+        if (!a.child_sku && !b.child_sku) return 0;
+        if (!a.child_sku) return 1;
+        if (!b.child_sku) return -1;
+        return a.child_sku.localeCompare(b.child_sku);
+      },
       onCell: (record) => ({
         onDoubleClick: () => handleCellDoubleClick(record, 'child_sku')
       }),
@@ -1530,42 +1653,6 @@ const PeakSeasonSummary: React.FC = () => {
         }
 
         return text ? <Text style={{ color: '#52c41a', cursor: 'pointer' }}>{text}</Text> : <Text type="secondary" style={{ cursor: 'pointer' }}>-</Text>;
-      }
-    },
-    {
-      title: '发货日期',
-      dataIndex: 'date',
-      key: 'date',
-      width: 120,
-      align: 'center',
-      sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      onCell: (record) => ({
-        onDoubleClick: () => handleCellDoubleClick(record, 'date')
-      }),
-      render: (text, record) => {
-        const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'date';
-        
-        if (isEditing) {
-          return (
-            <Input
-              type="date"
-              value={editingValue}
-              onChange={(e) => setEditingValue(e.target.value)}
-              onPressEnter={handleSaveInlineEdit}
-              onBlur={handleCancelInlineEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  handleCancelInlineEdit();
-                }
-              }}
-              autoFocus
-              size="small"
-              style={{ width: '100%' }}
-            />
-          );
-        }
-
-        return <Text style={{ cursor: 'pointer' }}>{text}</Text>;
       }
     },
     {
@@ -2375,7 +2462,7 @@ const PeakSeasonSummary: React.FC = () => {
             </div>
             <Table
               columns={shipmentColumns}
-              dataSource={supplierShipments}
+              dataSource={getMergedShipmentData()}
               rowKey="id"
               loading={loading}
               scroll={{ x: 1000 }}
