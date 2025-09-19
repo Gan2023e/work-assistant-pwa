@@ -6,6 +6,7 @@ const {
   PeakSeasonInventoryPrep, 
   SupplierShipmentsPeakSeason, 
   BulkPaymentsPeakSeason,
+  SupplierShippingCost,
   SellerInventorySku,
   ProductWeblink
 } = require('../models');
@@ -799,17 +800,26 @@ router.get('/supplier-shipments', async (req, res) => {
         s.sellercolorname as color,
         s.quantity,
         s.create_date,
-        sis.parent_sku,
+        COALESCE(s.parent_sku, sis.parent_sku) as parent_sku,
         sis.child_sku,
-        CASE 
-          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
-          ELSE pw.seller_name 
-        END as supplier_name
+        COALESCE(s.supplier_name, 
+          CASE 
+            WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+            ELSE pw.seller_name 
+          END
+        ) as supplier_name,
+        ssc.shipping_cost,
+        ssc.logistics_provider,
+        ssc.tracking_number,
+        ssc.package_count,
+        ssc.total_weight,
+        ssc.remark as shipping_remark
       FROM \`supplier_shipments_peak_season\` s
       LEFT JOIN sellerinventory_sku sis ON s.vendor_sku = sis.vendor_sku AND s.sellercolorname = sis.sellercolorname
       LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      LEFT JOIN supplier_shipping_costs ssc ON COALESCE(s.supplier_name, pw.seller_name) = ssc.supplier_name AND s.date = ssc.shipping_date
       WHERE s.date IS NOT NULL ${whereCondition}
-      ORDER BY s.date DESC, s.vendor_sku, s.sellercolorname
+      ORDER BY s.date DESC, COALESCE(s.supplier_name, pw.seller_name), s.vendor_sku, s.sellercolorname
       LIMIT :limit OFFSET :offset
     `, {
       replacements: { ...replacements, limit, offset },
@@ -1344,6 +1354,502 @@ router.get('/shipped-amount-details', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取已发金额明细失败',
+      error: error.message
+    });
+  }
+});
+
+// 新增供应商发货记录
+router.post('/supplier-shipments', async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { 
+      shipping_date, 
+      supplier_name, 
+      shipment_items = [], // 发货明细项目数组
+      shipping_cost_info = {} // 运费信息
+    } = req.body;
+
+    if (!shipping_date || !supplier_name) {
+      return res.status(400).json({
+        code: 1,
+        message: '发货日期和供应商名称不能为空'
+      });
+    }
+
+    // 检查是否至少有发货明细或运费信息之一
+    const hasValidShipmentItems = Array.isArray(shipment_items) && shipment_items.length > 0 &&
+                                  shipment_items.some(item => item.vendor_sku && item.color && item.quantity > 0);
+    
+    const hasShippingCostInfo = shipping_cost_info && (
+      shipping_cost_info.shipping_cost ||
+      shipping_cost_info.logistics_provider ||
+      shipping_cost_info.tracking_number ||
+      shipping_cost_info.package_count ||
+      shipping_cost_info.total_weight ||
+      shipping_cost_info.remark
+    );
+
+    if (!hasValidShipmentItems && !hasShippingCostInfo) {
+      return res.status(400).json({
+        code: 1,
+        message: '请至少填写发货明细或运费信息中的一项'
+      });
+    }
+
+    const created_shipments = [];
+    
+    // 批量创建发货记录（如果有发货明细）
+    if (hasValidShipmentItems) {
+      for (const item of shipment_items) {
+        const { vendor_sku, color, quantity, parent_sku } = item;
+        
+        // 跳过不完整的明细项
+        if (!vendor_sku || !color || !quantity || quantity <= 0) {
+          continue;
+        }
+
+        // 创建发货记录
+        const shipmentRecord = await SupplierShipmentsPeakSeason.create({
+          日期: shipping_date,
+          卖家货号: vendor_sku,
+          卖家颜色: color,
+          数量: quantity,
+          供应商名称: supplier_name,
+          父级SKU: parent_sku || null,
+          录入日期: new Date()
+        }, { transaction });
+
+        created_shipments.push(shipmentRecord);
+      }
+    }
+
+    // 处理运费信息（如果有任何运费相关信息）
+    if (hasShippingCostInfo) {
+      const {
+        shipping_cost,
+        logistics_provider,
+        tracking_number,
+        package_count,
+        total_weight,
+        remark
+      } = shipping_cost_info;
+
+      // 检查是否已存在相同供应商和日期的运费记录
+      const existingCost = await SupplierShippingCost.findOne({
+        where: {
+          supplier_name: supplier_name,
+          shipping_date: shipping_date
+        },
+        transaction
+      });
+
+      if (existingCost) {
+        // 更新现有运费记录
+        await existingCost.update({
+          shipping_cost: shipping_cost,
+          logistics_provider: logistics_provider || existingCost.logistics_provider,
+          tracking_number: tracking_number || existingCost.tracking_number,
+          package_count: package_count || existingCost.package_count,
+          total_weight: total_weight || existingCost.total_weight,
+          remark: remark || existingCost.remark
+        }, { transaction });
+      } else {
+        // 创建新的运费记录
+        await SupplierShippingCost.create({
+          supplier_name: supplier_name,
+          shipping_date: shipping_date,
+          shipping_cost: shipping_cost,
+          logistics_provider: logistics_provider,
+          tracking_number: tracking_number,
+          package_count: package_count,
+          total_weight: total_weight,
+          remark: remark
+        }, { transaction });
+      }
+    }
+
+    await transaction.commit();
+
+    const message = [];
+    if (created_shipments.length > 0) {
+      message.push(`${created_shipments.length}条发货记录`);
+    }
+    if (hasShippingCostInfo) {
+      message.push('运费信息');
+    }
+    
+    res.json({
+      code: 0,
+      message: `${message.join('和')}${message.length > 0 ? '创建成功' : '操作完成'}`,
+      data: {
+        created_shipment_count: created_shipments.length,
+        has_shipping_cost: hasShippingCostInfo,
+        shipping_date: shipping_date,
+        supplier_name: supplier_name
+      }
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('创建供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建发货记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新供应商发货记录
+router.put('/supplier-shipments/:id', async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const shipment = await SupplierShipmentsPeakSeason.findByPk(id, { transaction });
+    
+    if (!shipment) {
+      return res.status(404).json({
+        code: 1,
+        message: '发货记录不存在'
+      });
+    }
+
+    // 更新基本信息
+    const updates = {};
+    if (updateData.date) updates.日期 = updateData.date;
+    if (updateData.vendor_sku) updates.卖家货号 = updateData.vendor_sku;
+    if (updateData.color) updates.卖家颜色 = updateData.color;
+    if (updateData.quantity !== undefined) updates.数量 = updateData.quantity;
+    if (updateData.parent_sku) updates.父级SKU = updateData.parent_sku;
+    if (updateData.supplier_name) updates.供应商名称 = updateData.supplier_name;
+
+    if (Object.keys(updates).length > 0) {
+      await shipment.update(updates, { transaction });
+    }
+
+    // 如果修改了供应商信息，需要同步更新相关的Parent SKU记录
+    if (updateData.supplier_name && updateData.parent_sku) {
+      const affectedCount = await sequelize.query(`
+        UPDATE product_weblink 
+        SET seller_name = :supplier_name 
+        WHERE parent_sku = :parent_sku
+      `, {
+        replacements: { 
+          supplier_name: updateData.supplier_name,
+          parent_sku: updateData.parent_sku 
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      });
+      
+      if (affectedCount[1] > 0) {
+        // 同步更新其他相关发货记录的供应商信息
+        await sequelize.query(`
+          UPDATE supplier_shipments_peak_season 
+          SET supplier_name = :supplier_name 
+          WHERE parent_sku = :parent_sku AND supplier_name != :supplier_name
+        `, {
+          replacements: { 
+            supplier_name: updateData.supplier_name,
+            parent_sku: updateData.parent_sku 
+          },
+          type: sequelize.QueryTypes.UPDATE,
+          transaction
+        });
+      }
+    }
+
+    await transaction.commit();
+
+    res.json({
+      code: 0,
+      message: updateData.supplier_name ? '发货记录和供应商信息已更新' : '发货记录更新成功'
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('更新供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除供应商发货记录
+router.delete('/supplier-shipments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const shipment = await SupplierShipmentsPeakSeason.findByPk(id);
+    
+    if (!shipment) {
+      return res.status(404).json({
+        code: 1,
+        message: '发货记录不存在'
+      });
+    }
+
+    await shipment.destroy();
+
+    res.json({
+      code: 0,
+      message: '发货记录删除成功'
+    });
+
+  } catch (error) {
+    console.error('删除供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 批量删除供应商发货记录
+router.post('/supplier-shipments/batch-delete', async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { ids } = req.body;
+    
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请选择要删除的记录'
+      });
+    }
+
+    const deleteCount = await SupplierShipmentsPeakSeason.destroy({
+      where: {
+        id: {
+          [Op.in]: ids
+        }
+      },
+      transaction
+    });
+
+    await transaction.commit();
+
+    res.json({
+      code: 0,
+      message: `成功删除 ${deleteCount} 条记录`
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('批量删除供应商发货记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取运费记录列表
+router.get('/shipping-costs', async (req, res) => {
+  try {
+    const { year, supplier_name, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereCondition = {};
+    
+    if (year) {
+      whereCondition[Op.and] = sequelize.where(
+        sequelize.fn('YEAR', sequelize.col('shipping_date')), 
+        year
+      );
+    }
+    
+    if (supplier_name) {
+      whereCondition.supplier_name = {
+        [Op.like]: `%${supplier_name}%`
+      };
+    }
+
+    const { count, rows } = await SupplierShippingCost.findAndCountAll({
+      where: whereCondition,
+      order: [['shipping_date', 'DESC'], ['supplier_name', 'ASC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    res.json({
+      code: 0,
+      data: {
+        records: rows,
+        pagination: {
+          current: parseInt(page),
+          pageSize: parseInt(limit),
+          total: count,
+          totalPages: Math.ceil(count / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('获取运费记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取运费记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 创建或更新运费记录
+router.post('/shipping-costs', async (req, res) => {
+  try {
+    const {
+      supplier_name,
+      shipping_date,
+      shipping_cost,
+      logistics_provider,
+      tracking_number,
+      package_count,
+      total_weight,
+      remark
+    } = req.body;
+
+    if (!supplier_name || !shipping_date || !shipping_cost) {
+      return res.status(400).json({
+        code: 1,
+        message: '供应商名称、发货日期和运费金额不能为空'
+      });
+    }
+
+    // 检查是否已存在相同供应商和日期的记录
+    const [shippingCost, created] = await SupplierShippingCost.findOrCreate({
+      where: {
+        supplier_name: supplier_name,
+        shipping_date: shipping_date
+      },
+      defaults: {
+        shipping_cost: shipping_cost,
+        logistics_provider: logistics_provider,
+        tracking_number: tracking_number,
+        package_count: package_count,
+        total_weight: total_weight,
+        remark: remark
+      }
+    });
+
+    if (!created) {
+      // 更新现有记录
+      await shippingCost.update({
+        shipping_cost: shipping_cost,
+        logistics_provider: logistics_provider || shippingCost.logistics_provider,
+        tracking_number: tracking_number || shippingCost.tracking_number,
+        package_count: package_count || shippingCost.package_count,
+        total_weight: total_weight || shippingCost.total_weight,
+        remark: remark || shippingCost.remark
+      });
+    }
+
+    res.json({
+      code: 0,
+      message: created ? '运费记录创建成功' : '运费记录更新成功',
+      data: shippingCost
+    });
+
+  } catch (error) {
+    console.error('保存运费记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '保存运费记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除运费记录
+router.delete('/shipping-costs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const shippingCost = await SupplierShippingCost.findByPk(id);
+    
+    if (!shippingCost) {
+      return res.status(404).json({
+        code: 1,
+        message: '运费记录不存在'
+      });
+    }
+
+    await shippingCost.destroy();
+
+    res.json({
+      code: 0,
+      message: '运费记录删除成功'
+    });
+
+  } catch (error) {
+    console.error('删除运费记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取供应商和卖家货号选项（用于新增发货记录的下拉框）
+router.get('/shipment-options', async (req, res) => {
+  try {
+    // 获取供应商列表
+    const supplierResult = await sequelize.query(`
+      SELECT DISTINCT 
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+          ELSE pw.seller_name 
+        END as supplier_name
+      FROM product_weblink pw 
+      WHERE pw.seller_name IS NOT NULL AND pw.seller_name != ''
+      ORDER BY pw.seller_name
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 获取卖家货号和颜色组合
+    const skuColorResult = await sequelize.query(`
+      SELECT DISTINCT 
+        sis.vendor_sku,
+        sis.sellercolorname as color,
+        sis.parent_sku,
+        sis.child_sku,
+        CASE 
+          WHEN pw.seller_name IS NULL OR pw.seller_name = '' THEN '无供应商信息'
+          ELSE pw.seller_name 
+        END as supplier_name
+      FROM sellerinventory_sku sis
+      LEFT JOIN product_weblink pw ON sis.parent_sku = pw.parent_sku
+      WHERE sis.vendor_sku IS NOT NULL AND sis.sellercolorname IS NOT NULL
+      ORDER BY sis.vendor_sku, sis.sellercolorname
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json({
+      code: 0,
+      data: {
+        suppliers: supplierResult.map(item => item.supplier_name),
+        sku_colors: skuColorResult
+      }
+    });
+
+  } catch (error) {
+    console.error('获取发货记录选项失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取选项数据失败',
       error: error.message
     });
   }

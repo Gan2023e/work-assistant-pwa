@@ -25,6 +25,7 @@ const ListingsSku = require('./ListingsSku');
 const PeakSeasonInventoryPrep = require('./PeakSeasonInventoryPrep');
 const SupplierShipmentsPeakSeason = require('./SupplierShipmentsPeakSeason');
 const BulkPaymentsPeakSeason = require('./BulkPaymentsPeakSeason');
+const SupplierShippingCost = require('./SupplierShippingCost');
 
 // 设置模型关联关系
 
@@ -110,5 +111,6 @@ module.exports = {
   ListingsSku,
   PeakSeasonInventoryPrep,
   SupplierShipmentsPeakSeason,
-  BulkPaymentsPeakSeason
+  BulkPaymentsPeakSeason,
+  SupplierShippingCost
 };

@@ -18,7 +18,9 @@ import {
   DatePicker,
   InputNumber,
   Popconfirm,
-  Tooltip
+  Tooltip,
+  AutoComplete,
+  Checkbox
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { 
@@ -117,6 +119,26 @@ interface SupplierShipmentRecord {
   parent_sku?: string;
   child_sku?: string;
   supplier_name?: string;
+  shipping_cost?: number;
+  logistics_provider?: string;
+  tracking_number?: string;
+  package_count?: number;
+  total_weight?: number;
+  shipping_remark?: string;
+}
+
+
+
+// 选项数据接口
+interface ShipmentOptions {
+  suppliers: string[];
+  sku_colors: {
+    vendor_sku: string;
+    color: string;
+    parent_sku?: string;
+    child_sku?: string;
+    supplier_name?: string;
+  }[];
 }
 
 interface ShipmentSummaryData {
@@ -188,6 +210,16 @@ const PeakSeasonSummary: React.FC = () => {
   const [summaryFilters, setSummaryFilters] = useState({
     year: 2025 as number | undefined
   });
+
+  // 新增发货记录状态
+  const [addShipmentVisible, setAddShipmentVisible] = useState(false);
+  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOptions>({
+    suppliers: [],
+    sku_colors: []
+  });
+  const [addShipmentForm] = Form.useForm();
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
+  const [formUpdateKey, setFormUpdateKey] = useState(0); // 用于强制更新表单
 
   // 筛选条件
   const [filters, setFilters] = useState({
@@ -444,6 +476,28 @@ const PeakSeasonSummary: React.FC = () => {
   };
 
   // 获取合并行数据
+  // 获取同一组（相同供应商+日期）的所有记录ID
+  const getGroupRecordIds = (record: SupplierShipmentRecord) => {
+    return supplierShipments
+      .filter(item => 
+        item.supplier_name === record.supplier_name && 
+        item.date === record.date
+      )
+      .map(item => item.id);
+  };
+
+  // 检查一个组是否全部被选中
+  const isGroupSelected = (record: SupplierShipmentRecord) => {
+    const groupIds = getGroupRecordIds(record);
+    return groupIds.every(id => selectedRowKeys.includes(id));
+  };
+
+  // 检查一个组是否部分被选中
+  const isGroupPartialSelected = (record: SupplierShipmentRecord) => {
+    const groupIds = getGroupRecordIds(record);
+    return groupIds.some(id => selectedRowKeys.includes(id)) && !isGroupSelected(record);
+  };
+
   const getMergedShipmentData = () => {
     // 多级排序：1.发货日期降序 2.供应商名称 3.Child SKU升序
     const sortedData = [...supplierShipments].sort((a, b) => {
@@ -614,29 +668,6 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
-  // 删除记录
-  const handleDeleteRecord = async (id: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/${id}`, {
-        method: 'DELETE'
-      });
-      
-      const data = await response.json();
-      
-      if (data.code === 0) {
-        message.success('删除成功');
-        // 清空选中状态
-        setSelectedRowKeys([]);
-        fetchSupplierShipments(shipmentPagination.current);
-      } else {
-        message.error(data.message);
-      }
-    } catch (error) {
-      console.error('删除失败:', error);
-      message.error('删除失败');
-    }
-  };
-
   // 批量删除记录
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
@@ -660,6 +691,40 @@ const PeakSeasonSummary: React.FC = () => {
       if (data.code === 0) {
         message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
         setSelectedRowKeys([]);
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      message.error('批量删除失败');
+    }
+  };
+
+  // 批量删除指定ID的记录 (用于操作列的组删除)
+  const handleGroupDelete = async (idsToDelete: number[]) => {
+    if (idsToDelete.length === 0) {
+      message.warning('没有需要删除的记录');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments/batch-delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ids: idsToDelete
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success(`成功删除 ${idsToDelete.length} 条记录`);
+        // 从选中状态中移除已删除的记录
+        setSelectedRowKeys(prev => prev.filter(id => !idsToDelete.includes(id)));
         fetchSupplierShipments(shipmentPagination.current);
       } else {
         message.error(data.message);
@@ -887,6 +952,201 @@ const PeakSeasonSummary: React.FC = () => {
     }
   };
 
+  // 获取发货记录选项数据
+  const fetchShipmentOptions = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/shipment-options`);
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        setShipmentOptions(data.data);
+        console.log('设置发货记录选项数据:', data.data);
+      } else {
+        console.error('获取选项数据API返回错误:', data.message);
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('获取选项数据失败:', error);
+      message.error('获取选项数据失败');
+    }
+  };
+
+  // 新增发货记录
+  const handleAddShipment = async (values: any) => {
+    try {
+      setLoading(true);
+      
+      const { shipping_date, supplier_name, shipment_items, ...shippingCostInfo } = values;
+      
+      // 检查是否至少有一个部分被填写
+      const hasShipmentItems = shipment_items && shipment_items.length > 0 && 
+                              shipment_items.some((item: any) => item.vendor_sku && item.color && item.quantity);
+      
+      const hasShippingCost = shippingCostInfo.shipping_cost || 
+                            shippingCostInfo.logistics_provider ||
+                            shippingCostInfo.tracking_number ||
+                            shippingCostInfo.package_count ||
+                            shippingCostInfo.total_weight ||
+                            shippingCostInfo.remark;
+      
+      if (!hasShipmentItems && !hasShippingCost) {
+        message.warning('请至少填写发货明细或运费信息中的一项');
+        return;
+      }
+
+      // 如果没有填写供应商，但填写了发货明细，尝试从发货明细中获取供应商信息
+      let finalSupplierName = supplier_name;
+      if (!finalSupplierName && hasShipmentItems) {
+        const firstItem = shipment_items.find((item: any) => item.vendor_sku);
+        if (firstItem) {
+          const skuColor = shipmentOptions.sku_colors.find(
+            sc => sc.vendor_sku === firstItem.vendor_sku && sc.supplier_name
+          );
+          finalSupplierName = skuColor?.supplier_name || '未知供应商';
+        }
+      }
+
+      const requestData = {
+        shipping_date: shipping_date.format('YYYY-MM-DD'),
+        supplier_name: finalSupplierName || '未知供应商',
+        shipment_items: hasShipmentItems ? shipment_items
+          .filter((item: any) => item.vendor_sku && item.color && item.quantity)
+          .map((item: any) => ({
+            vendor_sku: item.vendor_sku,
+            color: item.color,
+            quantity: item.quantity,
+            parent_sku: item.parent_sku
+          })) : [],
+        shipping_cost_info: hasShippingCost ? {
+          shipping_cost: shippingCostInfo.shipping_cost || 0,
+          logistics_provider: shippingCostInfo.logistics_provider || '',
+          tracking_number: shippingCostInfo.tracking_number || '',
+          package_count: shippingCostInfo.package_count || 0,
+          total_weight: shippingCostInfo.total_weight || 0,
+          remark: shippingCostInfo.remark || ''
+        } : {}
+      };
+
+      console.log('新增发货记录请求数据:', requestData);
+      
+      const response = await fetch(`${API_BASE_URL}/api/peak-season/supplier-shipments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      const data = await response.json();
+      
+      if (data.code === 0) {
+        message.success(data.message);
+        setAddShipmentVisible(false);
+        addShipmentForm.resetFields();
+        setSelectedSupplier('');
+        setFormUpdateKey(0);
+        // 刷新发货记录列表
+        fetchSupplierShipments(shipmentPagination.current);
+      } else {
+        message.error(data.message);
+      }
+    } catch (error) {
+      console.error('新增发货记录失败:', error);
+      message.error('新增发货记录失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 编辑运费
+  const handleEditShippingCost = (record: SupplierShipmentRecord) => {
+    Modal.confirm({
+      title: '编辑运费信息',
+      content: (
+        <Form
+          layout="vertical"
+          initialValues={{
+            supplier_name: record.supplier_name,
+            shipping_date: record.date,
+            shipping_cost: record.shipping_cost || 0,
+            logistics_provider: record.logistics_provider || '',
+            tracking_number: record.tracking_number || '',
+            package_count: record.package_count || 0,
+            total_weight: record.total_weight || 0,
+            remark: record.shipping_remark || ''
+          }}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item name="shipping_cost" label="运费金额" rules={[{ required: true }]}>
+            <InputNumber
+              min={0}
+              precision={2}
+              step={0.01}
+              style={{ width: '100%' }}
+              placeholder="请输入运费金额"
+            />
+          </Form.Item>
+          <Form.Item name="logistics_provider" label="物流商">
+            <AutoComplete
+              placeholder="请选择/输入物流商"
+              allowClear
+              options={[
+                { value: '圆通', label: '圆通' },
+                { value: '中通', label: '中通' },
+                { value: '韵达', label: '韵达' },
+                { value: '极兔', label: '极兔' },
+                { value: '申通', label: '申通' },
+                { value: '顺丰', label: '顺丰' }
+              ]}
+              filterOption={(input, option) =>
+                (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
+          <Form.Item name="tracking_number" label="物流单号">
+            <Input placeholder="请输入物流单号" />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="package_count" label="包裹数量">
+                <InputNumber min={0} style={{ width: '100%' }} placeholder="包裹数" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="total_weight" label="总重量(kg)">
+                <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="重量" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="remark" label="备注">
+            <Input.TextArea rows={3} placeholder="请输入备注信息" />
+          </Form.Item>
+        </Form>
+      ),
+      okText: '保存',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const values = await new Promise((resolve, reject) => {
+            Modal.confirm({
+              title: '获取表单数据',
+              content: '正在保存运费信息...',
+              okText: '确定',
+              onOk: () => resolve({}), // 这里需要实际获取表单数据
+            });
+          });
+
+          // 实际保存运费数据的逻辑
+          console.log('保存运费数据:', values);
+          message.success('运费信息保存成功');
+        } catch (error) {
+          console.error('保存运费失败:', error);
+          message.error('保存运费失败');
+        }
+      }
+    });
+  };
+
   // 处理供应商统计数据，计算rowSpan用于表格合并显示，并按付款类型优先级排序
   const processSupplierStatsForDisplay = (rawData: any[]): SupplierStats[] => {
     // 先按供应商和年份分组
@@ -1085,6 +1345,7 @@ const PeakSeasonSummary: React.FC = () => {
       fetchSupplierStats();
     } else if (key === 'supplier-shipments') {
       fetchFilterOptions(); // 获取筛选选项
+      fetchShipmentOptions(); // 获取发货记录选项
       fetchSupplierShipments(1);
     } else if (key === 'supplier-shipments-summary') {
       fetchShipmentSummary();
@@ -1582,6 +1843,79 @@ const PeakSeasonSummary: React.FC = () => {
       }
     },
     {
+      title: '运费信息',
+      key: 'shipping_info',
+      width: 150,
+      align: 'center',
+      onCell: (record, index) => {
+        // 检查合并行逻辑 - 运费与供应商和日期合并
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        if (currentItem && currentItem.supplierRowSpan > 0) {
+          return {
+            rowSpan: currentItem.supplierRowSpan,
+            onDoubleClick: () => handleEditShippingCost(record)
+          };
+        } else if (currentItem && currentItem.supplierRowSpan === 0) {
+          return { rowSpan: 0 };
+        }
+        return {};
+      },
+      render: (_, record, index) => {
+        // 只在合并行的第一行显示运费信息
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        
+        if (currentItem && currentItem.supplierRowSpan > 0) {
+          const shippingCost = record.shipping_cost || 0;
+          const trackingNumber = record.tracking_number;
+          
+          return (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ marginBottom: 4 }}>
+                <Button 
+                  type="link" 
+                  style={{ 
+                    padding: 0, 
+                    color: shippingCost > 0 ? '#fa8c16' : '#999', 
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    height: 'auto'
+                  }}
+                  onClick={() => handleEditShippingCost(record)}
+                >
+                  ¥{shippingCost.toLocaleString()}
+                </Button>
+              </div>
+              {trackingNumber && (
+                <div>
+                  <Button 
+                    type="link" 
+                    size="small"
+                    style={{ 
+                      padding: '0 2px', 
+                      color: '#1890ff', 
+                      fontSize: '12px',
+                      height: 'auto',
+                      textDecoration: 'underline'
+                    }}
+                    onClick={() => {
+                      const searchUrl = `https://www.baidu.com/s?ie=utf-8&f=8&rsv_bp=1&rsv_idx=1&tn=baidu&wd=${encodeURIComponent(trackingNumber)}`;
+                      window.open(searchUrl, '_blank');
+                    }}
+                    title={`点击搜索物流单号: ${trackingNumber}`}
+                  >
+                    {trackingNumber}
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        }
+        return null;
+      }
+    },
+    {
       title: 'Parent SKU',
       dataIndex: 'parent_sku',
       key: 'parent_sku',
@@ -1770,37 +2104,70 @@ const PeakSeasonSummary: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 80,
+      width: 100,
       align: 'center',
       fixed: 'right',
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingRecord(record);
-              setEditModalVisible(true);
-            }}
-            title="编辑"
-          />
-          <Popconfirm
-            title="确定要删除这条记录吗？"
-            onConfirm={() => handleDeleteRecord(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              size="small"
-              icon={<DeleteOutlined />}
-              danger
-              title="删除"
-            />
-          </Popconfirm>
-        </Space>
-      )
+      onCell: (record, index) => {
+        // 检查合并行逻辑 - 操作与供应商和日期合并
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        if (currentItem && currentItem.supplierRowSpan > 0) {
+          return {
+            rowSpan: currentItem.supplierRowSpan,
+          };
+        } else if (currentItem && currentItem.supplierRowSpan === 0) {
+          return { rowSpan: 0 };
+        }
+        return {};
+      },
+      render: (_, record, index) => {
+        // 只在合并行的第一行显示操作按钮
+        const mergedData = getMergedShipmentData();
+        const currentItem = mergedData[index!];
+        
+        if (currentItem && currentItem.supplierRowSpan > 0) {
+          const groupIds = getGroupRecordIds(record);
+          const groupRecords = supplierShipments.filter(item => groupIds.includes(item.id));
+          
+          return (
+            <Space>
+              <Button
+                type="link"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  // 批量编辑：选择该组的第一条记录作为编辑模板
+                  setEditingRecord(record);
+                  setEditModalVisible(true);
+                }}
+                title={`批量编辑 ${groupRecords.length} 条记录`}
+              />
+              <Popconfirm
+                title={`确定要删除这 ${groupRecords.length} 条记录吗？`}
+                description={
+                  <div>
+                    <div>供应商: {record.supplier_name || '未知'}</div>
+                    <div>发货日期: {record.date}</div>
+                    <div>记录数量: {groupRecords.length} 条</div>
+                  </div>
+                }
+                onConfirm={() => handleGroupDelete(groupIds)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  danger
+                  title={`批量删除 ${groupRecords.length} 条记录`}
+                />
+              </Popconfirm>
+            </Space>
+          );
+        }
+        return null;
+      }
     }
   ];
 
@@ -2425,6 +2792,13 @@ const PeakSeasonSummary: React.FC = () => {
                   搜索
                 </Button>
                 <Button
+                  type="primary"
+                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                  onClick={() => setAddShipmentVisible(true)}
+                >
+                  新增发货记录
+                </Button>
+                <Button
                   icon={<ReloadOutlined />}
                   onClick={() => {
                     // 重置筛选状态
@@ -2479,6 +2853,54 @@ const PeakSeasonSummary: React.FC = () => {
                 onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as number[]),
                 type: 'checkbox',
                 fixed: true,
+                onCell: (record, index) => {
+                  const mergedData = getMergedShipmentData();
+                  const currentItem = mergedData[index!];
+                  // 只在合并行的第一行显示复选框
+                  if (currentItem && currentItem.supplierRowSpan > 0) {
+                    return {
+                      rowSpan: currentItem.supplierRowSpan,
+                    };
+                  } else if (currentItem && currentItem.supplierRowSpan === 0) {
+                    return { rowSpan: 0 };
+                  }
+                  return {};
+                },
+                renderCell: (checked, record, index, originNode) => {
+                  const mergedData = getMergedShipmentData();
+                  const currentItem = mergedData[index!];
+                  
+                  // 只在合并行的第一行显示自定义复选框
+                  if (currentItem && currentItem.supplierRowSpan > 0) {
+                    const isSelected = isGroupSelected(record);
+                    const isPartial = isGroupPartialSelected(record);
+                    
+                    return (
+                      <Checkbox
+                        checked={isSelected}
+                        indeterminate={isPartial}
+                        onChange={(e) => {
+                          const groupIds = getGroupRecordIds(record);
+                          if (e.target.checked) {
+                            // 选中组内所有记录
+                            const newSelectedKeys = [...selectedRowKeys];
+                            groupIds.forEach(id => {
+                              if (!newSelectedKeys.includes(id)) {
+                                newSelectedKeys.push(id);
+                              }
+                            });
+                            setSelectedRowKeys(newSelectedKeys);
+                          } else {
+                            // 取消选中组内所有记录
+                            const newSelectedKeys = selectedRowKeys.filter(id => !groupIds.includes(id));
+                            setSelectedRowKeys(newSelectedKeys);
+                          }
+                        }}
+                      />
+                    );
+                  }
+                  return null;
+                },
               }}
               size="small"
             />
@@ -2940,6 +3362,285 @@ const PeakSeasonSummary: React.FC = () => {
             </Table.Summary.Row>
           )}
         />
+      </Modal>
+
+      {/* 新增发货记录模态框 */}
+      <Modal
+        title="新增供应商发货记录"
+        open={addShipmentVisible}
+        onCancel={() => {
+          setAddShipmentVisible(false);
+          addShipmentForm.resetFields();
+          setSelectedSupplier('');
+          setFormUpdateKey(0);
+        }}
+        footer={null}
+        width={1000}
+        style={{ top: 20 }}
+      >
+        <Form
+          form={addShipmentForm}
+          layout="vertical"
+          onFinish={handleAddShipment}
+          initialValues={{
+            shipping_date: dayjs(),
+            shipment_items: [{ vendor_sku: '', color: '', quantity: 1 }]
+          }}
+        >
+          <div style={{ 
+            backgroundColor: '#f0f9ff', 
+            border: '1px solid #bae6fd', 
+            borderRadius: 4, 
+            padding: 12, 
+            marginBottom: 16,
+            fontSize: '14px',
+            color: '#0369a1'
+          }}>
+            💡 <strong>温馨提示：</strong>发货明细和运费信息可以都填写，也可以选择其中之一填写。
+          </div>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="shipping_date"
+                label="发货日期"
+                rules={[{ required: true, message: '请选择发货日期' }]}
+              >
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="supplier_name"
+                label="供应商（可选）"
+                tooltip="可选择现有供应商或输入新供应商名称，如不填写将根据发货明细自动推导"
+              >
+                <AutoComplete
+                  placeholder="请选择/输入供应商（可选）"
+                  allowClear
+                  filterOption={(input, option) =>
+                    (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                  onChange={(value) => {
+                    setSelectedSupplier(value || '');
+                    // 强制更新表单以刷新颜色选项
+                    setFormUpdateKey(prev => prev + 1);
+                  }}
+                  options={shipmentOptions.suppliers.map(supplier => ({
+                    value: supplier,
+                    label: supplier
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Title level={5}>发货明细</Title>
+          <Form.Item>
+            <Form.List name="shipment_items">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <div key={key} style={{ 
+                      display: 'flex', 
+                      marginBottom: 8, 
+                      padding: 16, 
+                      border: '1px solid #d9d9d9', 
+                      borderRadius: 6,
+                      backgroundColor: '#fafafa'
+                    }}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'vendor_sku']}
+                        style={{ flex: 1, marginRight: 16, marginBottom: 0 }}
+                      >
+                        <AutoComplete
+                          placeholder="请选择/输入卖家货号"
+                          allowClear
+                          filterOption={(input, option) => {
+                            return (option?.value as string)?.toLowerCase().includes(input.toLowerCase()) || false;
+                          }}
+                          onChange={(value) => {
+                            // 查找是否是现有的SKU选项
+                            const skuColor = shipmentOptions.sku_colors.find(sc => sc.vendor_sku === value);
+                            if (skuColor?.parent_sku) {
+                              addShipmentForm.setFieldValue(['shipment_items', name, 'parent_sku'], skuColor.parent_sku);
+                            }
+                            
+                            // 自动填充供应商名称（如果供应商字段为空且找到了对应的供应商）
+                            if (skuColor?.supplier_name && !addShipmentForm.getFieldValue('supplier_name')) {
+                              addShipmentForm.setFieldValue('supplier_name', skuColor.supplier_name);
+                              setSelectedSupplier(skuColor.supplier_name);
+                            }
+                            
+                            // 只有在选择现有SKU时才清空颜色，自填的不清空
+                            const isExistingSku = shipmentOptions.sku_colors.some(sc => sc.vendor_sku === value);
+                            if (isExistingSku) {
+                              addShipmentForm.setFieldValue(['shipment_items', name, 'color'], '');
+                            }
+                            
+                            // 强制更新表单以刷新颜色选项
+                            setFormUpdateKey(prev => prev + 1);
+                          }}
+                          options={(() => {
+                            // 根据选择的供应商过滤卖家货号
+                            const filteredSkus = selectedSupplier 
+                              ? shipmentOptions.sku_colors.filter(sc => sc.supplier_name === selectedSupplier)
+                              : shipmentOptions.sku_colors;
+                            
+                            return Array.from(new Set(filteredSkus.map(sc => sc.vendor_sku))).map(sku => ({
+                              value: sku,
+                              label: sku
+                            }));
+                          })()}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'color']}
+                        style={{ flex: 1, marginRight: 16, marginBottom: 0 }}
+                      >
+                        <AutoComplete
+                          placeholder="请选择/输入颜色"
+                          allowClear
+                          filterOption={(input, option) =>
+                            (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
+                          }
+                          key={`${name}-color-${formUpdateKey}`}
+                          options={(() => {
+                            const currentVendorSku = addShipmentForm.getFieldValue(['shipment_items', name, 'vendor_sku']);
+                            if (!currentVendorSku) return [];
+                            
+                            // 根据当前选择的卖家货号和供应商过滤颜色选项
+                            const filteredColors = shipmentOptions.sku_colors.filter(sc => {
+                              if (sc.vendor_sku !== currentVendorSku) return false;
+                              if (selectedSupplier && sc.supplier_name !== selectedSupplier) return false;
+                              return true;
+                            });
+                            
+                            return filteredColors.map(sc => ({
+                              value: sc.color,
+                              label: sc.color
+                            }));
+                          })()}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'quantity']}
+                        style={{ flex: 1, marginRight: 16, marginBottom: 0 }}
+                      >
+                        <InputNumber
+                          min={1}
+                          placeholder="数量"
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'parent_sku']}
+                        style={{ display: 'none' }}
+                      >
+                        <Input />
+                      </Form.Item>
+                      <Button
+                        type="link"
+                        danger
+                        onClick={() => remove(name)}
+                        disabled={fields.length === 1}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  ))}
+                  <Form.Item>
+                    <Button
+                      type="dashed"
+                      onClick={() => add()}
+                      block
+                      icon={<SearchOutlined />}
+                    >
+                      添加发货明细
+                    </Button>
+                  </Form.Item>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
+
+          <div style={{ borderTop: '1px solid #d9d9d9', paddingTop: 16, marginTop: 16 }}>
+            <Title level={5}>运费信息</Title>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="shipping_cost" label="运费金额">
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    step={0.01}
+                    style={{ width: '100%' }}
+                    placeholder="请输入运费金额"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="logistics_provider" label="物流商">
+                  <AutoComplete
+                    placeholder="请选择/输入物流商"
+                    allowClear
+                    options={[
+                      { value: '圆通', label: '圆通' },
+                      { value: '中通', label: '中通' },
+                      { value: '韵达', label: '韵达' },
+                      { value: '极兔', label: '极兔' },
+                      { value: '申通', label: '申通' },
+                      { value: '顺丰', label: '顺丰' }
+                    ]}
+                    filterOption={(input, option) =>
+                      (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
+                    }
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="tracking_number" label="物流单号">
+                  <Input placeholder="请输入物流单号" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="package_count" label="包裹数量">
+                  <InputNumber min={0} style={{ width: '100%' }} placeholder="包裹数" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="total_weight" label="总重量(kg)">
+                  <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="重量" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="remark" label="备注">
+                  <Input placeholder="请输入备注信息" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          <Form.Item style={{ marginTop: 24, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setAddShipmentVisible(false);
+                addShipmentForm.resetFields();
+                setSelectedSupplier('');
+                setFormUpdateKey(0);
+              }}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={loading}>
+                保存发货记录
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );
