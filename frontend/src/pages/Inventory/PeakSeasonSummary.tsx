@@ -2971,7 +2971,7 @@ const PeakSeasonSummary: React.FC = () => {
               pagination={false}
               size="small"
               bordered
-
+              sticky={{ offsetHeader: 64, offsetSummary: 0 }}
               summary={() => {
                 // 计算每日总计、备货合计、发货合计和剩余合计
                 const dailyTotals: { [date: string]: number } = {};
@@ -2995,7 +2995,7 @@ const PeakSeasonSummary: React.FC = () => {
                 remainingGrandTotal = prepGrandTotal - grandTotal;
                 
                 return (
-                  <Table.Summary.Row style={{ backgroundColor: '#fafafa' }}>
+                  <Table.Summary.Row style={{ backgroundColor: '#fafafa', position: 'sticky', bottom: 0, zIndex: 1 }}>
                     <Table.Summary.Cell index={0}>
                       <Text strong style={{ fontSize: '14px' }}>汇总合计</Text>
                     </Table.Summary.Cell>
@@ -3345,10 +3345,13 @@ const PeakSeasonSummary: React.FC = () => {
           scroll={{ x: 1200 }}
           size="small"
           bordered
-
+          sticky={{ offsetHeader: 0, offsetSummary: 0 }}
           summary={() => (
             <Table.Summary.Row style={{ 
               backgroundColor: '#fafafa',
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 1000,
               borderTop: '2px solid #d9d9d9'
             }}>
               <Table.Summary.Cell index={0} colSpan={selectedAmountInfo?.type === 'prep' ? 3 : 7}>
