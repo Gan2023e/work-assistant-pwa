@@ -11,7 +11,7 @@ const {
   ProductWeblink
 } = require('../models');
 
-// 获取旺季备货汇总统计
+// 获取旺季备货统计
 router.get('/summary', async (req, res) => {
   try {
     const { year, country, local_sku } = req.query;
@@ -75,7 +75,7 @@ router.get('/summary', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('获取旺季备货汇总统计失败:', error);
+    console.error('获取旺季备货统计失败:', error);
     res.status(500).json({
       code: 1,
       message: '获取统计数据失败',

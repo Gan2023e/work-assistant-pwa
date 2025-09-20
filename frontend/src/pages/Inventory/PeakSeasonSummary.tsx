@@ -2506,7 +2506,7 @@ const PeakSeasonSummary: React.FC = () => {
       <div style={{ marginBottom: '24px' }}>
         <Title level={2}>
           <BarChartOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
-          旺季备货汇总
+          旺季备货
         </Title>
         
         {/* 调试信息 */}
