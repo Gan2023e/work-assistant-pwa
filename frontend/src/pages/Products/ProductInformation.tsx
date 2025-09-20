@@ -163,7 +163,7 @@ const ProductInformation: React.FC = () => {
         params.append(key, value.toString());
       });
 
-      const response = await fetch(`${API_BASE_URL}/product-information/list?${params}`);
+      const response = await fetch(`${API_BASE_URL}/api/product-information/list?${params}`);
       const result = await response.json();
 
       if (result.success) {
