@@ -2440,8 +2440,7 @@ const ShippingPage: React.FC = () => {
             rowKey={(record: MergedShippingData) => record.record_num !== null ? record.record_num : `manual-${record.local_sku}-${record.country}`}
             loading={mergedLoading}
             pagination={false}
-            scroll={{ x: 1500, y: 'calc(100vh - 350px)' }}
-            sticky={{ offsetHeader: 64 }}
+            scroll={{ x: 1500 }}
             onChange={handleTableChange}
             rowSelection={{
               type: 'checkbox',
@@ -3019,7 +3018,7 @@ const ShippingPage: React.FC = () => {
             pagination={false}
             size="small"
             rowKey={(record: UnmappedInventoryItem) => `${record.local_sku}_${record.country}`}
-            scroll={{ y: 400 }}
+            scroll={{ x: 800 }}
           />
           
           <div style={{ marginTop: 16, textAlign: 'right' }}>
