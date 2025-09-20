@@ -2441,6 +2441,7 @@ const ShippingPage: React.FC = () => {
             loading={mergedLoading}
             pagination={false}
             scroll={{ x: 1500 }}
+            sticky={{ offsetHeader: 0 }}
             onChange={handleTableChange}
             rowSelection={{
               type: 'checkbox',
