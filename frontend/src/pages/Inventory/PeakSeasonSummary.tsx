@@ -2967,11 +2967,10 @@ const PeakSeasonSummary: React.FC = () => {
               dataSource={shipmentSummary}
               rowKey="child_sku"
               loading={loading}
-              scroll={{ x: Math.max(500 + summaryDates.length * 100, 1000), y: 500 }}
+              scroll={{ x: Math.max(500 + summaryDates.length * 100, 1000) }}
               pagination={false}
               size="small"
               bordered
-              sticky={{ offsetHeader: 64, offsetSummary: 0 }}
               summary={() => {
                 // 计算每日总计、备货合计、发货合计和剩余合计
                 const dailyTotals: { [date: string]: number } = {};
@@ -3342,7 +3341,7 @@ const PeakSeasonSummary: React.FC = () => {
           rowKey={(record, index) => `${record.source_type}-${index}`}
           loading={loading}
           pagination={false}
-          scroll={{ y: 'calc(80vh - 200px)' }}
+
           size="small"
           bordered
           sticky={{ offsetHeader: 0, offsetSummary: 0 }}

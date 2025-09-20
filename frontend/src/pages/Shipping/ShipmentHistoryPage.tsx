@@ -567,7 +567,7 @@ const ShipmentHistoryPage: React.FC = () => {
           rowSelection={rowSelection}
           loading={loading}
           size="small"
-          scroll={{ x: 1440, y: 600 }}
+          scroll={{ x: 1440 }}
           pagination={{
             ...pagination,
             showSizeChanger: true,
