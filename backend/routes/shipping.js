@@ -518,96 +518,45 @@ router.post('/mixed-boxes', async (req, res) => {
       
       if (skuMappingConditions.length > 0) {
         try {
+          // 修复：使用与merged-data接口相同的精确映射逻辑
           allMappings = await AmzSkuMapping.findAll({
             where: {
               [Op.or]: skuMappingConditions
             },
-            attributes: ['local_sku', 'country', 'amz_sku', 'site'],
+            attributes: ['local_sku', 'country', 'amz_sku', 'site', 'sku_type'],
             raw: true
           });
           
-                    // 使用统一的listings_sku查询逻辑（混合箱专用）
-          if (allMappings.length > 0) {
-            // 获取所有需要查询的local_sku
-            const uniqueSkus = [...new Set(allMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
+          console.log('\x1b[33m%s\x1b[0m', `🔍 混合箱数据Amazon SKU映射查询: 找到${allMappings.length}条映射记录`);
+
+          // 为每个local_sku+country选择最佳映射（优先FBA SKU）
+          const bestMappings = new Map();
+          allMappings.forEach(mapping => {
+            const key = `${mapping.local_sku}_${mapping.country}`;
+            const existing = bestMappings.get(key);
             
-            for (const skuInfo of uniqueSkus) {
-              // 根据国家确定对应的Amazon站点
-              let siteCondition = '';
-              
-              switch (skuInfo.country) {
-                case '英国':
-                case 'UK':
-                  siteCondition = `AND site = 'www.amazon.co.uk'`;
-                  break;
-                case '美国':
-                case 'US':
-                  siteCondition = `AND site = 'www.amazon.com'`;
-                  break;
-                case '澳大利亚':
-                case 'AU':
-                  siteCondition = `AND site = 'www.amazon.com.au'`;
-                  break;
-                case '加拿大':
-                case 'CA':
-                  siteCondition = `AND site = 'www.amazon.ca'`;
-                  break;
-                case '阿联酋':
-                case 'AE':
-                  siteCondition = `AND site = 'www.amazon.ae'`;
-                  break;
-                default:
-                  // 其他国家使用通用逻辑，优先美国站点
-                  siteCondition = `AND site IN ('www.amazon.com', 'www.amazon.co.uk', 'www.amazon.com.au', 'www.amazon.ca', 'www.amazon.ae')`;
-                  break;
-              }
-
-              const listingsQuery = `
-                SELECT 
-                  \`seller-sku\` as amazon_sku,
-                  \`fulfillment-channel\` as fulfillment_channel,
-                  site
-                FROM listings_sku 
-                WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                  ${siteCondition}
-                  AND ((\`fulfillment-channel\` LIKE 'AMAZON_%') OR \`fulfillment-channel\` = 'DEFAULT')
-                ORDER BY 
-                  CASE 
-                    WHEN site = 'www.amazon.com' AND '${skuInfo.country}' IN ('美国', 'US') THEN 1
-                    WHEN site = 'www.amazon.co.uk' AND '${skuInfo.country}' IN ('英国', 'UK') THEN 1
-                    WHEN site = 'www.amazon.com.au' AND '${skuInfo.country}' IN ('澳大利亚', 'AU') THEN 1
-                    WHEN site = 'www.amazon.ca' AND '${skuInfo.country}' IN ('加拿大', 'CA') THEN 1
-                    WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
-                    ELSE 2
-                  END,
-                  CASE 
-                    WHEN LENGTH(\`seller-sku\`) < 20 THEN 1
-                    ELSE 2
-                  END,
-                  LENGTH(\`seller-sku\`) ASC,
-                  \`seller-sku\`
-                LIMIT 1
-              `;
-              
-              console.log('\x1b[34m%s\x1b[0m', `🔍 混合箱SKU查询 ${skuInfo.local_sku} (${skuInfo.country}):`, listingsQuery);
-              
-              const listingsResults = await sequelize.query(listingsQuery, {
-                type: sequelize.QueryTypes.SELECT,
-                raw: true
-              });
-              
-              if (listingsResults.length > 0) {
-                const result = listingsResults[0];
-                const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
-                mixedBoxListingsMap.set(mappingKey, result.amazon_sku);
-                console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱SKU映射成功: ${skuInfo.local_sku} (${skuInfo.country}) -> ${result.amazon_sku}`);
-              } else {
-                console.log('\x1b[31m%s\x1b[0m', `❌ 混合箱SKU无匹配: ${skuInfo.local_sku} (${skuInfo.country})`);
-              }
+            // 如果没有现有映射，或者当前映射是FBA SKU而现有的不是，则使用当前映射
+            if (!existing || (mapping.sku_type === 'FBA SKU' && existing.sku_type !== 'FBA SKU')) {
+              bestMappings.set(key, mapping);
             }
-          }
-        } catch (mappingError) {
+          });
 
+          // 直接使用AmzSkuMapping的精确映射，而不需要再查询listings_sku
+          bestMappings.forEach((mapping, key) => {
+            mixedBoxListingsMap.set(key, mapping.amz_sku);
+            console.log('\x1b[32m%s\x1b[0m', `✅ 混合箱SKU映射: ${mapping.local_sku} (${mapping.country}) -> ${mapping.amz_sku} (${mapping.sku_type})`);
+          });
+
+          // 对于没有找到映射的SKU，记录警告
+          skuMappingConditions.forEach(sku => {
+            const key = `${sku.local_sku}_${sku.country}`;
+            if (!mixedBoxListingsMap.has(key)) {
+              console.log('\x1b[31m%s\x1b[0m', `❌ 混合箱SKU无映射: ${sku.local_sku} (${sku.country})`);
+            }
+          });
+          
+        } catch (error) {
+          console.error('\x1b[31m%s\x1b[0m', '❌ 查询混合箱SKU映射失败:', error);
         }
       }
       
@@ -643,7 +592,7 @@ router.post('/mixed-boxes', async (req, res) => {
           
           const mappingKey = `${sku}_${country}`;
           const amazonSku = mixedBoxListingsMap.get(mappingKey) || '';
-          console.log('\x1b[36m%s\x1b[0m', `🔍 混合箱SKU映射: ${sku} -> ${amazonSku || '(留空)'} (来源: ${mixedBoxListingsMap.has(mappingKey) ? 'listings_sku' : '无匹配记录'})`);
+          console.log('\x1b[36m%s\x1b[0m', `🔍 混合箱SKU映射: ${sku} -> ${amazonSku || '(留空)'} (来源: ${mixedBoxListingsMap.has(mappingKey) ? 'AmzSkuMapping' : '无匹配记录'})`);
 
           allMixedBoxData.push({
             box_num: mixBoxNum,
@@ -665,7 +614,7 @@ router.post('/mixed-boxes', async (req, res) => {
     // 第三步：处理整箱数据（仅选中的记录，并过滤已出库的SKU）
     const wholeBoxData = {};
     
-    // 为整箱数据查询listings_sku映射关系（使用与merged-data端点相同的逻辑）
+    // 为整箱数据查询Amazon SKU映射关系（使用与merged-data端点相同的逻辑）
     const wholeBoxListingsMap = new Map();
       
       // 获取所有整箱SKU的映射条件
@@ -674,106 +623,53 @@ router.post('/mixed-boxes', async (req, res) => {
       
       if (wholeBoxSkus.length > 0) {
         try {
+          // 修复：使用与merged-data接口相同的精确映射逻辑
+          // 步骤1: 使用AmzSkuMapping表进行精确映射，优先FBA SKU
+          const mappingConditions = wholeBoxSkus.map(sku => ({
+            [Op.and]: [
+              { local_sku: sku.local_sku },
+              { country: sku.country }
+            ]
+          }));
 
-        
-        // 步骤1: 查询SKU映射关系以获取amz_sku
-        const amzSkuMappings = await AmzSkuMapping.findAll({
-            where: {
-              [Op.or]: wholeBoxSkus
-            },
-          attributes: ['local_sku', 'country', 'amz_sku', 'site'],
+          const amzSkuMappings = await AmzSkuMapping.findAll({
+            where: { [Op.or]: mappingConditions },
+            attributes: ['local_sku', 'country', 'amz_sku', 'site', 'sku_type'],
             raw: true
           });
-          
 
-        
-        // 使用统一的listings_sku查询逻辑（整箱专用）
-        if (amzSkuMappings.length > 0) {
-          // 获取所有需要查询的local_sku
-          const uniqueSkus = [...new Set(amzSkuMappings.map(m => ({ local_sku: m.local_sku, country: m.country })))];
-          
-          for (const skuInfo of uniqueSkus) {
-            // 根据国家确定对应的Amazon站点
-            let siteCondition = '';
+          console.log('\x1b[33m%s\x1b[0m', `🔍 整箱数据Amazon SKU映射查询: 找到${amzSkuMappings.length}条映射记录`);
+
+          // 为每个local_sku+country选择最佳映射（优先FBA SKU）
+          const bestMappings = new Map();
+          amzSkuMappings.forEach(mapping => {
+            const key = `${mapping.local_sku}_${mapping.country}`;
+            const existing = bestMappings.get(key);
             
-            switch (skuInfo.country) {
-              case '英国':
-              case 'UK':
-                siteCondition = `AND site = 'www.amazon.co.uk'`;
-                break;
-              case '美国':
-              case 'US':
-                siteCondition = `AND site = 'www.amazon.com'`;
-                break;
-              case '澳大利亚':
-              case 'AU':
-                siteCondition = `AND site = 'www.amazon.com.au'`;
-                break;
-              case '加拿大':
-              case 'CA':
-                siteCondition = `AND site = 'www.amazon.ca'`;
-                break;
-              case '阿联酋':
-              case 'AE':
-                siteCondition = `AND site = 'www.amazon.ae'`;
-                break;
-              default:
-                // 其他国家使用通用逻辑，优先美国站点
-                siteCondition = `AND site IN ('www.amazon.com', 'www.amazon.co.uk', 'www.amazon.com.au', 'www.amazon.ca', 'www.amazon.ae')`;
-                break;
+            // 如果没有现有映射，或者当前映射是FBA SKU而现有的不是，则使用当前映射
+            if (!existing || (mapping.sku_type === 'FBA SKU' && existing.sku_type !== 'FBA SKU')) {
+              bestMappings.set(key, mapping);
             }
+          });
 
-            const listingsQuery = `
-              SELECT 
-                \`seller-sku\` as amazon_sku,
-                \`fulfillment-channel\` as fulfillment_channel,
-                site
-              FROM listings_sku 
-              WHERE \`seller-sku\` LIKE '%${skuInfo.local_sku}%'
-                ${siteCondition}
-                AND ((\`fulfillment-channel\` LIKE 'AMAZON_%') OR \`fulfillment-channel\` = 'DEFAULT')
-              ORDER BY 
-                CASE 
-                  WHEN site = 'www.amazon.com' AND '${skuInfo.country}' IN ('美国', 'US') THEN 1
-                  WHEN site = 'www.amazon.co.uk' AND '${skuInfo.country}' IN ('英国', 'UK') THEN 1
-                  WHEN site = 'www.amazon.com.au' AND '${skuInfo.country}' IN ('澳大利亚', 'AU') THEN 1
-                  WHEN site = 'www.amazon.ca' AND '${skuInfo.country}' IN ('加拿大', 'CA') THEN 1
-                  WHEN site = 'www.amazon.ae' AND '${skuInfo.country}' IN ('阿联酋', 'AE') THEN 1
-                  ELSE 2
-                END,
-                CASE 
-                  WHEN LENGTH(\`seller-sku\`) < 20 THEN 1
-                  ELSE 2
-                END,
-                LENGTH(\`seller-sku\`) ASC,
-                \`seller-sku\`
-              LIMIT 1
-            `;
-            
-            console.log('\x1b[34m%s\x1b[0m', `🔍 整箱SKU查询 ${skuInfo.local_sku} (${skuInfo.country}):`, listingsQuery);
-            
-            const listingsResults = await sequelize.query(listingsQuery, {
-              type: sequelize.QueryTypes.SELECT,
-              raw: true
-            });
-            
-            if (listingsResults.length > 0) {
-              const result = listingsResults[0];
-              const mappingKey = `${skuInfo.local_sku}_${skuInfo.country}`;
-              wholeBoxListingsMap.set(mappingKey, result.amazon_sku);
-              console.log('\x1b[32m%s\x1b[0m', `✅ 整箱SKU映射成功: ${skuInfo.local_sku} (${skuInfo.country}) -> ${result.amazon_sku}`);
-            } else {
-              console.log('\x1b[31m%s\x1b[0m', `❌ 整箱SKU无匹配: ${skuInfo.local_sku} (${skuInfo.country})`);
+          // 设置映射关系
+          bestMappings.forEach((mapping, key) => {
+            wholeBoxListingsMap.set(key, mapping.amz_sku);
+            console.log('\x1b[32m%s\x1b[0m', `✅ 整箱SKU映射: ${mapping.local_sku} (${mapping.country}) -> ${mapping.amz_sku} (${mapping.sku_type})`);
+          });
+
+          // 对于没有找到映射的SKU，记录警告
+          wholeBoxSkus.forEach(sku => {
+            const key = `${sku.local_sku}_${sku.country}`;
+            if (!wholeBoxListingsMap.has(key)) {
+              console.log('\x1b[31m%s\x1b[0m', `❌ 整箱SKU无映射: ${sku.local_sku} (${sku.country})`);
             }
-          }
-        }
-        
+          });
 
-        
         } catch (error) {
-
+          console.error('\x1b[31m%s\x1b[0m', '❌ 查询整箱SKU映射失败:', error);
+        }
       }
-    }
     
     inventoryData.forEach(item => {
       if (!item.mix_box_num || item.mix_box_num.trim() === '') {
@@ -6571,7 +6467,11 @@ router.post('/update-shipped-status', async (req, res) => {
     }));
     
     const allMappings = await AmzSkuMapping.findAll({
-      where: { [Op.or]: mappingConditions }
+      where: {
+        [Op.or]: mappingConditions
+      },
+      attributes: ['local_sku', 'country', 'amz_sku', 'site', 'sku_type'],
+      raw: true
     });
     
     // 创建映射的快速查找表
