@@ -1664,7 +1664,7 @@ const Listings: React.FC = () => {
           rowKey="key"
           rowSelection={handleRowSelection}
           onChange={handleTableChange}
-
+          sticky={{ offsetHeader: 64 }}
           locale={{
             emptyText: <Empty description="暂无数据" />
           }}
