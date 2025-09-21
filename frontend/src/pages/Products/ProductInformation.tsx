@@ -825,14 +825,14 @@ const ProductInformation: React.FC = () => {
                   .filter(col => col.key !== 'action') // 子表格不显示操作列
                   .map(col => ({
                     ...col,
-                    render: col.render ? (value: any, record: ProductInformationData) => {
+                    render: col.render ? (value: any, record: ProductInformationData, index: number) => {
                       // 对于子行，强制非分组模式渲染
                       if (typeof col.render === 'function') {
-                        return col.render(value, record);
+                        return col.render(value, record, index);
                       }
                       return value;
                     } : undefined
-                  }));
+                  })) as ColumnsType<ProductInformationData>;
 
                 return (
                   <Table<ProductInformationData>
