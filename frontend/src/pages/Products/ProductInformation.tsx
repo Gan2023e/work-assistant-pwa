@@ -183,7 +183,7 @@ const ProductInformation: React.FC = () => {
   // 获取统计信息
   const fetchStatistics = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/product-information/statistics`);
+      const response = await fetch(`${API_BASE_URL}/api/product-information/statistics`);
       const result = await response.json();
 
       if (result.success) {
@@ -221,7 +221,7 @@ const ProductInformation: React.FC = () => {
     try {
       const values = await form.validateFields();
       
-      const response = await fetch(`${API_BASE_URL}/product-information/${currentRecord?.site}/${currentRecord?.item_sku}`, {
+      const response = await fetch(`${API_BASE_URL}/api/product-information/${currentRecord?.site}/${currentRecord?.item_sku}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -246,7 +246,7 @@ const ProductInformation: React.FC = () => {
   // 删除记录
   const handleDelete = async (record: ProductInformationData) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/product-information/${record.site}/${record.item_sku}`, {
+      const response = await fetch(`${API_BASE_URL}/api/product-information/${record.site}/${record.item_sku}`, {
         method: 'DELETE',
       });
 
@@ -271,7 +271,7 @@ const ProductInformation: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/product-information/batch-delete`, {
+      const response = await fetch(`${API_BASE_URL}/api/product-information/batch-delete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -332,9 +332,9 @@ const ProductInformation: React.FC = () => {
       ),
     },
     {
-      title: '原始父SKU',
-      dataIndex: 'original_parent_sku',
-      key: 'original_parent_sku',
+      title: '外部产品ID',
+      dataIndex: 'external_product_id',
+      key: 'external_product_id',
       width: 120,
       ellipsis: true
     },
@@ -343,6 +343,41 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'brand_name',
       key: 'brand_name',
       width: 100,
+      ellipsis: true
+    },
+    {
+      title: '制造商',
+      dataIndex: 'manufacturer',
+      key: 'manufacturer',
+      width: 120,
+      ellipsis: true
+    },
+    {
+      title: '产品类型',
+      dataIndex: 'item_type',
+      key: 'item_type',
+      width: 120,
+      ellipsis: true
+    },
+    {
+      title: '标准价格',
+      dataIndex: 'standard_price',
+      key: 'standard_price',
+      width: 100,
+      render: (price: number) => price ? `$${price}` : '-'
+    },
+    {
+      title: '标价',
+      dataIndex: 'list_price',
+      key: 'list_price',
+      width: 100,
+      render: (price: number) => price ? `$${price}` : '-'
+    },
+    {
+      title: '原始父SKU',
+      dataIndex: 'original_parent_sku',
+      key: 'original_parent_sku',
+      width: 120,
       ellipsis: true
     },
     {
@@ -365,6 +400,37 @@ const ProductInformation: React.FC = () => {
       key: 'size_name',
       width: 100,
       ellipsis: true
+    },
+    {
+      title: '数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 80,
+      render: (qty: number) => qty || '-'
+    },
+    {
+      title: '原产国',
+      dataIndex: 'country_of_origin',
+      key: 'country_of_origin',
+      width: 100,
+      ellipsis: true
+    },
+    {
+      title: '主图',
+      dataIndex: 'main_image_url',
+      key: 'main_image_url',
+      width: 80,
+      render: (url: string) => url ? (
+        <img 
+          src={url} 
+          alt="主图" 
+          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+          }}
+        />
+      ) : '-'
     },
     {
       title: '操作',
@@ -516,7 +582,7 @@ const ProductInformation: React.FC = () => {
           rowSelection={rowSelection}
           loading={loading}
           pagination={false}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 2000 }}
           locale={{
             emptyText: <Empty description="暂无数据" />
           }}
@@ -544,32 +610,61 @@ const ProductInformation: React.FC = () => {
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={null}
-        width={800}
+        width={900}
       >
         {currentRecord && (
           <Descriptions bordered size="small" column={2}>
             <Descriptions.Item label="站点" span={1}>{currentRecord.site}</Descriptions.Item>
             <Descriptions.Item label="商品SKU" span={1}>{currentRecord.item_sku}</Descriptions.Item>
             <Descriptions.Item label="商品名称" span={2}>{currentRecord.item_name}</Descriptions.Item>
-            <Descriptions.Item label="原始父SKU" span={1}>{currentRecord.original_parent_sku}</Descriptions.Item>
-            <Descriptions.Item label="父SKU" span={1}>{currentRecord.parent_sku}</Descriptions.Item>
-            <Descriptions.Item label="品牌" span={1}>{currentRecord.brand_name}</Descriptions.Item>
-            <Descriptions.Item label="制造商" span={1}>{currentRecord.manufacturer}</Descriptions.Item>
-            <Descriptions.Item label="颜色" span={1}>{currentRecord.color_name}</Descriptions.Item>
-            <Descriptions.Item label="尺寸" span={1}>{currentRecord.size_name}</Descriptions.Item>
-            <Descriptions.Item label="标准价格" span={1}>{currentRecord.standard_price}</Descriptions.Item>
-            <Descriptions.Item label="标价" span={1}>{currentRecord.list_price}</Descriptions.Item>
-            <Descriptions.Item label="原产国" span={2}>{currentRecord.country_of_origin}</Descriptions.Item>
+            <Descriptions.Item label="外部产品ID" span={1}>{currentRecord.external_product_id || '-'}</Descriptions.Item>
+            <Descriptions.Item label="外部产品ID类型" span={1}>{currentRecord.external_product_id_type || '-'}</Descriptions.Item>
+            <Descriptions.Item label="原始父SKU" span={1}>{currentRecord.original_parent_sku || '-'}</Descriptions.Item>
+            <Descriptions.Item label="父SKU" span={1}>{currentRecord.parent_sku || '-'}</Descriptions.Item>
+            <Descriptions.Item label="品牌" span={1}>{currentRecord.brand_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="制造商" span={1}>{currentRecord.manufacturer || '-'}</Descriptions.Item>
+            <Descriptions.Item label="产品类型" span={1}>{currentRecord.feed_product_type || '-'}</Descriptions.Item>
+            <Descriptions.Item label="商品类型" span={1}>{currentRecord.item_type || '-'}</Descriptions.Item>
+            <Descriptions.Item label="型号" span={1}>{currentRecord.model || '-'}</Descriptions.Item>
+            <Descriptions.Item label="颜色" span={1}>{currentRecord.color_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="尺寸" span={1}>{currentRecord.size_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="标准价格" span={1}>{currentRecord.standard_price ? `$${currentRecord.standard_price}` : '-'}</Descriptions.Item>
+            <Descriptions.Item label="标价" span={1}>{currentRecord.list_price ? `$${currentRecord.list_price}` : '-'}</Descriptions.Item>
+            <Descriptions.Item label="数量" span={1}>{currentRecord.quantity || '-'}</Descriptions.Item>
+            <Descriptions.Item label="原产国" span={1}>{currentRecord.country_of_origin || '-'}</Descriptions.Item>
+            <Descriptions.Item label="父子关系" span={1}>{currentRecord.parent_child || '-'}</Descriptions.Item>
+            <Descriptions.Item label="关系类型" span={1}>{currentRecord.relationship_type || '-'}</Descriptions.Item>
+            <Descriptions.Item label="变体主题" span={1}>{currentRecord.variation_theme || '-'}</Descriptions.Item>
+            <Descriptions.Item label="颜色映射" span={1}>{currentRecord.color_map || '-'}</Descriptions.Item>
+            <Descriptions.Item label="尺寸映射" span={1}>{currentRecord.size_map || '-'}</Descriptions.Item>
+            <Descriptions.Item label="目标性别" span={1}>{currentRecord.target_gender || '-'}</Descriptions.Item>
+            <Descriptions.Item label="部门" span={1}>{currentRecord.department_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="风格" span={1}>{currentRecord.style_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="通用关键词" span={2}>{currentRecord.generic_keywords || '-'}</Descriptions.Item>
             <Descriptions.Item label="产品描述" span={2}>
-              <div style={{ maxHeight: '100px', overflow: 'auto' }}>
-                {currentRecord.product_description}
+              <div style={{ maxHeight: '120px', overflow: 'auto' }}>
+                {currentRecord.product_description || '-'}
               </div>
             </Descriptions.Item>
+            <Descriptions.Item label="要点1" span={2}>{currentRecord.bullet_point1 || '-'}</Descriptions.Item>
+            <Descriptions.Item label="要点2" span={2}>{currentRecord.bullet_point2 || '-'}</Descriptions.Item>
+            <Descriptions.Item label="要点3" span={2}>{currentRecord.bullet_point3 || '-'}</Descriptions.Item>
+            <Descriptions.Item label="要点4" span={2}>{currentRecord.bullet_point4 || '-'}</Descriptions.Item>
+            <Descriptions.Item label="要点5" span={2}>{currentRecord.bullet_point5 || '-'}</Descriptions.Item>
             {currentRecord.main_image_url && (
               <Descriptions.Item label="主图" span={2}>
                 <img 
                   src={currentRecord.main_image_url} 
                   alt="主图" 
+                  style={{ maxWidth: '200px', maxHeight: '150px' }} 
+                />
+              </Descriptions.Item>
+            )}
+            {currentRecord.swatch_image_url && (
+              <Descriptions.Item label="样本图" span={2}>
+                <img 
+                  src={currentRecord.swatch_image_url} 
+                  alt="样本图" 
                   style={{ maxWidth: '200px', maxHeight: '150px' }} 
                 />
               </Descriptions.Item>
@@ -584,7 +679,7 @@ const ProductInformation: React.FC = () => {
         open={editVisible}
         onOk={handleSaveEdit}
         onCancel={() => setEditVisible(false)}
-        width={800}
+        width={1000}
         okText="保存"
         cancelText="取消"
       >
@@ -596,19 +691,68 @@ const ProductInformation: React.FC = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
+              <Form.Item label="外部产品ID" name="external_product_id">
+                <Input placeholder="请输入外部产品ID" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
               <Form.Item label="品牌" name="brand_name">
                 <Input placeholder="请输入品牌" />
               </Form.Item>
             </Col>
-          </Row>
-          
-          <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="制造商" name="manufacturer">
                 <Input placeholder="请输入制造商" />
               </Form.Item>
             </Col>
+          </Row>
+
+          <Row gutter={16}>
             <Col span={12}>
+              <Form.Item label="产品类型" name="item_type">
+                <Input placeholder="请输入产品类型" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="型号" name="model">
+                <Input placeholder="请输入型号" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="标准价格" name="standard_price">
+                <Input type="number" placeholder="请输入标准价格" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="标价" name="list_price">
+                <Input type="number" placeholder="请输入标价" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="数量" name="quantity">
+                <Input type="number" placeholder="请输入数量" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="颜色" name="color_name">
+                <Input placeholder="请输入颜色" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="尺寸" name="size_name">
+                <Input placeholder="请输入尺寸" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
               <Form.Item label="原产国" name="country_of_origin">
                 <Input placeholder="请输入原产国" />
               </Form.Item>
@@ -617,13 +761,30 @@ const ProductInformation: React.FC = () => {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="标准价格" name="standard_price">
-                <Input type="number" placeholder="请输入标准价格" />
+              <Form.Item label="父SKU" name="parent_sku">
+                <Input placeholder="请输入父SKU" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="标价" name="list_price">
-                <Input type="number" placeholder="请输入标价" />
+              <Form.Item label="变体主题" name="variation_theme">
+                <Input placeholder="请输入变体主题" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="目标性别" name="target_gender">
+                <Select placeholder="请选择目标性别" allowClear>
+                  <Option value="Male">男性</Option>
+                  <Option value="Female">女性</Option>
+                  <Option value="Unisex">中性</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="部门" name="department_name">
+                <Input placeholder="请输入部门" />
               </Form.Item>
             </Col>
           </Row>
@@ -633,12 +794,29 @@ const ProductInformation: React.FC = () => {
           </Form.Item>
 
           <Row gutter={16}>
-            <Col span={24}>
+            <Col span={12}>
+              <Form.Item label="通用关键词" name="generic_keywords">
+                <Input placeholder="请输入通用关键词" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item label="主图URL" name="main_image_url">
                 <Input placeholder="请输入主图URL" />
               </Form.Item>
             </Col>
           </Row>
+
+          <Form.Item label="要点1" name="bullet_point1">
+            <Input.TextArea rows={2} placeholder="请输入要点1" />
+          </Form.Item>
+
+          <Form.Item label="要点2" name="bullet_point2">
+            <Input.TextArea rows={2} placeholder="请输入要点2" />
+          </Form.Item>
+
+          <Form.Item label="要点3" name="bullet_point3">
+            <Input.TextArea rows={2} placeholder="请输入要点3" />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
