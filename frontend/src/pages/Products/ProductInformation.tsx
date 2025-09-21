@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table,
   Card,
@@ -106,6 +106,22 @@ interface ProductInformationData {
   country_of_origin: string;
 }
 
+// 分组后的数据结构
+interface GroupedProductData {
+  key: string;
+  parent_sku: string;
+  site: string;
+  brand_name: string;
+  manufacturer: string;
+  total_quantity: number;
+  children_count: number;
+  children: ProductInformationData[];
+  isParent: boolean;
+}
+
+// 表格显示的数据类型（包含父级和子级）
+type TableRowData = GroupedProductData | ProductInformationData;
+
 interface QueryParams {
   page: number;
   limit: number;
@@ -124,6 +140,8 @@ interface Statistics {
 const ProductInformation: React.FC = () => {
   // 状态管理
   const [data, setData] = useState<ProductInformationData[]>([]);
+  const [groupedData, setGroupedData] = useState<GroupedProductData[]>([]);
+  const [isGroupedView, setIsGroupedView] = useState(true); // 默认开启分组视图
   const [loading, setLoading] = useState(false);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [siteList, setSiteList] = useState<string[]>([]);
@@ -154,6 +172,58 @@ const ProductInformation: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<ProductInformationData | null>(null);
   const [form] = Form.useForm();
 
+  // 按父SKU分组数据的函数
+  const groupDataByParentSku = useCallback((rawData: ProductInformationData[]): GroupedProductData[] => {
+    const groups: { [key: string]: ProductInformationData[] } = {};
+    
+    // 按parent_sku分组，没有parent_sku的单独处理
+    rawData.forEach(item => {
+      const parentKey = item.parent_sku || `single_${item.site}_${item.item_sku}`;
+      if (!groups[parentKey]) {
+        groups[parentKey] = [];
+      }
+      groups[parentKey].push(item);
+    });
+
+    // 转换为GroupedProductData格式
+    const result: GroupedProductData[] = [];
+    Object.entries(groups).forEach(([parentKey, children]) => {
+      if (children.length === 1 && !children[0].parent_sku) {
+        // 单个产品且没有parent_sku，直接添加为普通行
+        return;
+      }
+
+      // 计算汇总信息
+      const totalQuantity = children.reduce((sum, child) => sum + (child.quantity || 0), 0);
+      const firstChild = children[0];
+      
+      const groupedItem: GroupedProductData = {
+        key: parentKey,
+        parent_sku: parentKey.startsWith('single_') ? '' : parentKey,
+        site: firstChild.site,
+        brand_name: firstChild.brand_name,
+        manufacturer: firstChild.manufacturer,
+        total_quantity: totalQuantity,
+        children_count: children.length,
+        children: children,
+        isParent: true
+      };
+      
+      result.push(groupedItem);
+    });
+
+    // 按parent_sku排序
+    return result.sort((a, b) => (a.parent_sku || '').localeCompare(b.parent_sku || ''));
+  }, []);
+
+  // 处理数据，根据视图模式生成不同的数据结构
+  const processedData = useMemo((): TableRowData[] => {
+    if (!isGroupedView) {
+      return data;
+    }
+    return groupedData;
+  }, [data, groupedData, isGroupedView]);
+
   // 获取数据列表
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -167,7 +237,11 @@ const ProductInformation: React.FC = () => {
       const result = await response.json();
 
       if (result.success) {
-        setData(result.data);
+        const rawData = result.data;
+        setData(rawData);
+        // 生成分组数据
+        const grouped = groupDataByParentSku(rawData);
+        setGroupedData(grouped);
         setPagination(result.pagination);
         setSiteList(result.siteList || []);
       } else {
@@ -178,7 +252,7 @@ const ProductInformation: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams]);
+  }, [queryParams, groupDataByParentSku]);
 
   // 获取统计信息
   const fetchStatistics = useCallback(async () => {
@@ -300,7 +374,7 @@ const ProductInformation: React.FC = () => {
   };
 
   // 表格列定义
-  const columns: ColumnsType<ProductInformationData> = [
+  const columns: ColumnsType<TableRowData> = [
     {
       title: '站点',
       dataIndex: 'site',
@@ -310,12 +384,28 @@ const ProductInformation: React.FC = () => {
       render: (site: string) => <Tag color="blue">{site}</Tag>
     },
     {
-      title: '商品SKU',
+      title: isGroupedView ? '父SKU/商品SKU' : '商品SKU',
       dataIndex: 'item_sku',
       key: 'item_sku',
       width: 150,
       fixed: 'left',
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          // 父级行显示父SKU
+          return (
+            <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
+              📁 {record.parent_sku || '未分组'}
+              <div style={{ fontSize: '12px', color: '#999', fontWeight: 'normal' }}>
+                {record.children_count} 个子产品
+              </div>
+            </div>
+          );
+        } else {
+          // 子级行或普通行显示商品SKU
+          return <span style={{ marginLeft: isGroupedView ? '16px' : '0' }}>{value}</span>;
+        }
+      }
     },
     {
       title: '商品名称',
@@ -325,18 +415,35 @@ const ProductInformation: React.FC = () => {
       ellipsis: {
         showTitle: false,
       },
-      render: (name: string) => (
-        <Tooltip placement="topLeft" title={name}>
-          {name}
-        </Tooltip>
-      ),
+      render: (name: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          // 父级行显示汇总信息
+          return (
+            <span style={{ fontWeight: 'bold' }}>
+              {record.brand_name} 系列产品
+            </span>
+          );
+        } else {
+          return (
+            <Tooltip placement="topLeft" title={name}>
+              <span style={{ marginLeft: isGroupedView ? '16px' : '0' }}>{name}</span>
+            </Tooltip>
+          );
+        }
+      },
     },
     {
       title: '外部产品ID',
       dataIndex: 'external_product_id',
       key: 'external_product_id',
       width: 120,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '品牌',
@@ -357,131 +464,230 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'item_type',
       key: 'item_type',
       width: 120,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '标准价格',
       dataIndex: 'standard_price',
       key: 'standard_price',
       width: 100,
-      render: (price: number) => price ? `$${price}` : '-'
+      render: (price: number, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return price ? `$${price}` : '-';
+      }
     },
     {
       title: '标价',
       dataIndex: 'list_price',
       key: 'list_price',
       width: 100,
-      render: (price: number) => price ? `$${price}` : '-'
+      render: (price: number, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return price ? `$${price}` : '-';
+      }
     },
     {
       title: '原始父SKU',
       dataIndex: 'original_parent_sku',
       key: 'original_parent_sku',
       width: 120,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '父SKU',
       dataIndex: 'parent_sku',
       key: 'parent_sku',
       width: 120,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return record.parent_sku || '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '颜色',
       dataIndex: 'color_name',
       key: 'color_name',
       width: 100,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '尺寸',
       dataIndex: 'size_name',
       key: 'size_name',
       width: 100,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '数量',
       dataIndex: 'quantity',
       key: 'quantity',
       width: 80,
-      render: (qty: number) => qty || '-'
+      render: (qty: number, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return <span style={{ fontWeight: 'bold', color: '#52c41a' }}>{record.total_quantity}</span>;
+        }
+        return qty || '-';
+      }
     },
     {
       title: '原产国',
       dataIndex: 'country_of_origin',
       key: 'country_of_origin',
       width: 100,
-      ellipsis: true
+      ellipsis: true,
+      render: (value: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          return '-';
+        }
+        return value || '-';
+      }
     },
     {
       title: '主图',
       dataIndex: 'main_image_url',
       key: 'main_image_url',
       width: 80,
-      render: (url: string) => url ? (
-        <img 
-          src={url} 
-          alt="主图" 
-          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.style.display = 'none';
-          }}
-        />
-      ) : '-'
+      render: (url: string, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          // 父级行显示第一个子产品的主图
+          const firstChild = record.children[0];
+          if (firstChild?.main_image_url) {
+            return (
+              <img 
+                src={firstChild.main_image_url} 
+                alt="主图" 
+                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', opacity: 0.7 }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+            );
+          }
+          return '📁';
+        }
+        
+        return url ? (
+          <img 
+            src={url} 
+            alt="主图" 
+            style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+            }}
+          />
+        ) : '-';
+      }
     },
     {
       title: '操作',
       key: 'action',
       width: 150,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="查看详情">
-            <Button
-              type="link"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => handleViewDetail(record)}
-            />
-          </Tooltip>
-          <Tooltip title="编辑">
-            <Button
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="确定删除这条记录吗？"
-            onConfirm={() => handleDelete(record)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Tooltip title="删除">
-              <Button
-                type="link"
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-              />
-            </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          // 父级行的操作
+          return (
+            <Space size="small">
+              <Tooltip title="展开/收起">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EyeOutlined />}
+                />
+              </Tooltip>
+            </Space>
+          );
+        } else {
+          // 子级行或普通行的操作
+          const productRecord = record as ProductInformationData;
+          return (
+            <Space size="small">
+              <Tooltip title="查看详情">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => handleViewDetail(productRecord)}
+                />
+              </Tooltip>
+              <Tooltip title="编辑">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => handleEdit(productRecord)}
+                />
+              </Tooltip>
+              <Popconfirm
+                title="确定删除这条记录吗？"
+                onConfirm={() => handleDelete(productRecord)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Tooltip title="删除">
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          );
+        }
+      },
     },
   ];
 
   // 行选择配置
   const rowSelection = {
     selectedRowKeys,
-    onChange: (selectedRowKeys: React.Key[], selectedRows: ProductInformationData[]) => {
+    onChange: (selectedRowKeys: React.Key[], selectedRows: TableRowData[]) => {
       setSelectedRowKeys(selectedRowKeys as string[]);
-      setSelectedRows(selectedRows);
+      // 过滤出真正的产品数据行，排除父级分组行
+      const productRows = selectedRows.filter((row): row is ProductInformationData => {
+        return !('isParent' in row);
+      });
+      setSelectedRows(productRows);
     },
+    // 在分组视图下，只允许选择子级行，不允许选择父级行
+    getCheckboxProps: (record: TableRowData) => ({
+      disabled: isGroupedView && 'isParent' in record && record.isParent,
+    }),
   };
 
   // 组件加载时获取数据
@@ -556,6 +762,24 @@ const ProductInformation: React.FC = () => {
           >
             重置
           </Button>
+
+          {/* 视图切换按钮 */}
+          <Button.Group>
+            <Button 
+              type={isGroupedView ? "primary" : "default"}
+              onClick={() => setIsGroupedView(true)}
+              icon={<span>📁</span>}
+            >
+              分组视图
+            </Button>
+            <Button 
+              type={!isGroupedView ? "primary" : "default"}
+              onClick={() => setIsGroupedView(false)}
+              icon={<span>📄</span>}
+            >
+              列表视图
+            </Button>
+          </Button.Group>
         </Space>
 
         {/* 批量操作 */}
@@ -577,15 +801,70 @@ const ProductInformation: React.FC = () => {
         {/* 数据表格 */}
         <Table
           columns={columns}
-          dataSource={data}
-          rowKey={(record) => `${record.site}-${record.item_sku}`}
-          rowSelection={rowSelection}
+          dataSource={processedData}
+          rowKey={(record) => {
+            if ('isParent' in record && record.isParent) {
+              return `parent-${record.key}`;
+            } else {
+              const productRecord = record as ProductInformationData;
+              return `${productRecord.site}-${productRecord.item_sku}`;
+            }
+          }}
+          rowSelection={isGroupedView ? undefined : rowSelection}
           loading={loading}
           pagination={false}
           scroll={{ x: 2000 }}
           locale={{
             emptyText: <Empty description="暂无数据" />
           }}
+          expandable={isGroupedView ? {
+            expandedRowRender: (parentRecord) => {
+              if ('isParent' in parentRecord && parentRecord.isParent) {
+                // 为子表格创建专门的列定义，确保类型正确
+                const childColumns: ColumnsType<ProductInformationData> = columns
+                  .filter(col => col.key !== 'action') // 子表格不显示操作列
+                  .map(col => ({
+                    ...col,
+                    render: col.render ? (value: any, record: ProductInformationData) => {
+                      // 对于子行，强制非分组模式渲染
+                      if (typeof col.render === 'function') {
+                        return col.render(value, record);
+                      }
+                      return value;
+                    } : undefined
+                  }));
+
+                return (
+                  <Table<ProductInformationData>
+                    columns={childColumns}
+                    dataSource={parentRecord.children}
+                    rowKey={(record: ProductInformationData) => `child-${record.site}-${record.item_sku}`}
+                    pagination={false}
+                    showHeader={false}
+                    size="small"
+                    style={{ margin: '0 40px' }}
+                  />
+                );
+              }
+              return null;
+            },
+            defaultExpandAllRows: false,
+            expandRowByClick: true,
+            expandIcon: ({ expanded, onExpand, record }) => {
+              if ('isParent' in record && record.isParent) {
+                return (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={expanded ? '📂' : '📁'}
+                    onClick={e => onExpand(record, e)}
+                    style={{ border: 'none', padding: '0 4px' }}
+                  />
+                );
+              }
+              return null;
+            }
+          } : undefined}
         />
 
         {/* 分页 */}
