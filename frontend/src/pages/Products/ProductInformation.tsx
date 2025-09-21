@@ -417,11 +417,15 @@ const ProductInformation: React.FC = () => {
       },
       render: (name: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示汇总信息
+          // 父级行显示第一个子产品的商品名称作为父SKU标题
+          const firstChildName = record.children.length > 0 ? record.children[0].item_name : '';
+          const displayName = firstChildName || `${record.brand_name} 系列产品`;
           return (
-            <span style={{ fontWeight: 'bold' }}>
-              {record.brand_name} 系列产品
-            </span>
+            <Tooltip placement="topLeft" title={displayName}>
+              <span style={{ fontWeight: 'bold' }}>
+                {displayName}
+              </span>
+            </Tooltip>
           );
         } else {
           return (
@@ -842,6 +846,7 @@ const ProductInformation: React.FC = () => {
                     pagination={false}
                     showHeader={false}
                     size="small"
+                    scroll={{ x: 2000 }}
                     style={{ margin: '0 40px' }}
                   />
                 );
