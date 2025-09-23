@@ -1,0 +1,35 @@
+# 前端文件和构建产物
+frontend/
+netlify.toml
+
+# 开发和配置文件
+.git/
+.gitignore
+*.md
+README.md
+.env.local
+.env.development
+
+# 依赖和临时文件
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器和IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试和覆盖率报告
+coverage/
+.nyc_output/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp 
