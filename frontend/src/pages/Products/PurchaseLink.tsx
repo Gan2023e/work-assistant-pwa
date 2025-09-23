@@ -335,6 +335,7 @@ const Purchase: React.FC = () => {
   const [batchQtyPerBox, setBatchQtyPerBox] = useState<number | undefined>(undefined);
   const [batchVendorSku, setBatchVendorSku] = useState<string>('');
   const [batchWeight, setBatchWeight] = useState<number | undefined>(undefined);
+  const [batchPrice, setBatchPrice] = useState<number | undefined>(undefined);
   const [batchLoading, setBatchLoading] = useState(false);
   // 用于获取输入框值的refs
   const colorInputRef = useRef<any>(null);
@@ -3927,6 +3928,59 @@ const Purchase: React.FC = () => {
     }
   };
 
+  const handleBatchSetPrice = async () => {
+    if (selectedSkuIds.length === 0) {
+      message.warning('请先选择要设置的子SKU');
+      return;
+    }
+    
+    if (batchPrice === undefined || batchPrice <= 0) {
+      message.warning('请输入有效的价格');
+      return;
+    }
+
+    setBatchLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const skuId of selectedSkuIds) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              price: batchPrice
+            }),
+          });
+
+          if (res.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`更新SKU ${skuId} 失败:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        message.success(`批量设置价格成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
+        await loadSellerSkuData(currentParentSku);
+        setSelectedSkuIds([]);
+        setBatchPrice(undefined);
+      } else {
+        message.error('批量设置价格失败');
+      }
+    } catch (error) {
+      console.error('批量设置价格失败:', error);
+      message.error('批量设置价格失败');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   // 重点款相关处理函数
   const handleKeyProductToggle = async (record: ProductRecord) => {
     try {
@@ -6591,6 +6645,7 @@ const Purchase: React.FC = () => {
           setBatchQtyPerBox(undefined);
           setBatchVendorSku('');
           setBatchWeight(undefined);
+          setBatchPrice(undefined);
         }}
         width={1400}
         style={{ height: '80vh' }}
@@ -6661,6 +6716,25 @@ const Purchase: React.FC = () => {
                 设实测重量
               </Button>
               
+              <InputNumber
+                placeholder="价格(¥)"
+                value={batchPrice}
+                onChange={(value) => setBatchPrice(value ?? undefined)}
+                min={0}
+                step={0.01}
+                precision={2}
+                style={{ width: 90 }}
+                size="small"
+              />
+              <Button
+                size="small"
+                onClick={handleBatchSetPrice}
+                loading={batchLoading}
+                disabled={selectedSkuIds.length === 0}
+              >
+                设置价格
+              </Button>
+              
               <Button
                 size="small"
                 onClick={() => {
@@ -6668,6 +6742,7 @@ const Purchase: React.FC = () => {
                   setBatchQtyPerBox(undefined);
                   setBatchVendorSku('');
                   setBatchWeight(undefined);
+                  setBatchPrice(undefined);
                 }}
                 disabled={selectedSkuIds.length === 0}
               >
