@@ -219,13 +219,15 @@ const ProductInformation: React.FC = () => {
   // 获取当前视图的数据和分页信息
   const currentViewData = useMemo(() => {
     if (isGroupedView) {
-      // 分组视图：直接返回已经分页处理过的分组数据
-      return groupedData;
+      // 分组视图：显示当前页的分组数据
+      const startIndex = (queryParams.page - 1) * queryParams.limit;
+      const endIndex = startIndex + queryParams.limit;
+      return groupedData.slice(startIndex, endIndex);
     } else {
       // 列表视图：显示原始数据（已经是分页的）
       return data;
     }
-  }, [isGroupedView, groupedData, data]);
+  }, [isGroupedView, groupedData, data, queryParams.page, queryParams.limit]);
 
   // 计算当前视图的分页信息
   const currentPagination = useMemo(() => {
@@ -240,79 +242,56 @@ const ProductInformation: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      
       if (isGroupedView) {
-        // 分组视图：需要两步获取数据
-        // 1. 先获取足够的数据来计算母SKU总数
-        const countParams = new URLSearchParams();
-        countParams.append('page', '1');
-        countParams.append('limit', '1000'); // 获取足够多的数据用于计算母SKU总数
-        
-        if (queryParams.search) {
-          countParams.set('search', queryParams.search);
-        }
-        if (queryParams.site && queryParams.site !== 'all') {
-          countParams.set('site', queryParams.site);
-        }
-
-        const countResponse = await fetch(`${API_BASE_URL}/api/product-information/list?${countParams}`);
-        const countResult = await countResponse.json();
-
-        if (countResult.success) {
-          // 计算母SKU总数
-          const allGrouped = groupDataByParentSku(countResult.data);
-          const totalParentSkus = allGrouped.length;
-
-          // 2. 获取当前页需要的具体数据
-          // 计算需要获取的数据范围以覆盖当前页的母SKU
-          const startIndex = (queryParams.page - 1) * queryParams.limit;
-          const endIndex = startIndex + queryParams.limit;
-          const neededGrouped = allGrouped.slice(startIndex, endIndex);
-          
-          // 获取这些母SKU对应的所有子产品数据
-          if (neededGrouped.length > 0) {
-            setGroupedData(neededGrouped);
-            setData(neededGrouped.flatMap(group => group.children));
-          } else {
-            setGroupedData([]);
-            setData([]);
-          }
-
-          // 设置正确的分页信息
-          setPagination({
-            current: queryParams.page,
-            pageSize: queryParams.limit,
-            total: totalParentSkus,
-            pages: Math.ceil(totalParentSkus / queryParams.limit)
-          });
-        }
-        
-        setSiteList(countResult.siteList || []);
+        // 分组视图：获取更大的数据集以便正确分组和分页
+        // 获取当前页前后一定范围的数据，确保分组完整性
+        const expandedPageSize = Math.max(queryParams.limit * 3, 150);
+        params.append('page', '1');
+        params.append('limit', expandedPageSize.toString());
       } else {
         // 列表视图：使用标准分页
-        const params = new URLSearchParams();
         Object.entries(queryParams).forEach(([key, value]) => {
           params.append(key, value.toString());
         });
+      }
+      
+      // 添加搜索和筛选条件
+      if (queryParams.search) {
+        params.set('search', queryParams.search);
+      }
+      if (queryParams.site && queryParams.site !== 'all') {
+        params.set('site', queryParams.site);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/product-information/list?${params}`);
+      const result = await response.json();
+
+      if (result.success) {
+        const rawData = result.data;
+        setData(rawData);
         
-        // 添加搜索和筛选条件
-        if (queryParams.search) {
-          params.set('search', queryParams.search);
-        }
-        if (queryParams.site && queryParams.site !== 'all') {
-          params.set('site', queryParams.site);
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/product-information/list?${params}`);
-        const result = await response.json();
-
-        if (result.success) {
-          const rawData = result.data;
-          setData(rawData);
-          setPagination(result.pagination);
-          setSiteList(result.siteList || []);
+        if (isGroupedView) {
+          // 生成分组数据
+          const grouped = groupDataByParentSku(rawData);
+          setGroupedData(grouped);
+          
+          // 分组视图使用自定义分页信息
+          setPagination({
+            current: queryParams.page,
+            pageSize: queryParams.limit,
+            total: grouped.length, // 使用分组后的总数
+            pages: Math.ceil(grouped.length / queryParams.limit)
+          });
         } else {
-          message.error(result.message || '获取数据失败');
+          // 列表视图使用后端分页信息
+          setPagination(result.pagination);
         }
+        
+        setSiteList(result.siteList || []);
+      } else {
+        message.error(result.message || '获取数据失败');
       }
     } catch (error) {
       message.error('获取数据失败: ' + error);

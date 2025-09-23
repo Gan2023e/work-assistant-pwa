@@ -282,60 +282,8 @@ router.post('/batch-delete', async (req, res) => {
 // 获取统计信息
 router.get('/statistics', async (req, res) => {
   try {
-    // 获取查询参数
-    const {
-      search = '',
-      site = 'all'
-    } = req.query;
-
-    // 构建查询条件
-    let whereConditions = {};
-    
-    // 站点筛选
-    if (site !== 'all') {
-      whereConditions.site = site;
-    }
-
-    // 搜索条件
-    if (search) {
-      whereConditions[Op.or] = [
-        { item_sku: { [Op.iLike]: `%${search}%` } },
-        { item_name: { [Op.iLike]: `%${search}%` } },
-        { original_parent_sku: { [Op.iLike]: `%${search}%` } },
-        { brand_name: { [Op.iLike]: `%${search}%` } },
-        { parent_sku: { [Op.iLike]: `%${search}%` } }
-      ];
-    }
-
     // 总数统计
-    const totalCount = await ProductInformation.count({ where: whereConditions });
-
-    // 获取所有符合条件的数据，用于计算母SKU数量
-    const allData = await ProductInformation.findAll({
-      where: whereConditions,
-      attributes: ['parent_sku', 'site', 'item_sku'],
-      raw: true
-    });
-
-    // 计算母SKU数量（模拟前端分组逻辑）
-    const parentSkuGroups = {};
-    allData.forEach(item => {
-      const parentKey = item.parent_sku || `single_${item.site}_${item.item_sku}`;
-      if (!parentSkuGroups[parentKey]) {
-        parentSkuGroups[parentKey] = [];
-      }
-      parentSkuGroups[parentKey].push(item);
-    });
-
-    // 计算有效的母SKU数量（排除单个且无parent_sku的记录）
-    let parentSkuCount = 0;
-    Object.entries(parentSkuGroups).forEach(([parentKey, children]) => {
-      // 跳过单个产品且没有parent_sku的情况
-      if (children.length === 1 && !children[0].parent_sku) {
-        return;
-      }
-      parentSkuCount++;
-    });
+    const totalCount = await ProductInformation.count();
 
     // 按站点统计
     const siteStats = await ProductInformation.findAll({
@@ -360,7 +308,6 @@ router.get('/statistics', async (req, res) => {
       success: true,
       data: {
         totalCount,
-        parentSkuCount, // 新增母SKU总数
         siteStats,
         brandStats
       }
