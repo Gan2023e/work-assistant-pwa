@@ -1,10 +1,9 @@
 [build]
-builder = "nixpacks"
-buildCommand = "cd backend && npm ci --only=production"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 watchPatterns = ["backend/**"]
 
 [deploy]
-startCommand = "cd backend && npm start"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
