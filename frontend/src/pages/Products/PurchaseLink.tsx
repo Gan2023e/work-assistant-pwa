@@ -96,6 +96,8 @@ interface SellerInventorySkuRecord {
   sellersizename?: string;
   qty_per_box?: number;
   price?: number;
+  weight?: number;
+  weight_type?: 'estimated' | 'measured';
 }
 
 interface CpcFile {
@@ -338,6 +340,8 @@ const Purchase: React.FC = () => {
   const sizeInputRef = useRef<any>(null);
   const qtyInputRef = useRef<any>(null);
   const priceInputRef = useRef<any>(null);
+  const weightInputRef = useRef<any>(null);
+  const weightTypeInputRef = useRef<any>(null);
   const vendorSkuInputRef = useRef<any>(null);
   
   // 利润推算器相关状态
@@ -3720,7 +3724,9 @@ const Purchase: React.FC = () => {
         sellercolorname: colorInputRef.current?.input?.value || '',
         sellersizename: sizeInputRef.current?.input?.value || '',
         qty_per_box: parseInt(qtyInputRef.current?.input?.value) || 0,
-        price: parseFloat(priceInputRef.current?.input?.value) || null
+        price: parseFloat(priceInputRef.current?.input?.value) || null,
+        weight: parseFloat(weightInputRef.current?.value) || null,
+        weight_type: weightTypeInputRef.current?.value || 'estimated'
       };
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuid)}`, {
@@ -6731,6 +6737,59 @@ const Purchase: React.FC = () => {
                   />
                 ) : (
                   <span>{value ? `¥${value}` : '-'}</span>
+                );
+              },
+            },
+            {
+              title: '重量(kg)',
+              dataIndex: 'weight',
+              key: 'weight',
+              width: 120,
+              align: 'center',
+              render: (value: number, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <InputNumber 
+                    ref={weightInputRef}
+                    size="small" 
+                    min={0}
+                    max={50}
+                    step="0.001"
+                    precision={3}
+                    defaultValue={record.weight || undefined}
+                    key={`weight-${record.skuid}`}
+                    style={{ width: '100%', textAlign: 'center' }}
+                    placeholder="重量"
+                  />
+                ) : (
+                  <span>{value ? `${value}kg` : '-'}</span>
+                );
+              },
+            },
+            {
+              title: '重量类型',
+              dataIndex: 'weight_type',
+              key: 'weight_type',
+              width: 100,
+              align: 'center',
+              render: (value: string, record: SellerInventorySkuRecord) => {
+                const isEditing = record.skuid === sellerSkuEditingKey;
+                return isEditing ? (
+                  <Select 
+                    ref={weightTypeInputRef}
+                    size="small" 
+                    defaultValue={record.weight_type || 'estimated'}
+                    key={`weight_type-${record.skuid}`}
+                    style={{ width: '100%' }}
+                    placeholder="类型"
+                  >
+                    <Option value="estimated">预估</Option>
+                    <Option value="measured">实测</Option>
+                  </Select>
+                ) : (
+                  <Tag color={value === 'measured' ? 'green' : 'orange'} style={{ fontSize: 11 }}>
+                    {value === 'measured' ? '实测' : '预估'}
+                  </Tag>
                 );
               },
             },
