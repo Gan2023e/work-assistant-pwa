@@ -1,6 +1,7 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
+buildCommand = "echo 'Using Dockerfile build'"
 watchPatterns = ["backend/**"]
 
 [deploy]

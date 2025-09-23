@@ -1,4 +1,5 @@
-# 使用官方Node.js 18 LTS镜像
+# Railway Dockerfile Build - 工作助手PWA后端
+# 使用官方Node.js 18 LTS镜像，避免nixpacks构建问题
 FROM node:18-alpine
 
 # 设置工作目录
