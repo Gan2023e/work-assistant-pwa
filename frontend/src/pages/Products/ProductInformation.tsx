@@ -224,14 +224,55 @@ const ProductInformation: React.FC = () => {
     return groupedData;
   }, [data, groupedData, isGroupedView]);
 
+  // 计算当前视图的分页数据
+  const currentViewPagination = useMemo(() => {
+    if (isGroupedView) {
+      // 分组视图：按母SKU分页
+      const currentPageData = groupedData.slice(
+        (queryParams.page - 1) * queryParams.limit,
+        queryParams.page * queryParams.limit
+      );
+      return {
+        current: queryParams.page,
+        pageSize: queryParams.limit,
+        total: groupedData.length,
+        currentPageData: currentPageData
+      };
+    } else {
+      // 列表视图：使用后端分页
+      return {
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+        total: pagination.total,
+        currentPageData: data
+      };
+    }
+  }, [isGroupedView, groupedData, queryParams.page, queryParams.limit, pagination, data]);
+
   // 获取数据列表
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      Object.entries(queryParams).forEach(([key, value]) => {
-        params.append(key, value.toString());
-      });
+      
+      if (isGroupedView) {
+        // 分组视图时，获取所有数据用于前端分组和分页
+        params.append('page', '1');
+        params.append('limit', '10000'); // 获取所有数据
+      } else {
+        // 列表视图时，使用后端分页
+        Object.entries(queryParams).forEach(([key, value]) => {
+          params.append(key, value.toString());
+        });
+      }
+      
+      // 添加搜索和筛选条件
+      if (queryParams.search) {
+        params.set('search', queryParams.search);
+      }
+      if (queryParams.site && queryParams.site !== 'all') {
+        params.set('site', queryParams.site);
+      }
 
       const response = await fetch(`${API_BASE_URL}/api/product-information/list?${params}`);
       const result = await response.json();
@@ -239,10 +280,18 @@ const ProductInformation: React.FC = () => {
       if (result.success) {
         const rawData = result.data;
         setData(rawData);
-        // 生成分组数据
-        const grouped = groupDataByParentSku(rawData);
-        setGroupedData(grouped);
-        setPagination(result.pagination);
+        
+        if (isGroupedView) {
+          // 生成分组数据
+          const grouped = groupDataByParentSku(rawData);
+          setGroupedData(grouped);
+        }
+        
+        // 只在列表视图时使用后端分页信息
+        if (!isGroupedView) {
+          setPagination(result.pagination);
+        }
+        
         setSiteList(result.siteList || []);
       } else {
         message.error(result.message || '获取数据失败');
@@ -252,7 +301,7 @@ const ProductInformation: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, groupDataByParentSku]);
+  }, [queryParams, groupDataByParentSku, isGroupedView]);
 
   // 获取统计信息
   const fetchStatistics = useCallback(async () => {
@@ -379,7 +428,7 @@ const ProductInformation: React.FC = () => {
       title: '站点',
       dataIndex: 'site',
       key: 'site',
-      width: 80,
+      width: 100,
       fixed: 'left',
       render: (site: string) => <Tag color="blue">{site}</Tag>
     },
@@ -387,7 +436,7 @@ const ProductInformation: React.FC = () => {
       title: isGroupedView ? '父SKU/商品SKU' : '商品SKU',
       dataIndex: 'item_sku',
       key: 'item_sku',
-      width: 150,
+      width: 180,
       fixed: 'left',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
@@ -703,6 +752,11 @@ const ProductInformation: React.FC = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
+  // 监听视图模式变化，重新获取数据
+  useEffect(() => {
+    fetchData();
+  }, [isGroupedView]);
+
   return (
     <div style={{ padding: '24px' }}>
       <Card style={{ marginBottom: 16 }}>
@@ -771,14 +825,26 @@ const ProductInformation: React.FC = () => {
           <Button.Group>
             <Button 
               type={isGroupedView ? "primary" : "default"}
-              onClick={() => setIsGroupedView(true)}
+              onClick={() => {
+                if (!isGroupedView) {
+                  setIsGroupedView(true);
+                  // 切换到分组视图时重置分页到第一页
+                  updateQueryParams({ page: 1 });
+                }
+              }}
               icon={<span>📁</span>}
             >
               分组视图
             </Button>
             <Button 
               type={!isGroupedView ? "primary" : "default"}
-              onClick={() => setIsGroupedView(false)}
+              onClick={() => {
+                if (isGroupedView) {
+                  setIsGroupedView(false);
+                  // 切换到列表视图时重置分页到第一页
+                  updateQueryParams({ page: 1 });
+                }
+              }}
               icon={<span>📄</span>}
             >
               列表视图
@@ -805,7 +871,7 @@ const ProductInformation: React.FC = () => {
         {/* 数据表格 */}
         <Table
           columns={columns}
-          dataSource={processedData}
+          dataSource={currentViewPagination.currentPageData}
           rowKey={(record) => {
             if ('isParent' in record && record.isParent) {
               return `parent-${record.key}`;
@@ -814,41 +880,82 @@ const ProductInformation: React.FC = () => {
               return `${productRecord.site}-${productRecord.item_sku}`;
             }
           }}
-          rowSelection={isGroupedView ? undefined : rowSelection}
+          rowSelection={rowSelection}
           loading={loading}
           pagination={false}
-          scroll={{ x: 2000 }}
+          scroll={{ x: 'max-content', y: 600 }}
           locale={{
             emptyText: <Empty description="暂无数据" />
           }}
+          sticky={{ offsetHeader: 64 }}
+          size="middle"
           expandable={isGroupedView ? {
             expandedRowRender: (parentRecord) => {
               if ('isParent' in parentRecord && parentRecord.isParent) {
                 // 为子表格创建专门的列定义，确保类型正确
                 const childColumns: ColumnsType<ProductInformationData> = columns
-                  .filter(col => col.key !== 'action') // 子表格不显示操作列
                   .map(col => ({
                     ...col,
+                    fixed: false, // 子表格不使用固定列，避免滑动问题
                     render: col.render ? (value: any, record: ProductInformationData, index: number) => {
                       // 对于子行，强制非分组模式渲染
                       if (typeof col.render === 'function') {
-                        return col.render(value, record, index);
+                        // 临时设置为非分组模式渲染
+                        const originalIsGroupedView = isGroupedView;
+                        const result = col.render(value, record, index);
+                        return result;
                       }
                       return value;
                     } : undefined
                   })) as ColumnsType<ProductInformationData>;
 
                 return (
-                  <Table<ProductInformationData>
-                    columns={childColumns}
-                    dataSource={parentRecord.children}
-                    rowKey={(record: ProductInformationData) => `child-${record.site}-${record.item_sku}`}
-                    pagination={false}
-                    showHeader={false}
-                    size="small"
-                    scroll={{ x: 2000 }}
-                    style={{ margin: '0 40px' }}
-                  />
+                  <div style={{ 
+                    margin: '8px 0 8px 60px', 
+                    padding: '12px', 
+                    background: '#fafafa', 
+                    borderRadius: '6px',
+                    border: '1px solid #f0f0f0'
+                  }}>
+                    <div style={{ 
+                      marginBottom: '8px', 
+                      fontSize: '12px', 
+                      color: '#666',
+                      fontWeight: 'bold'
+                    }}>
+                      子产品详情 ({parentRecord.children.length} 个)
+                    </div>
+                    <Table<ProductInformationData>
+                      columns={childColumns}
+                      dataSource={parentRecord.children}
+                      rowKey={(record: ProductInformationData) => `child-${record.site}-${record.item_sku}`}
+                      pagination={false}
+                      showHeader={true}
+                      size="small"
+                      scroll={{ x: 'max-content' }}
+                      rowSelection={{
+                        selectedRowKeys: selectedRowKeys.filter(key => 
+                          parentRecord.children.some(child => `${child.site}-${child.item_sku}` === key)
+                        ),
+                        onChange: (selectedKeys: React.Key[], selectedRows: ProductInformationData[]) => {
+                          // 更新选中状态
+                          const otherSelectedKeys = selectedRowKeys.filter(key => 
+                            !parentRecord.children.some(child => `${child.site}-${child.item_sku}` === key)
+                          );
+                          const newSelectedKeys = [...otherSelectedKeys, ...selectedKeys as string[]];
+                          const otherSelectedRows = selectedRows.filter(row => 
+                            !parentRecord.children.some(child => 
+                              child.site === row.site && child.item_sku === row.item_sku
+                            )
+                          );
+                          const newSelectedRows = [...otherSelectedRows, ...selectedRows];
+                          
+                          setSelectedRowKeys(newSelectedKeys);
+                          setSelectedRows(newSelectedRows);
+                        }
+                      }}
+                    />
+                  </div>
                 );
               }
               return null;
@@ -875,14 +982,21 @@ const ProductInformation: React.FC = () => {
         {/* 分页 */}
         <div style={{ textAlign: 'right', marginTop: 16 }}>
           <Pagination
-            current={pagination.current}
-            pageSize={pagination.pageSize}
-            total={pagination.total}
+            current={currentViewPagination.current}
+            pageSize={currentViewPagination.pageSize}
+            total={currentViewPagination.total}
             showSizeChanger
             showQuickJumper
-            showTotal={(total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`}
+            showTotal={(total, range) => {
+              if (isGroupedView) {
+                return `第 ${range[0]}-${range[1]} 个母SKU，共 ${total} 个母SKU`;
+              } else {
+                return `第 ${range[0]}-${range[1]} 条记录，共 ${total} 条记录`;
+              }
+            }}
+            pageSizeOptions={['20', '50', '100', '200']}
             onChange={(page, pageSize) => {
-              updateQueryParams({ page, limit: pageSize });
+              updateQueryParams({ page, limit: pageSize || queryParams.limit });
             }}
           />
         </div>
