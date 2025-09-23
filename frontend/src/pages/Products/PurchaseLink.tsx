@@ -3917,6 +3917,7 @@ ${selectedSkuIds.map(skuId => {
           console.error('钉钉通知发送失败:', error);
           // 钉钉通知失败不影响主要功能
         }
+        }
         
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
