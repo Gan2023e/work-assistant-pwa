@@ -3885,8 +3885,9 @@ const Purchase: React.FC = () => {
       if (res.ok && result.code === 0) {
         message.success(`批量设置重量成功：${result.data.affectedRows} 条记录，重量类型已设为实测`);
         
-        // 发送钉钉通知
-        try {
+        // 只有在真正有记录被更新时才发送钉钉通知
+        if (result.data.affectedRows > 0) {
+          try {
           const notificationRes = await fetch(`${API_BASE_URL}/api/dingtalk/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
