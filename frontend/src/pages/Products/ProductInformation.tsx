@@ -219,15 +219,17 @@ const ProductInformation: React.FC = () => {
   // 获取当前视图的数据和分页信息
   const currentViewData = useMemo(() => {
     if (isGroupedView) {
-      // 分组视图：显示分组后的数据
-      return groupedData;
+      // 分组视图：显示当前页的分组数据
+      const startIndex = (queryParams.page - 1) * queryParams.limit;
+      const endIndex = startIndex + queryParams.limit;
+      return groupedData.slice(startIndex, endIndex);
     } else {
-      // 列表视图：显示原始数据
+      // 列表视图：显示原始数据（已经是分页的）
       return data;
     }
-  }, [isGroupedView, groupedData, data]);
+  }, [isGroupedView, groupedData, data, queryParams.page, queryParams.limit]);
 
-  // 统一的分页信息
+  // 计算当前视图的分页信息
   const currentPagination = useMemo(() => {
     return {
       current: pagination.current,
@@ -242,10 +244,18 @@ const ProductInformation: React.FC = () => {
     try {
       const params = new URLSearchParams();
       
-      // 统一使用后端分页，避免一次获取大量数据
-      Object.entries(queryParams).forEach(([key, value]) => {
-        params.append(key, value.toString());
-      });
+      if (isGroupedView) {
+        // 分组视图：获取更大的数据集以便正确分组和分页
+        // 获取当前页前后一定范围的数据，确保分组完整性
+        const expandedPageSize = Math.max(queryParams.limit * 3, 150);
+        params.append('page', '1');
+        params.append('limit', expandedPageSize.toString());
+      } else {
+        // 列表视图：使用标准分页
+        Object.entries(queryParams).forEach(([key, value]) => {
+          params.append(key, value.toString());
+        });
+      }
       
       // 添加搜索和筛选条件
       if (queryParams.search) {
@@ -266,10 +276,19 @@ const ProductInformation: React.FC = () => {
           // 生成分组数据
           const grouped = groupDataByParentSku(rawData);
           setGroupedData(grouped);
+          
+          // 分组视图使用自定义分页信息
+          setPagination({
+            current: queryParams.page,
+            pageSize: queryParams.limit,
+            total: grouped.length, // 使用分组后的总数
+            pages: Math.ceil(grouped.length / queryParams.limit)
+          });
+        } else {
+          // 列表视图使用后端分页信息
+          setPagination(result.pagination);
         }
         
-        // 使用后端分页信息
-        setPagination(result.pagination);
         setSiteList(result.siteList || []);
       } else {
         message.error(result.message || '获取数据失败');
