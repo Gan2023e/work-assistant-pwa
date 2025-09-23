@@ -6360,6 +6360,57 @@ router.put('/seller-inventory-sku/:skuid', async (req, res) => {
   }
 });
 
+// 批量更新SellerInventorySku记录
+router.put('/batch-update-seller-inventory-sku', async (req, res) => {
+  try {
+    const { skuIds, updateData } = req.body;
+    
+    if (!skuIds || !Array.isArray(skuIds) || skuIds.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU ID列表不能为空'
+      });
+    }
+
+    if (!updateData || Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '更新数据不能为空'
+      });
+    }
+
+    console.log('批量更新SellerInventorySku记录，SKU IDs:', skuIds, '更新数据:', updateData);
+
+    // 执行批量更新 - 一条SQL语句
+    const [affectedRows] = await SellerInventorySku.update(updateData, {
+      where: { 
+        skuid: {
+          [require('sequelize').Op.in]: skuIds
+        }
+      }
+    });
+
+    console.log('SellerInventorySku批量更新成功，影响行数:', affectedRows);
+
+    res.json({
+      code: 0,
+      message: `批量更新成功，影响 ${affectedRows} 条记录`,
+      data: {
+        affectedRows,
+        skuIds,
+        updateData
+      }
+    });
+
+  } catch (error) {
+    console.error('批量更新SellerInventorySku数据失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '批量更新失败: ' + error.message
+    });
+  }
+});
+
 // 筛选重点款记录
 router.post('/filter-key-products', async (req, res) => {
   try {
