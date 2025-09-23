@@ -1805,6 +1805,13 @@ const Listings: React.FC = () => {
               {selectedSku.qty_per_box && (
                 <p><strong>装箱数量:</strong> {selectedSku.qty_per_box}个</p>
               )}
+              {selectedSku.weight && (
+                <p><strong>重量:</strong> {selectedSku.weight}kg 
+                  <Tag color={selectedSku.weight_type === 'measured' ? 'green' : 'orange'} style={{ marginLeft: 8, fontSize: 12 }}>
+                    {selectedSku.weight_type === 'measured' ? '实测' : '预估'}
+                  </Tag>
+                </p>
+              )}
             </div>
             
             <h3>站点映射详情:</h3>

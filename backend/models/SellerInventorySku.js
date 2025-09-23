@@ -42,6 +42,17 @@ const SellerInventorySku = sequelize.define('SellerInventorySku', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
     comment: '产品价格'
+  },
+  weight: {
+    type: DataTypes.DECIMAL(8, 3),
+    allowNull: true,
+    comment: '产品重量(千克)'
+  },
+  weight_type: {
+    type: DataTypes.ENUM('estimated', 'measured'),
+    allowNull: true,
+    defaultValue: 'estimated',
+    comment: '重量类型：estimated-预估, measured-实测'
   }
 }, {
   tableName: 'sellerinventory_sku',

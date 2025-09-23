@@ -5972,6 +5972,24 @@ router.post('/batch-add-amz-sku-mapping', async (req, res) => {
           update_time: new Date()
         });
 
+        // 如果有重量和重量类型信息，同时更新SellerInventorySku表
+        if (mapping.weight !== undefined || mapping.weight_type !== undefined) {
+          const updateData = {};
+          if (mapping.weight !== undefined && mapping.weight !== null && mapping.weight !== '') {
+            updateData.weight = parseFloat(mapping.weight);
+          }
+          if (mapping.weight_type) {
+            updateData.weight_type = mapping.weight_type;
+          }
+          
+          if (Object.keys(updateData).length > 0) {
+            await SellerInventorySku.update(updateData, {
+              where: { child_sku: mapping.local_sku }
+            });
+            console.log(`📦 更新SKU重量信息: ${mapping.local_sku} - 重量: ${mapping.weight}kg, 类型: ${mapping.weight_type}`);
+          }
+        }
+
         console.log(`✅ 成功插入: ${mapping.local_sku} -> ${mapping.amz_sku}`);
         return { success: true, mapping };
         

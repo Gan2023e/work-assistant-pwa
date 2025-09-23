@@ -3565,7 +3565,9 @@ const Purchase: React.FC = () => {
         site: formValues[`site_${index}`],
         country: formValues[`country_${index}`],
         local_sku: formValues[`local_sku_${index}`],
-        sku_type: formValues[`sku_type_${index}`] || 'Local SKU'
+        sku_type: formValues[`sku_type_${index}`] || 'Local SKU',
+        weight: formValues[`weight_${index}`],
+        weight_type: formValues[`weight_type_${index}`] || 'estimated'
       }));
 
       console.log('添加Amazon SKU映射:', mappings);
@@ -6003,6 +6005,24 @@ const Purchase: React.FC = () => {
                           <th style={{
                             padding: '12px 16px',
                             borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>重量(kg)</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #e8e8e8',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#262626'
+                          }}>重量类型</th>
+                          <th style={{
+                            padding: '12px 16px',
+                            borderBottom: '2px solid #e8e8e8',
                             textAlign: 'center',
                             fontWeight: 'bold',
                             fontSize: '14px',
@@ -6110,6 +6130,55 @@ const Purchase: React.FC = () => {
                                 </Form.Item>
                               </td>
                               
+                              {/* 重量 - 可编辑 */}
+                              <td style={{
+                                padding: '8px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                textAlign: 'center'
+                              }}>
+                                <Form.Item
+                                  name={`weight_${index}`}
+                                  style={{ margin: 0 }}
+                                >
+                                  <InputNumber 
+                                    placeholder="重量"
+                                    min={0}
+                                    max={50}
+                                    precision={3}
+                                    style={{ 
+                                      width: '100%',
+                                      fontSize: '14px'
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              
+                              {/* 重量类型 - 可选择 */}
+                              <td style={{
+                                padding: '8px 16px',
+                                borderRight: '1px solid #f0f0f0',
+                                fontSize: '14px',
+                                textAlign: 'center'
+                              }}>
+                                <Form.Item
+                                  name={`weight_type_${index}`}
+                                  style={{ margin: 0 }}
+                                  initialValue="estimated"
+                                >
+                                  <Select 
+                                    style={{ 
+                                      width: '100%',
+                                      fontSize: '14px'
+                                    }}
+                                    placeholder="选择类型"
+                                  >
+                                    <Option value="estimated">预估</Option>
+                                    <Option value="measured">实测</Option>
+                                  </Select>
+                                </Form.Item>
+                              </td>
+                              
                               {/* Amazon SKU - 可编辑 */}
                               <td style={{
                                 padding: '8px 16px',
@@ -6148,7 +6217,7 @@ const Purchase: React.FC = () => {
                     textAlign: 'center'
                   }}>
                     <Text type="secondary">
-                      💡 Amazon SKU已预填写建议格式，可根据需要修改 | SKU类型将自动设置为 "Local SKU"
+                      💡 Amazon SKU已预填写建议格式，可根据需要修改 | SKU类型将自动设置为 "Local SKU" | 重量可填写产品重量（千克），重量类型默认为预估
                     </Text>
                   </div>
                 </Form>

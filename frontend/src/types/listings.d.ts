@@ -26,6 +26,8 @@ export interface ParentSkuData {
   sellercolorname?: string;
   sellersizename?: string;
   qty_per_box?: number;
+  weight?: number;
+  weight_type?: 'estimated' | 'measured';
   weblink?: string;
   product_status?: string;
   notice?: string;
