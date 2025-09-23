@@ -3784,36 +3784,26 @@ const Purchase: React.FC = () => {
     }
 
     setBatchLoading(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      for (const skuId of selectedSkuIds) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ qty_per_box: batchQtyPerBox }),
-          });
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-seller-inventory-sku`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skuIds: selectedSkuIds,
+          updateData: { qty_per_box: batchQtyPerBox }
+        }),
+      });
 
-          if (res.ok) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        } catch (error) {
-          console.error(`更新SKU ${skuId} 失败:`, error);
-          failCount++;
-        }
-      }
+      const result = await res.json();
 
-      if (successCount > 0) {
-        message.success(`批量设置成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
+      if (res.ok && result.code === 0) {
+        message.success(`批量设置成功：${result.data.affectedRows} 条记录`);
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchQtyPerBox(undefined);
       } else {
-        message.error('批量设置失败');
+        message.error(result.message || '批量设置失败');
       }
     } catch (error) {
       console.error('批量设置失败:', error);
@@ -3835,36 +3825,26 @@ const Purchase: React.FC = () => {
     }
 
     setBatchLoading(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      for (const skuId of selectedSkuIds) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ vendor_sku: batchVendorSku }),
-          });
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-seller-inventory-sku`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skuIds: selectedSkuIds,
+          updateData: { vendor_sku: batchVendorSku }
+        }),
+      });
 
-          if (res.ok) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        } catch (error) {
-          console.error(`更新SKU ${skuId} 失败:`, error);
-          failCount++;
-        }
-      }
+      const result = await res.json();
 
-      if (successCount > 0) {
-        message.success(`批量设置成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
+      if (res.ok && result.code === 0) {
+        message.success(`批量设置成功：${result.data.affectedRows} 条记录`);
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchVendorSku('');
       } else {
-        message.error('批量设置失败');
+        message.error(result.message || '批量设置失败');
       }
     } catch (error) {
       console.error('批量设置失败:', error);
@@ -3886,39 +3866,29 @@ const Purchase: React.FC = () => {
     }
 
     setBatchLoading(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      for (const skuId of selectedSkuIds) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              weight: batchWeight,
-              weight_type: 'measured' // 批量设置重量后，重量类型自动改为"实测"
-            }),
-          });
-
-          if (res.ok) {
-            successCount++;
-          } else {
-            failCount++;
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-seller-inventory-sku`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skuIds: selectedSkuIds,
+          updateData: { 
+            weight: batchWeight,
+            weight_type: 'measured' // 批量设置重量后，重量类型自动改为"实测"
           }
-        } catch (error) {
-          console.error(`更新SKU ${skuId} 失败:`, error);
-          failCount++;
-        }
-      }
+        }),
+      });
 
-      if (successCount > 0) {
-        message.success(`批量设置重量成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}，重量类型已设为实测`);
+      const result = await res.json();
+
+      if (res.ok && result.code === 0) {
+        message.success(`批量设置重量成功：${result.data.affectedRows} 条记录，重量类型已设为实测`);
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchWeight(undefined);
       } else {
-        message.error('批量设置重量失败');
+        message.error(result.message || '批量设置重量失败');
       }
     } catch (error) {
       console.error('批量设置重量失败:', error);
@@ -3940,38 +3910,26 @@ const Purchase: React.FC = () => {
     }
 
     setBatchLoading(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      for (const skuId of selectedSkuIds) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              price: batchPrice
-            }),
-          });
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-seller-inventory-sku`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skuIds: selectedSkuIds,
+          updateData: { price: batchPrice }
+        }),
+      });
 
-          if (res.ok) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        } catch (error) {
-          console.error(`更新SKU ${skuId} 失败:`, error);
-          failCount++;
-        }
-      }
+      const result = await res.json();
 
-      if (successCount > 0) {
-        message.success(`批量设置价格成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
+      if (res.ok && result.code === 0) {
+        message.success(`批量设置价格成功：${result.data.affectedRows} 条记录`);
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchPrice(undefined);
       } else {
-        message.error('批量设置价格失败');
+        message.error(result.message || '批量设置价格失败');
       }
     } catch (error) {
       console.error('批量设置价格失败:', error);
