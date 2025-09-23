@@ -3884,6 +3884,36 @@ const Purchase: React.FC = () => {
 
       if (res.ok && result.code === 0) {
         message.success(`批量设置重量成功：${result.data.affectedRows} 条记录，重量类型已设为实测`);
+        
+        // 发送钉钉通知
+        try {
+          const notificationRes = await fetch(`${API_BASE_URL}/api/dingtalk/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `📦 子SKU重量批量更新通知
+
+母SKU: ${currentParentSku}
+更新数量: ${result.data.affectedRows} 个子SKU
+统一重量: ${batchWeight}kg (已设为实测重量)
+操作时间: ${new Date().toLocaleString('zh-CN')}
+
+更新的SKU ID:
+${selectedSkuIds.map(id => `• ${id}`).join('\n')}
+
+所有选中的子SKU重量已统一更新，重量类型已自动设置为"实测"。`,
+              type: 'weight_batch_update'
+            }),
+          });
+          
+          if (notificationRes.ok) {
+            console.log('✅ 钉钉通知发送成功');
+          }
+        } catch (error) {
+          console.error('钉钉通知发送失败:', error);
+          // 钉钉通知失败不影响主要功能
+        }
+        
         await loadSellerSkuData(currentParentSku);
         setSelectedSkuIds([]);
         setBatchWeight(undefined);
