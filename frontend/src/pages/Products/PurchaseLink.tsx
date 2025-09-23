@@ -3899,7 +3899,10 @@ const Purchase: React.FC = () => {
 操作时间: ${new Date().toLocaleString('zh-CN')}
 
 子SKU:
-${selectedSkuIds.map(id => `• ${id}`).join('\n')}
+${selectedSkuIds.map(skuId => {
+          const skuRecord = sellerSkuData.find(record => record.skuid === skuId);
+          return `• ${skuRecord?.child_sku || skuId}`;
+        }).join('\n')}
 
 所有选中的子SKU重量已统一更新，重量类型已自动设置为"实测"。`,
               type: 'weight_batch_update'
