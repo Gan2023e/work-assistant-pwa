@@ -17,12 +17,10 @@ import {
   Row,
   Col,
   Statistic,
-  Empty,
-  Spin
+  Empty
 } from 'antd';
 import {
   SearchOutlined,
-  PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
@@ -216,38 +214,27 @@ const ProductInformation: React.FC = () => {
     return result.sort((a, b) => (a.parent_sku || '').localeCompare(b.parent_sku || ''));
   }, []);
 
-  // 处理数据，根据视图模式生成不同的数据结构
-  const processedData = useMemo((): TableRowData[] => {
-    if (!isGroupedView) {
+
+
+  // 获取当前视图的数据和分页信息
+  const currentViewData = useMemo(() => {
+    if (isGroupedView) {
+      // 分组视图：显示分组后的数据
+      return groupedData;
+    } else {
+      // 列表视图：显示原始数据
       return data;
     }
-    return groupedData;
-  }, [data, groupedData, isGroupedView]);
+  }, [isGroupedView, groupedData, data]);
 
-  // 计算当前视图的分页数据
-  const currentViewPagination = useMemo(() => {
-    if (isGroupedView) {
-      // 分组视图：按母SKU分页
-      const currentPageData = groupedData.slice(
-        (queryParams.page - 1) * queryParams.limit,
-        queryParams.page * queryParams.limit
-      );
-      return {
-        current: queryParams.page,
-        pageSize: queryParams.limit,
-        total: groupedData.length,
-        currentPageData: currentPageData
-      };
-    } else {
-      // 列表视图：使用后端分页
-      return {
-        current: pagination.current,
-        pageSize: pagination.pageSize,
-        total: pagination.total,
-        currentPageData: data
-      };
-    }
-  }, [isGroupedView, groupedData, queryParams.page, queryParams.limit, pagination, data]);
+  // 统一的分页信息
+  const currentPagination = useMemo(() => {
+    return {
+      current: pagination.current,
+      pageSize: pagination.pageSize,
+      total: pagination.total
+    };
+  }, [pagination]);
 
   // 获取数据列表
   const fetchData = useCallback(async () => {
@@ -255,16 +242,10 @@ const ProductInformation: React.FC = () => {
     try {
       const params = new URLSearchParams();
       
-      if (isGroupedView) {
-        // 分组视图时，获取所有数据用于前端分组和分页
-        params.append('page', '1');
-        params.append('limit', '10000'); // 获取所有数据
-      } else {
-        // 列表视图时，使用后端分页
-        Object.entries(queryParams).forEach(([key, value]) => {
-          params.append(key, value.toString());
-        });
-      }
+      // 统一使用后端分页，避免一次获取大量数据
+      Object.entries(queryParams).forEach(([key, value]) => {
+        params.append(key, value.toString());
+      });
       
       // 添加搜索和筛选条件
       if (queryParams.search) {
@@ -287,11 +268,8 @@ const ProductInformation: React.FC = () => {
           setGroupedData(grouped);
         }
         
-        // 只在列表视图时使用后端分页信息
-        if (!isGroupedView) {
-          setPagination(result.pagination);
-        }
-        
+        // 使用后端分页信息
+        setPagination(result.pagination);
         setSiteList(result.siteList || []);
       } else {
         message.error(result.message || '获取数据失败');
@@ -871,7 +849,7 @@ const ProductInformation: React.FC = () => {
         {/* 数据表格 */}
         <Table
           columns={columns}
-          dataSource={currentViewPagination.currentPageData}
+          dataSource={currentViewData}
           rowKey={(record) => {
             if ('isParent' in record && record.isParent) {
               return `parent-${record.key}`;
@@ -900,8 +878,6 @@ const ProductInformation: React.FC = () => {
                     render: col.render ? (value: any, record: ProductInformationData, index: number) => {
                       // 对于子行，强制非分组模式渲染
                       if (typeof col.render === 'function') {
-                        // 临时设置为非分组模式渲染
-                        const originalIsGroupedView = isGroupedView;
                         const result = col.render(value, record, index);
                         return result;
                       }
@@ -982,9 +958,9 @@ const ProductInformation: React.FC = () => {
         {/* 分页 */}
         <div style={{ textAlign: 'right', marginTop: 16 }}>
           <Pagination
-            current={currentViewPagination.current}
-            pageSize={currentViewPagination.pageSize}
-            total={currentViewPagination.total}
+            current={currentPagination.current}
+            pageSize={currentPagination.pageSize}
+            total={currentPagination.total}
             showSizeChanger
             showQuickJumper
             showTotal={(total, range) => {
