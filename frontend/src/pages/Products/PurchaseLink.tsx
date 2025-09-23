@@ -6597,68 +6597,72 @@ const Purchase: React.FC = () => {
         bodyStyle={{ height: 'calc(80vh - 110px)', overflow: 'auto' }}
         footer={null}
       >
-        {/* 批量操作区域 */}
-        <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Space align="center" wrap>
-              <Text strong>批量设置数量:</Text>
+        {/* 批量操作区域 - 简化版 */}
+        <div style={{ marginBottom: 16, padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            {selectedSkuIds.length > 0 && (
+              <Text strong style={{ color: '#1890ff', fontSize: '13px' }}>
+                已选择 {selectedSkuIds.length} 项 - 批量操作
+              </Text>
+            )}
+            <Space align="center" wrap size="middle">
               <InputNumber
-                placeholder="单箱产品数量"
+                placeholder="数量"
                 value={batchQtyPerBox}
                 onChange={(value) => setBatchQtyPerBox(value ?? undefined)}
                 min={1}
-                style={{ width: 120 }}
+                style={{ width: 80 }}
+                size="small"
               />
               <Button
-                type="primary"
+                size="small"
                 onClick={handleBatchSetQtyPerBox}
                 loading={batchLoading}
                 disabled={selectedSkuIds.length === 0}
               >
-                设置数量 ({selectedSkuIds.length})
+                设置数量
               </Button>
-            </Space>
-            <Space align="center" wrap>
-              <Text strong>批量设置卖家货号:</Text>
+              
               <Input
-                placeholder="卖家货号"
+                placeholder="货号"
                 value={batchVendorSku}
                 onChange={(e) => setBatchVendorSku(e.target.value)}
-                style={{ width: 200 }}
+                style={{ width: 120 }}
+                size="small"
               />
               <Button
-                type="primary"
+                size="small"
                 onClick={handleBatchSetVendorSku}
                 loading={batchLoading}
                 disabled={selectedSkuIds.length === 0}
               >
-                设置货号 ({selectedSkuIds.length})
+                设置货号
               </Button>
-            </Space>
-            <Space align="center" wrap>
-              <Text strong>批量设置重量:</Text>
+              
               <InputNumber
-                placeholder="重量(千克)"
+                placeholder="重量(kg)"
                 value={batchWeight}
                 onChange={(value) => setBatchWeight(value ?? undefined)}
                 min={0}
                 max={50}
                 step={0.001}
                 precision={3}
-                style={{ width: 140 }}
+                style={{ width: 100 }}
+                size="small"
               />
               <Button
+                size="small"
                 type="primary"
                 onClick={handleBatchSetWeight}
                 loading={batchLoading}
                 disabled={selectedSkuIds.length === 0}
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
               >
-                设为实测重量 ({selectedSkuIds.length})
+                设实测重量
               </Button>
-            </Space>
-            <Space align="center">
+              
               <Button
+                size="small"
                 onClick={() => {
                   setSelectedSkuIds([]);
                   setBatchQtyPerBox(undefined);
@@ -6667,7 +6671,7 @@ const Purchase: React.FC = () => {
                 }}
                 disabled={selectedSkuIds.length === 0}
               >
-                清除选择
+                清除
               </Button>
             </Space>
           </Space>
