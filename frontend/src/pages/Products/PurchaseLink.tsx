@@ -3898,7 +3898,7 @@ const Purchase: React.FC = () => {
 统一重量: ${batchWeight}kg (已设为实测重量)
 操作时间: ${new Date().toLocaleString('zh-CN')}
 
-更新的SKU ID:
+子SKU:
 ${selectedSkuIds.map(id => `• ${id}`).join('\n')}
 
 所有选中的子SKU重量已统一更新，重量类型已自动设置为"实测"。`,
