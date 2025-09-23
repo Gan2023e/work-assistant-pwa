@@ -6606,8 +6606,7 @@ const Purchase: React.FC = () => {
           setBatchPrice(undefined);
         }}
         width={1400}
-        style={{ height: '80vh' }}
-        bodyStyle={{ height: 'calc(80vh - 110px)', overflow: 'auto' }}
+        bodyStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
         footer={null}
       >
         {/* 批量操作区域 - 简化版 */}
@@ -6716,7 +6715,7 @@ const Purchase: React.FC = () => {
           rowKey="skuid"
           size="small"
           pagination={false}
-          scroll={{ y: 400, x: 1200 }}
+          scroll={{ x: 1200 }}
           rowSelection={{
             type: 'checkbox',
             selectedRowKeys: selectedSkuIds,
