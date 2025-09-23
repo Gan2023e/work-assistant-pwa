@@ -31,16 +31,24 @@ async function sendDingTalkMessage(webhookUrl, secretKey, message, atMobiles = [
       }
     };
 
+    console.log('📤 发送钉钉消息到:', url);
+    console.log('📤 消息数据:', JSON.stringify(dingTalkData, null, 2));
+    
     const response = await axios.post(url, dingTalkData);
+    console.log('📥 钉钉服务器响应:', response.data);
+    
     return { success: true, data: response.data };
   } catch (error) {
     console.error('❌ 钉钉消息发送失败:', error.message);
+    if (error.response) {
+      console.error('📥 钉钉服务器错误响应:', error.response.data);
+    }
     throw error;
   }
 }
 
 // 发送通用钉钉消息
-router.post('/send-message', async (req, res) => {
+router.post('/send', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '📱 发送钉钉消息请求:', JSON.stringify(req.body, null, 2));
   
   try {
@@ -151,6 +159,59 @@ ${skuList.join('\n')}
       code: 1,
       message: '发送失败',
       error: error.message
+    });
+  }
+});
+
+// 测试钉钉配置端点
+router.post('/test', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🧪 测试钉钉配置请求');
+  
+  try {
+    const webhookUrl = process.env.DINGTALK_WEBHOOK;
+    const secretKey = process.env.SECRET_KEY;
+    
+    console.log('📋 环境变量检查:');
+    console.log('   DINGTALK_WEBHOOK:', webhookUrl ? '已配置' : '未配置');
+    console.log('   SECRET_KEY:', secretKey ? '已配置' : '未配置');
+    
+    if (!webhookUrl) {
+      return res.json({
+        code: 1,
+        message: '钉钉Webhook未配置',
+        data: { 
+          configured: false, 
+          webhook: false,
+          secret: !!secretKey
+        }
+      });
+    }
+
+    const testMessage = `🧪 钉钉通知测试\n时间：${new Date().toLocaleString('zh-CN')}\n这是一条测试消息，用于验证钉钉配置是否正确。`;
+    
+    const result = await sendDingTalkMessage(webhookUrl, secretKey, testMessage);
+    
+    res.json({
+      code: 0,
+      message: '测试消息发送成功',
+      data: { 
+        configured: true,
+        webhook: true,
+        secret: !!secretKey,
+        result: result.data
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 钉钉测试失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '测试失败',
+      error: error.message,
+      data: {
+        configured: !!process.env.DINGTALK_WEBHOOK,
+        webhook: !!process.env.DINGTALK_WEBHOOK,
+        secret: !!process.env.SECRET_KEY
+      }
     });
   }
 });
