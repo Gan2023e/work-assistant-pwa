@@ -131,6 +131,7 @@ interface QueryParams {
 
 interface Statistics {
   totalCount: number;
+  parentSkuCount: number; // 新增母SKU总数
   siteStats: Array<{ site: string; count: number }>;
   brandStats: Array<{ brand_name: string; count: number }>;
 }
@@ -277,12 +278,13 @@ const ProductInformation: React.FC = () => {
           const grouped = groupDataByParentSku(rawData);
           setGroupedData(grouped);
           
-          // 分组视图使用自定义分页信息
+          // 分组视图使用统计信息中的母SKU总数
+          const totalParentSkus = statistics?.parentSkuCount || grouped.length;
           setPagination({
             current: queryParams.page,
             pageSize: queryParams.limit,
-            total: grouped.length, // 使用分组后的总数
-            pages: Math.ceil(grouped.length / queryParams.limit)
+            total: totalParentSkus, // 使用统计信息中的母SKU总数
+            pages: Math.ceil(totalParentSkus / queryParams.limit)
           });
         } else {
           // 列表视图使用后端分页信息
@@ -300,19 +302,7 @@ const ProductInformation: React.FC = () => {
     }
   }, [queryParams, groupDataByParentSku, isGroupedView]);
 
-  // 获取统计信息
-  const fetchStatistics = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/product-information/statistics`);
-      const result = await response.json();
 
-      if (result.success) {
-        setStatistics(result.data);
-      }
-    } catch (error) {
-      console.error('获取统计信息失败:', error);
-    }
-  }, []);
 
   // 更新查询参数
   const updateQueryParams = (newParams: Partial<QueryParams>) => {
@@ -740,14 +730,36 @@ const ProductInformation: React.FC = () => {
     }),
   };
 
-  // 组件加载时获取数据
+  // 组件加载时获取数据和统计信息
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // 监听查询参数变化，同时更新统计信息
   useEffect(() => {
-    fetchStatistics();
-  }, [fetchStatistics]);
+    const updateStatistics = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (queryParams.search) {
+          params.append('search', queryParams.search);
+        }
+        if (queryParams.site && queryParams.site !== 'all') {
+          params.append('site', queryParams.site);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/product-information/statistics?${params}`);
+        const result = await response.json();
+
+        if (result.success) {
+          setStatistics(result.data);
+        }
+      } catch (error) {
+        console.error('获取统计信息失败:', error);
+      }
+    };
+
+    updateStatistics();
+  }, [queryParams.search, queryParams.site]);
 
   // 监听视图模式变化，重新获取数据
   useEffect(() => {
