@@ -334,6 +334,7 @@ const Purchase: React.FC = () => {
   const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([]);
   const [batchQtyPerBox, setBatchQtyPerBox] = useState<number | undefined>(undefined);
   const [batchVendorSku, setBatchVendorSku] = useState<string>('');
+  const [batchWeight, setBatchWeight] = useState<number | undefined>(undefined);
   const [batchLoading, setBatchLoading] = useState(false);
   // 用于获取输入框值的refs
   const colorInputRef = useRef<any>(null);
@@ -3872,6 +3873,60 @@ const Purchase: React.FC = () => {
     }
   };
 
+  const handleBatchSetWeight = async () => {
+    if (selectedSkuIds.length === 0) {
+      message.warning('请先选择要设置的子SKU');
+      return;
+    }
+    
+    if (batchWeight === undefined || batchWeight <= 0) {
+      message.warning('请输入有效的重量（千克）');
+      return;
+    }
+
+    setBatchLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const skuId of selectedSkuIds) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/seller-inventory-sku/${encodeURIComponent(skuId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              weight: batchWeight,
+              weight_type: 'measured' // 批量设置重量后，重量类型自动改为"实测"
+            }),
+          });
+
+          if (res.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`更新SKU ${skuId} 失败:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        message.success(`批量设置重量成功：${successCount} 条记录${failCount > 0 ? `，失败 ${failCount} 条` : ''}，重量类型已设为实测`);
+        await loadSellerSkuData(currentParentSku);
+        setSelectedSkuIds([]);
+        setBatchWeight(undefined);
+      } else {
+        message.error('批量设置重量失败');
+      }
+    } catch (error) {
+      console.error('批量设置重量失败:', error);
+      message.error('批量设置重量失败');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   // 重点款相关处理函数
   const handleKeyProductToggle = async (record: ProductRecord) => {
     try {
@@ -6535,6 +6590,7 @@ const Purchase: React.FC = () => {
           setSelectedSkuIds([]);
           setBatchQtyPerBox(undefined);
           setBatchVendorSku('');
+          setBatchWeight(undefined);
         }}
         width={1400}
         style={{ height: '80vh' }}
@@ -6579,12 +6635,35 @@ const Purchase: React.FC = () => {
                 设置货号 ({selectedSkuIds.length})
               </Button>
             </Space>
+            <Space align="center" wrap>
+              <Text strong>批量设置重量:</Text>
+              <InputNumber
+                placeholder="重量(千克)"
+                value={batchWeight}
+                onChange={(value) => setBatchWeight(value ?? undefined)}
+                min={0}
+                max={50}
+                step={0.001}
+                precision={3}
+                style={{ width: 140 }}
+              />
+              <Button
+                type="primary"
+                onClick={handleBatchSetWeight}
+                loading={batchLoading}
+                disabled={selectedSkuIds.length === 0}
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                设为实测重量 ({selectedSkuIds.length})
+              </Button>
+            </Space>
             <Space align="center">
               <Button
                 onClick={() => {
                   setSelectedSkuIds([]);
                   setBatchQtyPerBox(undefined);
                   setBatchVendorSku('');
+                  setBatchWeight(undefined);
                 }}
                 disabled={selectedSkuIds.length === 0}
               >
