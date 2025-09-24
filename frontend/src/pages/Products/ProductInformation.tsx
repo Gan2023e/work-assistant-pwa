@@ -692,6 +692,103 @@ const ProductInformation: React.FC = () => {
       }
     },
     {
+      title: '产品图片',
+      key: 'product_images',
+      width: 120,
+      render: (_, record: TableRowData) => {
+        if (isGroupedView && 'isParent' in record && record.isParent) {
+          // 父级行显示第一个子产品的主图
+          const firstChild = record.children.find(c => c.main_image_url);
+          if (firstChild?.main_image_url) {
+            return (
+              <div style={{ textAlign: 'center' }}>
+                <img 
+                  src={firstChild.main_image_url} 
+                  alt="系列主图" 
+                  style={{ 
+                    width: '50px', 
+                    height: '50px', 
+                    objectFit: 'cover', 
+                    borderRadius: '6px',
+                    border: '2px solid #e8f4fd'
+                  }}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+                <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                  系列预览
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div style={{ textAlign: 'center', color: '#999' }}>
+              <div style={{ fontSize: '24px' }}>📁</div>
+              <div style={{ fontSize: '10px' }}>系列产品</div>
+            </div>
+          );
+        }
+        
+        const productRecord = record as ProductInformationData;
+        const images = [
+          productRecord.main_image_url,
+          productRecord.swatch_image_url,
+          productRecord.other_image_url1,
+          productRecord.other_image_url2,
+          productRecord.other_image_url3,
+          productRecord.other_image_url4,
+          productRecord.other_image_url5,
+          productRecord.other_image_url6,
+          productRecord.other_image_url7,
+          productRecord.other_image_url8
+        ].filter(url => url && url.trim());
+        
+        if (images.length === 0) {
+          return (
+            <div style={{ 
+              marginLeft: isGroupedView ? '40px' : '0',
+              color: '#999',
+              textAlign: 'center'
+            }}>
+              -
+            </div>
+          );
+        }
+        
+        return (
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: isGroupedView ? 'flex-start' : 'center',
+            marginLeft: isGroupedView ? '40px' : '0'
+          }}>
+            <img 
+              src={images[0]} 
+              alt="商品主图" 
+              style={{ 
+                width: '45px', 
+                height: '45px', 
+                objectFit: 'cover', 
+                borderRadius: '4px',
+                border: '1px solid #d9d9d9'
+              }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
+            {images.length > 1 && (
+              <span style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                +{images.length - 1}张
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
       title: '商品名称',
       dataIndex: 'item_name',
       key: 'item_name',
@@ -1387,103 +1484,6 @@ const ProductInformation: React.FC = () => {
             </div>
           </Tooltip>
         ) : '-';
-      }
-    },
-    {
-      title: '产品图片',
-      key: 'product_images',
-      width: 120,
-      render: (_, record: TableRowData) => {
-        if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示第一个子产品的主图
-          const firstChild = record.children.find(c => c.main_image_url);
-          if (firstChild?.main_image_url) {
-            return (
-              <div style={{ textAlign: 'center' }}>
-                <img 
-                  src={firstChild.main_image_url} 
-                  alt="系列主图" 
-                  style={{ 
-                    width: '50px', 
-                    height: '50px', 
-                    objectFit: 'cover', 
-                    borderRadius: '6px',
-                    border: '2px solid #e8f4fd'
-                  }}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
-                <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
-                  系列预览
-                </div>
-              </div>
-            );
-          }
-          return (
-            <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: '24px' }}>📁</div>
-              <div style={{ fontSize: '10px' }}>系列产品</div>
-            </div>
-          );
-        }
-        
-        const productRecord = record as ProductInformationData;
-        const images = [
-          productRecord.main_image_url,
-          productRecord.swatch_image_url,
-          productRecord.other_image_url1,
-          productRecord.other_image_url2,
-          productRecord.other_image_url3,
-          productRecord.other_image_url4,
-          productRecord.other_image_url5,
-          productRecord.other_image_url6,
-          productRecord.other_image_url7,
-          productRecord.other_image_url8
-        ].filter(url => url && url.trim());
-        
-        if (images.length === 0) {
-          return (
-            <div style={{ 
-              marginLeft: isGroupedView ? '40px' : '0',
-              color: '#999',
-              textAlign: 'center'
-            }}>
-              -
-            </div>
-          );
-        }
-        
-        return (
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: isGroupedView ? 'flex-start' : 'center',
-            marginLeft: isGroupedView ? '40px' : '0'
-          }}>
-            <img 
-              src={images[0]} 
-              alt="商品主图" 
-              style={{ 
-                width: '45px', 
-                height: '45px', 
-                objectFit: 'cover', 
-                borderRadius: '4px',
-                border: '1px solid #d9d9d9'
-              }}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
-            />
-            {images.length > 1 && (
-              <span style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
-                +{images.length - 1}张
-              </span>
-            )}
-          </div>
-        );
       }
     },
     {
