@@ -17,7 +17,8 @@ import {
   Row,
   Col,
   Statistic,
-  Empty
+  Empty,
+  Upload
 } from 'antd';
 import {
   SearchOutlined,
@@ -26,7 +27,8 @@ import {
   EyeOutlined,
   ReloadOutlined,
   ExclamationCircleOutlined,
-  DownloadOutlined
+  ExportOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -112,12 +114,10 @@ interface GroupedProductData {
   site: string;
   brand_name: string;
   manufacturer: string;
-  item_name?: string;
-  main_image_url?: string;
   total_quantity: number;
   children_count: number;
   children: ProductInformationData[];
-  parent_record?: ProductInformationData;
+  parent_record?: ProductInformationData; // 母SKU记录（如果存在）
   isParent: boolean;
 }
 
@@ -174,54 +174,18 @@ const ProductInformation: React.FC = () => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [exportVisible, setExportVisible] = useState(false);
+  const [uploadVisible, setUploadVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ProductInformationData | null>(null);
-  const [exportLoading, setExportLoading] = useState(false);
   const [form] = Form.useForm();
-  const [exportForm] = Form.useForm();
-
-  // 按父SKU分组数据的函数
-  const groupDataByParentSku = useCallback((rawData: ProductInformationData[]): GroupedProductData[] => {
-    const groups: { [key: string]: ProductInformationData[] } = {};
-    
-    // 按parent_sku分组，没有parent_sku的单独处理
-    rawData.forEach(item => {
-      const parentKey = item.parent_sku || `single_${item.site}_${item.item_sku}`;
-      if (!groups[parentKey]) {
-        groups[parentKey] = [];
-      }
-      groups[parentKey].push(item);
-    });
-
-    // 转换为GroupedProductData格式
-    const result: GroupedProductData[] = [];
-    Object.entries(groups).forEach(([parentKey, children]) => {
-      if (children.length === 1 && !children[0].parent_sku) {
-        // 单个产品且没有parent_sku，直接添加为普通行
-        return;
-      }
-
-      // 计算汇总信息
-      const totalQuantity = children.reduce((sum, child) => sum + (child.quantity || 0), 0);
-      const firstChild = children[0];
-      
-      const groupedItem: GroupedProductData = {
-        key: parentKey,
-        parent_sku: parentKey.startsWith('single_') ? '' : parentKey,
-        site: firstChild.site,
-        brand_name: firstChild.brand_name,
-        manufacturer: firstChild.manufacturer,
-        total_quantity: totalQuantity,
-        children_count: children.length,
-        children: children,
-        isParent: true
-      };
-      
-      result.push(groupedItem);
-    });
-
-    // 按parent_sku排序
-    return result.sort((a, b) => (a.parent_sku || '').localeCompare(b.parent_sku || ''));
-  }, []);
+  
+  // 导出相关状态
+  const [exportLoading, setExportLoading] = useState(false);
+  const [targetCountry, setTargetCountry] = useState<string>('');
+  
+  // 上传相关状态
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadCountry, setUploadCountry] = useState<string>('');
+  const [fileList, setFileList] = useState<any[]>([]);
 
 
 
@@ -296,12 +260,10 @@ const ProductInformation: React.FC = () => {
             site: group.site,
             brand_name: group.brand_name,
             manufacturer: group.manufacturer,
-            item_name: group.item_name,
-            main_image_url: group.main_image_url,
             total_quantity: group.total_quantity,
             children_count: group.children_count,
             children: group.children,
-            parent_record: group.parent_record,
+            parent_record: group.parent_record, // 母SKU记录
             isParent: true
           })));
           setData([]); // 清空原始数据
@@ -360,13 +322,19 @@ const ProductInformation: React.FC = () => {
     setEditVisible(true);
   };
 
-  // 保存编辑
+  // 保存编辑/新增
   const handleSaveEdit = async () => {
     try {
       const values = await form.validateFields();
       
-      const response = await fetch(`${API_BASE_URL}/api/product-information/${currentRecord?.site}/${currentRecord?.item_sku}`, {
-        method: 'PUT',
+      // 如果currentRecord为null，表示新增记录
+      const isNewRecord = !currentRecord;
+      const url = isNewRecord 
+        ? `${API_BASE_URL}/api/product-information`
+        : `${API_BASE_URL}/api/product-information/${currentRecord?.site}/${currentRecord?.item_sku}`;
+      
+      const response = await fetch(url, {
+        method: isNewRecord ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -376,14 +344,14 @@ const ProductInformation: React.FC = () => {
       const result = await response.json();
 
       if (result.success) {
-        message.success('保存成功');
+        message.success(isNewRecord ? '新增成功' : '保存成功');
         setEditVisible(false);
         fetchData();
       } else {
-        message.error(result.message || '保存失败');
+        message.error(result.message || (isNewRecord ? '新增失败' : '保存失败'));
       }
     } catch (error) {
-      message.error('保存失败: ' + error);
+      message.error((currentRecord ? '保存' : '新增') + '失败: ' + error);
     }
   };
 
@@ -444,53 +412,142 @@ const ProductInformation: React.FC = () => {
   };
 
   // 导出到模板
-  const handleExportToTemplate = () => {
-    if (selectedRows.length === 0) {
-      message.warning('请选择要导出的记录');
+  const handleExportToTemplate = async () => {
+    if (!targetCountry) {
+      message.error('请选择目标国家');
       return;
     }
-    setExportVisible(true);
-  };
 
-  // 执行导出
-  const handleDoExport = async () => {
+    if (selectedRows.length === 0) {
+      message.error('请选择要导出的记录');
+      return;
+    }
+
+    setExportLoading(true);
     try {
-      const values = await exportForm.validateFields();
-      setExportLoading(true);
-
       const response = await fetch(`${API_BASE_URL}/api/product-information/export-to-template`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          records: selectedRows,
-          country: values.country
+          selectedRecords: selectedRows,
+          targetCountry: targetCountry
         }),
       });
 
       if (response.ok) {
+        // 下载文件
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `亚马逊资料模板_${values.country}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        
+        // 从响应头获取文件名
+        const contentDisposition = response.headers.get('content-disposition');
+        let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        if (contentDisposition) {
+          const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
+          if (fileNameMatch) {
+            fileName = decodeURIComponent(fileNameMatch[1]);
+          }
+        }
+        
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
-        message.success('导出成功');
+
+        message.success(`导出成功！已下载 ${selectedRows.length} 条记录到 ${targetCountry} 模板`);
         setExportVisible(false);
-        exportForm.resetFields();
+        setTargetCountry('');
+        setSelectedRowKeys([]);
+        setSelectedRows([]);
       } else {
-        const result = await response.json();
-        message.error(result.message || '导出失败');
+        const errorResult = await response.json();
+        message.error(errorResult.message || '导出失败');
       }
     } catch (error) {
       message.error('导出失败: ' + error);
     } finally {
       setExportLoading(false);
+    }
+  };
+
+  // 上传资料表
+  const handleUploadTemplate = async () => {
+    if (!uploadCountry) {
+      message.error('请选择对应的国家');
+      return;
+    }
+
+    if (fileList.length === 0) {
+      message.error('请选择要上传的Excel文件');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileList[0].originFileObj);
+    formData.append('country', uploadCountry);
+
+    setUploadLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/product-information/upload-template`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        message.success(
+          `${result.message}！新增${result.data.inserted}条，更新${result.data.updated}条记录${
+            result.data.errors > 0 ? `，${result.data.errors}条失败` : ''
+          }`
+        );
+        
+        // 显示错误详情（如果有）
+        if (result.data.errorDetails && result.data.errorDetails.length > 0) {
+          Modal.info({
+            title: '导入详情',
+            width: 600,
+            content: (
+              <div>
+                <p>导入完成统计：</p>
+                <ul>
+                  <li>新增记录：{result.data.inserted} 条</li>
+                  <li>更新记录：{result.data.updated} 条</li>
+                  <li>失败记录：{result.data.errors} 条</li>
+                </ul>
+                {result.data.errorDetails.length > 0 && (
+                  <>
+                    <p>错误详情（前10条）：</p>
+                    <ul style={{ maxHeight: '200px', overflow: 'auto' }}>
+                      {result.data.errorDetails.map((error: string, index: number) => (
+                        <li key={index} style={{ color: '#ff4d4f', fontSize: '12px' }}>
+                          {error}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            ),
+          });
+        }
+
+        setUploadVisible(false);
+        setUploadCountry('');
+        setFileList([]);
+        fetchData(); // 刷新数据
+      } else {
+        message.error(result.message || '上传失败');
+      }
+    } catch (error) {
+      message.error('上传失败: ' + error);
+    } finally {
+      setUploadLoading(false);
     }
   };
 
@@ -557,12 +614,20 @@ const ProductInformation: React.FC = () => {
       },
       render: (name: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示真实的母SKU商品名称
-          const parentName = record.item_name || record.parent_sku || `${record.brand_name} 系列产品`;
+          // 父级行优先显示母SKU记录的商品名称，其次是第一个子产品的名称
+          let displayName = '';
+          if (record.parent_record && record.parent_record.item_name) {
+            displayName = record.parent_record.item_name;
+          } else if (record.children.length > 0) {
+            displayName = record.children[0].item_name;
+          } else {
+            displayName = `${record.brand_name} 系列产品`;
+          }
+          
           return (
-            <Tooltip placement="topLeft" title={parentName}>
+            <Tooltip placement="topLeft" title={displayName}>
               <span style={{ fontWeight: 'bold' }}>
-                {parentName}
+                {displayName}
               </span>
             </Tooltip>
           );
@@ -723,14 +788,14 @@ const ProductInformation: React.FC = () => {
       width: 80,
       render: (url: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示真实的母SKU主图
-          const parentImageUrl = record.main_image_url;
-          if (parentImageUrl) {
+          // 父级行显示第一个子产品的主图
+          const firstChild = record.children[0];
+          if (firstChild?.main_image_url) {
             return (
               <img 
-                src={parentImageUrl} 
+                src={firstChild.main_image_url} 
                 alt="主图" 
-                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
+                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', opacity: 0.7 }}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.style.display = 'none';
@@ -959,13 +1024,38 @@ const ProductInformation: React.FC = () => {
               列表视图
             </Button>
           </Button.Group>
+
+          {/* 数据操作按钮 */}
+          <Button
+            type="primary"
+            icon={<UploadOutlined />}
+            onClick={() => setUploadVisible(true)}
+          >
+            上传资料表
+          </Button>
+
+          <Button
+            type="default"
+            icon={<EditOutlined />}
+            onClick={() => {
+              // 新增记录功能
+              setCurrentRecord(null);
+              setEditVisible(true);
+            }}
+          >
+            新增记录
+          </Button>
         </Space>
 
         {/* 批量操作 */}
         {selectedRowKeys.length > 0 && (
           <Space style={{ marginBottom: 16 }}>
             <span>已选择 {selectedRowKeys.length} 项</span>
-            <Button type="primary" onClick={handleExportToTemplate}>
+            <Button
+              type="primary"
+              icon={<ExportOutlined />}
+              onClick={() => setExportVisible(true)}
+            >
               导出到模板
             </Button>
             <Popconfirm
@@ -1104,12 +1194,12 @@ const ProductInformation: React.FC = () => {
 
       {/* 编辑弹窗 */}
       <Modal
-        title="编辑产品资料"
+        title={currentRecord ? "编辑产品资料" : "新增产品资料"}
         open={editVisible}
         onOk={handleSaveEdit}
         onCancel={() => setEditVisible(false)}
         width={1000}
-        okText="保存"
+        okText={currentRecord ? "保存" : "新增"}
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
@@ -1249,43 +1339,166 @@ const ProductInformation: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 导出模态框 */}
+      {/* 导出弹窗 */}
       <Modal
-        title="导出到亚马逊资料模板"
+        title="导出到资料模板"
         open={exportVisible}
-        onOk={handleDoExport}
+        onOk={handleExportToTemplate}
         onCancel={() => {
           setExportVisible(false);
-          exportForm.resetFields();
+          setTargetCountry('');
         }}
         confirmLoading={exportLoading}
-        okText="导出"
+        okText="开始导出"
         cancelText="取消"
+        width={500}
       >
-        <Form form={exportForm} layout="vertical">
-          <Form.Item
-            label="选择国家站点"
-            name="country"
-            rules={[{ required: true, message: '请选择国家站点' }]}
-          >
-            <Select placeholder="请选择要导出的国家站点">
-              <Option value="美国">美国 (US)</Option>
-              <Option value="加拿大">加拿大 (CA)</Option>
-              <Option value="英国">英国 (UK)</Option>
-              <Option value="德国">德国 (DE)</Option>
-              <Option value="法国">法国 (FR)</Option>
-              <Option value="意大利">意大利 (IT)</Option>
-              <Option value="西班牙">西班牙 (ES)</Option>
-              <Option value="日本">日本 (JP)</Option>
-              <Option value="澳大利亚">澳大利亚 (AU)</Option>
-              <Option value="印度">印度 (IN)</Option>
-              <Option value="阿联酋">阿联酋 (AE)</Option>
-            </Select>
-          </Form.Item>
-          <div style={{ color: '#666', fontSize: '14px' }}>
-            将导出 {selectedRows.length} 条记录到选定国家的亚马逊资料模板中
-          </div>
-        </Form>
+        <div style={{ padding: '16px 0' }}>
+          <p style={{ marginBottom: 16, color: '#666' }}>
+            将选中的 <strong>{selectedRows.length}</strong> 条记录导出到指定国家的亚马逊资料模板中
+          </p>
+          
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
+                选择目标国家：
+              </label>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="请选择要导出的国家站点"
+                value={targetCountry}
+                onChange={setTargetCountry}
+                size="large"
+              >
+                <Option value="美国">美国</Option>
+                <Option value="英国">英国</Option>
+                <Option value="德国">德国</Option>
+                <Option value="法国">法国</Option>
+                <Option value="意大利">意大利</Option>
+                <Option value="西班牙">西班牙</Option>
+                <Option value="日本">日本</Option>
+                <Option value="加拿大">加拿大</Option>
+                <Option value="澳大利亚">澳大利亚</Option>
+                <Option value="印度">印度</Option>
+                <Option value="阿联酋">阿联酋</Option>
+              </Select>
+            </div>
+            
+            <div style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, fontSize: '12px' }}>
+              <p style={{ margin: 0, color: '#666' }}>
+                📋 <strong>导出说明：</strong>
+              </p>
+              <ul style={{ margin: '8px 0 0 16px', color: '#666' }}>
+                <li>将从阿里云OSS获取对应国家的亚马逊资料模板</li>
+                <li>选中的产品数据会自动填入模板的对应字段</li>
+                <li>导出完成后将自动下载到本地</li>
+                <li>请确保目标国家的模板已上传到"亚马逊资料模板管理"</li>
+              </ul>
+            </div>
+          </Space>
+        </div>
+      </Modal>
+
+      {/* 上传弹窗 */}
+      <Modal
+        title="上传资料表文件"
+        open={uploadVisible}
+        onOk={handleUploadTemplate}
+        onCancel={() => {
+          setUploadVisible(false);
+          setUploadCountry('');
+          setFileList([]);
+        }}
+        confirmLoading={uploadLoading}
+        okText="开始导入"
+        cancelText="取消"
+        width={600}
+      >
+        <div style={{ padding: '16px 0' }}>
+          <p style={{ marginBottom: 16, color: '#666' }}>
+            上传Excel资料表文件，系统将自动解析并导入到产品资料数据库中
+          </p>
+          
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
+                选择对应国家：
+              </label>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="请选择资料表对应的国家站点"
+                value={uploadCountry}
+                onChange={setUploadCountry}
+                size="large"
+              >
+                <Option value="美国">美国</Option>
+                <Option value="英国">英国</Option>
+                <Option value="德国">德国</Option>
+                <Option value="法国">法国</Option>
+                <Option value="意大利">意大利</Option>
+                <Option value="西班牙">西班牙</Option>
+                <Option value="日本">日本</Option>
+                <Option value="加拿大">加拿大</Option>
+                <Option value="澳大利亚">澳大利亚</Option>
+                <Option value="印度">印度</Option>
+                <Option value="阿联酋">阿联酋</Option>
+              </Select>
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
+                选择Excel文件：
+              </label>
+              <Upload
+                fileList={fileList}
+                onChange={({ fileList }) => setFileList(fileList)}
+                beforeUpload={(file) => {
+                  // 检查文件类型
+                  const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                                 file.type === 'application/vnd.ms-excel' ||
+                                 file.name.endsWith('.xlsx') || 
+                                 file.name.endsWith('.xls');
+                  if (!isExcel) {
+                    message.error('请选择Excel文件（.xlsx或.xls）');
+                    return false;
+                  }
+                  
+                  // 检查文件大小
+                  const isLt10M = file.size / 1024 / 1024 < 10;
+                  if (!isLt10M) {
+                    message.error('文件大小不能超过10MB');
+                    return false;
+                  }
+                  
+                  return false; // 阻止自动上传
+                }}
+                maxCount={1}
+                accept=".xlsx,.xls"
+                style={{ width: '100%' }}
+              >
+                <Button icon={<UploadOutlined />} size="large" style={{ width: '100%' }}>
+                  选择Excel文件
+                </Button>
+              </Upload>
+              <div style={{ marginTop: '8px', color: '#999', fontSize: '12px' }}>
+                支持.xlsx和.xls格式，文件大小限制10MB
+              </div>
+            </div>
+            
+            <div style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, fontSize: '12px' }}>
+              <p style={{ margin: 0, color: '#666' }}>
+                📋 <strong>导入说明：</strong>
+              </p>
+              <ul style={{ margin: '8px 0 0 16px', color: '#666' }}>
+                <li>Excel文件需要包含 <code>item_sku</code>、<code>item_name</code> 等必需字段</li>
+                <li>系统会自动识别表头，支持中英文字段名</li>
+                <li>如果SKU已存在将更新记录，否则新增记录</li>
+                <li>支持批量导入，建议单次不超过1000条记录</li>
+                <li>导入完成后会显示详细统计信息和错误报告</li>
+              </ul>
+            </div>
+          </Space>
+        </div>
       </Modal>
     </div>
   );
