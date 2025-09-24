@@ -54,11 +54,11 @@ router.get('/list', async (req, res) => {
     // 搜索条件
     if (search) {
       whereConditions[Op.or] = [
-        { item_sku: { [Op.iLike]: `%${search}%` } },
-        { item_name: { [Op.iLike]: `%${search}%` } },
-        { original_parent_sku: { [Op.iLike]: `%${search}%` } },
-        { brand_name: { [Op.iLike]: `%${search}%` } },
-        { parent_sku: { [Op.iLike]: `%${search}%` } }
+        { item_sku: { [Op.like]: `%${search}%` } },
+        { item_name: { [Op.like]: `%${search}%` } },
+        { original_parent_sku: { [Op.like]: `%${search}%` } },
+        { brand_name: { [Op.like]: `%${search}%` } },
+        { parent_sku: { [Op.like]: `%${search}%` } }
       ];
     }
 
@@ -378,11 +378,11 @@ router.get('/grouped-list', async (req, res) => {
     // 搜索条件
     if (search) {
       whereConditions[Op.or] = [
-        { item_sku: { [Op.iLike]: `%${search}%` } },
-        { item_name: { [Op.iLike]: `%${search}%` } },
-        { original_parent_sku: { [Op.iLike]: `%${search}%` } },
-        { brand_name: { [Op.iLike]: `%${search}%` } },
-        { parent_sku: { [Op.iLike]: `%${search}%` } }
+        { item_sku: { [Op.like]: `%${search}%` } },
+        { item_name: { [Op.like]: `%${search}%` } },
+        { original_parent_sku: { [Op.like]: `%${search}%` } },
+        { brand_name: { [Op.like]: `%${search}%` } },
+        { parent_sku: { [Op.like]: `%${search}%` } }
       ];
     }
 
@@ -757,7 +757,7 @@ router.post('/export-to-template', async (req, res) => {
       where: {
         country: targetCountry,
         file_name: {
-          [Op.iLike]: '%.xlsx'
+          [Op.like]: '%.xlsx'
         }
       },
       order: [['created_at', 'DESC']]
