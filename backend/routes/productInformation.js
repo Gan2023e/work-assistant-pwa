@@ -29,6 +29,7 @@ const upload = multer({
 
 // 获取产品资料列表（带分页和搜索）
 router.get('/list', async (req, res) => {
+  const startTime = Date.now();
   try {
     const {
       page = 1,
@@ -38,6 +39,8 @@ router.get('/list', async (req, res) => {
       sort_by = 'item_sku',
       sort_order = 'ASC'
     } = req.query;
+
+    console.log(`🔍 普通列表搜索请求: 搜索词="${search}", 页码=${page}, 每页=${limit}, 站点=${site}, 排序=${sort_by}`);
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -91,6 +94,10 @@ router.get('/list', async (req, res) => {
     });
 
     const siteList = sites.map(s => s.site);
+
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`✅ 普通列表搜索完成: 耗时 ${duration}ms, 返回 ${rows.length} 条记录, 总数 ${count} 条`);
 
     res.json({
       success: true,
@@ -356,6 +363,7 @@ router.get('/statistics', async (req, res) => {
 
 // 获取分组视图数据（支持分页）
 router.get('/grouped-list', async (req, res) => {
+  const startTime = Date.now();
   try {
     const {
       page = 1,
@@ -364,6 +372,8 @@ router.get('/grouped-list', async (req, res) => {
       site = 'all'
     } = req.query;
 
+    console.log(`🔍 分组视图搜索请求: 搜索词="${search}", 页码=${page}, 每页=${limit}, 站点=${site}`);
+    
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
 
@@ -407,51 +417,85 @@ router.get('/grouped-list', async (req, res) => {
     const endIndex = startIndex + limitNum;
     const currentPageParentSkus = allParentSkus.slice(startIndex, endIndex);
 
-    // 获取这些parent_sku对应的所有数据
-    const groupedData = [];
-
-    for (const parentSku of currentPageParentSkus) {
-      const children = await ProductInformation.findAll({
+    // 批量获取所有子记录和父记录（避免N+1查询问题）
+    const [allChildren, allParentRecords] = await Promise.all([
+      // 批量获取所有子记录
+      ProductInformation.findAll({
         where: {
           ...whereConditions,
-          parent_sku: parentSku
+          parent_sku: { [Op.in]: currentPageParentSkus }
         },
-        order: [['item_sku', 'ASC']]
-      });
-
-      // 尝试获取母SKU记录（parent_child='Parent'且item_sku=parent_sku的记录）
-      const parentRecord = await ProductInformation.findOne({
+        order: [['parent_sku', 'ASC'], ['item_sku', 'ASC']]
+      }),
+      // 批量获取所有母SKU记录
+      ProductInformation.findAll({
         where: {
           ...whereConditions,
-          item_sku: parentSku,
+          item_sku: { [Op.in]: currentPageParentSkus },
           parent_child: 'Parent'
         }
-      });
+      })
+    ]);
 
-      if (children.length > 0) {
-        const totalQuantity = children.reduce((sum, child) => sum + (child.quantity || 0), 0);
-        const firstChild = children[0];
+    // 按parent_sku分组整理数据
+    const childrenByParentSku = {};
+    const parentRecordsByParentSku = {};
 
-        groupedData.push({
-          parent_sku: parentSku,
-          site: parentRecord ? parentRecord.site : firstChild.site,
-          brand_name: parentRecord ? parentRecord.brand_name : firstChild.brand_name,
-          manufacturer: parentRecord ? parentRecord.manufacturer : firstChild.manufacturer,
-          total_quantity: totalQuantity,
-          children_count: children.length,
-          children: children,
-          parent_record: parentRecord // 包含母SKU记录信息
-        });
+    // 分组子记录
+    allChildren.forEach(child => {
+      if (!childrenByParentSku[child.parent_sku]) {
+        childrenByParentSku[child.parent_sku] = [];
       }
+      childrenByParentSku[child.parent_sku].push(child);
+    });
+
+    // 分组父记录
+    allParentRecords.forEach(parentRecord => {
+      parentRecordsByParentSku[parentRecord.item_sku] = parentRecord;
+    });
+
+    // 构建最终的分组数据
+    const groupedData = currentPageParentSkus.map(parentSku => {
+      const children = childrenByParentSku[parentSku] || [];
+      const parentRecord = parentRecordsByParentSku[parentSku] || null;
+      
+      if (children.length === 0) return null;
+
+      const totalQuantity = children.reduce((sum, child) => sum + (child.quantity || 0), 0);
+      const firstChild = children[0];
+
+      return {
+        parent_sku: parentSku,
+        site: parentRecord ? parentRecord.site : firstChild.site,
+        brand_name: parentRecord ? parentRecord.brand_name : firstChild.brand_name,
+        manufacturer: parentRecord ? parentRecord.manufacturer : firstChild.manufacturer,
+        total_quantity: totalQuantity,
+        children_count: children.length,
+        children: children,
+        parent_record: parentRecord
+      };
+    }).filter(item => item !== null);
+
+    // 获取站点列表（使用简单缓存）
+    let siteList = [];
+    const cacheKey = 'productinfo_sites';
+    const cached = global.siteListCache;
+    
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 300000)) { // 5分钟缓存
+      siteList = cached.data;
+    } else {
+      const sites = await ProductInformation.findAll({
+        attributes: ['site'],
+        group: ['site'],
+        raw: true
+      });
+      siteList = sites.map(s => s.site);
+      global.siteListCache = { data: siteList, timestamp: Date.now() };
     }
 
-    // 获取站点列表
-    const sites = await ProductInformation.findAll({
-      attributes: ['site'],
-      group: ['site'],
-      raw: true
-    });
-    const siteList = sites.map(s => s.site);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`✅ 分组视图搜索完成: 耗时 ${duration}ms, 返回 ${groupedData.length} 组数据, 总记录 ${totalParentSkus} 个parent_sku`);
 
     res.json({
       success: true,
