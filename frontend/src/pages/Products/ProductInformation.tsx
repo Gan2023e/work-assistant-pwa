@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Table,
   Card,
@@ -18,7 +18,9 @@ import {
   Col,
   Statistic,
   Empty,
-  Upload
+  Upload,
+  Badge,
+  Divider
 } from 'antd';
 import {
   SearchOutlined,
@@ -28,7 +30,10 @@ import {
   ReloadOutlined,
   ExclamationCircleOutlined,
   ExportOutlined,
-  UploadOutlined
+  UploadOutlined,
+  DownOutlined,
+  RightOutlined,
+  PushpinOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -151,6 +156,11 @@ const ProductInformation: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [selectedRows, setSelectedRows] = useState<ProductInformationData[]>([]);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
+  const [pinnedParentKey, setPinnedParentKey] = useState<string | null>(null); // 固定的母SKU
+
+  // 引用
+  const tableRef = useRef<HTMLDivElement>(null);
+  const pinnedRowRef = useRef<HTMLDivElement>(null);
 
   // 查询参数
   const [queryParams, setQueryParams] = useState<QueryParams>({
@@ -551,6 +561,35 @@ const ProductInformation: React.FC = () => {
     }
   };
 
+  // 处理展开/收起
+  const handleExpand = (parentKey: string) => {
+    const fullParentKey = `parent-${parentKey}`;
+    const isExpanded = expandedRowKeys.includes(fullParentKey);
+    
+    if (isExpanded) {
+      // 收起时取消固定
+      setExpandedRowKeys(prev => prev.filter(key => key !== fullParentKey));
+      if (pinnedParentKey === parentKey) {
+        setPinnedParentKey(null);
+      }
+    } else {
+      // 展开时设置为固定
+      setExpandedRowKeys(prev => [...prev, fullParentKey]);
+      setPinnedParentKey(parentKey);
+      
+      // 滚动到对应位置，确保固定行可见
+      setTimeout(() => {
+        const tableElement = tableRef.current;
+        if (tableElement) {
+          const targetRow = tableElement.querySelector(`[data-row-key="parent-${parentKey}"]`);
+          if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      }, 100);
+    }
+  };
+
   // 表格列定义
   const columns: ColumnsType<TableRowData> = [
     {
@@ -565,42 +604,90 @@ const ProductInformation: React.FC = () => {
       title: isGroupedView ? '父SKU/商品SKU' : '商品SKU',
       dataIndex: 'item_sku',
       key: 'item_sku',
-      width: 180,
+      width: 220,
       fixed: 'left',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 父级行显示父SKU和展开/收起按钮
           const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
+          const isPinned = pinnedParentKey === record.key;
+          
           return (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <Button
                 type="text"
                 size="small"
-                icon={isExpanded ? '📂' : '📁'}
-                onClick={() => {
-                  const parentKey = `parent-${record.key}`;
-                  if (isExpanded) {
-                    setExpandedRowKeys(prev => prev.filter(key => key !== parentKey));
-                  } else {
-                    setExpandedRowKeys(prev => [...prev, parentKey]);
-                  }
+                icon={isExpanded ? <DownOutlined /> : <RightOutlined />}
+                onClick={() => handleExpand(record.key)}
+                style={{ 
+                  border: 'none', 
+                  padding: '0 8px', 
+                  marginRight: '12px',
+                  color: isExpanded ? '#1890ff' : '#999',
+                  fontSize: '12px'
                 }}
-                style={{ border: 'none', padding: '0 4px', marginRight: '8px' }}
               />
-              <div>
-                <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                  {record.parent_sku || '未分组'}
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  fontWeight: 'bold', 
+                  color: '#1890ff',
+                  fontSize: '14px'
+                }}>
+                  <span style={{ marginRight: '8px' }}>
+                    {record.parent_sku || '未分组'}
+                  </span>
+                  {isPinned && (
+                    <Badge 
+                      count={<PushpinOutlined style={{ color: '#faad14', fontSize: '12px' }} />} 
+                      offset={[0, 0]}
+                    />
+                  )}
                 </div>
-                <div style={{ fontSize: '12px', color: '#999', fontWeight: 'normal' }}>
-                  {record.children_count} 个子产品
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: '#666', 
+                  fontWeight: 'normal',
+                  marginTop: '2px'
+                }}>
+                  <Space size={8}>
+                    <span>🎯 {record.children_count} 个子产品</span>
+                    <span>📦 总库存: {record.total_quantity}</span>
+                  </Space>
                 </div>
               </div>
             </div>
           );
         } else {
-          // 子级行或普通行显示商品SKU
-          return <span style={{ marginLeft: isGroupedView ? '32px' : '0' }}>{value}</span>;
+          // 子级行显示商品SKU
+          return (
+            <div style={{ 
+              marginLeft: isGroupedView ? '40px' : '0',
+              padding: '4px 0'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <div style={{
+                  width: '3px',
+                  height: '20px',
+                  backgroundColor: '#52c41a',
+                  borderRadius: '1px',
+                  marginRight: '8px'
+                }} />
+                <span style={{ 
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  color: '#262626'
+                }}>
+                  {value}
+                </span>
+              </div>
+            </div>
+          );
         }
       }
     },
@@ -608,7 +695,7 @@ const ProductInformation: React.FC = () => {
       title: '商品名称',
       dataIndex: 'item_name',
       key: 'item_name',
-      width: 200,
+      width: 250,
       ellipsis: {
         showTitle: false,
       },
@@ -626,15 +713,26 @@ const ProductInformation: React.FC = () => {
           
           return (
             <Tooltip placement="topLeft" title={displayName}>
-              <span style={{ fontWeight: 'bold' }}>
+              <div style={{ 
+                fontWeight: 'bold',
+                fontSize: '14px',
+                lineHeight: '1.4'
+              }}>
                 {displayName}
-              </span>
+              </div>
             </Tooltip>
           );
         } else {
           return (
             <Tooltip placement="topLeft" title={name}>
-              <span style={{ marginLeft: isGroupedView ? '32px' : '0' }}>{name}</span>
+              <div style={{ 
+                marginLeft: isGroupedView ? '40px' : '0',
+                fontSize: '13px',
+                color: '#595959',
+                lineHeight: '1.4'
+              }}>
+                {name}
+              </div>
             </Tooltip>
           );
         }
@@ -643,19 +741,31 @@ const ProductInformation: React.FC = () => {
     {
       title: '外部产品ID',
       key: 'external_product_id_info',
-      width: 140,
+      width: 160,
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return '-';
+          return (
+            <div style={{ 
+              color: '#999', 
+              fontSize: '12px',
+              textAlign: 'center'
+            }}>
+              - 系列产品 -
+            </div>
+          );
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
-            <div>{productRecord.external_product_id || '-'}</div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+              {productRecord.external_product_id || '-'}
+            </div>
             {productRecord.external_product_id_type && (
-              <div style={{ fontSize: '11px', color: '#999' }}>
-                类型: {productRecord.external_product_id_type}
+              <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                <Tag color="geekblue">
+                  {productRecord.external_product_id_type}
+                </Tag>
               </div>
             )}
           </div>
@@ -665,21 +775,35 @@ const ProductInformation: React.FC = () => {
     {
       title: '品牌/制造商',
       key: 'brand_manufacturer',
-      width: 150,
+      width: 160,
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           return (
-            <div>
-              <div style={{ fontWeight: 'bold' }}>{record.brand_name}</div>
-              <div style={{ fontSize: '11px', color: '#999' }}>{record.manufacturer}</div>
+            <div style={{ padding: '4px 0' }}>
+              <div style={{ 
+                fontWeight: 'bold', 
+                fontSize: '13px',
+                color: '#262626'
+              }}>
+                {record.brand_name}
+              </div>
+              <div style={{ 
+                fontSize: '11px', 
+                color: '#999',
+                marginTop: '2px'
+              }}>
+                {record.manufacturer}
+              </div>
             </div>
           );
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
-            <div>{productRecord.brand_name || '-'}</div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ fontSize: '12px' }}>
+              {productRecord.brand_name || '-'}
+            </div>
             <div style={{ fontSize: '11px', color: '#999' }}>
               {productRecord.manufacturer || '-'}
             </div>
@@ -690,19 +814,31 @@ const ProductInformation: React.FC = () => {
     {
       title: '产品类型',
       key: 'product_type',
-      width: 120,
+      width: 140,
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return '-';
+          return (
+            <div style={{ 
+              color: '#999', 
+              fontSize: '12px',
+              textAlign: 'center'
+            }}>
+              - 系列产品 -
+            </div>
+          );
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
-            <div>{productRecord.item_type || '-'}</div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ fontSize: '12px' }}>
+              {productRecord.item_type || '-'}
+            </div>
             {productRecord.feed_product_type && (
-              <div style={{ fontSize: '11px', color: '#999' }}>
-                Feed: {productRecord.feed_product_type}
+              <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                <Tag color="cyan">
+                  {productRecord.feed_product_type}
+                </Tag>
               </div>
             )}
           </div>
@@ -713,27 +849,74 @@ const ProductInformation: React.FC = () => {
       title: '型号',
       dataIndex: 'model',
       key: 'model',
-      width: 100,
+      width: 120,
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return '-';
+          return (
+            <div style={{ 
+              color: '#999', 
+              fontSize: '12px',
+              textAlign: 'center'
+            }}>
+              - 系列产品 -
+            </div>
+          );
         }
-        return value || '-';
+        return (
+          <div style={{ 
+            marginLeft: isGroupedView ? '40px' : '0',
+            fontSize: '12px',
+            fontFamily: 'monospace'
+          }}>
+            {value || '-'}
+          </div>
+        );
       }
     },
     {
       title: '价格信息',
       key: 'price_info',
-      width: 120,
+      width: 140,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return '-';
+          // 计算价格范围
+          const prices = record.children
+            .filter(child => child.standard_price)
+            .map(child => child.standard_price);
+          
+          if (prices.length === 0) {
+            return (
+              <div style={{ 
+                color: '#999', 
+                fontSize: '12px',
+                textAlign: 'center'
+              }}>
+                - 系列产品 -
+              </div>
+            );
+          }
+          
+          const minPrice = Math.min(...prices);
+          const maxPrice = Math.max(...prices);
+          
+          return (
+            <div style={{ fontSize: '12px' }}>
+              <div style={{ fontWeight: 'bold', color: '#52c41a' }}>
+                ${minPrice === maxPrice ? minPrice.toFixed(2) : `${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}`}
+              </div>
+              <div style={{ fontSize: '11px', color: '#999' }}>
+                价格区间
+              </div>
+            </div>
+          );
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
-            <div>标准: {productRecord.standard_price ? `$${productRecord.standard_price}` : '-'}</div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#52c41a' }}>
+              {productRecord.standard_price ? `$${productRecord.standard_price}` : '-'}
+            </div>
             <div style={{ fontSize: '11px', color: '#999' }}>
               标价: {productRecord.list_price ? `$${productRecord.list_price}` : '-'}
             </div>
@@ -745,12 +928,41 @@ const ProductInformation: React.FC = () => {
       title: '数量',
       dataIndex: 'quantity',
       key: 'quantity',
-      width: 80,
+      width: 100,
       render: (qty: number, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return <span style={{ fontWeight: 'bold', color: '#52c41a' }}>{record.total_quantity}</span>;
+          return (
+            <div style={{ textAlign: 'center' }}>
+              <Badge 
+                count={record.total_quantity} 
+                showZero 
+                style={{ 
+                  backgroundColor: '#52c41a',
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}
+              />
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                总计
+              </div>
+            </div>
+          );
         }
-        return qty || '-';
+        return (
+          <div style={{ 
+            marginLeft: isGroupedView ? '40px' : '0',
+            textAlign: isGroupedView ? 'left' : 'center'
+          }}>
+            <Badge 
+              count={qty || 0} 
+              showZero 
+              style={{ 
+                backgroundColor: qty > 0 ? '#1890ff' : '#d9d9d9',
+                fontSize: '11px'
+              }}
+            />
+          </div>
+        );
       }
     },
     {
@@ -764,7 +976,7 @@ const ProductInformation: React.FC = () => {
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
             <div>原始: {productRecord.original_parent_sku || '-'}</div>
             <div>父SKU: {productRecord.parent_sku || '-'}</div>
             {productRecord.parent_child && (
@@ -784,22 +996,58 @@ const ProductInformation: React.FC = () => {
     {
       title: '变体信息',
       key: 'variant_info',
-      width: 150,
+      width: 170,
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          return '-';
+          // 统计变体信息
+          const colors = Array.from(new Set(record.children.map(c => c.color_name).filter(Boolean)));
+          const sizes = Array.from(new Set(record.children.map(c => c.size_name).filter(Boolean)));
+          
+          return (
+            <div style={{ fontSize: '11px' }}>
+              {colors.length > 0 && (
+                <div style={{ marginBottom: '2px' }}>
+                  <Tag color="magenta">
+                    {colors.length}种颜色
+                  </Tag>
+                </div>
+              )}
+              {sizes.length > 0 && (
+                <div>
+                  <Tag color="purple">
+                    {sizes.length}种尺寸
+                  </Tag>
+                </div>
+              )}
+              {colors.length === 0 && sizes.length === 0 && (
+                <div style={{ color: '#999', textAlign: 'center' }}>
+                  - 系列产品 -
+                </div>
+              )}
+            </div>
+          );
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
-            <div>颜色: {productRecord.color_name || '-'}</div>
-            <div>尺寸: {productRecord.size_name || '-'}</div>
-            {productRecord.variation_theme && (
-              <div style={{ fontSize: '11px', color: '#999' }}>
-                主题: {productRecord.variation_theme}
-              </div>
-            )}
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <Space direction="vertical" size={2}>
+              {productRecord.color_name && (
+                <Tag color="magenta">
+                  {productRecord.color_name}
+                </Tag>
+              )}
+              {productRecord.size_name && (
+                <Tag color="purple">
+                  {productRecord.size_name}
+                </Tag>
+              )}
+              {productRecord.variation_theme && (
+                <div style={{ fontSize: '10px', color: '#999' }}>
+                  主题: {productRecord.variation_theme}
+                </div>
+              )}
+            </Space>
           </div>
         );
       }
@@ -815,7 +1063,7 @@ const ProductInformation: React.FC = () => {
         }
         const productRecord = record as ProductInformationData;
         return (
-          <div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
             {productRecord.color_map && <div>颜色: {productRecord.color_map}</div>}
             {productRecord.size_map && <div>尺寸: {productRecord.size_map}</div>}
             {(!productRecord.color_map && !productRecord.size_map) && '-'}
@@ -837,9 +1085,9 @@ const ProductInformation: React.FC = () => {
         }
         return (
           <Tooltip placement="topLeft" title={description}>
-            <span style={{ marginLeft: isGroupedView ? '32px' : '0' }}>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {description ? (description.length > 50 ? `${description.substring(0, 50)}...` : description) : '-'}
-            </span>
+            </div>
           </Tooltip>
         );
       }
@@ -879,7 +1127,9 @@ const ProductInformation: React.FC = () => {
               ))}
             </div>
           }>
-            <span>{shortText}</span>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+              {shortText}
+            </div>
           </Tooltip>
         );
       }
@@ -894,7 +1144,11 @@ const ProductInformation: React.FC = () => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           return '-';
         }
-        return value || '-';
+        return (
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            {value || '-'}
+          </div>
+        );
       }
     },
     {
@@ -916,7 +1170,7 @@ const ProductInformation: React.FC = () => {
         
         return attributes.length > 0 ? (
           <Tooltip title={attributes.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {attributes.slice(0, 2).map((attr, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{attr}</div>
               ))}
@@ -946,7 +1200,7 @@ const ProductInformation: React.FC = () => {
         
         return features.length > 0 ? (
           <Tooltip title={features.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {features.slice(0, 2).map((feature, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{feature}</div>
               ))}
@@ -975,7 +1229,7 @@ const ProductInformation: React.FC = () => {
         
         return careInfo.length > 0 ? (
           <Tooltip title={careInfo.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {careInfo.slice(0, 2).map((info, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{info}</div>
               ))}
@@ -1006,7 +1260,7 @@ const ProductInformation: React.FC = () => {
         
         return (
           <Tooltip title={seasons.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {seasons.slice(0, 2).map((season, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{season}</div>
               ))}
@@ -1026,7 +1280,11 @@ const ProductInformation: React.FC = () => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           return '-';
         }
-        return value || '-';
+        return (
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            {value || '-'}
+          </div>
+        );
       }
     },
     {
@@ -1046,7 +1304,7 @@ const ProductInformation: React.FC = () => {
         }
         
         return storageInfo.length > 0 ? (
-          <div>
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
             {storageInfo.map((info, index) => (
               <div key={index} style={{ fontSize: '11px' }}>{info}</div>
             ))}
@@ -1078,7 +1336,7 @@ const ProductInformation: React.FC = () => {
         
         return dimensions.length > 0 ? (
           <Tooltip title={dimensions.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {dimensions.slice(0, 2).map((dim, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{dim}</div>
               ))}
@@ -1098,7 +1356,11 @@ const ProductInformation: React.FC = () => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           return '-';
         }
-        return value || '-';
+        return (
+          <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            {value || '-'}
+          </div>
+        );
       }
     },
     {
@@ -1118,7 +1380,7 @@ const ProductInformation: React.FC = () => {
         
         return info.length > 0 ? (
           <Tooltip title={info.join(', ')}>
-            <div>
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
               {info.map((item, index) => (
                 <div key={index} style={{ fontSize: '11px' }}>{item}</div>
               ))}
@@ -1134,21 +1396,37 @@ const ProductInformation: React.FC = () => {
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 父级行显示第一个子产品的主图
-          const firstChild = record.children[0];
+          const firstChild = record.children.find(c => c.main_image_url);
           if (firstChild?.main_image_url) {
             return (
-              <img 
-                src={firstChild.main_image_url} 
-                alt="主图" 
-                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', opacity: 0.7 }}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
-              />
+              <div style={{ textAlign: 'center' }}>
+                <img 
+                  src={firstChild.main_image_url} 
+                  alt="系列主图" 
+                  style={{ 
+                    width: '50px', 
+                    height: '50px', 
+                    objectFit: 'cover', 
+                    borderRadius: '6px',
+                    border: '2px solid #e8f4fd'
+                  }}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+                <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                  系列预览
+                </div>
+              </div>
             );
           }
-          return '📁';
+          return (
+            <div style={{ textAlign: 'center', color: '#999' }}>
+              <div style={{ fontSize: '24px' }}>📁</div>
+              <div style={{ fontSize: '10px' }}>系列产品</div>
+            </div>
+          );
         }
         
         const productRecord = record as ProductInformationData;
@@ -1165,14 +1443,35 @@ const ProductInformation: React.FC = () => {
           productRecord.other_image_url8
         ].filter(url => url && url.trim());
         
-        if (images.length === 0) return '-';
+        if (images.length === 0) {
+          return (
+            <div style={{ 
+              marginLeft: isGroupedView ? '40px' : '0',
+              color: '#999',
+              textAlign: 'center'
+            }}>
+              -
+            </div>
+          );
+        }
         
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: isGroupedView ? 'flex-start' : 'center',
+            marginLeft: isGroupedView ? '40px' : '0'
+          }}>
             <img 
               src={images[0]} 
-              alt="主图" 
-              style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
+              alt="商品主图" 
+              style={{ 
+                width: '45px', 
+                height: '45px', 
+                objectFit: 'cover', 
+                borderRadius: '4px',
+                border: '1px solid #d9d9d9'
+              }}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
@@ -1190,53 +1489,73 @@ const ProductInformation: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 180,
       fixed: 'right',
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行的操作（可以添加批量操作等）
+          // 父级行的操作
+          const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
           return (
             <Space size="small">
-              <span style={{ color: '#999', fontSize: '12px' }}>母SKU</span>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => handleExpand(record.key)}
+                style={{
+                  color: isExpanded ? '#1890ff' : '#666',
+                  fontSize: '12px'
+                }}
+              >
+                {isExpanded ? '收起子产品' : '展开子产品'}
+              </Button>
+              <Divider type="vertical" />
+              <span style={{ color: '#999', fontSize: '11px' }}>
+                母SKU组
+              </span>
             </Space>
           );
         } else {
           // 子级行或普通行的操作
           const productRecord = record as ProductInformationData;
           return (
-            <Space size="small">
-              <Tooltip title="查看详情">
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<EyeOutlined />}
-                  onClick={() => handleViewDetail(productRecord)}
-                />
-              </Tooltip>
-              <Tooltip title="编辑">
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => handleEdit(productRecord)}
-                />
-              </Tooltip>
-              <Popconfirm
-                title="确定删除这条记录吗？"
-                onConfirm={() => handleDelete(productRecord)}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Tooltip title="删除">
+            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+              <Space size="small">
+                <Tooltip title="查看详情">
                   <Button
                     type="link"
                     size="small"
-                    danger
-                    icon={<DeleteOutlined />}
+                    icon={<EyeOutlined />}
+                    onClick={() => handleViewDetail(productRecord)}
+                    style={{ padding: '2px 4px' }}
                   />
                 </Tooltip>
-              </Popconfirm>
-            </Space>
+                <Tooltip title="编辑">
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => handleEdit(productRecord)}
+                    style={{ padding: '2px 4px' }}
+                  />
+                </Tooltip>
+                <Popconfirm
+                  title="确定删除这条记录吗？"
+                  onConfirm={() => handleDelete(productRecord)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Tooltip title="删除">
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      style={{ padding: '2px 4px' }}
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              </Space>
+            </div>
           );
         }
       },
@@ -1280,41 +1599,122 @@ const ProductInformation: React.FC = () => {
       <style>
         {`
           .child-row {
-            background-color: #fafafa !important;
+            background-color: #fafbfc !important;
+            border-left: 3px solid #e6f7ff !important;
           }
           .child-row:hover {
-            background-color: #f0f0f0 !important;
+            background-color: #f0f8ff !important;
           }
           .child-row td {
-            border-top: 1px solid #e6f3ff !important;
-            border-left: 3px solid #1890ff !important;
+            border-top: 1px solid #e6f7ff !important;
+            position: relative;
           }
-          .child-row td:first-child {
-            border-left: 3px solid #1890ff !important;
+          
+          .parent-row {
+            background-color: #fff !important;
+            border-left: 4px solid #1890ff !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+          }
+          .parent-row:hover {
+            background-color: #f8fafe !important;
+          }
+          .parent-row.pinned {
+            position: sticky !important;
+            top: 55px !important;
+            z-index: 10 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+            border-left: 4px solid #faad14 !important;
+          }
+          .parent-row.pinned td {
+            background-color: #fffbe6 !important;
+          }
+          
+          .ant-table-thead > tr > th {
+            background-color: #fafafa !important;
+            font-weight: 600 !important;
+            color: #262626 !important;
+            border-bottom: 2px solid #e8e8e8 !important;
+          }
+          
+          .ant-table-tbody > tr > td {
+            padding: 12px 16px !important;
+          }
+          
+          .child-row td:first-child::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, #52c41a, #95f985);
+          }
+          
+          /* 展开动画效果 */
+          .child-row {
+            animation: fadeInUp 0.3s ease-out;
+          }
+          
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(-10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
           }
         `}
       </style>
+      
       <Card style={{ marginBottom: 16 }}>
-        <h1 style={{ margin: 0, marginBottom: 16 }}>产品资料管理</h1>
+        <h1 style={{ margin: 0, marginBottom: 16, color: '#262626' }}>
+          📋 产品资料管理
+        </h1>
         
         {/* 统计信息 */}
         {statistics && (
-          <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col span={6}>
-              <Statistic title="总记录数" value={statistics.totalCount} />
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="总记录数" 
+                  value={statistics.totalCount}
+                  prefix="📊"
+                  valueStyle={{ color: '#1890ff' }}
+                />
+              </Card>
             </Col>
             <Col span={6}>
-              <Statistic 
-                title="母SKU数量" 
-                value={statistics.parentSkuCount} 
-                prefix={<span style={{ color: '#1890ff' }}>📁</span>}
-              />
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="母SKU数量" 
+                  value={statistics.parentSkuCount} 
+                  prefix="📁"
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Card>
             </Col>
             <Col span={6}>
-              <Statistic title="站点数量" value={statistics.siteStats?.length || 0} />
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="站点数量" 
+                  value={statistics.siteStats?.length || 0}
+                  prefix="🌐"
+                  valueStyle={{ color: '#722ed1' }}
+                />
+              </Card>
             </Col>
             <Col span={6}>
-              <Statistic title="品牌数量" value={statistics.brandStats?.length || 0} />
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="品牌数量" 
+                  value={statistics.brandStats?.length || 0}
+                  prefix="🏷️"
+                  valueStyle={{ color: '#fa8c16' }}
+                />
+              </Card>
             </Col>
           </Row>
         )}
@@ -1439,34 +1839,38 @@ const ProductInformation: React.FC = () => {
         )}
 
         {/* 数据表格 */}
-        <Table
-          columns={columns}
-          dataSource={currentViewData}
-          rowKey={(record) => {
-            if ('isParent' in record && record.isParent) {
-              return `parent-${record.key}`;
-            } else {
-              const productRecord = record as ProductInformationData;
-              return `${productRecord.site}-${productRecord.item_sku}`;
-            }
-          }}
-          rowSelection={rowSelection}
-          loading={loading}
-          pagination={false}
-          scroll={{ x: 'max-content', y: 600 }}
-          locale={{
-            emptyText: <Empty description="暂无数据" />
-          }}
-          sticky={{ offsetHeader: 64 }}
-          size="middle"
-          rowClassName={(record) => {
-            if (isGroupedView && !('isParent' in record && record.isParent)) {
-              // 子行使用不同的背景色
-              return 'child-row';
-            }
-            return '';
-          }}
-        />
+        <div ref={tableRef}>
+          <Table
+            columns={columns}
+            dataSource={currentViewData}
+            rowKey={(record) => {
+              if ('isParent' in record && record.isParent) {
+                return `parent-${record.key}`;
+              } else {
+                const productRecord = record as ProductInformationData;
+                return `${productRecord.site}-${productRecord.item_sku}`;
+              }
+            }}
+            rowSelection={rowSelection}
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 'max-content', y: 650 }}
+            locale={{
+              emptyText: <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            }}
+            sticky={{ offsetHeader: 64 }}
+            size="middle"
+            rowClassName={(record) => {
+              if (isGroupedView && 'isParent' in record && record.isParent) {
+                const isPinned = pinnedParentKey === record.key;
+                return `parent-row ${isPinned ? 'pinned' : ''}`;
+              } else if (isGroupedView && !('isParent' in record && record.isParent)) {
+                return 'child-row';
+              }
+              return '';
+            }}
+          />
+        </div>
 
         {/* 分页 */}
         <div style={{ textAlign: 'right', marginTop: 16 }}>
