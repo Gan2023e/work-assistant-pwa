@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
+const { sequelize } = require('../models');
 const ProductInformation = require('../models/ProductInformation');
 const multer = require('multer');
 const XLSX = require('xlsx');
