@@ -373,6 +373,7 @@ router.get('/grouped-list', async (req, res) => {
     } = req.query;
 
     console.log(`🔍 分组视图搜索请求: 搜索词="${search}", 页码=${page}, 每页=${limit}, 站点=${site}`);
+    const queryStartTime = Date.now();
     
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -396,50 +397,82 @@ router.get('/grouped-list', async (req, res) => {
       ];
     }
 
-    // 首先获取所有parent_sku的列表（用于分页）
-    const parentSkuQuery = await ProductInformation.findAll({
-      attributes: ['parent_sku'],
-      where: {
-        ...whereConditions,
-        parent_sku: { [Op.not]: null },
-        parent_sku: { [Op.ne]: '' }
-      },
-      group: ['parent_sku'],
-      order: [['parent_sku', 'ASC']],
-      raw: true
-    });
+    // 优化：使用数据库级别的分页，避免将所有数据加载到内存
+    const offset = (pageNum - 1) * limitNum;
+    console.log(`📊 开始分页查询: 偏移量=${offset}, 限制=${limitNum}`);
 
-    const allParentSkus = parentSkuQuery.map(item => item.parent_sku);
-    const totalParentSkus = allParentSkus.length;
-
-    // 计算当前页需要的parent_sku
-    const startIndex = (pageNum - 1) * limitNum;
-    const endIndex = startIndex + limitNum;
-    const currentPageParentSkus = allParentSkus.slice(startIndex, endIndex);
-
-    // 批量获取所有子记录和父记录（避免N+1查询问题）
-    const [allChildren, allParentRecords] = await Promise.all([
-      // 批量获取所有子记录
+    const pagingQueryStart = Date.now();
+    // 先获取分页的parent_sku列表和总数
+    const [currentPageParentSkus, totalCount] = await Promise.all([
+      // 获取当前页的parent_sku
       ProductInformation.findAll({
+        attributes: ['parent_sku'],
         where: {
           ...whereConditions,
-          parent_sku: { [Op.in]: currentPageParentSkus }
+          parent_sku: { [Op.not]: null },
+          parent_sku: { [Op.ne]: '' }
         },
-        order: [['parent_sku', 'ASC'], ['item_sku', 'ASC']]
+        group: ['parent_sku'],
+        order: [['parent_sku', 'ASC']],
+        limit: limitNum,
+        offset: offset,
+        raw: true
       }),
-      // 批量获取所有母SKU记录
-      ProductInformation.findAll({
-        where: {
-          ...whereConditions,
-          item_sku: { [Op.in]: currentPageParentSkus },
-          parent_child: 'Parent'
-        }
+      // 获取总数（用于分页信息）
+      sequelize.query(`
+        SELECT COUNT(DISTINCT parent_sku) as total
+        FROM product_information 
+        WHERE parent_sku IS NOT NULL AND parent_sku != ''
+        ${whereConditions.site ? 'AND site = :site' : ''}
+        ${whereConditions[Op.or] ? `AND (
+          item_sku LIKE :search OR 
+          item_name LIKE :search OR 
+          original_parent_sku LIKE :search OR 
+          brand_name LIKE :search OR 
+          parent_sku LIKE :search
+        )` : ''}
+      `, {
+        replacements: { 
+          ...(whereConditions.site && { site: whereConditions.site }),
+          ...(whereConditions[Op.or] && { search: `%${search}%` })
+        },
+        type: QueryTypes.SELECT
       })
     ]);
 
-    // 按parent_sku分组整理数据
-    const childrenByParentSku = {};
-    const parentRecordsByParentSku = {};
+        const currentPageParentSkuList = currentPageParentSkus.map(item => item.parent_sku);
+    const totalParentSkus = totalCount[0].total;
+    
+    const pagingQueryEnd = Date.now();
+    console.log(`✅ 分页查询完成: 耗时 ${pagingQueryEnd - pagingQueryStart}ms, 获取 ${currentPageParentSkuList.length} 个parent_sku, 总数 ${totalParentSkus}`);
+
+    const detailQueryStart = Date.now();
+    // 批量获取所有子记录和父记录（避免N+1查询问题）
+    const [allChildren, allParentRecords] = await Promise.all([
+        // 批量获取所有子记录
+        ProductInformation.findAll({
+          where: {
+            ...whereConditions,
+            parent_sku: { [Op.in]: currentPageParentSkuList }
+          },
+          order: [['parent_sku', 'ASC'], ['item_sku', 'ASC']]
+        }),
+        // 批量获取所有母SKU记录
+        ProductInformation.findAll({
+          where: {
+            ...whereConditions,
+            item_sku: { [Op.in]: currentPageParentSkuList },
+            parent_child: 'Parent'
+          }
+        })
+      ]);
+
+          const detailQueryEnd = Date.now();
+      console.log(`📦 批量查询完成: 耗时 ${detailQueryEnd - detailQueryStart}ms, 获取 ${allChildren.length} 个子记录, ${allParentRecords.length} 个父记录`);
+
+      // 按parent_sku分组整理数据
+      const childrenByParentSku = {};
+      const parentRecordsByParentSku = {};
 
     // 分组子记录
     allChildren.forEach(child => {
@@ -454,8 +487,8 @@ router.get('/grouped-list', async (req, res) => {
       parentRecordsByParentSku[parentRecord.item_sku] = parentRecord;
     });
 
-    // 构建最终的分组数据
-    const groupedData = currentPageParentSkus.map(parentSku => {
+          // 构建最终的分组数据
+      const groupedData = currentPageParentSkuList.map(parentSku => {
       const children = childrenByParentSku[parentSku] || [];
       const parentRecord = parentRecordsByParentSku[parentSku] || null;
       
