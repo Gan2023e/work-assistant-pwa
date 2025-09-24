@@ -294,6 +294,75 @@ const ProductInformation: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // 监听查询参数和视图模式变化，自动触发数据获取
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        
+        // 添加搜索和筛选条件
+        if (queryParams.search) {
+          params.set('search', queryParams.search);
+        }
+        if (queryParams.site && queryParams.site !== 'all') {
+          params.set('site', queryParams.site);
+        }
+        
+        // 添加分页参数
+        params.append('page', queryParams.page.toString());
+        params.append('limit', queryParams.limit.toString());
+
+        let apiUrl;
+        if (isGroupedView) {
+          // 分组视图：使用专门的分组API
+          apiUrl = `${API_BASE_URL}/api/product-information/grouped-list?${params}`;
+        } else {
+          // 列表视图：使用标准API
+          apiUrl = `${API_BASE_URL}/api/product-information/list?${params}`;
+        }
+
+        const response = await fetch(apiUrl);
+        const result = await response.json();
+
+        if (result.success) {
+          if (isGroupedView) {
+            // 分组视图：直接使用后端返回的分组数据
+            setGroupedData(result.data.map((group: any) => ({
+              key: group.parent_sku,
+              parent_sku: group.parent_sku,
+              site: group.site,
+              brand_name: group.brand_name,
+              manufacturer: group.manufacturer,
+              total_quantity: group.total_quantity,
+              children_count: group.children_count,
+              children: group.children,
+              parent_record: group.parent_record, // 母SKU记录
+              isParent: true
+            })));
+            setData([]); // 清空原始数据
+          } else {
+            // 列表视图：使用原始数据
+            setData(result.data);
+            setGroupedData([]); // 清空分组数据
+          }
+          
+          // 使用后端返回的分页信息
+          setPagination(result.pagination);
+          setSiteList(result.siteList || []);
+        } else {
+          message.error(result.message || '获取数据失败');
+        }
+      } catch (error) {
+        message.error('获取数据失败: ' + error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, [queryParams, isGroupedView]);
 
   // 获取统计信息
@@ -1579,20 +1648,10 @@ const ProductInformation: React.FC = () => {
     }),
   };
 
-  // 组件加载时先获取统计信息，再获取数据
+  // 组件加载时获取统计信息
   useEffect(() => {
     fetchStatistics();
   }, [fetchStatistics]);
-
-  useEffect(() => {
-    // 首次加载或statistics加载完成后获取数据
-    fetchData();
-  }, [fetchData]);
-
-  // 监听视图模式变化，重新获取数据
-  useEffect(() => {
-    fetchData();
-  }, [isGroupedView]);
 
   return (
     <div style={{ padding: '24px' }}>
