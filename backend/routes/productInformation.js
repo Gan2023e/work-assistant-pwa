@@ -285,6 +285,13 @@ router.get('/statistics', async (req, res) => {
     // 总数统计
     const totalCount = await ProductInformation.count();
 
+    // 母SKU统计（parent_child为'Parent'的记录数）
+    const parentSkuCount = await ProductInformation.count({
+      where: {
+        parent_child: 'Parent'
+      }
+    });
+
     // 按站点统计
     const siteStats = await ProductInformation.findAll({
       attributes: ['site', [ProductInformation.sequelize.fn('COUNT', '*'), 'count']],
@@ -308,6 +315,7 @@ router.get('/statistics', async (req, res) => {
       success: true,
       data: {
         totalCount,
+        parentSkuCount,
         siteStats,
         brandStats
       }
@@ -318,6 +326,115 @@ router.get('/statistics', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取统计信息失败: ' + error.message
+    });
+  }
+});
+
+// 获取分组视图数据（支持分页）
+router.get('/grouped-list', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      search = '',
+      site = 'all'
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // 构建查询条件
+    let whereConditions = {};
+
+    // 站点筛选
+    if (site !== 'all') {
+      whereConditions.site = site;
+    }
+
+    // 搜索条件
+    if (search) {
+      whereConditions[Op.or] = [
+        { item_sku: { [Op.iLike]: `%${search}%` } },
+        { item_name: { [Op.iLike]: `%${search}%` } },
+        { original_parent_sku: { [Op.iLike]: `%${search}%` } },
+        { brand_name: { [Op.iLike]: `%${search}%` } },
+        { parent_sku: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    // 首先获取所有parent_sku的列表（用于分页）
+    const parentSkuQuery = await ProductInformation.findAll({
+      attributes: ['parent_sku'],
+      where: {
+        ...whereConditions,
+        parent_sku: { [Op.not]: null },
+        parent_sku: { [Op.ne]: '' }
+      },
+      group: ['parent_sku'],
+      order: [['parent_sku', 'ASC']],
+      raw: true
+    });
+
+    const allParentSkus = parentSkuQuery.map(item => item.parent_sku);
+    const totalParentSkus = allParentSkus.length;
+
+    // 计算当前页需要的parent_sku
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    const currentPageParentSkus = allParentSkus.slice(startIndex, endIndex);
+
+    // 获取这些parent_sku对应的所有数据
+    const groupedData = [];
+    
+    for (const parentSku of currentPageParentSkus) {
+      const children = await ProductInformation.findAll({
+        where: {
+          ...whereConditions,
+          parent_sku: parentSku
+        },
+        order: [['item_sku', 'ASC']]
+      });
+
+      if (children.length > 0) {
+        const totalQuantity = children.reduce((sum, child) => sum + (child.quantity || 0), 0);
+        
+        groupedData.push({
+          parent_sku: parentSku,
+          site: children[0].site,
+          brand_name: children[0].brand_name,
+          manufacturer: children[0].manufacturer,
+          total_quantity: totalQuantity,
+          children_count: children.length,
+          children: children
+        });
+      }
+    }
+
+    // 获取站点列表
+    const sites = await ProductInformation.findAll({
+      attributes: ['site'],
+      group: ['site'],
+      raw: true
+    });
+    const siteList = sites.map(s => s.site);
+
+    res.json({
+      success: true,
+      data: groupedData,
+      pagination: {
+        current: pageNum,
+        pageSize: limitNum,
+        total: totalParentSkus,
+        pages: Math.ceil(totalParentSkus / limitNum)
+      },
+      siteList: siteList
+    });
+
+  } catch (error) {
+    console.error('获取分组数据失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取分组数据失败: ' + error.message
     });
   }
 });

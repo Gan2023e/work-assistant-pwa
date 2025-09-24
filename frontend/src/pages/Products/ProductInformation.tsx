@@ -131,6 +131,7 @@ interface QueryParams {
 
 interface Statistics {
   totalCount: number;
+  parentSkuCount: number;
   siteStats: Array<{ site: string; count: number }>;
   brandStats: Array<{ brand_name: string; count: number }>;
 }
@@ -145,6 +146,7 @@ const ProductInformation: React.FC = () => {
   const [siteList, setSiteList] = useState<string[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [selectedRows, setSelectedRows] = useState<ProductInformationData[]>([]);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
 
   // 查询参数
   const [queryParams, setQueryParams] = useState<QueryParams>({
@@ -219,15 +221,25 @@ const ProductInformation: React.FC = () => {
   // 获取当前视图的数据和分页信息
   const currentViewData = useMemo(() => {
     if (isGroupedView) {
-      // 分组视图：显示当前页的分组数据
-      const startIndex = (queryParams.page - 1) * queryParams.limit;
-      const endIndex = startIndex + queryParams.limit;
-      return groupedData.slice(startIndex, endIndex);
+      // 分组视图：直接显示后端返回的当前页分组数据
+      const result: TableRowData[] = [];
+      groupedData.forEach(group => {
+        // 添加父级行
+        result.push(group);
+        // 如果该组已展开，添加所有子行
+        if (expandedRowKeys.includes(`parent-${group.key}`)) {
+          group.children.forEach(child => {
+            result.push(child);
+          });
+        }
+      });
+      
+      return result;
     } else {
       // 列表视图：显示原始数据（已经是分页的）
       return data;
     }
-  }, [isGroupedView, groupedData, data, queryParams.page, queryParams.limit]);
+  }, [isGroupedView, groupedData, data, expandedRowKeys]);
 
   // 计算当前视图的分页信息
   const currentPagination = useMemo(() => {
@@ -244,19 +256,6 @@ const ProductInformation: React.FC = () => {
     try {
       const params = new URLSearchParams();
       
-      if (isGroupedView) {
-        // 分组视图：获取更大的数据集以便正确分组和分页
-        // 获取当前页前后一定范围的数据，确保分组完整性
-        const expandedPageSize = Math.max(queryParams.limit * 3, 150);
-        params.append('page', '1');
-        params.append('limit', expandedPageSize.toString());
-      } else {
-        // 列表视图：使用标准分页
-        Object.entries(queryParams).forEach(([key, value]) => {
-          params.append(key, value.toString());
-        });
-      }
-      
       // 添加搜索和筛选条件
       if (queryParams.search) {
         params.set('search', queryParams.search);
@@ -264,31 +263,46 @@ const ProductInformation: React.FC = () => {
       if (queryParams.site && queryParams.site !== 'all') {
         params.set('site', queryParams.site);
       }
+      
+      // 添加分页参数
+      params.append('page', queryParams.page.toString());
+      params.append('limit', queryParams.limit.toString());
 
-      const response = await fetch(`${API_BASE_URL}/api/product-information/list?${params}`);
+      let apiUrl;
+      if (isGroupedView) {
+        // 分组视图：使用专门的分组API
+        apiUrl = `${API_BASE_URL}/api/product-information/grouped-list?${params}`;
+      } else {
+        // 列表视图：使用标准API
+        apiUrl = `${API_BASE_URL}/api/product-information/list?${params}`;
+      }
+
+      const response = await fetch(apiUrl);
       const result = await response.json();
 
       if (result.success) {
-        const rawData = result.data;
-        setData(rawData);
-        
         if (isGroupedView) {
-          // 生成分组数据
-          const grouped = groupDataByParentSku(rawData);
-          setGroupedData(grouped);
-          
-          // 分组视图使用自定义分页信息
-          setPagination({
-            current: queryParams.page,
-            pageSize: queryParams.limit,
-            total: grouped.length, // 使用分组后的总数
-            pages: Math.ceil(grouped.length / queryParams.limit)
-          });
+          // 分组视图：直接使用后端返回的分组数据
+          setGroupedData(result.data.map((group: any) => ({
+            key: group.parent_sku,
+            parent_sku: group.parent_sku,
+            site: group.site,
+            brand_name: group.brand_name,
+            manufacturer: group.manufacturer,
+            total_quantity: group.total_quantity,
+            children_count: group.children_count,
+            children: group.children,
+            isParent: true
+          })));
+          setData([]); // 清空原始数据
         } else {
-          // 列表视图使用后端分页信息
-          setPagination(result.pagination);
+          // 列表视图：使用原始数据
+          setData(result.data);
+          setGroupedData([]); // 清空分组数据
         }
         
+        // 使用后端返回的分页信息
+        setPagination(result.pagination);
         setSiteList(result.siteList || []);
       } else {
         message.error(result.message || '获取数据失败');
@@ -298,7 +312,7 @@ const ProductInformation: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, groupDataByParentSku, isGroupedView]);
+  }, [queryParams, isGroupedView]);
 
   // 获取统计信息
   const fetchStatistics = useCallback(async () => {
@@ -438,18 +452,37 @@ const ProductInformation: React.FC = () => {
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示父SKU
+          // 父级行显示父SKU和展开/收起按钮
+          const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
           return (
-            <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
-              📁 {record.parent_sku || '未分组'}
-              <div style={{ fontSize: '12px', color: '#999', fontWeight: 'normal' }}>
-                {record.children_count} 个子产品
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Button
+                type="text"
+                size="small"
+                icon={isExpanded ? '📂' : '📁'}
+                onClick={() => {
+                  const parentKey = `parent-${record.key}`;
+                  if (isExpanded) {
+                    setExpandedRowKeys(prev => prev.filter(key => key !== parentKey));
+                  } else {
+                    setExpandedRowKeys(prev => [...prev, parentKey]);
+                  }
+                }}
+                style={{ border: 'none', padding: '0 4px', marginRight: '8px' }}
+              />
+              <div>
+                <div style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                  {record.parent_sku || '未分组'}
+                </div>
+                <div style={{ fontSize: '12px', color: '#999', fontWeight: 'normal' }}>
+                  {record.children_count} 个子产品
+                </div>
               </div>
             </div>
           );
         } else {
           // 子级行或普通行显示商品SKU
-          return <span style={{ marginLeft: isGroupedView ? '16px' : '0' }}>{value}</span>;
+          return <span style={{ marginLeft: isGroupedView ? '32px' : '0' }}>{value}</span>;
         }
       }
     },
@@ -476,7 +509,7 @@ const ProductInformation: React.FC = () => {
         } else {
           return (
             <Tooltip placement="topLeft" title={name}>
-              <span style={{ marginLeft: isGroupedView ? '16px' : '0' }}>{name}</span>
+              <span style={{ marginLeft: isGroupedView ? '32px' : '0' }}>{name}</span>
             </Tooltip>
           );
         }
@@ -668,16 +701,10 @@ const ProductInformation: React.FC = () => {
       fixed: 'right',
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行的操作
+          // 父级行的操作（可以添加批量操作等）
           return (
             <Space size="small">
-              <Tooltip title="展开/收起">
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<EyeOutlined />}
-                />
-              </Tooltip>
+              <span style={{ color: '#999', fontSize: '12px' }}>母SKU</span>
             </Space>
           );
         } else {
@@ -740,14 +767,15 @@ const ProductInformation: React.FC = () => {
     }),
   };
 
-  // 组件加载时获取数据
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
+  // 组件加载时先获取统计信息，再获取数据
   useEffect(() => {
     fetchStatistics();
   }, [fetchStatistics]);
+
+  useEffect(() => {
+    // 首次加载或statistics加载完成后获取数据
+    fetchData();
+  }, [fetchData]);
 
   // 监听视图模式变化，重新获取数据
   useEffect(() => {
@@ -756,6 +784,23 @@ const ProductInformation: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
+      <style>
+        {`
+          .child-row {
+            background-color: #fafafa !important;
+          }
+          .child-row:hover {
+            background-color: #f0f0f0 !important;
+          }
+          .child-row td {
+            border-top: 1px solid #e6f3ff !important;
+            border-left: 3px solid #1890ff !important;
+          }
+          .child-row td:first-child {
+            border-left: 3px solid #1890ff !important;
+          }
+        `}
+      </style>
       <Card style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0, marginBottom: 16 }}>产品资料管理</h1>
         
@@ -764,6 +809,13 @@ const ProductInformation: React.FC = () => {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={6}>
               <Statistic title="总记录数" value={statistics.totalCount} />
+            </Col>
+            <Col span={6}>
+              <Statistic 
+                title="母SKU数量" 
+                value={statistics.parentSkuCount} 
+                prefix={<span style={{ color: '#1890ff' }}>📁</span>}
+              />
             </Col>
             <Col span={6}>
               <Statistic title="站点数量" value={statistics.siteStats?.length || 0} />
@@ -886,92 +938,13 @@ const ProductInformation: React.FC = () => {
           }}
           sticky={{ offsetHeader: 64 }}
           size="middle"
-          expandable={isGroupedView ? {
-            expandedRowRender: (parentRecord) => {
-              if ('isParent' in parentRecord && parentRecord.isParent) {
-                // 为子表格创建专门的列定义，确保类型正确
-                const childColumns: ColumnsType<ProductInformationData> = columns
-                  .map(col => ({
-                    ...col,
-                    fixed: false, // 子表格不使用固定列，避免滑动问题
-                    render: col.render ? (value: any, record: ProductInformationData, index: number) => {
-                      // 对于子行，强制非分组模式渲染
-                      if (typeof col.render === 'function') {
-                        const result = col.render(value, record, index);
-                        return result;
-                      }
-                      return value;
-                    } : undefined
-                  })) as ColumnsType<ProductInformationData>;
-
-                return (
-                  <div style={{ 
-                    margin: '8px 0 8px 60px', 
-                    padding: '12px', 
-                    background: '#fafafa', 
-                    borderRadius: '6px',
-                    border: '1px solid #f0f0f0'
-                  }}>
-                    <div style={{ 
-                      marginBottom: '8px', 
-                      fontSize: '12px', 
-                      color: '#666',
-                      fontWeight: 'bold'
-                    }}>
-                      子产品详情 ({parentRecord.children.length} 个)
-                    </div>
-                    <Table<ProductInformationData>
-                      columns={childColumns}
-                      dataSource={parentRecord.children}
-                      rowKey={(record: ProductInformationData) => `child-${record.site}-${record.item_sku}`}
-                      pagination={false}
-                      showHeader={true}
-                      size="small"
-                      scroll={{ x: 'max-content' }}
-                      rowSelection={{
-                        selectedRowKeys: selectedRowKeys.filter(key => 
-                          parentRecord.children.some(child => `${child.site}-${child.item_sku}` === key)
-                        ),
-                        onChange: (selectedKeys: React.Key[], selectedRows: ProductInformationData[]) => {
-                          // 更新选中状态
-                          const otherSelectedKeys = selectedRowKeys.filter(key => 
-                            !parentRecord.children.some(child => `${child.site}-${child.item_sku}` === key)
-                          );
-                          const newSelectedKeys = [...otherSelectedKeys, ...selectedKeys as string[]];
-                          const otherSelectedRows = selectedRows.filter(row => 
-                            !parentRecord.children.some(child => 
-                              child.site === row.site && child.item_sku === row.item_sku
-                            )
-                          );
-                          const newSelectedRows = [...otherSelectedRows, ...selectedRows];
-                          
-                          setSelectedRowKeys(newSelectedKeys);
-                          setSelectedRows(newSelectedRows);
-                        }
-                      }}
-                    />
-                  </div>
-                );
-              }
-              return null;
-            },
-            defaultExpandAllRows: false,
-            expandRowByClick: true,
-            expandIcon: ({ expanded, onExpand, record }) => {
-              if ('isParent' in record && record.isParent) {
-                return (
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={expanded ? '📂' : '📁'}
-                    onClick={e => onExpand(record, e)}
-                    style={{ border: 'none', padding: '0 4px' }}
-                  />
-                );
-              }
-              return null;
+          rowClassName={(record) => {
+            if (isGroupedView && !('isParent' in record && record.isParent)) {
+              // 子行使用不同的背景色
+              return 'child-row';
             }
-          } : undefined}
+            return '';
+          }}
         />
 
         {/* 分页 */}
