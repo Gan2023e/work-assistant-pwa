@@ -387,6 +387,16 @@ router.get('/grouped-list', async (req, res) => {
     const groupedData = [];
     
     for (const parentSku of currentPageParentSkus) {
+      // 获取母SKU记录（parent_child='Parent'）
+      const parentRecord = await ProductInformation.findOne({
+        where: {
+          ...whereConditions,
+          item_sku: parentSku,
+          parent_child: 'Parent'
+        }
+      });
+
+      // 获取子SKU记录
       const children = await ProductInformation.findAll({
         where: {
           ...whereConditions,
@@ -400,12 +410,15 @@ router.get('/grouped-list', async (req, res) => {
         
         groupedData.push({
           parent_sku: parentSku,
-          site: children[0].site,
-          brand_name: children[0].brand_name,
-          manufacturer: children[0].manufacturer,
+          site: (parentRecord || children[0]).site,
+          brand_name: (parentRecord || children[0]).brand_name,
+          manufacturer: (parentRecord || children[0]).manufacturer,
+          item_name: parentRecord ? parentRecord.item_name : children[0].item_name,
+          main_image_url: parentRecord ? parentRecord.main_image_url : children[0].main_image_url,
           total_quantity: totalQuantity,
           children_count: children.length,
-          children: children
+          children: children,
+          parent_record: parentRecord // 包含完整的母SKU记录
         });
       }
     }
@@ -435,6 +448,141 @@ router.get('/grouped-list', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取分组数据失败: ' + error.message
+    });
+  }
+});
+
+// 导出到亚马逊资料模板
+router.post('/export-to-template', async (req, res) => {
+  try {
+    const { records, country } = req.body;
+
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供要导出的记录'
+      });
+    }
+
+    if (!country) {
+      return res.status(400).json({
+        success: false,
+        message: '请选择国家站点'
+      });
+    }
+
+    // 获取OSS工具函数
+    const { getTemplateFromOSS } = require('../utils/oss');
+    const XLSX = require('xlsx');
+
+    // 从配置中获取模板信息
+    const configPath = 'amazon/templates/config.json';
+    let templateConfig = {};
+    
+    try {
+      const configData = await getTemplateFromOSS(configPath);
+      if (configData) {
+        templateConfig = JSON.parse(configData.toString());
+      }
+    } catch (error) {
+      console.log('获取模板配置失败，使用默认配置:', error.message);
+    }
+
+    const countryConfig = templateConfig[country];
+    if (!countryConfig || !countryConfig.ossPath) {
+      return res.status(404).json({
+        success: false,
+        message: `未找到${country}站点的亚马逊资料模板，请先上传模板文件`
+      });
+    }
+
+    // 从OSS下载模板文件
+    const templateBuffer = await getTemplateFromOSS(countryConfig.ossPath);
+    if (!templateBuffer) {
+      return res.status(404).json({
+        success: false,
+        message: `无法获取${country}站点的模板文件`
+      });
+    }
+
+    // 读取Excel模板
+    const workbook = XLSX.read(templateBuffer, { type: 'buffer' });
+    const sheetName = countryConfig.sheetName || workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    if (!worksheet) {
+      return res.status(400).json({
+        success: false,
+        message: `模板文件中未找到工作表: ${sheetName}`
+      });
+    }
+
+    // 获取起始行和列配置
+    const startRow = countryConfig.startRow || 2;
+
+    // 填充数据到模板
+    records.forEach((record, index) => {
+      const rowIndex = startRow + index;
+      
+      // 根据模板结构填充数据 - 这里需要根据实际的亚马逊模板格式调整
+      const cellMappings = {
+        'A': record.item_sku, // SKU
+        'B': record.item_name, // 商品名称
+        'C': record.brand_name, // 品牌
+        'D': record.product_description, // 产品描述
+        'E': record.bullet_point1, // 要点1
+        'F': record.bullet_point2, // 要点2
+        'G': record.bullet_point3, // 要点3
+        'H': record.bullet_point4, // 要点4
+        'I': record.bullet_point5, // 要点5
+        'J': record.main_image_url, // 主图URL
+        'K': record.standard_price, // 价格
+        'L': record.quantity, // 数量
+        'M': record.color_name, // 颜色
+        'N': record.size_name, // 尺寸
+        'O': record.parent_sku, // 父SKU
+        'P': record.manufacturer, // 制造商
+        'Q': record.country_of_origin, // 原产国
+      };
+
+      // 填充每个单元格
+      Object.entries(cellMappings).forEach(([column, value]) => {
+        const cellAddress = `${column}${rowIndex}`;
+        if (value !== undefined && value !== null && value !== '') {
+          if (!worksheet[cellAddress]) {
+            worksheet[cellAddress] = {};
+          }
+          worksheet[cellAddress].v = value;
+          worksheet[cellAddress].t = typeof value === 'number' ? 'n' : 's';
+        }
+      });
+    });
+
+    // 更新工作表范围
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    const lastRow = Math.max(range.e.r, startRow + records.length - 1);
+    const lastCol = Math.max(range.e.c, 16); // Q列是第16列
+    worksheet['!ref'] = XLSX.utils.encode_range({
+      s: { r: range.s.r, c: range.s.c },
+      e: { r: lastRow, c: lastCol }
+    });
+
+    // 生成新的Excel文件
+    const outputBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // 设置响应头
+    const fileName = `亚马逊资料模板_${country}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    
+    // 发送文件
+    res.send(outputBuffer);
+
+  } catch (error) {
+    console.error('导出到模板失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '导出失败: ' + error.message
     });
   }
 });

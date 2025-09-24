@@ -25,7 +25,8 @@ import {
   DeleteOutlined,
   EyeOutlined,
   ReloadOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -111,9 +112,12 @@ interface GroupedProductData {
   site: string;
   brand_name: string;
   manufacturer: string;
+  item_name?: string;
+  main_image_url?: string;
   total_quantity: number;
   children_count: number;
   children: ProductInformationData[];
+  parent_record?: ProductInformationData;
   isParent: boolean;
 }
 
@@ -169,8 +173,11 @@ const ProductInformation: React.FC = () => {
   // 弹窗状态
   const [detailVisible, setDetailVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
+  const [exportVisible, setExportVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ProductInformationData | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
   const [form] = Form.useForm();
+  const [exportForm] = Form.useForm();
 
   // 按父SKU分组数据的函数
   const groupDataByParentSku = useCallback((rawData: ProductInformationData[]): GroupedProductData[] => {
@@ -289,9 +296,12 @@ const ProductInformation: React.FC = () => {
             site: group.site,
             brand_name: group.brand_name,
             manufacturer: group.manufacturer,
+            item_name: group.item_name,
+            main_image_url: group.main_image_url,
             total_quantity: group.total_quantity,
             children_count: group.children_count,
             children: group.children,
+            parent_record: group.parent_record,
             isParent: true
           })));
           setData([]); // 清空原始数据
@@ -433,6 +443,57 @@ const ProductInformation: React.FC = () => {
     }
   };
 
+  // 导出到模板
+  const handleExportToTemplate = () => {
+    if (selectedRows.length === 0) {
+      message.warning('请选择要导出的记录');
+      return;
+    }
+    setExportVisible(true);
+  };
+
+  // 执行导出
+  const handleDoExport = async () => {
+    try {
+      const values = await exportForm.validateFields();
+      setExportLoading(true);
+
+      const response = await fetch(`${API_BASE_URL}/api/product-information/export-to-template`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          records: selectedRows,
+          country: values.country
+        }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `亚马逊资料模板_${values.country}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        message.success('导出成功');
+        setExportVisible(false);
+        exportForm.resetFields();
+      } else {
+        const result = await response.json();
+        message.error(result.message || '导出失败');
+      }
+    } catch (error) {
+      message.error('导出失败: ' + error);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   // 表格列定义
   const columns: ColumnsType<TableRowData> = [
     {
@@ -496,13 +557,12 @@ const ProductInformation: React.FC = () => {
       },
       render: (name: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示第一个子产品的商品名称作为父SKU标题
-          const firstChildName = record.children.length > 0 ? record.children[0].item_name : '';
-          const displayName = firstChildName || `${record.brand_name} 系列产品`;
+          // 父级行显示真实的母SKU商品名称
+          const parentName = record.item_name || record.parent_sku || `${record.brand_name} 系列产品`;
           return (
-            <Tooltip placement="topLeft" title={displayName}>
+            <Tooltip placement="topLeft" title={parentName}>
               <span style={{ fontWeight: 'bold' }}>
-                {displayName}
+                {parentName}
               </span>
             </Tooltip>
           );
@@ -663,14 +723,14 @@ const ProductInformation: React.FC = () => {
       width: 80,
       render: (url: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
-          // 父级行显示第一个子产品的主图
-          const firstChild = record.children[0];
-          if (firstChild?.main_image_url) {
+          // 父级行显示真实的母SKU主图
+          const parentImageUrl = record.main_image_url;
+          if (parentImageUrl) {
             return (
               <img 
-                src={firstChild.main_image_url} 
+                src={parentImageUrl} 
                 alt="主图" 
-                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', opacity: 0.7 }}
+                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.style.display = 'none';
@@ -905,6 +965,9 @@ const ProductInformation: React.FC = () => {
         {selectedRowKeys.length > 0 && (
           <Space style={{ marginBottom: 16 }}>
             <span>已选择 {selectedRowKeys.length} 项</span>
+            <Button type="primary" onClick={handleExportToTemplate}>
+              导出到模板
+            </Button>
             <Popconfirm
               title="确定批量删除选中的记录吗？"
               onConfirm={handleBatchDelete}
@@ -1183,6 +1246,45 @@ const ProductInformation: React.FC = () => {
           <Form.Item label="要点3" name="bullet_point3">
             <Input.TextArea rows={2} placeholder="请输入要点3" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 导出模态框 */}
+      <Modal
+        title="导出到亚马逊资料模板"
+        open={exportVisible}
+        onOk={handleDoExport}
+        onCancel={() => {
+          setExportVisible(false);
+          exportForm.resetFields();
+        }}
+        confirmLoading={exportLoading}
+        okText="导出"
+        cancelText="取消"
+      >
+        <Form form={exportForm} layout="vertical">
+          <Form.Item
+            label="选择国家站点"
+            name="country"
+            rules={[{ required: true, message: '请选择国家站点' }]}
+          >
+            <Select placeholder="请选择要导出的国家站点">
+              <Option value="美国">美国 (US)</Option>
+              <Option value="加拿大">加拿大 (CA)</Option>
+              <Option value="英国">英国 (UK)</Option>
+              <Option value="德国">德国 (DE)</Option>
+              <Option value="法国">法国 (FR)</Option>
+              <Option value="意大利">意大利 (IT)</Option>
+              <Option value="西班牙">西班牙 (ES)</Option>
+              <Option value="日本">日本 (JP)</Option>
+              <Option value="澳大利亚">澳大利亚 (AU)</Option>
+              <Option value="印度">印度 (IN)</Option>
+              <Option value="阿联酋">阿联酋 (AE)</Option>
+            </Select>
+          </Form.Item>
+          <div style={{ color: '#666', fontSize: '14px' }}>
+            将导出 {selectedRows.length} 条记录到选定国家的亚马逊资料模板中
+          </div>
         </Form>
       </Modal>
     </div>
