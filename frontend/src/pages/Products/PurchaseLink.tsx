@@ -58,7 +58,8 @@ import {
   UpOutlined,
   MenuOutlined,
   MenuFoldOutlined,
-  MenuUnfoldOutlined
+  MenuUnfoldOutlined,
+  ExperimentOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -471,7 +472,7 @@ const SidebarStatsPanel: React.FC<{
         <StatCard
           title="CPC测试中"
           value={statistics.cpcTestingInProgress}
-          icon={<LoadingOutlined />}
+          icon={<PlayCircleOutlined />}
           color="#fa8c16"
           onClick={() => handleCardClick('测试中', 'cpc_status')}
           span={collapsed ? 24 : 12}
