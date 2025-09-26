@@ -425,17 +425,17 @@ router.post('/batch-cancel-cpc-detection', async (req, res) => {
       return res.status(400).json({ message: '请选择要取消检测的记录' });
     }
 
-    // 先查询哪些记录的CPC测试状态为"CPC样品待采购"
+    // 先查询哪些记录的CPC测试状态为支持取消检测的状态
     const eligibleRecords = await ProductWeblink.findAll({
       where: {
         id: { [Op.in]: ids },
-        cpc_status: 'CPC样品待采购'
+        cpc_status: { [Op.in]: ['CPC样品待采购', '测试中', '样品已发'] }
       },
-      attributes: ['id', 'parent_sku']
+      attributes: ['id', 'parent_sku', 'cpc_status']
     });
 
     if (eligibleRecords.length === 0) {
-      return res.status(400).json({ message: '选中的记录中没有CPC测试情况为"CPC样品待采购"的记录' });
+      return res.status(400).json({ message: '选中的记录中没有可取消检测的记录（支持取消：CPC样品待采购、测试中、样品已发）' });
     }
 
     const eligibleIds = eligibleRecords.map(record => record.id);
@@ -1406,6 +1406,11 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '样品已发' }
     });
 
+    // 计算CPC测试中数量
+    const cpcTestingInProgressCount = await ProductWeblink.count({
+      where: { cpc_status: '测试中' }
+    });
+
     // 计算CPC待上架产品数量（测试完成且CPC提交情况为空）
     const cpcPendingListingCount = await ProductWeblink.count({
       where: {
@@ -1441,6 +1446,7 @@ router.get('/statistics', async (req, res) => {
         cpcTestPending: cpcTestPendingCount,
         cpcTesting: cpcTestingCount,
         cpcSampleSent: cpcSampleSentCount,
+        cpcTestingInProgress: cpcTestingInProgressCount,
         cpcPendingListing: cpcPendingListingCount,
         keyProducts: keyProductsCount
       },
