@@ -28,7 +28,9 @@ import {
   Tabs,
   Switch,
   Radio,
-  Steps
+  Steps,
+  Layout,
+  Drawer
 } from 'antd';
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
@@ -53,7 +55,10 @@ import {
   EditOutlined,
   CalculatorOutlined,
   DownOutlined,
-  UpOutlined
+  UpOutlined,
+  MenuOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -176,16 +181,17 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick,
       className="stat-card"
       style={{ 
         cursor: 'pointer', 
-        minHeight: '85px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+        minHeight: span === 24 ? '75px' : '85px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         border: '1px solid #f0f0f0',
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        marginBottom: span === 24 ? '8px' : '0'
       }}
       bodyStyle={{ 
-        padding: '16px',
+        padding: span === 24 ? '12px' : '14px',
         position: 'relative',
         zIndex: 1
       }}
@@ -194,8 +200,8 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick,
         position: 'absolute',
         top: 0,
         right: 0,
-        width: '40px',
-        height: '40px',
+        width: '30px',
+        height: '30px',
         background: `linear-gradient(135deg, ${color}20, ${color}10)`,
         borderRadius: '0 0 0 100%',
         opacity: 0.3
@@ -203,11 +209,12 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick,
       <Statistic
         title={
           <span style={{ 
-            fontSize: '12px', 
+            fontSize: span === 24 ? '11px' : '12px', 
             fontWeight: 500, 
             color: '#666',
             display: 'block',
-            marginBottom: '4px'
+            marginBottom: '2px',
+            lineHeight: 1.2
           }}>
             {title}
           </span>
@@ -216,15 +223,15 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick,
         prefix={
           <span style={{ 
             color: color, 
-            marginRight: '8px',
-            fontSize: '16px'
+            marginRight: span === 24 ? '6px' : '8px',
+            fontSize: span === 24 ? '14px' : '16px'
           }}>
             {icon}
           </span>
         }
         valueStyle={{ 
           color, 
-          fontSize: '20px', 
+          fontSize: span === 24 ? '16px' : '18px', 
           fontWeight: 'bold',
           lineHeight: 1.2
         }}
@@ -318,6 +325,434 @@ const CardGroup: React.FC<CardGroupProps> = ({
       </div>
     )}
   </Card>
+);
+
+// 侧边栏统计面板组件
+const SidebarStatsPanel: React.FC<{
+  statistics: any;
+  cardGroupCollapsed: any;
+  setCardGroupCollapsed: any;
+  handleCardClick: any;
+  handleCanOrganizeDataClick: any;
+  handleCpcPendingListingClick: any;
+  handleKeyProductsClick: any;
+  collapsed: boolean;
+}> = ({
+  statistics,
+  cardGroupCollapsed,
+  setCardGroupCollapsed,
+  handleCardClick,
+  handleCanOrganizeDataClick,
+  handleCpcPendingListingClick,
+  handleKeyProductsClick,
+  collapsed
+}) => (
+  <div style={{ 
+    padding: collapsed ? '12px 8px' : '16px',
+    height: '100%',
+    overflowY: 'auto'
+  }}>
+    {/* 数据总览 */}
+    <Card 
+      size="small"
+      style={{ 
+        marginBottom: '16px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        border: 'none',
+        borderRadius: '8px'
+      }}
+      bodyStyle={{ padding: collapsed ? '12px 8px' : '16px 12px' }}
+    >
+      <div style={{ color: 'white', textAlign: 'center' }}>
+        {!collapsed && (
+          <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>
+            数据总览
+          </div>
+        )}
+        <div style={{ fontSize: collapsed ? '18px' : '24px', fontWeight: 'bold' }}>
+          {Object.values(statistics).reduce((sum, value) => sum + value, 0)}
+        </div>
+        {!collapsed && (
+          <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '2px' }}>
+            总记录数
+          </div>
+        )}
+      </div>
+    </Card>
+
+    {/* 全部展开/收起按钮 */}
+    {!collapsed && (
+      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+        <Button 
+          type="text" 
+          size="small"
+          onClick={() => {
+            const allCollapsed = Object.values(cardGroupCollapsed).every(v => v);
+            setCardGroupCollapsed({
+              productStatus: !allCollapsed,
+              cpcTesting: !allCollapsed,
+              special: !allCollapsed
+            });
+          }}
+          style={{ fontSize: '11px' }}
+        >
+          {Object.values(cardGroupCollapsed).every(v => v) ? '全部展开' : '全部收起'}
+        </Button>
+      </div>
+    )}
+
+    {/* 产品状态组 */}
+    <CardGroup 
+      title={collapsed ? "📋" : "📋 产品状态"}
+      backgroundColor="#f6ffed"
+      total={collapsed ? undefined : statistics.newProductFirstReview + statistics.infringementSecondReview + 
+             statistics.waitingPImage + statistics.waitingUpload + statistics.canOrganizeData}
+      subtitle={collapsed ? undefined : "产品审核与处理流程"}
+      collapsed={cardGroupCollapsed.productStatus}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        productStatus: !prev.productStatus
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="新品一审"
+          value={statistics.newProductFirstReview}
+          icon={<PlusOutlined />}
+          color="#1890ff"
+          onClick={() => handleCardClick('新品一审')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="侵权二审"
+          value={statistics.infringementSecondReview}
+          icon={<SearchOutlined />}
+          color="#fa541c"
+          onClick={() => handleCardClick('待审核')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="待P图"
+          value={statistics.waitingPImage}
+          icon={<CameraOutlined />}
+          color="#cf1322"
+          onClick={() => handleCardClick('待P图')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="待上传"
+          value={statistics.waitingUpload}
+          icon={<CloudUploadOutlined />}
+          color="#1890ff"
+          onClick={() => handleCardClick('待上传')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="可整理资料"
+          value={statistics.canOrganizeData}
+          icon={<FileExcelOutlined />}
+          color="#722ed1"
+          onClick={handleCanOrganizeDataClick}
+          span={collapsed ? 24 : 12}
+        />
+      </Row>
+    </CardGroup>
+
+    {/* CPC检测流程组 */}
+    <CardGroup 
+      title={collapsed ? "🔬" : "🔬 CPC检测流程"}
+      backgroundColor="#fff7e6"
+      total={collapsed ? undefined : statistics.cpcTestPending + statistics.cpcTesting + statistics.cpcSampleSent + 
+             statistics.cpcTestingInProgress + statistics.cpcPendingListing}
+      subtitle={collapsed ? undefined : "CPC测试全流程管理"}
+      collapsed={cardGroupCollapsed.cpcTesting}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        cpcTesting: !prev.cpcTesting
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="CPC测试待审核"
+          value={statistics.cpcTestPending}
+          icon={<ClockCircleOutlined />}
+          color="#fa8c16"
+          onClick={() => handleCardClick('申请测试', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC样品待采购"
+          value={statistics.cpcTesting}
+          icon={<SearchOutlined />}
+          color="#13c2c2"
+          onClick={() => handleCardClick('CPC样品待采购', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC已发样品"
+          value={statistics.cpcSampleSent}
+          icon={<CheckCircleOutlined />}
+          color="#52c41a"
+          onClick={() => handleCardClick('样品已发', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC测试中"
+          value={statistics.cpcTestingInProgress}
+          icon={<LoadingOutlined />}
+          color="#fa8c16"
+          onClick={() => handleCardClick('测试中', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC待上架产品"
+          value={statistics.cpcPendingListing}
+          icon={<PlayCircleOutlined />}
+          color="#722ed1"
+          onClick={handleCpcPendingListingClick}
+          span={collapsed ? 24 : 12}
+        />
+      </Row>
+    </CardGroup>
+
+    {/* 特殊标记组 */}
+    <CardGroup 
+      title={collapsed ? "⭐" : "⭐ 特殊标记"}
+      backgroundColor="#fff1f0"
+      total={collapsed ? undefined : statistics.keyProducts}
+      subtitle={collapsed ? undefined : "重要产品标识"}
+      collapsed={cardGroupCollapsed.special}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        special: !prev.special
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="重点款产品"
+          value={statistics.keyProducts}
+          icon={<CheckCircleOutlined />}
+          color="#f5222d"
+          onClick={handleKeyProductsClick}
+          span={24}
+        />
+      </Row>
+    </CardGroup>
+  </div>
+);
+
+// 侧边栏统计面板组件
+const SidebarStatsPanel: React.FC<{
+  statistics: any;
+  cardGroupCollapsed: any;
+  setCardGroupCollapsed: any;
+  handleCardClick: any;
+  handleCanOrganizeDataClick: any;
+  handleCpcPendingListingClick: any;
+  handleKeyProductsClick: any;
+  collapsed: boolean;
+}> = ({
+  statistics,
+  cardGroupCollapsed,
+  setCardGroupCollapsed,
+  handleCardClick,
+  handleCanOrganizeDataClick,
+  handleCpcPendingListingClick,
+  handleKeyProductsClick,
+  collapsed
+}) => (
+  <div style={{ 
+    padding: collapsed ? '12px 8px' : '16px',
+    height: '100%',
+    overflowY: 'auto'
+  }}>
+    {/* 数据总览 */}
+    <Card 
+      size="small"
+      style={{ 
+        marginBottom: '16px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        border: 'none',
+        borderRadius: '8px'
+      }}
+      bodyStyle={{ padding: collapsed ? '12px 8px' : '16px 12px' }}
+    >
+      <div style={{ color: 'white', textAlign: 'center' }}>
+        {!collapsed && (
+          <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>
+            数据总览
+          </div>
+        )}
+        <div style={{ fontSize: collapsed ? '18px' : '24px', fontWeight: 'bold' }}>
+          {Object.values(statistics).reduce((sum, value) => sum + value, 0)}
+        </div>
+        {!collapsed && (
+          <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '2px' }}>
+            总记录数
+          </div>
+        )}
+      </div>
+    </Card>
+
+    {/* 全部展开/收起按钮 */}
+    {!collapsed && (
+      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+        <Button 
+          type="text" 
+          size="small"
+          onClick={() => {
+            const allCollapsed = Object.values(cardGroupCollapsed).every(v => v);
+            setCardGroupCollapsed({
+              productStatus: !allCollapsed,
+              cpcTesting: !allCollapsed,
+              special: !allCollapsed
+            });
+          }}
+          style={{ fontSize: '11px' }}
+        >
+          {Object.values(cardGroupCollapsed).every(v => v) ? '全部展开' : '全部收起'}
+        </Button>
+      </div>
+    )}
+
+    {/* 产品状态组 */}
+    <CardGroup 
+      title={collapsed ? "📋" : "📋 产品状态"}
+      backgroundColor="#f6ffed"
+      total={collapsed ? undefined : statistics.newProductFirstReview + statistics.infringementSecondReview + 
+             statistics.waitingPImage + statistics.waitingUpload + statistics.canOrganizeData}
+      subtitle={collapsed ? undefined : "产品审核与处理流程"}
+      collapsed={cardGroupCollapsed.productStatus}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        productStatus: !prev.productStatus
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="新品一审"
+          value={statistics.newProductFirstReview}
+          icon={<PlusOutlined />}
+          color="#1890ff"
+          onClick={() => handleCardClick('新品一审')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="侵权二审"
+          value={statistics.infringementSecondReview}
+          icon={<SearchOutlined />}
+          color="#fa541c"
+          onClick={() => handleCardClick('待审核')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="待P图"
+          value={statistics.waitingPImage}
+          icon={<CameraOutlined />}
+          color="#cf1322"
+          onClick={() => handleCardClick('待P图')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="待上传"
+          value={statistics.waitingUpload}
+          icon={<CloudUploadOutlined />}
+          color="#1890ff"
+          onClick={() => handleCardClick('待上传')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="可整理资料"
+          value={statistics.canOrganizeData}
+          icon={<FileExcelOutlined />}
+          color="#722ed1"
+          onClick={handleCanOrganizeDataClick}
+          span={collapsed ? 24 : 12}
+        />
+      </Row>
+    </CardGroup>
+
+    {/* CPC检测流程组 */}
+    <CardGroup 
+      title={collapsed ? "🔬" : "🔬 CPC检测流程"}
+      backgroundColor="#fff7e6"
+      total={collapsed ? undefined : statistics.cpcTestPending + statistics.cpcTesting + statistics.cpcSampleSent + 
+             statistics.cpcTestingInProgress + statistics.cpcPendingListing}
+      subtitle={collapsed ? undefined : "CPC测试全流程管理"}
+      collapsed={cardGroupCollapsed.cpcTesting}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        cpcTesting: !prev.cpcTesting
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="CPC测试待审核"
+          value={statistics.cpcTestPending}
+          icon={<ClockCircleOutlined />}
+          color="#fa8c16"
+          onClick={() => handleCardClick('申请测试', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC样品待采购"
+          value={statistics.cpcTesting}
+          icon={<SearchOutlined />}
+          color="#13c2c2"
+          onClick={() => handleCardClick('CPC样品待采购', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC已发样品"
+          value={statistics.cpcSampleSent}
+          icon={<CheckCircleOutlined />}
+          color="#52c41a"
+          onClick={() => handleCardClick('样品已发', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC测试中"
+          value={statistics.cpcTestingInProgress}
+          icon={<LoadingOutlined />}
+          color="#fa8c16"
+          onClick={() => handleCardClick('测试中', 'cpc_status')}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC待上架产品"
+          value={statistics.cpcPendingListing}
+          icon={<PlayCircleOutlined />}
+          color="#722ed1"
+          onClick={handleCpcPendingListingClick}
+          span={collapsed ? 24 : 12}
+        />
+      </Row>
+    </CardGroup>
+
+    {/* 特殊标记组 */}
+    <CardGroup 
+      title={collapsed ? "⭐" : "⭐ 特殊标记"}
+      backgroundColor="#fff1f0"
+      total={collapsed ? undefined : statistics.keyProducts}
+      subtitle={collapsed ? undefined : "重要产品标识"}
+      collapsed={cardGroupCollapsed.special}
+      onCollapse={collapsed ? undefined : () => setCardGroupCollapsed(prev => ({
+        ...prev,
+        special: !prev.special
+      }))}
+    >
+      <Row gutter={[8, 8]}>
+        <StatCard
+          title="重点款产品"
+          value={statistics.keyProducts}
+          icon={<CheckCircleOutlined />}
+          color="#f5222d"
+          onClick={handleKeyProductsClick}
+          span={24}
+        />
+      </Row>
+    </CardGroup>
+  </div>
 );
 
 const Purchase: React.FC = () => {
@@ -485,6 +920,10 @@ const Purchase: React.FC = () => {
     cpcTesting: false,
     special: false
   });
+
+  // 侧边栏状态
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   // 使用全局任务上下文
   const { tasks: backgroundTasks, addTask, updateTask, removeTask, hasRunningTasks } = useTaskContext();
@@ -4458,205 +4897,70 @@ ${selectedSkuIds.map(skuId => {
     }
   };
 
+  const { Sider, Content } = Layout;
+
   return (
     <div style={{ 
-      padding: '16px',
       background: '#f5f5f5',
       minHeight: '100vh'
     }}>
-            {/* 统计卡片区域 */}
-      <div style={{ marginBottom: '16px' }}>
-        {/* 总览卡片 */}
-        <Card 
-          style={{ 
-            marginBottom: '16px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            border: 'none',
-            borderRadius: '12px'
+      <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+        {/* 左侧边栏 */}
+        <Sider
+          collapsible
+          collapsed={sidebarCollapsed}
+          onCollapse={setSidebarCollapsed}
+          width={320}
+          collapsedWidth={80}
+          style={{
+            background: '#fff',
+            borderRight: '1px solid #f0f0f0',
+            boxShadow: '2px 0 8px rgba(0,0,0,0.06)'
           }}
-          bodyStyle={{ padding: '20px' }}
+          trigger={
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '12px',
+              borderTop: '1px solid #f0f0f0',
+              background: '#fafafa'
+            }}>
+              {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </div>
+          }
         >
-          <Row gutter={16} align="middle">
-            <Col span={18}>
-              <div style={{ color: 'white' }}>
-                <h3 style={{ color: 'white', margin: 0, fontSize: '18px' }}>
-                  📊 数据总览
-                </h3>
-                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '4px 0 0 0', fontSize: '14px' }}>
-                  产品链接管理系统 - 实时数据统计
-                </p>
-              </div>
-            </Col>
-            <Col span={6}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: 'white', fontSize: '32px', fontWeight: 'bold', lineHeight: 1 }}>
-                  {Object.values(statistics).reduce((sum, value) => sum + value, 0)}
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px', marginTop: '4px' }}>
-                  总记录数
-                </div>
-              </div>
-            </Col>
-          </Row>
-        </Card>
+          <div style={{
+            padding: '16px 8px 8px 8px',
+            borderBottom: '1px solid #f0f0f0',
+            background: '#fafafa'
+          }}>
+            <div style={{ 
+              textAlign: 'center',
+              fontSize: sidebarCollapsed ? '12px' : '14px',
+              fontWeight: 'bold',
+              color: '#1890ff'
+            }}>
+              {sidebarCollapsed ? '📊' : '📊 统计面板'}
+            </div>
+          </div>
+          
+          <SidebarStatsPanel
+            statistics={statistics}
+            cardGroupCollapsed={cardGroupCollapsed}
+            setCardGroupCollapsed={setCardGroupCollapsed}
+            handleCardClick={handleCardClick}
+            handleCanOrganizeDataClick={handleCanOrganizeDataClick}
+            handleCpcPendingListingClick={handleCpcPendingListingClick}
+            handleKeyProductsClick={handleKeyProductsClick}
+            collapsed={sidebarCollapsed}
+          />
+        </Sider>
 
-        {/* 全部展开/收起按钮 */}
-        <div style={{ textAlign: 'right', marginBottom: '12px' }}>
-          <Button 
-            type="text" 
-            size="small"
-            onClick={() => {
-              const allCollapsed = Object.values(cardGroupCollapsed).every(v => v);
-              setCardGroupCollapsed({
-                productStatus: !allCollapsed,
-                cpcTesting: !allCollapsed,
-                special: !allCollapsed
-              });
-            }}
-            style={{ fontSize: '12px' }}
-          >
-            {Object.values(cardGroupCollapsed).every(v => v) ? '全部展开' : '全部收起'}
-          </Button>
-        </div>
-
-        {/* 产品状态组 */}
-        <CardGroup 
-          title="📋 产品状态"
-          backgroundColor="#f6ffed"
-          total={statistics.newProductFirstReview + statistics.infringementSecondReview + 
-                 statistics.waitingPImage + statistics.waitingUpload + statistics.canOrganizeData}
-          subtitle="产品审核与处理流程"
-          collapsed={cardGroupCollapsed.productStatus}
-          onCollapse={() => setCardGroupCollapsed(prev => ({
-            ...prev,
-            productStatus: !prev.productStatus
-          }))}
-        >
-          <Row gutter={[16, 16]}>
-            <StatCard
-              title="新品一审"
-              value={statistics.newProductFirstReview}
-              icon={<PlusOutlined />}
-              color="#1890ff"
-              onClick={() => handleCardClick('新品一审')}
-              span={5}
-            />
-            <StatCard
-              title="侵权二审"
-              value={statistics.infringementSecondReview}
-              icon={<SearchOutlined />}
-              color="#fa541c"
-              onClick={() => handleCardClick('待审核')}
-              span={5}
-            />
-            <StatCard
-              title="待P图"
-              value={statistics.waitingPImage}
-              icon={<CameraOutlined />}
-              color="#cf1322"
-              onClick={() => handleCardClick('待P图')}
-              span={5}
-            />
-            <StatCard
-              title="待上传"
-              value={statistics.waitingUpload}
-              icon={<CloudUploadOutlined />}
-              color="#1890ff"
-              onClick={() => handleCardClick('待上传')}
-              span={5}
-            />
-            <StatCard
-              title="可整理资料"
-              value={statistics.canOrganizeData}
-              icon={<FileExcelOutlined />}
-              color="#722ed1"
-              onClick={handleCanOrganizeDataClick}
-              span={4}
-            />
-          </Row>
-        </CardGroup>
-
-        {/* CPC检测流程组 */}
-        <CardGroup 
-          title="🔬 CPC检测流程"
-          backgroundColor="#fff7e6"
-          total={statistics.cpcTestPending + statistics.cpcTesting + statistics.cpcSampleSent + 
-                 statistics.cpcTestingInProgress + statistics.cpcPendingListing}
-          subtitle="CPC测试全流程管理"
-          collapsed={cardGroupCollapsed.cpcTesting}
-          onCollapse={() => setCardGroupCollapsed(prev => ({
-            ...prev,
-            cpcTesting: !prev.cpcTesting
-          }))}
-        >
-          <Row gutter={[16, 16]}>
-            <StatCard
-              title="CPC测试待审核"
-              value={statistics.cpcTestPending}
-              icon={<ClockCircleOutlined />}
-              color="#fa8c16"
-              onClick={() => handleCardClick('申请测试', 'cpc_status')}
-              span={5}
-            />
-            <StatCard
-              title="CPC样品待采购"
-              value={statistics.cpcTesting}
-              icon={<SearchOutlined />}
-              color="#13c2c2"
-              onClick={() => handleCardClick('CPC样品待采购', 'cpc_status')}
-              span={5}
-            />
-            <StatCard
-              title="CPC已发样品"
-              value={statistics.cpcSampleSent}
-              icon={<CheckCircleOutlined />}
-              color="#52c41a"
-              onClick={() => handleCardClick('样品已发', 'cpc_status')}
-              span={5}
-            />
-            <StatCard
-              title="CPC测试中"
-              value={statistics.cpcTestingInProgress}
-              icon={<LoadingOutlined />}
-              color="#fa8c16"
-              onClick={() => handleCardClick('测试中', 'cpc_status')}
-              span={5}
-            />
-            <StatCard
-              title="CPC待上架产品"
-              value={statistics.cpcPendingListing}
-              icon={<PlayCircleOutlined />}
-              color="#722ed1"
-              onClick={handleCpcPendingListingClick}
-              span={4}
-            />
-          </Row>
-        </CardGroup>
-
-        {/* 特殊标记组 */}
-        <CardGroup 
-          title="⭐ 特殊标记"
-          backgroundColor="#fff1f0"
-          total={statistics.keyProducts}
-          subtitle="重要产品标识"
-          collapsed={cardGroupCollapsed.special}
-          onCollapse={() => setCardGroupCollapsed(prev => ({
-            ...prev,
-            special: !prev.special
-          }))}
-        >
-          <Row gutter={[16, 16]}>
-            <StatCard
-              title="重点款产品"
-              value={statistics.keyProducts}
-              icon={<CheckCircleOutlined />}
-              color="#f5222d"
-              onClick={handleKeyProductsClick}
-              span={8}
-            />
-          </Row>
-        </CardGroup>
-      </div>
+        {/* 主要内容区域 */}
+        <Content style={{ 
+          background: '#f5f5f5',
+          padding: '16px',
+          overflow: 'auto'
+        }}>
 
             <div style={{ marginBottom: '12px' }}>
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
@@ -7278,6 +7582,8 @@ ${selectedSkuIds.map(skuId => {
           </div>
         </Space>
       </Modal>
+        </Content>
+      </Layout>
     </div>
   );
 };
