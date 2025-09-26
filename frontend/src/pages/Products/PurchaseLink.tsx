@@ -352,34 +352,6 @@ const SidebarStatsPanel: React.FC<{
     height: '100%',
     overflowY: 'auto'
   }}>
-    {/* 数据总览 */}
-    <Card 
-      size="small"
-      style={{ 
-        marginBottom: '16px',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        border: 'none',
-        borderRadius: '8px'
-      }}
-      bodyStyle={{ padding: collapsed ? '12px 8px' : '16px 12px' }}
-    >
-      <div style={{ color: 'white', textAlign: 'center' }}>
-        {!collapsed && (
-          <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>
-            数据总览
-          </div>
-        )}
-        <div style={{ fontSize: collapsed ? '18px' : '24px', fontWeight: 'bold' }}>
-          {(Object.values(statistics) as number[]).reduce((sum: number, value: number) => sum + value, 0)}
-        </div>
-        {!collapsed && (
-          <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '2px' }}>
-            总记录数
-          </div>
-        )}
-      </div>
-    </Card>
-
     {/* 全部展开/收起按钮 */}
     {!collapsed && (
       <div style={{ textAlign: 'center', marginBottom: '12px' }}>
