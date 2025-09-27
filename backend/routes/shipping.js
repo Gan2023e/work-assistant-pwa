@@ -4088,9 +4088,9 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       const startColIndex = getColumnIndex(startColumn);
       const startRow = parseInt(dataStartRow);
       
-      // 直接生成箱子配置
-      const boxColumns = [];
-      const boxNumbers = [];
+      // 清空现有数组并重新生成箱子配置
+      boxColumns = [];
+      boxNumbers = [];
       
       for (let i = 0; i < numBoxes; i++) {
         const colIndex = startColIndex + i;
@@ -4118,8 +4118,6 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       headerRowIndex = startRow - 2; // 设置一个虚拟的标题行索引，实际不使用
       skuStartRowIndex = startRow - 1; // 设置SKU开始行索引
       skuEndRowIndex = startRow - 1; // 初始化结束行索引
-      boxColumns = autoConfig.boxColumns;
-      boxNumbers = autoConfig.boxNumbers;
       
     } else {
       // 传统的自动分析流程
@@ -4365,7 +4363,7 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       const startRowIndex = parseInt(dataStartRow) - 1; // 转换为0基索引
       
       // 查找SKU数据范围（从指定行开始，直到遇到空行）
-      let skuEndRowIndex = startRowIndex;
+      skuEndRowIndex = startRowIndex;
       for (let rowIndex = startRowIndex; rowIndex < data.length; rowIndex++) {
         const row = data[rowIndex] || [];
         const skuCell = String(row[0] || '').trim();
