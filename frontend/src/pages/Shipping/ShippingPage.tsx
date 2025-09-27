@@ -1054,7 +1054,8 @@ const ShippingPage: React.FC = () => {
                 
               } catch (error) {
                 console.error('❌ 自动下载失败:', error);
-                message.error(`自动下载失败: ${error.message}`);
+                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                message.error(`自动下载失败: ${errorMessage}`);
                 
                 // 提供手动下载选项
                 Modal.info({
