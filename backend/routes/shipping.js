@@ -4079,6 +4079,8 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     let skuEndRowIndex = -1;
     let boxColumns = [];
     let boxNumbers = [];
+    let packingItems = [];
+    let boxes = [];
 
     if (useNewFlow) {
       // 新的简化流程：直接根据参数配置
@@ -4276,9 +4278,9 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
 
-    // 初始化数据数组（传统流程）
-    const packingItems = [];
-    const boxes = [];
+    // 重置数据数组（传统流程）
+    packingItems = [];
+    boxes = [];
     
     // 解析装箱数据
     // 创建箱子信息
@@ -4355,9 +4357,9 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
     // 注意：packingItems 和 boxes 数组已在相应流程中初始化
 
     if (useNewFlow) {
-      // 初始化数据数组（新流程）
-      const packingItems = [];
-      const boxes = [];
+      // 重置数据数组（新流程）
+      packingItems = [];
+      boxes = [];
       
       // 新流程：直接从指定位置解析数据
       const startRowIndex = parseInt(dataStartRow) - 1; // 转换为0基索引
