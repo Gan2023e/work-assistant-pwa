@@ -3976,16 +3976,16 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
                   max={record.total_boxes}
                   value={record.confirm_boxes}
                   onChange={(value: number | null) => {
-                    const newData = [...confirmData];
+                    const updatedData = [...confirmData];
                     const newBoxes = value || 0;
-                    newData[index].confirm_boxes = newBoxes;
+                    updatedData[index].confirm_boxes = newBoxes;
                     
                     // 根据箱数自动计算数量：箱数 * 每箱平均数量
                     const avgQuantityPerBox = Math.floor(record.total_quantity / record.total_boxes);
                     const newQuantity = Math.min(newBoxes * avgQuantityPerBox, record.total_quantity);
-                    newData[index].confirm_quantity = newQuantity;
+                    updatedData[index].confirm_quantity = newQuantity;
                     
-                    setConfirmData(newData);
+                    setConfirmData(updatedData);
                   }}
                 />
               )
@@ -4003,17 +4003,18 @@ const WholeBoxConfirmForm: React.FC<WholeBoxConfirmFormProps> = ({
                     value={record.confirm_quantity}
                     keyboard={false} // 禁用键盘输入
                     onChange={(value: number | null) => {
-                      const newData = [...confirmData];
+                      const modifiedData = [...confirmData];
                       const newQuantity = value || 0;
-                      newData[index].confirm_quantity = newQuantity;
+                      modifiedData[index].confirm_quantity = newQuantity;
                       
                       // 根据数量自动计算箱数：数量 / 每箱平均数量
-                      if (avgQuantityPerBox > 0) {
-                        const newBoxes = Math.round(newQuantity / avgQuantityPerBox);
-                        newData[index].confirm_boxes = Math.min(newBoxes, record.total_boxes);
+                      const currentAvgQuantityPerBox = Math.floor(record.total_quantity / record.total_boxes);
+                      if (currentAvgQuantityPerBox > 0) {
+                        const newBoxes = Math.round(newQuantity / currentAvgQuantityPerBox);
+                        modifiedData[index].confirm_boxes = Math.min(newBoxes, record.total_boxes);
                       }
                       
-                      setConfirmData(newData);
+                      setConfirmData(modifiedData);
                     }}
                   />
                 );
