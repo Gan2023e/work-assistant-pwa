@@ -988,23 +988,94 @@ const ShippingPage: React.FC = () => {
             // 自动下载
             setTimeout(async () => {
               try {
-                const downloadResponse = await fetch(`${API_BASE_URL}${fillResult.data.downloadUrl}`);
-                if (downloadResponse.ok) {
-                  const blob = await downloadResponse.blob();
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.style.display = 'none';
-                  a.href = url;
-                  a.download = fillResult.data.outputFileName;
-                  document.body.appendChild(a);
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                  document.body.removeChild(a);
-                  message.success(`装箱表已自动下载：${fillResult.data.outputFileName}`);
+                console.log('🔍 开始自动下载装箱表，URL:', `${API_BASE_URL}${fillResult.data.downloadUrl}`);
+                
+                const downloadResponse = await fetch(`${API_BASE_URL}${fillResult.data.downloadUrl}`, {
+                  method: 'GET',
+                  headers: {
+                    ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+                  },
+                });
+                
+                console.log('📡 下载响应状态:', downloadResponse.status);
+                
+                if (!downloadResponse.ok) {
+                  // 尝试获取错误信息
+                  let errorMessage = `下载失败 (HTTP ${downloadResponse.status})`;
+                  try {
+                    const errorText = await downloadResponse.text();
+                    console.error('❌ 下载错误响应:', errorText);
+                    
+                    // 尝试解析JSON错误
+                    try {
+                      const errorJson = JSON.parse(errorText);
+                      errorMessage = errorJson.message || errorMessage;
+                    } catch (parseError) {
+                      // 如果不是JSON，显示前100个字符
+                      errorMessage = errorText.length > 100 ? errorText.substring(0, 100) + '...' : errorText;
+                    }
+                  } catch (textError) {
+                    console.error('❌ 获取错误信息失败:', textError);
+                  }
+                  
+                  throw new Error(errorMessage);
                 }
+                
+                // 检查响应类型
+                const contentType = downloadResponse.headers.get('content-type');
+                console.log('📋 响应内容类型:', contentType);
+                
+                if (contentType && contentType.includes('application/json')) {
+                  // 如果返回的是JSON而不是文件，可能是错误响应
+                  const jsonResponse = await downloadResponse.json();
+                  console.error('❌ 期望文件但收到JSON响应:', jsonResponse);
+                  throw new Error(jsonResponse.message || '服务器返回了JSON而不是文件');
+                }
+                
+                const blob = await downloadResponse.blob();
+                console.log('📁 文件Blob大小:', blob.size);
+                
+                if (blob.size === 0) {
+                  throw new Error('下载的文件为空');
+                }
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fillResult.data.outputFileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                console.log('✅ 装箱表自动下载成功:', fillResult.data.outputFileName);
+                message.success(`装箱表已自动下载：${fillResult.data.outputFileName}`);
+                
               } catch (error) {
-                console.error('自动下载失败:', error);
-                message.warning('自动下载失败');
+                console.error('❌ 自动下载失败:', error);
+                message.error(`自动下载失败: ${error.message}`);
+                
+                // 提供手动下载选项
+                Modal.info({
+                  title: '装箱表已填写完成',
+                  content: (
+                    <div>
+                      <p>装箱表已成功填写，但自动下载失败。</p>
+                      <p>您可以手动下载文件：<strong>{fillResult.data.outputFileName}</strong></p>
+                      <Button 
+                        type="primary" 
+                        onClick={() => {
+                          window.open(`${API_BASE_URL}${fillResult.data.downloadUrl}`, '_blank');
+                        }}
+                        style={{ marginTop: 8 }}
+                      >
+                        手动下载
+                      </Button>
+                    </div>
+                  ),
+                  okText: '知道了'
+                });
               }
             }, 500);
             

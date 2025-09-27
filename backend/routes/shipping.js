@@ -4114,6 +4114,10 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       };
       
       headerRowIndex = startRow - 2; // 设置一个虚拟的标题行索引，实际不使用
+      skuStartRowIndex = startRow - 1; // 设置SKU开始行索引
+      skuEndRowIndex = startRow - 1; // 初始化结束行索引
+      boxColumns = autoConfig.boxColumns;
+      boxNumbers = autoConfig.boxNumbers;
       
     } else {
       // 传统的自动分析流程
@@ -4272,6 +4276,10 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
       }
     }
 
+    // 初始化数据数组（传统流程）
+    const packingItems = [];
+    const boxes = [];
+    
     // 解析装箱数据
     // 创建箱子信息
     for (let i = 0; i < boxNumbers.length; i++) {
@@ -4344,11 +4352,13 @@ router.post('/packing-list/upload', uploadPackingList.single('packingList'), asy
 
     } // 结束传统流程的else块
 
-    // 通用的数据解析部分（对两种流程都适用）
-    const packingItems = [];
-    const boxes = [];
+    // 注意：packingItems 和 boxes 数组已在相应流程中初始化
 
     if (useNewFlow) {
+      // 初始化数据数组（新流程）
+      const packingItems = [];
+      const boxes = [];
+      
       // 新流程：直接从指定位置解析数据
       const startRowIndex = parseInt(dataStartRow) - 1; // 转换为0基索引
       
@@ -4751,6 +4761,32 @@ router.post('/packing-list/fill', async (req, res) => {
     
     fs.writeFileSync(configPath, JSON.stringify(updatedConfig, null, 2));
 
+    // 验证生成的文件是否存在且有效
+    if (!fs.existsSync(outputPath)) {
+      console.error('❌ 生成的装箱表文件不存在:', outputPath);
+      return res.status(500).json({
+        success: false,
+        message: '装箱表填写失败：生成的文件不存在'
+      });
+    }
+
+    const fileStats = fs.statSync(outputPath);
+    if (fileStats.size === 0) {
+      console.error('❌ 生成的装箱表文件为空:', outputPath);
+      return res.status(500).json({
+        success: false,
+        message: '装箱表填写失败：生成的文件为空'
+      });
+    }
+
+    console.log('\x1b[32m%s\x1b[0m', '✅ 装箱表填写完成:', {
+      filledCount,
+      totalItems: Object.keys(shippingByBoxAndSku).length,
+      unmatchedSkus: unmatchedSkus.length,
+      outputFileName,
+      fileSize: fileStats.size
+    });
+
     res.json({
       success: true,
       message: `装箱表填写完成！保持原始格式，成功填写 ${filledCount} 条数据${unmatchedSkus.length > 0 ? `，${unmatchedSkus.length} 个SKU未匹配` : ''}`,
@@ -4759,6 +4795,8 @@ router.post('/packing-list/fill', async (req, res) => {
         totalItems: Object.keys(shippingByBoxAndSku).length,
         unmatchedSkus,
         outputFileName,
+        filePath: outputPath,
+        fileSize: fileStats.size,
         downloadUrl: `/api/shipping/packing-list/download-filled?file=${encodeURIComponent(outputFileName)}`
       }
     });
@@ -4774,39 +4812,108 @@ router.post('/packing-list/fill', async (req, res) => {
 
 // 下载填写好的装箱表文件
 router.get('/packing-list/download-filled', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到装箱表下载请求:', req.query);
+  
   try {
     const { file } = req.query;
     
     if (!file) {
+      console.error('❌ 未指定下载文件名');
       return res.status(400).json({
         success: false,
         message: '请指定要下载的文件'
       });
     }
 
-    const filePath = path.join(__dirname, '../uploads/packing-lists', file);
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
+    // 文件名安全性检查，防止路径遍历攻击
+    const sanitizedFileName = path.basename(file);
+    if (sanitizedFileName !== file) {
+      console.error('❌ 文件名包含非法路径字符:', file);
+      return res.status(400).json({
         success: false,
-        message: '文件不存在'
+        message: '文件名格式不正确'
       });
     }
 
-    // 设置响应头
+    const filePath = path.resolve(__dirname, '../uploads/packing-lists', sanitizedFileName);
+    const uploadsDir = path.resolve(__dirname, '../uploads/packing-lists');
+    
+    // 确保文件路径在允许的目录内
+    if (!filePath.startsWith(uploadsDir)) {
+      console.error('❌ 文件路径超出允许范围:', filePath);
+      return res.status(400).json({
+        success: false,
+        message: '文件路径不正确'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '📁 目标文件路径:', filePath);
+    
+    if (!fs.existsSync(filePath)) {
+      console.error('❌ 文件不存在:', filePath);
+      
+      // 列出目录中的文件以便调试
+      try {
+        const filesInDir = fs.readdirSync(uploadsDir);
+        console.log('\x1b[33m%s\x1b[0m', '📂 目录中的文件:', filesInDir);
+      } catch (listError) {
+        console.error('❌ 无法列出目录文件:', listError);
+      }
+      
+      return res.status(404).json({
+        success: false,
+        message: `文件不存在: ${sanitizedFileName}`
+      });
+    }
+
+    // 检查文件状态
+    const fileStats = fs.statSync(filePath);
+    console.log('\x1b[33m%s\x1b[0m', '📊 文件信息:', {
+      size: fileStats.size,
+      created: fileStats.birthtime,
+      modified: fileStats.mtime
+    });
+
+    if (fileStats.size === 0) {
+      console.error('❌ 文件为空:', filePath);
+      return res.status(500).json({
+        success: false,
+        message: '文件内容为空'
+      });
+    }
+
+    // 设置正确的响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(sanitizedFileName)}`);
+    res.setHeader('Content-Length', fileStats.size);
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    console.log('\x1b[32m%s\x1b[0m', '📤 开始发送文件:', sanitizedFileName);
     
     // 发送文件
-    res.sendFile(filePath);
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('\x1b[31m%s\x1b[0m', '❌ 文件发送失败:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: '文件发送失败: ' + err.message
+          });
+        }
+      } else {
+        console.log('\x1b[32m%s\x1b[0m', '✅ 文件发送成功:', sanitizedFileName);
+      }
+    });
     
   } catch (error) {
-    console.error('下载填写好的装箱表失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '下载失败',
-      error: error.message
-    });
+    console.error('\x1b[31m%s\x1b[0m', '❌ 下载装箱表失败:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: '下载失败: ' + error.message,
+        error: error.message
+      });
+    }
   }
 });
 
