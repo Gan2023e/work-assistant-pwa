@@ -4937,11 +4937,33 @@ ${selectedSkuIds.map(skuId => {
                       disabled={selectedRowKeys.length === 0}
                       size="small"
                     >
-                      {getUniqueStatuses().map(statusItem => (
-                        <Option key={statusItem.value} value={statusItem.value}>
-                          {statusItem.value} ({statusItem.count})
-                        </Option>
-                      ))}
+                      <Option value="新品一审">
+                        新品一审 ({allDataStats.statusStats.find(item => item.value === '新品一审')?.count || 0})
+                      </Option>
+                      <Option value="待审核">
+                        待审核 ({allDataStats.statusStats.find(item => item.value === '待审核')?.count || 0})
+                      </Option>
+                      <Option value="审核未通过">
+                        审核未通过 ({allDataStats.statusStats.find(item => item.value === '审核未通过')?.count || 0})
+                      </Option>
+                      <Option value="待P图">
+                        待P图 ({allDataStats.statusStats.find(item => item.value === '待P图')?.count || 0})
+                      </Option>
+                      <Option value="待上传">
+                        待上传 ({allDataStats.statusStats.find(item => item.value === '待上传')?.count || 0})
+                      </Option>
+                      <Option value="已经上传">
+                        已经上传 ({allDataStats.statusStats.find(item => item.value === '已经上传')?.count || 0})
+                      </Option>
+                      <Option value="临时下架">
+                        临时下架 ({allDataStats.statusStats.find(item => item.value === '临时下架')?.count || 0})
+                      </Option>
+                      <Option value="商品已下架">
+                        商品已下架 ({allDataStats.statusStats.find(item => item.value === '商品已下架')?.count || 0})
+                      </Option>
+                      <Option value="手动调库存">
+                        手动调库存 ({allDataStats.statusStats.find(item => item.value === '手动调库存')?.count || 0})
+                      </Option>
                     </Select>
                     
                     <Button 
