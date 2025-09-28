@@ -1047,6 +1047,9 @@ const Listings: React.FC = () => {
         return;
       }
 
+      // 获取旧状态（假设所有选中记录的状态相同）
+      const oldStatus = selectedRecords.length > 0 ? selectedRecords[0].status : '';
+
       // 调用批量更新API
       const response = await fetch(`${API_BASE_URL}/api/product-weblink/batch-update-status`, {
         method: 'POST',
@@ -1056,6 +1059,7 @@ const Listings: React.FC = () => {
         body: JSON.stringify({
           parent_skus: selectedOrphanRows,
           status: statusUpdateValue,
+          old_status: oldStatus,
         }),
       });
 

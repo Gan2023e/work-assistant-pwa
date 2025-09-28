@@ -13,6 +13,7 @@ const path = require('path');
 const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
+const { sendProductStatusEmail, sendCustomEmail } = require('../utils/emailService');
 
 // 国家代码转换为中文名称的映射表
 function convertCountryCodeToChinese(countryCode) {
@@ -288,7 +289,7 @@ router.post('/search', async (req, res) => {
 // 批量更新状态
 router.post('/batch-update-status', async (req, res) => {
   try {
-    const { ids, parent_skus, status } = req.body;
+    const { ids, parent_skus, status, old_status } = req.body;
     
     // 支持按id或parent_sku更新
     if (ids && Array.isArray(ids) && ids.length > 0) {
@@ -314,6 +315,50 @@ router.post('/batch-update-status', async (req, res) => {
     }
 
     const updateCount = parent_skus?.length || ids?.length;
+    
+    // 发送邮件通知
+    try {
+      let parentSkus = [];
+      
+      if (parent_skus && Array.isArray(parent_skus)) {
+        parentSkus = parent_skus;
+      } else if (ids && Array.isArray(ids)) {
+        // 根据ID查询母SKU
+        const records = await ProductWeblink.findAll({
+          where: { id: { [Op.in]: ids } },
+          attributes: ['parent_sku']
+        });
+        parentSkus = records.map(record => record.parent_sku);
+      }
+      
+      // 判断是否需要发送邮件
+      if (parentSkus.length > 0) {
+        let action = '';
+        const offlineStatus = process.env.PRODUCT_OFFLINE_STATUS || '商品已下架';
+        const onlineStatus = process.env.PRODUCT_ONLINE_STATUS || '已经上传';
+        const onlineAction = process.env.PRODUCT_ONLINE_ACTION || '产品上架';
+        const offlineAction = process.env.PRODUCT_OFFLINE_ACTION || '产品下架';
+        
+        if (old_status === offlineStatus && status === onlineStatus) {
+          action = onlineAction;
+        } else if (old_status === onlineStatus && status === offlineStatus) {
+          action = offlineAction;
+        }
+        
+        if (action) {
+          const emailResult = await sendProductStatusEmail(action, parentSkus);
+          if (emailResult.success) {
+            console.log(`✅ 邮件通知发送成功: ${action} (${parentSkus.length}个SKU)`);
+          } else {
+            console.error(`❌ 邮件通知发送失败: ${emailResult.error}`);
+          }
+        }
+      }
+    } catch (emailError) {
+      console.error('邮件发送过程中出错:', emailError);
+      // 邮件发送失败不影响主流程
+    }
+    
     res.json({ message: `批量更新成功，共更新了 ${updateCount} 条记录` });
   } catch (err) {
     console.error(err);
@@ -6451,6 +6496,29 @@ router.post('/filter-key-products', async (req, res) => {
     res.json({ data: result });
   } catch (err) {
     console.error('筛选重点款失败:', err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
+// 发送产品状态邮件
+router.post('/send-status-email', async (req, res) => {
+  try {
+    const { subject, content } = req.body;
+    
+    if (!subject || !content) {
+      return res.status(400).json({ message: '邮件标题和内容不能为空' });
+    }
+
+    // 使用自定义邮件服务发送邮件
+    const emailResult = await sendCustomEmail(subject, content);
+    
+    if (emailResult.success) {
+      res.json({ message: '邮件发送成功' });
+    } else {
+      res.status(500).json({ message: '邮件发送失败: ' + emailResult.error });
+    }
+  } catch (error) {
+    console.error('发送状态邮件失败:', error);
     res.status(500).json({ message: '服务器错误' });
   }
 });

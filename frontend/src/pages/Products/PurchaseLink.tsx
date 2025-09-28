@@ -32,6 +32,7 @@ import {
   Layout,
   Drawer
 } from 'antd';
+
 import { useTaskContext } from '../../contexts/TaskContext';
 import { 
   UploadOutlined, 
@@ -63,7 +64,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
-import { API_BASE_URL } from '../../config/api';
+import { API_BASE_URL, apiClient } from '../../config/api';
 import ProfitCalculator from '../../components/ProfitCalculator';
 
 // 添加CSS样式
@@ -757,6 +758,11 @@ const Purchase: React.FC = () => {
   const [currentCompetitorRecord, setCurrentCompetitorRecord] = useState<ProductRecord | null>(null);
   const [competitorLinksInput, setCompetitorLinksInput] = useState('');
 
+  // 产品上下架功能相关状态
+  const [productStatusModalVisible, setProductStatusModalVisible] = useState(false);
+  const [productStatusAction, setProductStatusAction] = useState<'上架' | '下架' | '数量调整' | null>(null);
+  const [quantityAdjustmentText, setQuantityAdjustmentText] = useState('');
+
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
     try {
@@ -1383,12 +1389,16 @@ const Purchase: React.FC = () => {
     }
 
     try {
+      // 获取选中记录的旧状态
+      const selectedRecords = data.filter(item => selectedRowKeys.includes(item.id));
+      const oldStatus = selectedRecords.length > 0 ? selectedRecords[0].status : '';
+      
       // 确保传递给后端的ID是数字类型
       const ids = selectedRowKeys.map(key => Number(key));
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, status }),
+        body: JSON.stringify({ ids, status, old_status: oldStatus }),
       });
 
       if (!res.ok) {
@@ -1446,6 +1456,85 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('批量更新失败:', e);
       message.error('批量更新失败');
+    }
+  };
+
+  // 处理产品上下架操作
+  const handleProductStatusAction = async (action: '上架' | '下架' | '数量调整') => {
+    try {
+      let emailContent = '';
+      let emailSubject = '产品手动上下架及数量调整';
+
+      if (action === '数量调整') {
+        if (!quantityAdjustmentText.trim()) {
+          message.warning('请输入SKU及数量信息');
+          return;
+        }
+        emailContent = `产品数量调整\n${quantityAdjustmentText}`;
+      } else {
+        // 上架或下架操作需要选中记录
+        if (selectedRowKeys.length === 0) {
+          message.warning('请先选择要操作的记录');
+          return;
+        }
+
+        // 获取选中记录的详细信息
+        const selectedRecords = data.filter(item => selectedRowKeys.includes(item.id));
+        const parentSkus = selectedRecords.map(record => record.parent_sku);
+
+        // 先检查状态，再执行操作
+        if (action === '上架') {
+          // 检查状态是否为"商品已下架"
+          const invalidRecords = selectedRecords.filter(record => record.status !== '商品已下架');
+          if (invalidRecords.length > 0) {
+            message.error(`以下记录状态不是"商品已下架"，无法执行上架操作：${invalidRecords.map(r => r.parent_sku).join(', ')}`);
+            return;
+          }
+          emailContent = `产品上架\n${parentSkus.join('\n')}`;
+        } else if (action === '下架') {
+          // 检查状态是否为"已经上传"
+          const invalidRecords = selectedRecords.filter(record => record.status !== '已经上传');
+          if (invalidRecords.length > 0) {
+            message.error(`以下记录状态不是"已经上传"，无法执行下架操作：${invalidRecords.map(r => r.parent_sku).join(', ')}`);
+            return;
+          }
+          emailContent = `产品下架\n${parentSkus.join('\n')}`;
+        }
+
+        // 先更新数据库状态
+        const ids = selectedRecords.map(record => record.id);
+        const newStatus = action === '上架' ? '已经上传' : '商品已下架';
+        
+        await apiClient.post('/api/product_weblink/batch-update-status', {
+          ids: ids,
+          status: newStatus,
+          old_status: action === '上架' ? '商品已下架' : '已经上传'
+        });
+      }
+
+      // 然后发送邮件
+      const result = await apiClient.post('/api/product_weblink/send-status-email', {
+        subject: emailSubject,
+        content: emailContent
+      });
+
+      message.success(`${action}操作成功`);
+      setProductStatusModalVisible(false);
+      setProductStatusAction(null);
+      setQuantityAdjustmentText('');
+      
+      // 刷新数据 - 重新执行当前搜索
+      if (input.trim()) {
+        handleSearch();
+      } else {
+        // 如果没有搜索条件，清空数据
+        setData([]);
+        setOriginalData([]);
+      }
+    } catch (error) {
+      console.error(`${action}操作失败:`, error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`${action}操作失败: ${errorMessage}`);
     }
   };
 
@@ -5012,6 +5101,21 @@ ${selectedSkuIds.map(skuId => {
                       新链接（采购用）
                     </Button>
 
+                    <Button 
+                      icon={<GlobalOutlined />}
+                      onClick={() => {
+                        if (selectedRowKeys.length === 0) {
+                          // 没有选中记录时，直接进入数量调整模式
+                          setProductStatusAction('数量调整');
+                        }
+                        setProductStatusModalVisible(true);
+                      }}
+                      size="small"
+                      style={{ backgroundColor: '#1890ff', borderColor: '#1890ff', color: 'white' }}
+                    >
+                      产品上下架
+                    </Button>
+
 
 
                   </Space>
@@ -7362,6 +7466,271 @@ ${selectedSkuIds.map(skuId => {
             </Text>
           </div>
         </Space>
+      </Modal>
+
+      {/* 产品上下架模态框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <GlobalOutlined style={{ color: '#1890ff', fontSize: '18px' }} />
+            <span style={{ fontSize: '16px', fontWeight: '600' }}>产品上下架操作</span>
+          </div>
+        }
+        open={productStatusModalVisible}
+        onCancel={() => {
+          setProductStatusModalVisible(false);
+          setProductStatusAction(null);
+          setQuantityAdjustmentText('');
+        }}
+        footer={null}
+        width={600}
+        style={{ top: '20vh' }}
+        bodyStyle={{ padding: '24px' }}
+      >
+        <div style={{ minHeight: '400px' }}>
+          {!productStatusAction ? (
+            // 操作选择界面
+            <div>
+              <div style={{ 
+                textAlign: 'center', 
+                marginBottom: '32px',
+                padding: '20px',
+                backgroundColor: selectedRowKeys.length === 0 ? '#fff7e6' : '#f8f9fa',
+                borderRadius: '8px',
+                border: selectedRowKeys.length === 0 ? '1px solid #ffd591' : '1px solid #e9ecef'
+              }}>
+                <Text style={{ fontSize: '16px', color: '#495057' }}>
+                  {selectedRowKeys.length === 0 ? '没有选择数据，直接进入数量调整操作' : '请选择您要执行的操作类型'}
+                </Text>
+                <br />
+                <Text type="secondary" style={{ fontSize: '14px' }}>
+                  {selectedRowKeys.length === 0 ? '您可以输入SKU及数量信息进行数量调整' : `已选择 ${selectedRowKeys.length} 条记录`}
+                </Text>
+              </div>
+              
+              <Space direction="vertical" style={{ width: '100%' }} size="large">
+                {selectedRowKeys.length > 0 ? (
+                  // 有选中记录时显示上架和下架选项
+                  <>
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<CheckCircleOutlined />}
+                      style={{ 
+                        width: '100%', 
+                        height: '60px',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 8px rgba(24, 144, 255, 0.2)'
+                      }}
+                      onClick={() => setProductStatusAction('上架')}
+                    >
+                      产品上架
+                    </Button>
+                    
+                    <Button
+                      danger
+                      size="large"
+                      icon={<CloseCircleOutlined />}
+                      style={{ 
+                        width: '100%', 
+                        height: '60px',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 8px rgba(255, 77, 79, 0.2)'
+                      }}
+                      onClick={() => setProductStatusAction('下架')}
+                    >
+                      产品下架
+                    </Button>
+                  </>
+                ) : null}
+                
+                <Button
+                  size="large"
+                  icon={<CalculatorOutlined />}
+                  style={{ 
+                    width: '100%', 
+                    height: '60px',
+                    fontSize: '16px',
+                    fontWeight: '500',
+                    backgroundColor: '#52c41a',
+                    borderColor: '#52c41a',
+                    color: 'white',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(82, 196, 26, 0.2)'
+                  }}
+                  onClick={() => setProductStatusAction('数量调整')}
+                >
+                  数量调整
+                </Button>
+              </Space>
+            </div>
+          ) : (
+            // 操作确认界面
+            <div>
+              <div style={{ 
+                marginBottom: '24px',
+                padding: '16px',
+                backgroundColor: productStatusAction === '上架' ? '#f6ffed' : 
+                               productStatusAction === '下架' ? '#fff2f0' : '#f0f9ff',
+                border: `1px solid ${productStatusAction === '上架' ? '#b7eb8f' : 
+                                        productStatusAction === '下架' ? '#ffccc7' : '#91d5ff'}`,
+                borderRadius: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  {productStatusAction === '上架' && <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '16px' }} />}
+                  {productStatusAction === '下架' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: '16px' }} />}
+                  {productStatusAction === '数量调整' && <CalculatorOutlined style={{ color: '#1890ff', fontSize: '16px' }} />}
+                  <Text strong style={{ fontSize: '16px' }}>
+                    {productStatusAction === '上架' ? '产品上架操作' : 
+                     productStatusAction === '下架' ? '产品下架操作' : '数量调整操作'}
+                  </Text>
+                </div>
+                {productStatusAction === '数量调整' && selectedRowKeys.length === 0 ? (
+                  <div style={{ 
+                    padding: '12px 16px',
+                    backgroundColor: '#fff7e6',
+                    border: '2px solid #ffa940',
+                    borderRadius: '6px',
+                    marginTop: '8px'
+                  }}>
+                    <Text style={{ 
+                      fontSize: '15px',
+                      fontWeight: '600',
+                      color: '#d46b08',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '18px' }}>⚠️</span>
+                      没有选择数据，直接进入数量调整操作。请输入SKU及数量信息
+                    </Text>
+                  </div>
+                ) : (
+                  <Text type="secondary">
+                    {productStatusAction === '数量调整' ? '请输入SKU及数量信息' : '将发送邮件通知相关人员'}
+                  </Text>
+                )}
+              </div>
+
+              {productStatusAction === '数量调整' ? (
+                <div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <Text strong style={{ fontSize: '14px' }}>SKU及数量信息</Text>
+                    <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
+                      （每行一个，格式：SKU 数量）
+                    </Text>
+                  </div>
+                  <TextArea
+                    value={quantityAdjustmentText}
+                    onChange={(e) => setQuantityAdjustmentText(e.target.value)}
+                    placeholder="请输入SKU及数量，例如：&#10;BTX-001 100&#10;BTX-002 50&#10;BTX-003 200"
+                    rows={8}
+                    style={{ 
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      borderRadius: '6px'
+                    }}
+                  />
+                  <div style={{ marginTop: '8px', textAlign: 'right' }}>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                      {quantityAdjustmentText.split('\n').filter(line => line.trim()).length} 行数据
+                    </Text>
+                  </div>
+                </div>
+              ) : (
+                selectedRowKeys.length > 0 ? (
+                  <div style={{ 
+                    padding: '16px',
+                    backgroundColor: '#fafafa',
+                    borderRadius: '6px',
+                    border: '1px solid #d9d9d9'
+                  }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <Text strong style={{ color: '#1890ff' }}>📧 邮件信息</Text>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Text strong>收件人：</Text>
+                      <Text code style={{ marginLeft: '8px' }}>rpa@xianchun.ltd</Text>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Text strong>标题：</Text>
+                      <Text style={{ marginLeft: '8px' }}>产品手动上下架及数量调整</Text>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Text strong>内容：</Text>
+                      <Text style={{ marginLeft: '8px' }}>{productStatusAction}</Text>
+                    </div>
+                    <div>
+                      <Text strong>包含：</Text>
+                      <Tag color="blue" style={{ marginLeft: '8px' }}>
+                        {selectedRowKeys.length} 个母SKU
+                      </Tag>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ 
+                    padding: '16px',
+                    backgroundColor: '#f0f9ff',
+                    borderRadius: '6px',
+                    border: '1px solid #91d5ff'
+                  }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <Text strong style={{ color: '#1890ff' }}>📧 邮件信息</Text>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Text strong>收件人：</Text>
+                      <Text code style={{ marginLeft: '8px' }}>rpa@xianchun.ltd</Text>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Text strong>标题：</Text>
+                      <Text style={{ marginLeft: '8px' }}>产品手动上下架及数量调整</Text>
+                    </div>
+                    <div>
+                      <Text strong>内容：</Text>
+                      <Text style={{ marginLeft: '8px' }}>产品数量调整</Text>
+                    </div>
+                  </div>
+                )
+              )}
+              
+              <div style={{ 
+                marginTop: '32px', 
+                paddingTop: '20px',
+                borderTop: '1px solid #f0f0f0',
+                display: 'flex',
+                justifyContent: selectedRowKeys.length === 0 ? 'flex-end' : 'space-between',
+                alignItems: 'center'
+              }}>
+                {selectedRowKeys.length > 0 && (
+                  <Button 
+                    size="large"
+                    onClick={() => setProductStatusAction(null)}
+                    style={{ borderRadius: '6px' }}
+                  >
+                    返回选择
+                  </Button>
+                )}
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => handleProductStatusAction(productStatusAction)}
+                  disabled={productStatusAction === '数量调整' && !quantityAdjustmentText.trim()}
+                  style={{ 
+                    borderRadius: '6px',
+                    minWidth: '120px'
+                  }}
+                >
+                  确认发送
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </Modal>
         </Content>
       </Layout>
