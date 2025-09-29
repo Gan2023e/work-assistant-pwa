@@ -2481,15 +2481,25 @@ const Purchase: React.FC = () => {
           );
         }
         
-        // 有值时显示按钮链接
+        // 有值时显示可选择的文本
         return (
-          <Button 
-            type="link" 
-            style={{ padding: 0, height: 'auto' }}
+          <div
             onClick={() => handleParentSkuClick(text)}
+            style={{ 
+              padding: '4px 8px',
+              cursor: 'pointer',
+              color: '#1890ff',
+              userSelect: 'text',
+              minHeight: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              wordBreak: 'break-all'
+            }}
+            title={`点击复制母SKU: ${text}`}
           >
             {text}
-          </Button>
+          </div>
         );
       }
     },
@@ -2525,9 +2535,23 @@ const Purchase: React.FC = () => {
         
         return (
           <Tooltip title={text}>
-            <a href={text} target="_blank" rel="noopener noreferrer" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+            <div
+              onClick={() => window.open(text, '_blank')}
+              style={{ 
+                display: 'block', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap', 
+                maxWidth: '180px',
+                cursor: 'pointer',
+                color: '#1890ff',
+                userSelect: 'text',
+                padding: '4px 8px'
+              }}
+              title={`点击打开链接: ${text}`}
+            >
               {sequenceNumber}
-            </a>
+            </div>
           </Tooltip>
         );
       }
