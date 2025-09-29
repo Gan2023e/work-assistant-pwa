@@ -2057,13 +2057,25 @@ router.post('/invoices/batch-download', async (req, res) => {
     
     // 设置列标题
     worksheet.columns = [
-      { header: '订单编号', key: 'order_number', width: 20 },
+      { header: '订单编号', key: 'order_number', width: 23 },
       { header: '订单日期', key: 'order_date', width: 15 },
-      { header: '卖家公司名', key: 'seller_name', width: 25 },
-      { header: '实付款(元)', key: 'amount', width: 15 },
-      { header: '发票号', key: 'invoice_number', width: 20 },
+      { header: '卖家公司名', key: 'seller_name', width: 45 },
+      { header: '实付款(元)', key: 'amount', width: 16 },
+      { header: '发票号', key: 'invoice_number', width: 23 },
       { header: '开票日期', key: 'invoice_date', width: 15 },
-      { header: '发票金额(元)', key: 'invoice_amount', width: 15 }
+      { header: '发票金额(元)', key: 'invoice_amount', width: 15 },
+      { header: '其他订单号', key: 'other_order_numbers', width: 20 },
+      { header: '其他订单日期', key: 'other_order_dates', width: 15 },
+      { header: '其他订单实付款(元)', key: 'other_order_amounts', width: 18 }
+    ];
+    
+    // 冻结第一行
+    worksheet.views = [
+      {
+        state: 'frozen',
+        xSplit: 0,
+        ySplit: 1
+      }
     ];
     
     // 设置标题行样式
@@ -2087,30 +2099,81 @@ router.post('/invoices/batch-download', async (req, res) => {
       invoiceGroups[invoiceNumber].push(order);
     });
     
+    // 检查每个发票对应的订单是否在导出日期区间内完全包含
+    const invoiceCompleteness = {};
+    for (const [invoiceNumber, groupOrders] of Object.entries(invoiceGroups)) {
+      // 获取该发票对应的所有订单（不限制日期范围）
+      const allInvoiceOrders = await PurchaseOrder.findAll({
+        where: {
+          invoice_status: '已开票'
+        },
+        include: [{
+          model: Invoice,
+          as: 'invoice',
+          where: {
+            invoice_number: invoiceNumber
+          }
+        }]
+      });
+      
+      // 检查是否有订单不在当前导出的日期范围内
+      const exportedOrderIds = groupOrders.map(order => order.id);
+      const missingOrders = allInvoiceOrders.filter(order => !exportedOrderIds.includes(order.id));
+      
+      invoiceCompleteness[invoiceNumber] = {
+        isComplete: missingOrders.length === 0,
+        missingOrders: missingOrders.map(order => ({
+          order_number: order.order_number,
+          order_date: order.order_date,
+          amount: order.amount
+        }))
+      };
+    }
+    
     // 添加数据行
     let currentRow = 2;
     Object.entries(invoiceGroups).forEach(([invoiceNumber, groupOrders]) => {
       const startRow = currentRow;
+      const completeness = invoiceCompleteness[invoiceNumber];
       
       // 添加该发票下的所有订单
       groupOrders.forEach((order, index) => {
-        // 安全处理日期格式
+        // 安全处理日期格式，使用北京时间
         const formatDate = (dateValue) => {
           if (!dateValue) return '';
+          
+          let date;
           if (dateValue instanceof Date) {
-            return dateValue.toISOString().slice(0, 10);
+            date = dateValue;
+          } else if (typeof dateValue === 'string') {
+            // 如果已经是YYYY-MM-DD格式的字符串，直接返回
+            if (/^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+              return dateValue.slice(0, 10);
+            }
+            date = new Date(dateValue);
+          } else {
+            date = new Date(dateValue);
           }
-          // 如果是字符串，尝试转换为Date再格式化
-          const date = new Date(dateValue);
-          if (!isNaN(date.getTime())) {
-            return date.toISOString().slice(0, 10);
+          
+          if (isNaN(date.getTime())) {
+            return String(dateValue).slice(0, 10);
           }
-          // 如果已经是YYYY-MM-DD格式的字符串，直接返回
-          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
-            return dateValue.slice(0, 10);
-          }
-          return String(dateValue).slice(0, 10);
+          
+          // 转换为北京时间 (UTC+8)
+          const beijingTime = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+          return beijingTime.toISOString().slice(0, 10);
         };
+        
+        // 生成发票完整性信息，分别填入3个列
+        let otherOrderNumbers = '';
+        let otherOrderDates = '';
+        let otherOrderAmounts = '';
+        
+        if (!completeness.isComplete) {
+          otherOrderNumbers = completeness.missingOrders.map(missing => missing.order_number).join('\n');
+          otherOrderDates = completeness.missingOrders.map(missing => formatDate(missing.order_date)).join('\n');
+          otherOrderAmounts = completeness.missingOrders.map(missing => `¥${Number(missing.amount).toFixed(2)}`).join('\n');
+        }
         
         const rowData = {
           order_number: order.order_number,
@@ -2119,17 +2182,54 @@ router.post('/invoices/batch-download', async (req, res) => {
           amount: Number(order.amount),
           invoice_number: order.invoice.invoice_number,
           invoice_date: formatDate(order.invoice.invoice_date),
-          invoice_amount: Number(order.invoice.total_amount)
+          invoice_amount: Number(order.invoice.total_amount),
+          other_order_numbers: otherOrderNumbers,
+          other_order_dates: otherOrderDates,
+          other_order_amounts: otherOrderAmounts
         };
         
         worksheet.addRow(rowData);
         
-        // 设置数字格式
+        // 设置数字格式和单元格样式
         const row = worksheet.getRow(currentRow);
         row.getCell('amount').numFmt = '#,##0.00';
         row.getCell('invoice_amount').numFmt = '#,##0.00';
         row.alignment = { horizontal: 'center', vertical: 'middle' };
-        row.height = 20;
+        
+        // 设置其他订单相关列的换行和左对齐
+        ['other_order_numbers', 'other_order_dates', 'other_order_amounts'].forEach(key => {
+          const cell = row.getCell(key);
+          cell.alignment = { 
+            horizontal: 'left', 
+            vertical: 'top',
+            wrapText: true 
+          };
+        });
+        
+        // 如果发票不完整，设置整行高亮显示和发票号备注
+        if (!completeness.isComplete) {
+          for (let col = 1; col <= 10; col++) {
+            const cell = row.getCell(col);
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFE6B3' } // 浅橙色背景
+            };
+          }
+          
+          // 在发票号单元格添加备注提示
+          const invoiceNumberCell = row.getCell('invoice_number');
+          const missingCount = completeness.missingOrders.length;
+          invoiceNumberCell.note = `该发票还包含 ${missingCount} 个订单不在当前导出月份范围内，详见右侧"其他订单"列`;
+        }
+        
+        // 根据内容长度调整行高
+        const maxLineCount = Math.max(
+          otherOrderNumbers.split('\n').length,
+          otherOrderDates.split('\n').length,
+          otherOrderAmounts.split('\n').length
+        );
+        row.height = Math.max(20, maxLineCount * 15);
         
         currentRow++;
       });
@@ -2144,6 +2244,12 @@ router.post('/invoices/batch-download', async (req, res) => {
         worksheet.mergeCells(`F${startRow}:F${endRow}`);
         // 合并发票金额列
         worksheet.mergeCells(`G${startRow}:G${endRow}`);
+        // 合并其他订单号列
+        worksheet.mergeCells(`H${startRow}:H${endRow}`);
+        // 合并其他订单日期列
+        worksheet.mergeCells(`I${startRow}:I${endRow}`);
+        // 合并其他订单实付款列
+        worksheet.mergeCells(`J${startRow}:J${endRow}`);
         
         // 设置合并单元格的样式
         ['E', 'F', 'G'].forEach(col => {
@@ -2156,12 +2262,45 @@ router.post('/invoices/batch-download', async (req, res) => {
             right: { style: 'thin' }
           };
         });
+        
+        // 设置其他订单相关列的样式（支持换行）
+        ['H', 'I', 'J'].forEach(col => {
+          const cell = worksheet.getCell(`${col}${startRow}`);
+          cell.alignment = { 
+            horizontal: 'left', 
+            vertical: 'top',
+            wrapText: true 
+          };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+        
+        // 如果发票不完整，设置合并单元格的高亮显示和发票号备注
+        if (!completeness.isComplete) {
+          for (let col = 1; col <= 10; col++) {
+            const cell = worksheet.getCell(`${String.fromCharCode(64 + col)}${startRow}`);
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFE6B3' } // 浅橙色背景
+            };
+          }
+          
+          // 在发票号合并单元格添加备注提示
+          const invoiceNumberCell = worksheet.getCell(`E${startRow}`);
+          const missingCount = completeness.missingOrders.length;
+          invoiceNumberCell.note = `该发票还包含 ${missingCount} 个订单不在当前导出月份范围内，详见右侧"其他订单"列`;
+        }
       }
     });
     
     // 设置所有数据行的边框
     for (let row = 2; row < currentRow; row++) {
-      for (let col = 1; col <= 7; col++) {
+      for (let col = 1; col <= 10; col++) {
         const cell = worksheet.getCell(row, col);
         cell.border = {
           top: { style: 'thin' },
@@ -2175,8 +2314,10 @@ router.post('/invoices/batch-download', async (req, res) => {
     // 生成Excel文件缓冲区
     const excelBuffer = await workbook.xlsx.writeBuffer();
     
-    // 将Excel文件添加到ZIP
-    const dateStr = new Date().toISOString().slice(0, 10);
+    // 将Excel文件添加到ZIP，使用北京时间
+    const now = new Date();
+    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const dateStr = beijingTime.toISOString().slice(0, 10);
     const excelFileName = `发票明细_${dateStr}.xlsx`;
     zip.file(excelFileName, excelBuffer);
     
@@ -2549,9 +2690,12 @@ router.post('/export-orders', async (req, res) => {
       }
     }
     
+    // 日期区间筛选，强制格式化为 YYYY-MM-DD
     if (start_date && end_date) {
+      const start = dayjs(start_date).format('YYYY-MM-DD');
+      const end = dayjs(end_date).format('YYYY-MM-DD');
       whereCondition.order_date = {
-        [Op.between]: [start_date, end_date]
+        [Op.between]: [start, end]
       };
     }
     
@@ -2639,8 +2783,10 @@ router.post('/export-orders', async (req, res) => {
     // 生成Excel文件
     const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     
-    // 设置响应头
-    const filename = `采购订单数据_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    // 设置响应头，使用北京时间
+    const now = new Date();
+    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const filename = `采购订单数据_${beijingTime.toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Content-Length', excelBuffer.length);
