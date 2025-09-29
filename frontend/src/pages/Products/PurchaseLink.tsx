@@ -2423,6 +2423,7 @@ const Purchase: React.FC = () => {
       key: 'parent_sku', 
       align: 'center',
       width: 120,
+      fixed: 'left',
       sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
       render: (text: string, record: ProductRecord) => {
         // 如果正在编辑这个记录的母SKU
@@ -2498,6 +2499,7 @@ const Purchase: React.FC = () => {
       key: 'weblink', 
       align: 'center',
       width: 200,
+      fixed: 'left',
       render: (text: string) => text ? (
         <Tooltip title={text}>
           <a href={text} target="_blank" rel="noopener noreferrer" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
@@ -2505,6 +2507,15 @@ const Purchase: React.FC = () => {
           </a>
         </Tooltip>
       ) : ''
+    },
+    { 
+      title: '备注', 
+      dataIndex: 'notice', 
+      key: 'notice', 
+      align: 'center',
+      width: 120,
+      fixed: 'left',
+      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
     },
     { 
       title: '竞争对手ASIN', 
@@ -2638,14 +2649,6 @@ const Purchase: React.FC = () => {
         </div>
       ),
       sorter: (a, b) => (a.is_key_product ? 1 : 0) - (b.is_key_product ? 1 : 0)
-    },
-    { 
-      title: '备注', 
-      dataIndex: 'notice', 
-      key: 'notice', 
-      align: 'center',
-      width: 120,
-      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
     },
     { 
       title: 'CPC文件', 
