@@ -2500,13 +2500,37 @@ const Purchase: React.FC = () => {
       align: 'center',
       width: 200,
       fixed: 'left',
-      render: (text: string) => text ? (
-        <Tooltip title={text}>
-          <a href={text} target="_blank" rel="noopener noreferrer" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
-            {text}
-          </a>
-        </Tooltip>
-      ) : ''
+      render: (text: string) => {
+        if (!text) return '';
+        
+        // 提取序列号部分
+        const extractSequenceNumber = (url: string): string => {
+          // 匹配 1688.com/offer/ 后面的数字部分
+          const match = url.match(/detail\.1688\.com\/offer\/(\d+)/);
+          if (match && match[1]) {
+            return match[1];
+          }
+          
+          // 如果匹配不到，尝试其他常见模式
+          const otherMatch = url.match(/\/(\d+)\.html$/);
+          if (otherMatch && otherMatch[1]) {
+            return otherMatch[1];
+          }
+          
+          // 如果都匹配不到，返回原URL
+          return url;
+        };
+        
+        const sequenceNumber = extractSequenceNumber(text);
+        
+        return (
+          <Tooltip title={text}>
+            <a href={text} target="_blank" rel="noopener noreferrer" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+              {sequenceNumber}
+            </a>
+          </Tooltip>
+        );
+      }
     },
     { 
       title: '备注', 
@@ -2516,6 +2540,22 @@ const Purchase: React.FC = () => {
       width: 120,
       fixed: 'left',
       sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
+    },
+    { 
+      title: 'Style Number', 
+      dataIndex: 'model_number', 
+      key: 'model_number', 
+      align: 'center',
+      width: 120,
+      sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || '')
+    },
+    { 
+      title: '推荐年龄', 
+      dataIndex: 'recommend_age', 
+      key: 'recommend_age', 
+      align: 'center',
+      width: 100,
+      sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || '')
     },
     { 
       title: '竞争对手ASIN', 
@@ -2689,22 +2729,6 @@ const Purchase: React.FC = () => {
       align: 'center',
       width: 120,
       sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || '')
-    },
-    { 
-      title: 'Style Number', 
-      dataIndex: 'model_number', 
-      key: 'model_number', 
-      align: 'center',
-      width: 120,
-      sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || '')
-    },
-    { 
-      title: '推荐年龄', 
-      dataIndex: 'recommend_age', 
-      key: 'recommend_age', 
-      align: 'center',
-      width: 100,
-      sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || '')
     },
     { 
       title: '广告是否创建', 
