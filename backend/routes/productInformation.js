@@ -405,7 +405,9 @@ router.get('/grouped-list', async (req, res) => {
 
     const pagingQueryStart = Date.now();
     // 先获取分页的parent_sku列表和总数
-    const [currentPageParentSkus, totalCount] = await Promise.all([
+    let currentPageParentSkus, totalCount;
+    try {
+      [currentPageParentSkus, totalCount] = await Promise.all([
       // 获取当前页的parent_sku
       ProductInformation.findAll({
         attributes: ['parent_sku'],
@@ -418,7 +420,8 @@ router.get('/grouped-list', async (req, res) => {
         order: [['parent_sku', 'ASC']],
         limit: limitNum,
         offset: offset,
-        raw: true
+        raw: true,
+        timeout: 25000 // 25秒超时
       }),
       // 获取总数（用于分页信息）
       sequelize.query(`
@@ -426,7 +429,7 @@ router.get('/grouped-list', async (req, res) => {
         FROM product_information 
         WHERE parent_sku IS NOT NULL AND parent_sku != ''
         ${whereConditions.site ? 'AND site = :site' : ''}
-        ${whereConditions[Op.or] ? `AND (
+        ${search ? `AND (
           item_sku LIKE :search OR 
           item_name LIKE :search OR 
           original_parent_sku LIKE :search OR 
@@ -436,11 +439,15 @@ router.get('/grouped-list', async (req, res) => {
       `, {
         replacements: { 
           ...(whereConditions.site && { site: whereConditions.site }),
-          ...(whereConditions[Op.or] && { search: `%${search}%` })
+          ...(search && { search: `%${search}%` })
         },
         type: QueryTypes.SELECT
       })
     ]);
+    } catch (queryError) {
+      console.error('分页查询失败:', queryError);
+      throw new Error(`数据库查询失败: ${queryError.message}`);
+    }
 
         const currentPageParentSkuList = currentPageParentSkus.map(item => item.parent_sku);
     const totalParentSkus = totalCount[0].total;
@@ -450,14 +457,17 @@ router.get('/grouped-list', async (req, res) => {
 
     const detailQueryStart = Date.now();
     // 批量获取所有子记录和父记录（避免N+1查询问题）
-    const [allChildren, allParentRecords] = await Promise.all([
+    let allChildren, allParentRecords;
+    try {
+      [allChildren, allParentRecords] = await Promise.all([
         // 批量获取所有子记录
         ProductInformation.findAll({
           where: {
             ...whereConditions,
             parent_sku: { [Op.in]: currentPageParentSkuList }
           },
-          order: [['parent_sku', 'ASC'], ['item_sku', 'ASC']]
+          order: [['parent_sku', 'ASC'], ['item_sku', 'ASC']],
+          timeout: 25000 // 25秒超时
         }),
         // 批量获取所有母SKU记录
         ProductInformation.findAll({
@@ -465,9 +475,14 @@ router.get('/grouped-list', async (req, res) => {
             ...whereConditions,
             item_sku: { [Op.in]: currentPageParentSkuList },
             parent_child: 'Parent'
-          }
+          },
+          timeout: 25000 // 25秒超时
         })
       ]);
+    } catch (detailQueryError) {
+      console.error('批量查询失败:', detailQueryError);
+      throw new Error(`批量查询失败: ${detailQueryError.message}`);
+    }
 
           const detailQueryEnd = Date.now();
       console.log(`📦 批量查询完成: 耗时 ${detailQueryEnd - detailQueryStart}ms, 获取 ${allChildren.length} 个子记录, ${allParentRecords.length} 个父记录`);
@@ -546,6 +561,11 @@ router.get('/grouped-list', async (req, res) => {
 
   } catch (error) {
     console.error('获取分组数据失败:', error);
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({
       success: false,
       message: '获取分组数据失败: ' + error.message

@@ -282,6 +282,43 @@ const ProductInformation: React.FC = () => {
             isParent: true
           })));
           setData([]); // 清空原始数据
+          
+          // 获取ASIN信息（包括母SKU和子SKU）
+          const allSellerSkus: string[] = [];
+          const siteMap: {[key: string]: string} = {};
+          
+          result.data.forEach((group: any) => {
+            // 添加母SKU
+            if (group.parent_sku) {
+              allSellerSkus.push(group.parent_sku);
+              siteMap[group.parent_sku] = group.site;
+            }
+            
+            // 添加子SKU
+            group.children.forEach((child: any) => {
+              if (child.item_sku) {
+                allSellerSkus.push(child.item_sku);
+                siteMap[child.item_sku] = child.site;
+              }
+            });
+          });
+          
+          // 按站点分组获取ASIN信息
+          const siteGroups: {[key: string]: string[]} = {};
+          allSellerSkus.forEach(sku => {
+            const site = siteMap[sku];
+            if (!siteGroups[site]) {
+              siteGroups[site] = [];
+            }
+            siteGroups[site].push(sku);
+          });
+          
+          // 为每个站点获取ASIN信息
+          Object.entries(siteGroups).forEach(([site, skus]) => {
+            if (skus.length > 0) {
+              fetchAsinData(skus, site);
+            }
+          });
         } else {
           // 列表视图：使用原始数据
           setData(result.data);
@@ -600,13 +637,34 @@ const ProductInformation: React.FC = () => {
   const fetchAsinData = async (sellerSkus: string[], site: string) => {
     try {
       console.log('🔍 正在获取ASIN信息:', { sellerSkus, site });
-      const response = await fetch(`${API_BASE_URL}/api/product-information/asin-info?sellerSkus=${sellerSkus.join(',')}&site=${site}`);
+      
+      // 站点名称映射：中文站点名 -> API站点名
+      const siteMapping: {[key: string]: string} = {
+        '美国': 'www.amazon.com',
+        '英国': 'www.amazon.co.uk',
+        '德国': 'www.amazon.de',
+        '法国': 'www.amazon.fr',
+        '意大利': 'www.amazon.it',
+        '西班牙': 'www.amazon.es',
+        '日本': 'www.amazon.co.jp',
+        '加拿大': 'www.amazon.ca',
+        '澳大利亚': 'www.amazon.com.au',
+        '印度': 'www.amazon.in',
+        '阿联酋': 'www.amazon.ae'
+      };
+      
+      const apiSite = siteMapping[site] || site;
+      const response = await fetch(`${API_BASE_URL}/api/product-information/asin-info?sellerSkus=${sellerSkus.join(',')}&site=${apiSite}`);
       const result = await response.json();
       
       console.log('📦 ASIN查询结果:', result);
       
       if (result.success) {
-        setAsinData(result.data);
+        // 合并到现有的asinData中，而不是替换
+        setAsinData(prev => ({
+          ...prev,
+          ...result.data
+        }));
       }
     } catch (error) {
       console.error('获取ASIN信息失败:', error);
@@ -656,6 +714,25 @@ const ProductInformation: React.FC = () => {
           // 父级行显示父SKU和展开/收起按钮
           const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
           
+          // 获取母SKU的ASIN信息
+          const siteMapping: {[key: string]: string} = {
+            '美国': 'www.amazon.com',
+            '英国': 'www.amazon.co.uk',
+            '德国': 'www.amazon.de',
+            '法国': 'www.amazon.fr',
+            '意大利': 'www.amazon.it',
+            '西班牙': 'www.amazon.es',
+            '日本': 'www.amazon.co.jp',
+            '加拿大': 'www.amazon.ca',
+            '澳大利亚': 'www.amazon.com.au',
+            '印度': 'www.amazon.in',
+            '阿联酋': 'www.amazon.ae'
+          };
+          
+          const apiSite = siteMapping[record.site] || record.site;
+          const asinKey = `${record.parent_sku}_${apiSite}`;
+          const asinInfo = asinData[asinKey];
+          
           return (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <Button
@@ -694,19 +771,70 @@ const ProductInformation: React.FC = () => {
                     <span>📦 总库存: {record.total_quantity}</span>
                   </Space>
                 </div>
+                {/* 显示母SKU的ASIN信息 */}
+                {asinInfo && asinInfo.asin1 && (
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#1890ff', 
+                    marginTop: '4px',
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                  onClick={() => {
+                    // 将API站点名转换为中文站点名
+                    const apiSiteToChinese: {[key: string]: string} = {
+                      'www.amazon.com': '美国',
+                      'www.amazon.co.uk': '英国',
+                      'www.amazon.de': '德国',
+                      'www.amazon.fr': '法国',
+                      'www.amazon.it': '意大利',
+                      'www.amazon.es': '西班牙',
+                      'www.amazon.co.jp': '日本',
+                      'www.amazon.ca': '加拿大',
+                      'www.amazon.com.au': '澳大利亚',
+                      'www.amazon.in': '印度',
+                      'www.amazon.ae': '阿联酋'
+                    };
+                    
+                    const chineseSite = apiSiteToChinese[asinInfo.site] || '美国';
+                    const amazonUrl = generateAmazonUrl(asinInfo.asin1, chineseSite);
+                    window.open(amazonUrl, '_blank');
+                  }}
+                  title={`点击打开亚马逊页面: ${asinInfo.asin1}`}
+                  >
+                    ASIN: {asinInfo.asin1}
+                  </div>
+                )}
               </div>
             </div>
           );
         } else {
           // 子级行显示商品SKU和ASIN
-          const asinKey = `${value}_${record.site}`;
+          // 站点名称映射：中文站点名 -> API站点名
+          const siteMapping: {[key: string]: string} = {
+            '美国': 'www.amazon.com',
+            '英国': 'www.amazon.co.uk',
+            '德国': 'www.amazon.de',
+            '法国': 'www.amazon.fr',
+            '意大利': 'www.amazon.it',
+            '西班牙': 'www.amazon.es',
+            '日本': 'www.amazon.co.jp',
+            '加拿大': 'www.amazon.ca',
+            '澳大利亚': 'www.amazon.com.au',
+            '印度': 'www.amazon.in',
+            '阿联酋': 'www.amazon.ae'
+          };
+          
+          const apiSite = siteMapping[record.site] || record.site;
+          const asinKey = `${value}_${apiSite}`;
           const asinInfo = asinData[asinKey];
           
           // 调试信息
           if (value && record.site) {
             console.log('🔍 查找ASIN:', { 
               sku: value, 
-              site: record.site, 
+              site: record.site,
+              apiSite,
               asinKey, 
               asinInfo,
               allAsinKeys: Object.keys(asinData)
@@ -746,7 +874,23 @@ const ProductInformation: React.FC = () => {
                       textDecoration: 'underline'
                     }}
                     onClick={() => {
-                      const amazonUrl = generateAmazonUrl(asinInfo.asin1, asinInfo.site);
+                      // 将API站点名转换为中文站点名
+                      const apiSiteToChinese: {[key: string]: string} = {
+                        'www.amazon.com': '美国',
+                        'www.amazon.co.uk': '英国',
+                        'www.amazon.de': '德国',
+                        'www.amazon.fr': '法国',
+                        'www.amazon.it': '意大利',
+                        'www.amazon.es': '西班牙',
+                        'www.amazon.co.jp': '日本',
+                        'www.amazon.ca': '加拿大',
+                        'www.amazon.com.au': '澳大利亚',
+                        'www.amazon.in': '印度',
+                        'www.amazon.ae': '阿联酋'
+                      };
+                      
+                      const chineseSite = apiSiteToChinese[asinInfo.site] || '美国';
+                      const amazonUrl = generateAmazonUrl(asinInfo.asin1, chineseSite);
                       window.open(amazonUrl, '_blank');
                     }}
                     title={`点击打开亚马逊页面: ${asinInfo.asin1}`}
@@ -1802,7 +1946,11 @@ const ProductInformation: React.FC = () => {
             style={{ width: 120 }}
             placeholder="选择站点"
             value={queryParams.site}
-            onChange={(value) => updateQueryParams({ site: value })}
+            onChange={(value) => {
+              updateQueryParams({ site: value });
+              // 站点筛选后自动触发数据获取
+              setTimeout(() => fetchData(), 100);
+            }}
           >
             <Option value="all">全部站点</Option>
             {siteList.map(site => (
