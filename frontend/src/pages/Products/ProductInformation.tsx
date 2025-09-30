@@ -231,7 +231,7 @@ const ProductInformation: React.FC = () => {
     };
   }, [pagination]);
 
-  // 获取数据列表
+  // 获取数据列表 - 统一的数据获取函数
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -258,7 +258,14 @@ const ProductInformation: React.FC = () => {
         apiUrl = `${API_BASE_URL}/api/product-information/list?${params}`;
       }
 
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(30000) // 30秒超时
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const result = await response.json();
 
       if (result.success) {
@@ -290,80 +297,27 @@ const ProductInformation: React.FC = () => {
         message.error(result.message || '获取数据失败');
       }
     } catch (error) {
-      message.error('获取数据失败: ' + error);
+      console.error('获取数据失败:', error);
+      if (error instanceof Error) {
+        if (error.name === 'TimeoutError') {
+          message.error('请求超时，请检查网络连接或稍后重试');
+        } else if (error.name === 'AbortError') {
+          message.error('请求被取消');
+        } else {
+          message.error('获取数据失败: ' + error.message);
+        }
+      } else {
+        message.error('获取数据失败: ' + String(error));
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryParams, isGroupedView]);
 
   // 监听查询参数和视图模式变化，自动触发数据获取
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        
-        // 添加搜索和筛选条件
-        if (queryParams.search) {
-          params.set('search', queryParams.search);
-        }
-        if (queryParams.site && queryParams.site !== 'all') {
-          params.set('site', queryParams.site);
-        }
-        
-        // 添加分页参数
-        params.append('page', queryParams.page.toString());
-        params.append('limit', queryParams.limit.toString());
-
-        let apiUrl;
-        if (isGroupedView) {
-          // 分组视图：使用专门的分组API
-          apiUrl = `${API_BASE_URL}/api/product-information/grouped-list?${params}`;
-        } else {
-          // 列表视图：使用标准API
-          apiUrl = `${API_BASE_URL}/api/product-information/list?${params}`;
-        }
-
-        const response = await fetch(apiUrl);
-        const result = await response.json();
-
-        if (result.success) {
-          if (isGroupedView) {
-            // 分组视图：直接使用后端返回的分组数据
-            setGroupedData(result.data.map((group: any) => ({
-              key: group.parent_sku,
-              parent_sku: group.parent_sku,
-              site: group.site,
-              brand_name: group.brand_name,
-              manufacturer: group.manufacturer,
-              total_quantity: group.total_quantity,
-              children_count: group.children_count,
-              children: group.children,
-              parent_record: group.parent_record, // 母SKU记录
-              isParent: true
-            })));
-            setData([]); // 清空原始数据
-          } else {
-            // 列表视图：使用原始数据
-            setData(result.data);
-            setGroupedData([]); // 清空分组数据
-          }
-          
-          // 使用后端返回的分页信息
-          setPagination(result.pagination);
-          setSiteList(result.siteList || []);
-        } else {
-          message.error(result.message || '获取数据失败');
-        }
-      } catch (error) {
-        message.error('获取数据失败: ' + error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [queryParams, isGroupedView]);
+    fetchData();
+  }, [fetchData]);
 
   // 获取统计信息
   const fetchStatistics = useCallback(async () => {
@@ -430,7 +384,7 @@ const ProductInformation: React.FC = () => {
         message.error(result.message || (isNewRecord ? '新增失败' : '保存失败'));
       }
     } catch (error) {
-      message.error((currentRecord ? '保存' : '新增') + '失败: ' + error);
+      message.error((currentRecord ? '保存' : '新增') + '失败: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -450,7 +404,7 @@ const ProductInformation: React.FC = () => {
         message.error(result.message || '删除失败');
       }
     } catch (error) {
-      message.error('删除失败: ' + error);
+      message.error('删除失败: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -486,7 +440,7 @@ const ProductInformation: React.FC = () => {
         message.error(result.message || '批量删除失败');
       }
     } catch (error) {
-      message.error('批量删除失败: ' + error);
+      message.error('批量删除失败: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -548,7 +502,7 @@ const ProductInformation: React.FC = () => {
         message.error(errorResult.message || '导出失败');
       }
     } catch (error) {
-      message.error('导出失败: ' + error);
+      message.error('导出失败: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setExportLoading(false);
     }
@@ -624,7 +578,7 @@ const ProductInformation: React.FC = () => {
         message.error(result.message || '上传失败');
       }
     } catch (error) {
-      message.error('上传失败: ' + error);
+      message.error('上传失败: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setUploadLoading(false);
     }
