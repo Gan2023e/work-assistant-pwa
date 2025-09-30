@@ -1256,7 +1256,10 @@ router.post('/filter', async (req, res) => {
         'list_parent_sku',
         'no_inventory_rate',
         'sales_30days',
-        'seller_name'
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
       ]
     });
 
@@ -1270,12 +1273,12 @@ router.post('/filter', async (req, res) => {
   }
 });
 
-// CPC待上架产品筛选接口（测试完成且CPC提交情况为空）
+// CPC待上架产品筛选接口（已测试且CPC提交情况为空）
 router.post('/filter-cpc-pending-listing', async (req, res) => {
   try {
     const result = await ProductWeblink.findAll({
       where: {
-        cpc_status: '测试完成',
+        cpc_status: '已测试',
         [Op.or]: [
           { cpc_submit: null },
           { cpc_submit: '' }
@@ -1297,7 +1300,10 @@ router.post('/filter-cpc-pending-listing', async (req, res) => {
         'list_parent_sku',
         'no_inventory_rate',
         'sales_30days',
-        'seller_name'
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
       ]
     });
 
@@ -1333,7 +1339,10 @@ router.post('/filter-can-organize-data', async (req, res) => {
         'list_parent_sku',
         'no_inventory_rate',
         'sales_30days',
-        'seller_name'
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
       ],
       order: [['update_time', 'DESC']]
     });
@@ -1456,10 +1465,10 @@ router.get('/statistics', async (req, res) => {
       where: { cpc_status: '测试中' }
     });
 
-    // 计算CPC待上架产品数量（测试完成且CPC提交情况为空）
+    // 计算CPC待上架产品数量（已测试且CPC提交情况为空）
     const cpcPendingListingCount = await ProductWeblink.count({
       where: {
-        cpc_status: '测试完成',
+        cpc_status: '已测试',
         [Op.or]: [
           { cpc_submit: null },
           { cpc_submit: '' }

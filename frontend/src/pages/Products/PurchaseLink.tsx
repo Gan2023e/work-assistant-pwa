@@ -947,9 +947,9 @@ const Purchase: React.FC = () => {
   // 点击CPC待上架产品数卡片的特殊处理
   const handleCpcPendingListingClick = async () => {
     try {
-      // 构建特殊查询条件：测试完成且CPC提交情况为空
+      // 构建特殊查询条件：已测试且CPC提交情况为空
       const conditions = {
-        cpc_status: '测试完成',
+        cpc_status: '已测试',
         cpc_submit_empty: true // 特殊标识，后端会处理
       };
 
@@ -974,7 +974,7 @@ const Purchase: React.FC = () => {
       // 更新筛选状态以反映当前筛选条件
       setFilters({ 
         ...filters, 
-        cpc_status: '测试完成',
+        cpc_status: '已测试',
         cpc_submit: '' // 显示为空的提交情况
       });
       
@@ -2719,21 +2719,52 @@ const Purchase: React.FC = () => {
       dataIndex: 'cpc_files', 
       key: 'cpc_files', 
       align: 'center',
-      width: 120,
+      width: 140,
       render: (text: string, record: ProductRecord) => {
         const fileCount = getCpcFileCount(record);
+        const hasFiles = fileCount > 0;
+        
         return (
-          <Space>
-            <Badge count={fileCount} overflowCount={99} size="small">
+          <Space direction="vertical" size={4}>
+            <Badge 
+              count={fileCount} 
+              overflowCount={99} 
+              size="small"
+              style={{ 
+                backgroundColor: hasFiles ? '#52c41a' : '#d9d9d9',
+                color: hasFiles ? '#fff' : '#999'
+              }}
+            >
               <Button
-                type="primary"
+                type={hasFiles ? "primary" : "default"}
                 size="small"
                 icon={<FilePdfOutlined />}
                 onClick={() => handleCpcFileManage(record)}
+                style={{
+                  backgroundColor: hasFiles ? '#52c41a' : undefined,
+                  borderColor: hasFiles ? '#52c41a' : undefined
+                }}
               >
-                CPC文件
+                {hasFiles ? `CPC文件(${fileCount})` : 'CPC文件'}
               </Button>
             </Badge>
+            {hasFiles && (
+              <div style={{ 
+                fontSize: '10px', 
+                color: '#52c41a',
+                fontWeight: 'bold'
+              }}>
+                ✓ 已上传
+              </div>
+            )}
+            {!hasFiles && (
+              <div style={{ 
+                fontSize: '10px', 
+                color: '#999'
+              }}>
+                未上传
+              </div>
+            )}
           </Space>
         );
       }
