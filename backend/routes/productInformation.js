@@ -5,6 +5,7 @@ const { sequelize } = require('../models');
 const ProductInformation = require('../models/ProductInformation');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const ListingsSku = require('../models/ListingsSku');
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -955,6 +956,63 @@ router.post('/export-to-template', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '导出失败: ' + error.message
+    });
+  }
+});
+
+// 根据seller-sku查询ASIN信息
+router.get('/asin-info', async (req, res) => {
+  try {
+    const { sellerSkus, site } = req.query;
+    
+    if (!sellerSkus) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少seller-sku参数'
+      });
+    }
+
+    // 解析seller-sku列表（支持单个或多个）
+    const skuList = Array.isArray(sellerSkus) ? sellerSkus : sellerSkus.split(',');
+    
+    // 构建查询条件
+    const whereCondition = {
+      'seller-sku': { [Op.in]: skuList }
+    };
+    
+    // 如果指定了站点，添加站点条件
+    if (site && site !== 'all') {
+      whereCondition.site = site;
+    }
+
+    // 查询ASIN信息
+    const asinData = await ListingsSku.findAll({
+      where: whereCondition,
+      attributes: ['seller-sku', 'asin1', 'site'],
+      raw: true
+    });
+
+    // 构建返回结果
+    const result = {};
+    asinData.forEach(item => {
+      const key = `${item['seller-sku']}_${item.site}`;
+      result[key] = {
+        'seller-sku': item['seller-sku'],
+        asin1: item.asin1,
+        site: item.site
+      };
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+
+  } catch (error) {
+    console.error('❌ 查询ASIN信息失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '查询ASIN信息失败: ' + error.message
     });
   }
 });

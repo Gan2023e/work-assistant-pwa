@@ -32,8 +32,7 @@ import {
   ExportOutlined,
   UploadOutlined,
   DownOutlined,
-  RightOutlined,
-  PushpinOutlined
+  RightOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -156,11 +155,10 @@ const ProductInformation: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [selectedRows, setSelectedRows] = useState<ProductInformationData[]>([]);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
-  const [pinnedParentKey, setPinnedParentKey] = useState<string | null>(null); // 固定的母SKU
+  const [asinData, setAsinData] = useState<{[key: string]: {asin1: string, site: string}}>({});
 
   // 引用
   const tableRef = useRef<HTMLDivElement>(null);
-  const pinnedRowRef = useRef<HTMLDivElement>(null);
 
   // 查询参数
   const [queryParams, setQueryParams] = useState<QueryParams>({
@@ -590,28 +588,51 @@ const ProductInformation: React.FC = () => {
     const isExpanded = expandedRowKeys.includes(fullParentKey);
     
     if (isExpanded) {
-      // 收起时取消固定
+      // 收起
       setExpandedRowKeys(prev => prev.filter(key => key !== fullParentKey));
-      if (pinnedParentKey === parentKey) {
-        setPinnedParentKey(null);
-      }
     } else {
-      // 展开时设置为固定
+      // 展开
       setExpandedRowKeys(prev => [...prev, fullParentKey]);
-      setPinnedParentKey(parentKey);
-      
-      // 滚动到对应位置，确保固定行可见
-      setTimeout(() => {
-        const tableElement = tableRef.current;
-        if (tableElement) {
-          const targetRow = tableElement.querySelector(`[data-row-key="parent-${parentKey}"]`);
-          if (targetRow) {
-            targetRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }
-      }, 100);
     }
   };
+
+  // 获取ASIN信息
+  const fetchAsinData = async (sellerSkus: string[], site: string) => {
+    try {
+      console.log('🔍 正在获取ASIN信息:', { sellerSkus, site });
+      const response = await fetch(`${API_BASE_URL}/api/product-information/asin-info?sellerSkus=${sellerSkus.join(',')}&site=${site}`);
+      const result = await response.json();
+      
+      console.log('📦 ASIN查询结果:', result);
+      
+      if (result.success) {
+        setAsinData(result.data);
+      }
+    } catch (error) {
+      console.error('获取ASIN信息失败:', error);
+    }
+  };
+
+  // 生成亚马逊链接
+  const generateAmazonUrl = (asin: string, site: string) => {
+    const siteMap: {[key: string]: string} = {
+      '美国': 'amazon.com',
+      '英国': 'amazon.co.uk',
+      '德国': 'amazon.de',
+      '法国': 'amazon.fr',
+      '意大利': 'amazon.it',
+      '西班牙': 'amazon.es',
+      '日本': 'amazon.co.jp',
+      '加拿大': 'amazon.ca',
+      '澳大利亚': 'amazon.com.au',
+      '印度': 'amazon.in',
+      '阿联酋': 'amazon.ae'
+    };
+    
+    const domain = siteMap[site] || 'amazon.com';
+    return `https://www.${domain}/dp/${asin}`;
+  };
+
 
   // 表格列定义
   const columns: ColumnsType<TableRowData> = [
@@ -634,7 +655,6 @@ const ProductInformation: React.FC = () => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 父级行显示父SKU和展开/收起按钮
           const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
-          const isPinned = pinnedParentKey === record.key;
           
           return (
             <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -662,12 +682,6 @@ const ProductInformation: React.FC = () => {
                   <span style={{ marginRight: '8px' }}>
                     {record.parent_sku || '未分组'}
                   </span>
-                  {isPinned && (
-                    <Badge 
-                      count={<PushpinOutlined style={{ color: '#faad14', fontSize: '12px' }} />} 
-                      offset={[0, 0]}
-                    />
-                  )}
                 </div>
                 <div style={{ 
                   fontSize: '12px', 
@@ -684,7 +698,21 @@ const ProductInformation: React.FC = () => {
             </div>
           );
         } else {
-          // 子级行显示商品SKU
+          // 子级行显示商品SKU和ASIN
+          const asinKey = `${value}_${record.site}`;
+          const asinInfo = asinData[asinKey];
+          
+          // 调试信息
+          if (value && record.site) {
+            console.log('🔍 查找ASIN:', { 
+              sku: value, 
+              site: record.site, 
+              asinKey, 
+              asinInfo,
+              allAsinKeys: Object.keys(asinData)
+            });
+          }
+          
           return (
             <div style={{ 
               marginLeft: isGroupedView ? '40px' : '0',
@@ -701,13 +729,32 @@ const ProductInformation: React.FC = () => {
                   borderRadius: '1px',
                   marginRight: '8px'
                 }} />
-                <span style={{ 
-                  fontSize: '13px',
-                  fontFamily: 'monospace',
-                  color: '#262626'
-                }}>
-                  {value}
-                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ 
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    color: '#262626'
+                  }}>
+                    {value}
+                  </div>
+                  {asinInfo && asinInfo.asin1 && (
+                    <div style={{ 
+                      fontSize: '11px',
+                      color: '#1890ff',
+                      marginTop: '2px',
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                    onClick={() => {
+                      const amazonUrl = generateAmazonUrl(asinInfo.asin1, asinInfo.site);
+                      window.open(amazonUrl, '_blank');
+                    }}
+                    title={`点击打开亚马逊页面: ${asinInfo.asin1}`}
+                    >
+                      ASIN: {asinInfo.asin1}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -1607,6 +1654,24 @@ const ProductInformation: React.FC = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
+  // 当数据加载时获取ASIN信息
+  useEffect(() => {
+    if (currentViewData && currentViewData.length > 0) {
+      // 提取所有子SKU的seller-sku
+      const sellerSkus = currentViewData
+        .filter(record => !('isParent' in record && record.isParent))
+        .map(record => {
+          const productRecord = record as ProductInformationData;
+          return productRecord.item_sku;
+        })
+        .filter(sku => sku);
+      
+      if (sellerSkus.length > 0) {
+        fetchAsinData(sellerSkus, queryParams.site);
+      }
+    }
+  }, [currentViewData, queryParams.site]);
+
   return (
     <div style={{ padding: '24px' }}>
       <style>
@@ -1630,16 +1695,6 @@ const ProductInformation: React.FC = () => {
           }
           .parent-row:hover {
             background-color: #f8fafe !important;
-          }
-          .parent-row.pinned {
-            position: sticky !important;
-            top: 55px !important;
-            z-index: 10 !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-            border-left: 4px solid #faad14 !important;
-          }
-          .parent-row.pinned td {
-            background-color: #fffbe6 !important;
           }
           
           .ant-table-thead > tr > th {
@@ -1867,7 +1922,7 @@ const ProductInformation: React.FC = () => {
             rowSelection={rowSelection}
             loading={loading}
             pagination={false}
-            scroll={{ x: 'max-content', y: 650 }}
+            scroll={{ x: 'max-content' }}
             locale={{
               emptyText: <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             }}
@@ -1875,8 +1930,7 @@ const ProductInformation: React.FC = () => {
             size="middle"
             rowClassName={(record) => {
               if (isGroupedView && 'isParent' in record && record.isParent) {
-                const isPinned = pinnedParentKey === record.key;
-                return `parent-row ${isPinned ? 'pinned' : ''}`;
+                return 'parent-row';
               } else if (isGroupedView && !('isParent' in record && record.isParent)) {
                 return 'child-row';
               }
