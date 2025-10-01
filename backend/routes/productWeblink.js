@@ -1354,179 +1354,150 @@ router.post('/filter-can-organize-data', async (req, res) => {
   }
 });
 
-// 获取全部数据统计信息
+// 获取全部数据统计信息（优化版 - 从15+次查询减少到2次）
 router.get('/statistics', async (req, res) => {
   try {
-    // 获取状态统计
-    const statusStats = await ProductWeblink.findAll({
+    console.log('🚀 开始优化后的统计查询...');
+    const startTime = Date.now();
+
+    // 第一次查询：获取所有分组统计数据（状态、CPC状态、CPC提交、供应商）
+    const groupedStats = await ProductWeblink.findAll({
       attributes: [
         'status',
-        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
-      ],
-      where: {
-        status: {
-          [Op.ne]: null,
-          [Op.ne]: ''
-        }
-      },
-      group: ['status'],
-      raw: true
-    });
-
-    // 获取CPC状态统计
-    const cpcStatusStats = await ProductWeblink.findAll({
-      attributes: [
         'cpc_status',
-        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
-      ],
-      where: {
-        cpc_status: {
-          [Op.ne]: null,
-          [Op.ne]: ''
-        }
-      },
-      group: ['cpc_status'],
-      raw: true
-    });
-
-    // 获取CPC提交情况统计
-    const cpcSubmitStats = await ProductWeblink.findAll({
-      attributes: [
         'cpc_submit',
-        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
-      ],
-      where: {
-        cpc_submit: {
-          [Op.ne]: null,
-          [Op.ne]: ''
-        }
-      },
-      group: ['cpc_submit'],
-      having: require('sequelize').where(
-        require('sequelize').fn('COUNT', require('sequelize').col('id')), 
-        '>', 
-        0
-      ),
-      raw: true
-    });
-
-    console.log('📊 CPC提交情况统计查询结果:', cpcSubmitStats);
-
-    // 获取供应商统计
-    const supplierStats = await ProductWeblink.findAll({
-      attributes: [
         'seller_name',
+        'is_key_product',
         [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
       ],
       where: {
-        seller_name: {
-          [Op.ne]: null,
-          [Op.ne]: ''
-        }
+        [Op.or]: [
+          { status: { [Op.ne]: null, [Op.ne]: '' } },
+          { cpc_status: { [Op.ne]: null, [Op.ne]: '' } },
+          { cpc_submit: { [Op.ne]: null, [Op.ne]: '' } },
+          { seller_name: { [Op.ne]: null, [Op.ne]: '' } },
+          { is_key_product: true }
+        ]
       },
-      group: ['seller_name'],
+      group: ['status', 'cpc_status', 'cpc_submit', 'seller_name', 'is_key_product'],
       raw: true
     });
 
-    // 计算特定状态的产品数量
-    const newProductFirstReviewCount = await ProductWeblink.count({
-      where: { status: '新品一审' }
+    console.log(`📊 第一次查询完成，获取到 ${groupedStats.length} 条分组数据`);
+
+    // 第二次查询：获取特定条件的计数统计（使用条件聚合）
+    const specificCounts = await ProductWeblink.findAll({
+      attributes: [
+        // 状态相关计数
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN status = '新品一审' THEN 1 ELSE 0 END")), 'newProductFirstReview'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN status = '待审核' THEN 1 ELSE 0 END")), 'infringementSecondReview'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN status = '待P图' THEN 1 ELSE 0 END")), 'waitingPImage'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN status = '待上传' THEN 1 ELSE 0 END")), 'waitingUpload'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN status IN ('待P图', '待上传') THEN 1 ELSE 0 END")), 'canOrganizeData'],
+        
+        // CPC状态相关计数
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '申请测试' THEN 1 ELSE 0 END")), 'cpcTestPending'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = 'CPC样品待采购' THEN 1 ELSE 0 END")), 'cpcTesting'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '样品已发' THEN 1 ELSE 0 END")), 'cpcSampleSent'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '测试中' THEN 1 ELSE 0 END")), 'cpcTestingInProgress'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '已测试' AND (cpc_submit IS NULL OR cpc_submit = '') THEN 1 ELSE 0 END")), 'cpcPendingListing'],
+        
+        // 重点款计数
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN is_key_product = true THEN 1 ELSE 0 END")), 'keyProducts']
+      ],
+      raw: true
     });
 
-    const infringementSecondReviewCount = await ProductWeblink.count({
-      where: { status: '待审核' }
-    });
+    console.log(`📊 第二次查询完成，获取到特定计数数据`);
 
-    const waitingPImageCount = await ProductWeblink.count({
-      where: { status: '待P图' }
-    });
+    // 处理分组统计数据
+    const statusStatsMap = new Map();
+    const cpcStatusStatsMap = new Map();
+    const cpcSubmitStatsMap = new Map();
+    const supplierStatsMap = new Map();
 
-    const waitingUploadCount = await ProductWeblink.count({
-      where: { status: '待上传' }
-    });
-
-    // 计算CPC测试待审核的产品数量（申请测试状态）
-    const cpcTestPendingCount = await ProductWeblink.count({
-      where: { cpc_status: '申请测试' }
-    });
-
-    // 计算CPC样品待采购的产品数量
-    const cpcTestingCount = await ProductWeblink.count({
-      where: { cpc_status: 'CPC样品待采购' }
-    });
-
-    // 计算CPC已发样品数量
-    const cpcSampleSentCount = await ProductWeblink.count({
-      where: { cpc_status: '样品已发' }
-    });
-
-    // 计算CPC测试中数量
-    const cpcTestingInProgressCount = await ProductWeblink.count({
-      where: { cpc_status: '测试中' }
-    });
-
-    // 计算CPC待上架产品数量（已测试且CPC提交情况为空）
-    const cpcPendingListingCount = await ProductWeblink.count({
-      where: {
-        cpc_status: '已测试',
-        [Op.or]: [
-          { cpc_submit: null },
-          { cpc_submit: '' }
-        ]
+    groupedStats.forEach(item => {
+      const count = parseInt(item.count) || 0;
+      
+      // 状态统计
+      if (item.status && item.status.trim() !== '') {
+        const current = statusStatsMap.get(item.status) || 0;
+        statusStatsMap.set(item.status, current + count);
+      }
+      
+      // CPC状态统计
+      if (item.cpc_status && item.cpc_status.trim() !== '') {
+        const current = cpcStatusStatsMap.get(item.cpc_status) || 0;
+        cpcStatusStatsMap.set(item.cpc_status, current + count);
+      }
+      
+      // CPC提交情况统计
+      if (item.cpc_submit && item.cpc_submit.trim() !== '') {
+        const current = cpcSubmitStatsMap.get(item.cpc_submit) || 0;
+        cpcSubmitStatsMap.set(item.cpc_submit, current + count);
+      }
+      
+      // 供应商统计
+      if (item.seller_name && item.seller_name.trim() !== '') {
+        const current = supplierStatsMap.get(item.seller_name) || 0;
+        supplierStatsMap.set(item.seller_name, current + count);
       }
     });
 
-    // 计算可整理资料的产品数量（待P图和待上传）
-    const canOrganizeDataCount = await ProductWeblink.count({
-      where: {
-        status: {
-          [Op.in]: ['待P图', '待上传']
-        }
-      }
-    });
+    // 转换为数组格式
+    const statusStats = Array.from(statusStatsMap.entries()).map(([value, count]) => ({
+      value,
+      count
+    }));
 
-    // 计算重点款数量
-    const keyProductsCount = await ProductWeblink.count({
-      where: { is_key_product: true }
-    });
+    const cpcStatusStats = Array.from(cpcStatusStatsMap.entries()).map(([value, count]) => ({
+      value,
+      count
+    }));
+
+    const cpcSubmitStats = Array.from(cpcSubmitStatsMap.entries())
+      .filter(([value, count]) => count > 0)
+      .map(([value, count]) => ({
+        value,
+        count
+      }));
+
+    const supplierStats = Array.from(supplierStatsMap.entries()).map(([value, count]) => ({
+      value,
+      count
+    }));
+
+    // 获取特定计数的结果
+    const counts = specificCounts[0] || {};
+    
+    const statistics = {
+      newProductFirstReview: parseInt(counts.newProductFirstReview) || 0,
+      infringementSecondReview: parseInt(counts.infringementSecondReview) || 0,
+      waitingPImage: parseInt(counts.waitingPImage) || 0,
+      waitingUpload: parseInt(counts.waitingUpload) || 0,
+      canOrganizeData: parseInt(counts.canOrganizeData) || 0,
+      cpcTestPending: parseInt(counts.cpcTestPending) || 0,
+      cpcTesting: parseInt(counts.cpcTesting) || 0,
+      cpcSampleSent: parseInt(counts.cpcSampleSent) || 0,
+      cpcTestingInProgress: parseInt(counts.cpcTestingInProgress) || 0,
+      cpcPendingListing: parseInt(counts.cpcPendingListing) || 0,
+      keyProducts: parseInt(counts.keyProducts) || 0
+    };
+
+    const endTime = Date.now();
+    console.log(`✅ 统计查询优化完成，耗时: ${endTime - startTime}ms`);
+    console.log('📊 CPC提交情况统计数据:', cpcSubmitStats);
 
     res.json({
-      statistics: {
-        newProductFirstReview: newProductFirstReviewCount,
-        infringementSecondReview: infringementSecondReviewCount,
-        waitingPImage: waitingPImageCount,
-        waitingUpload: waitingUploadCount,
-        canOrganizeData: canOrganizeDataCount,
-        cpcTestPending: cpcTestPendingCount,
-        cpcTesting: cpcTestingCount,
-        cpcSampleSent: cpcSampleSentCount,
-        cpcTestingInProgress: cpcTestingInProgressCount,
-        cpcPendingListing: cpcPendingListingCount,
-        keyProducts: keyProductsCount
-      },
-      statusStats: statusStats.map(item => ({
-        value: item.status,
-        count: parseInt(item.count)
-      })),
-      cpcStatusStats: cpcStatusStats.map(item => ({
-        value: item.cpc_status,
-        count: parseInt(item.count)
-      })),
-      cpcSubmitStats: cpcSubmitStats
-        .filter(item => item.cpc_submit && item.cpc_submit.trim() !== '') // 过滤空值
-        .map(item => ({
-          value: item.cpc_submit,
-          count: parseInt(item.count) || 0
-        }))
-        .filter(item => item.count > 0), // 确保count大于0
-      supplierStats: supplierStats.map(item => ({
-        value: item.seller_name,
-        count: parseInt(item.count)
-      }))
+      statistics,
+      statusStats,
+      cpcStatusStats,
+      cpcSubmitStats,
+      supplierStats
     });
 
   } catch (err) {
-    console.error(err);
+    console.error('统计查询失败:', err);
     res.status(500).json({ message: '获取统计信息失败: ' + err.message });
   }
 });
