@@ -1776,20 +1776,159 @@ const ProductInformation: React.FC = () => {
     },
   ];
 
-  // 行选择配置
-  const rowSelection = {
+  // 处理行选择
+  const handleRowSelection = {
     selectedRowKeys,
-    onChange: (selectedRowKeys: React.Key[], selectedRows: TableRowData[]) => {
-      setSelectedRowKeys(selectedRowKeys as string[]);
-      // 过滤出真正的产品数据行，排除父级分组行
-      const productRows = selectedRows.filter((row): row is ProductInformationData => {
+    onChange: (newSelectedRowKeys: React.Key[], newSelectedRows: TableRowData[]) => {
+      // 不过滤keys，让Antd正确管理选择状态
+      setSelectedRowKeys(newSelectedRowKeys as string[]);
+      
+      // 但是在selectedRows中只保存子SKU数据，用于业务逻辑
+      const productRows = newSelectedRows.filter((row): row is ProductInformationData => {
         return !('isParent' in row);
       });
       setSelectedRows(productRows);
     },
-    // 在分组视图下，只允许选择子级行，不允许选择父级行
+    onSelect: (record: TableRowData, selected: boolean) => {
+      const key = isGroupedView && 'isParent' in record && record.isParent 
+        ? `parent-${record.key}` 
+        : `${(record as ProductInformationData).site}-${(record as ProductInformationData).item_sku}`;
+      
+      if (isGroupedView && 'isParent' in record && record.isParent) {
+        // 选择母SKU时，联动选择所有子SKU
+        const parentRecord = record as GroupedProductData;
+        const childKeys = parentRecord.children.map(child => `${child.site}-${child.item_sku}`);
+        
+        if (selected) {
+          // 选中母SKU：先展开以显示子SKU，然后延迟设置选择状态
+          const parentSkuKey = `parent-${parentRecord.key}`;
+          const needExpand = !expandedRowKeys.includes(parentSkuKey);
+          
+          if (needExpand) {
+            setExpandedRowKeys([...expandedRowKeys, parentSkuKey]);
+          }
+          
+          // 准备选择状态数据
+          const newKeys = Array.from(new Set([...selectedRowKeys, key, ...childKeys]));
+          const newChildRows = [...selectedRows];
+          
+          // 添加所有子SKU到selectedRows
+          parentRecord.children.forEach(childSku => {
+            const childKey = `${childSku.site}-${childSku.item_sku}`;
+            if (!newChildRows.some(row => `${row.site}-${row.item_sku}` === childKey)) {
+              newChildRows.push(childSku);
+            }
+          });
+          
+          // 统一使用延迟设置，确保所有情况下都能正确处理状态更新
+          setTimeout(() => {
+            setSelectedRowKeys(newKeys);
+            setSelectedRows(newChildRows);
+          }, needExpand ? 50 : 10);
+        } else {
+          // 取消选中母SKU：移除母SKU key和所有子SKU keys
+          const keysToRemove = [key, ...childKeys];
+          const newKeys = selectedRowKeys.filter(k => !keysToRemove.includes(k));
+          const newChildRows = selectedRows.filter(row => {
+            const rowKey = `${row.site}-${row.item_sku}`;
+            return !childKeys.includes(rowKey);
+          });
+          
+          // 也使用延迟设置确保状态更新的正确性
+          setTimeout(() => {
+            setSelectedRowKeys(newKeys);
+            setSelectedRows(newChildRows);
+          }, 10);
+        }
+      } else {
+        // 选择子SKU时，需要检查是否影响母SKU状态
+        const productRecord = record as ProductInformationData;
+        const parentRow = groupedData.find(group => 
+          group.children.some(child => 
+            child.site === productRecord.site && child.item_sku === productRecord.item_sku
+          )
+        );
+        
+        if (selected) {
+          // 选中子SKU
+          const newKeys = [...selectedRowKeys, key];
+          const newChildRows = [...selectedRows, productRecord];
+          
+          // 检查是否所有同级子SKU都被选中，如果是则也选中母SKU
+          if (parentRow) {
+            const allChildKeys = parentRow.children.map(child => `${child.site}-${child.item_sku}`);
+            const selectedChildKeys = newKeys.filter(k => allChildKeys.includes(k));
+            if (selectedChildKeys.length === allChildKeys.length) {
+              const parentKey = `parent-${parentRow.key}`;
+              if (!newKeys.includes(parentKey)) {
+                newKeys.push(parentKey);
+              }
+            }
+          }
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
+        } else {
+          // 取消选中子SKU
+          const newKeys = selectedRowKeys.filter(k => k !== key);
+          const newChildRows = selectedRows.filter(row => `${row.site}-${row.item_sku}` !== key);
+          
+          // 如果取消选中子SKU，确保母SKU也被取消选中
+          if (parentRow) {
+            const parentKey = `parent-${parentRow.key}`;
+            if (newKeys.includes(parentKey)) {
+              const parentIndex = newKeys.indexOf(parentKey);
+              newKeys.splice(parentIndex, 1);
+            }
+          }
+          
+          setSelectedRowKeys(newKeys);
+          setSelectedRows(newChildRows);
+        }
+      }
+    },
+    onSelectAll: (selected: boolean, selectedRows: TableRowData[], changeRows: TableRowData[]) => {
+      if (selected) {
+        // 全选：首先展开所有母SKU，然后选择所有子SKU
+        const allParentKeys: string[] = [];
+        const allKeys: string[] = [];
+        const allChildRows: ProductInformationData[] = [];
+        
+        // 收集所有母SKU和子SKU
+        groupedData.forEach(group => {
+          const parentKey = `parent-${group.key}`;
+          allParentKeys.push(parentKey);
+          allKeys.push(parentKey);
+          
+          // 添加所有子SKU
+          group.children.forEach(child => {
+            const childKey = `${child.site}-${child.item_sku}`;
+            if (!allKeys.includes(childKey)) {
+              allKeys.push(childKey);
+              allChildRows.push(child);
+            }
+          });
+        });
+        
+        // 展开所有母SKU以确保子SKU可见
+        const uniqueExpandedKeys = Array.from(new Set([...expandedRowKeys, ...allParentKeys]));
+        setExpandedRowKeys(uniqueExpandedKeys);
+        
+        // 延迟设置选择状态，确保展开动画完成
+        setTimeout(() => {
+          setSelectedRowKeys(allKeys);
+          setSelectedRows(allChildRows);
+        }, 100);
+      } else {
+        // 取消全选
+        setSelectedRowKeys([]);
+        setSelectedRows([]);
+      }
+    },
     getCheckboxProps: (record: TableRowData) => ({
-      disabled: isGroupedView && 'isParent' in record && record.isParent,
+      name: isGroupedView && 'isParent' in record && record.isParent 
+        ? `parent-${record.key}` 
+        : `${(record as ProductInformationData).site}-${(record as ProductInformationData).item_sku}`,
     }),
   };
 
@@ -2067,7 +2206,7 @@ const ProductInformation: React.FC = () => {
                 return `${productRecord.site}-${productRecord.item_sku}`;
               }
             }}
-            rowSelection={rowSelection}
+            rowSelection={handleRowSelection}
             loading={loading}
             pagination={false}
             scroll={{ x: 'max-content' }}
