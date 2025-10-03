@@ -604,7 +604,7 @@ const Purchase: React.FC = () => {
   } | null>(null);
   
   // 搜索相关状态
-  const [searchType, setSearchType] = useState<'sku' | 'weblink'>('sku');
+  const [searchType, setSearchType] = useState<'sku' | 'weblink' | 'competitor_asin'>('sku');
   const [isFuzzySearch, setIsFuzzySearch] = useState(false);
   
   // 上传结果对话框状态
@@ -906,7 +906,7 @@ const Purchase: React.FC = () => {
       } else {
         const searchTypeName = searchType === 'sku' ? 'SKU' : 
                               searchType === 'weblink' ? '产品链接/ID' : '竞争对手ASIN';
-        const searchModeName = searchType === 'weblink' ? '模糊' : (isFuzzySearch ? '模糊' : '精确');
+        const searchModeName = searchType === 'weblink' || searchType === 'competitor_asin' ? '模糊' : (isFuzzySearch ? '模糊' : '精确');
         message.success(`通过${searchModeName}搜索${searchTypeName}，找到 ${searchData.length} 条产品信息`);
       }
     } catch (e) {
