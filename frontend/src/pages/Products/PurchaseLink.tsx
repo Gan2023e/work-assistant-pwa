@@ -5468,8 +5468,9 @@ ${selectedSkuIds.map(skuId => {
                 筛选条件
               </div>
               
+              {/* 第一行筛选器：产品状态、CPC测试情况、CPC提交情况、供应商 */}
               <Row gutter={[16, 12]} align="middle">
-                <Col span={4}>
+                <Col span={5}>
                   <div style={{ 
                     marginBottom: '6px', 
                     fontSize: '13px',
@@ -5494,7 +5495,7 @@ ${selectedSkuIds.map(skuId => {
                   </Select>
                 </Col>
                 
-                <Col span={4}>
+                <Col span={5}>
                   <div style={{ 
                     marginBottom: '6px', 
                     fontSize: '13px',
@@ -5552,7 +5553,7 @@ ${selectedSkuIds.map(skuId => {
                   />
                 </Col>
                 
-                <Col span={4}>
+                <Col span={10}>
                   <div style={{ 
                     marginBottom: '6px', 
                     fontSize: '13px',
@@ -5580,8 +5581,11 @@ ${selectedSkuIds.map(skuId => {
                     ))}
                   </Select>
                 </Col>
-                
-                <Col span={8}>
+              </Row>
+              
+              {/* 第二行筛选器：创建时间和筛选结果提示 */}
+              <Row gutter={[16, 12]} align="middle" style={{ marginTop: '12px' }}>
+                <Col span={10}>
                   <div style={{ 
                     marginBottom: '6px', 
                     fontSize: '13px',
@@ -5602,23 +5606,25 @@ ${selectedSkuIds.map(skuId => {
                     size="small"
                   />
                 </Col>
+                
+                {/* 筛选结果提示 */}
+                {(filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) && (
+                  <Col span={14}>
+                    <div style={{ 
+                      textAlign: 'left', 
+                      padding: '8px 12px',
+                      background: '#e6f7ff',
+                      borderRadius: '4px',
+                      border: '1px solid #91d5ff',
+                      marginTop: '20px'
+                    }}>
+                      <span style={{ color: '#1890ff', fontSize: '13px' }}>
+                        已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
+                      </span>
+                    </div>
+                  </Col>
+                )}
               </Row>
-              
-              {/* 筛选结果提示 */}
-              {(filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) && (
-                <div style={{ 
-                  textAlign: 'center', 
-                  marginTop: '12px',
-                  padding: '8px 12px',
-                  background: '#e6f7ff',
-                  borderRadius: '4px',
-                  border: '1px solid #91d5ff'
-                }}>
-                  <span style={{ color: '#1890ff', fontSize: '13px' }}>
-                    已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
