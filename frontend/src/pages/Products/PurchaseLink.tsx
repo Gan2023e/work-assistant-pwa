@@ -2569,7 +2569,6 @@ const Purchase: React.FC = () => {
       dataIndex: 'parent_sku', 
       key: 'parent_sku', 
       align: 'center',
-      width: 120,
       fixed: 'left',
       sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
       render: (text: string, record: ProductRecord) => {
@@ -2646,7 +2645,7 @@ const Purchase: React.FC = () => {
                 cursor: 'pointer',
                 color: '#1890ff',
                 fontWeight: 'bold',
-                wordBreak: 'break-all',
+                whiteSpace: 'nowrap',
                 flex: 1,
                 userSelect: 'text'
               }}
