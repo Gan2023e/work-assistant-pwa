@@ -1021,7 +1021,10 @@ const Purchase: React.FC = () => {
       // 调用后端API获取可整理资料的记录
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-can-organize-data`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        },
         body: JSON.stringify({}),
       });
 
@@ -2208,7 +2211,10 @@ const Purchase: React.FC = () => {
 
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${editingRecord.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        },
         body: JSON.stringify(values),
       });
 

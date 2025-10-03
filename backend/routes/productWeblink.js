@@ -534,20 +534,72 @@ router.post('/batch-delete', async (req, res) => {
   }
 });
 
+// 获取所有记录
+router.get('/', async (req, res) => {
+  try {
+    const records = await ProductWeblink.findAll({
+      order: [['id', 'DESC']],
+      limit: 1000 // 限制返回数量，避免数据过大
+    });
+    res.json(records);
+  } catch (err) {
+    console.error('获取记录失败:', err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
 // 更新单个记录
 router.put('/update/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
 
-    await ProductWeblink.update(updateData, {
-      where: { id }
+    console.log('更新ProductWeblink记录，ID:', id, '更新数据:', JSON.stringify(updateData, null, 2));
+
+    // 验证ID是否为有效数字
+    if (!id || isNaN(parseInt(id))) {
+      return res.status(400).json({ message: '无效的记录ID' });
+    }
+
+    // 检查记录是否存在
+    const existingRecord = await ProductWeblink.findByPk(id);
+    if (!existingRecord) {
+      return res.status(404).json({ message: '记录不存在' });
+    }
+
+    // 处理JSON字段
+    if (updateData.ads_add && typeof updateData.ads_add === 'object') {
+      updateData.ads_add = JSON.stringify(updateData.ads_add);
+    }
+    if (updateData.competitor_links && typeof updateData.competitor_links === 'object') {
+      updateData.competitor_links = JSON.stringify(updateData.competitor_links);
+    }
+    if (updateData.cpc_files && typeof updateData.cpc_files === 'object') {
+      updateData.cpc_files = JSON.stringify(updateData.cpc_files);
+    }
+
+    // 执行更新
+    const [affectedRows] = await ProductWeblink.update(updateData, {
+      where: { id: parseInt(id) }
     });
 
+    if (affectedRows === 0) {
+      return res.status(404).json({ message: '更新失败，记录可能不存在' });
+    }
+
+    console.log('ProductWeblink记录更新成功，影响行数:', affectedRows);
     res.json({ message: '更新成功' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: '服务器错误' });
+    console.error('更新ProductWeblink记录失败:', err);
+    console.error('错误详情:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name
+    });
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: err.message 
+    });
   }
 });
 
