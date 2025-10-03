@@ -5662,268 +5662,412 @@ ${selectedSkuIds.map(skuId => {
               border: '1px solid #f0f0f0'
             }}
             bodyStyle={{ 
-              paddingTop: '12px', 
-              paddingBottom: '12px',
+              paddingTop: '16px', 
+              paddingBottom: '16px',
               background: '#fafafa'
             }}
           >
-            <Row gutter={[12, 8]}>
+            <Row gutter={[16, 16]}>
               {/* 数据管理 */}
-              <Col span={8}>
+              <Col xs={24} sm={12} lg={8}>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px', 
                   backgroundColor: '#fff', 
-                  borderRadius: '8px',
+                  borderRadius: '12px',
                   border: '1px solid #e8e8e8',
                   height: '100%',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                  transition: 'all 0.3s ease'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '10px', 
+                    marginBottom: '16px', 
                     color: '#262626',
-                    fontSize: '13px',
+                    fontSize: '14px',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    paddingBottom: '8px',
+                    borderBottom: '2px solid #f0f0f0'
                   }}>
-                    <span style={{ marginRight: '6px' }}>📊</span>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '10px',
+                      fontSize: '16px'
+                    }}>
+                      📊
+                    </div>
                     数据管理
                   </div>
-                  <Space size="small" wrap>
-                    <Select
-                      placeholder="批量修改状态"
-                      style={{ width: 140 }}
-                      onSelect={(value) => handleBatchUpdateStatus(value)}
-                      disabled={selectedRowKeys.length === 0}
-                      size="small"
-                    >
-                      <Option value="新品一审">
-                        新品一审 ({allDataStats.statusStats.find(item => item.value === '新品一审')?.count || 0})
-                      </Option>
-                      <Option value="待审核">
-                        待审核 ({allDataStats.statusStats.find(item => item.value === '待审核')?.count || 0})
-                      </Option>
-                      <Option value="审核未通过">
-                        审核未通过 ({allDataStats.statusStats.find(item => item.value === '审核未通过')?.count || 0})
-                      </Option>
-                      <Option value="待P图">
-                        待P图 ({allDataStats.statusStats.find(item => item.value === '待P图')?.count || 0})
-                      </Option>
-                      <Option value="待上传">
-                        待上传 ({allDataStats.statusStats.find(item => item.value === '待上传')?.count || 0})
-                      </Option>
-                      <Option value="已经上传">
-                        已经上传 ({allDataStats.statusStats.find(item => item.value === '已经上传')?.count || 0})
-                      </Option>
-                      <Option value="临时下架">
-                        临时下架 ({allDataStats.statusStats.find(item => item.value === '临时下架')?.count || 0})
-                      </Option>
-                      <Option value="商品已下架">
-                        商品已下架 ({allDataStats.statusStats.find(item => item.value === '商品已下架')?.count || 0})
-                      </Option>
-                      <Option value="手动调库存">
-                        手动调库存 ({allDataStats.statusStats.find(item => item.value === '手动调库存')?.count || 0})
-                      </Option>
-                    </Select>
-                    
-                    <Button 
-                      icon={<UploadOutlined />}
-                      onClick={() => setUploadModalVisible(true)}
-                      loading={loading}
-                      size="small"
-                    >
-                      批量上传新品
-                    </Button>
-
-                    <Button 
-                      icon={<CalculatorOutlined />}
-                      onClick={() => setProfitCalculatorVisible(true)}
-                      size="small"
-                      type="primary"
-                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    >
-                      利润推算器
-                    </Button>
-
-                    <Popconfirm
-                      title="确定要删除选中的记录吗？"
-                      onConfirm={handleBatchDelete}
-                      okText="确定"
-                      cancelText="取消"
-                      disabled={selectedRowKeys.length === 0}
-                    >
-                      <Button 
-                        danger
-                        icon={<DeleteOutlined />}
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* 状态修改选择器 */}
+                    <div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginBottom: '6px',
+                        fontWeight: '500'
+                      }}>
+                        批量修改状态
+                      </div>
+                      <Select
+                        placeholder="选择状态"
+                        style={{ width: '100%' }}
+                        onSelect={(value) => handleBatchUpdateStatus(value)}
                         disabled={selectedRowKeys.length === 0}
                         size="small"
                       >
-                        批量删除
+                        <Option value="新品一审">
+                          新品一审 ({allDataStats.statusStats.find(item => item.value === '新品一审')?.count || 0})
+                        </Option>
+                        <Option value="待审核">
+                          待审核 ({allDataStats.statusStats.find(item => item.value === '待审核')?.count || 0})
+                        </Option>
+                        <Option value="审核未通过">
+                          审核未通过 ({allDataStats.statusStats.find(item => item.value === '审核未通过')?.count || 0})
+                        </Option>
+                        <Option value="待P图">
+                          待P图 ({allDataStats.statusStats.find(item => item.value === '待P图')?.count || 0})
+                        </Option>
+                        <Option value="待上传">
+                          待上传 ({allDataStats.statusStats.find(item => item.value === '待上传')?.count || 0})
+                        </Option>
+                        <Option value="已经上传">
+                          已经上传 ({allDataStats.statusStats.find(item => item.value === '已经上传')?.count || 0})
+                        </Option>
+                        <Option value="临时下架">
+                          临时下架 ({allDataStats.statusStats.find(item => item.value === '临时下架')?.count || 0})
+                        </Option>
+                        <Option value="商品已下架">
+                          商品已下架 ({allDataStats.statusStats.find(item => item.value === '商品已下架')?.count || 0})
+                        </Option>
+                        <Option value="手动调库存">
+                          手动调库存 ({allDataStats.statusStats.find(item => item.value === '手动调库存')?.count || 0})
+                        </Option>
+                      </Select>
+                    </div>
+
+                    {/* 操作按钮组 */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      <Button 
+                        icon={<UploadOutlined />}
+                        onClick={() => setUploadModalVisible(true)}
+                        loading={loading}
+                        size="small"
+                        style={{ 
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        批量上传
                       </Button>
-                    </Popconfirm>
 
-                    <Button 
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={() => setNewLinksModalVisible(true)}
-                      size="small"
-                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    >
-                      新链接（采购用）
-                    </Button>
+                      <Button 
+                        icon={<CalculatorOutlined />}
+                        onClick={() => setProfitCalculatorVisible(true)}
+                        size="small"
+                        type="primary"
+                        style={{ 
+                          backgroundColor: '#52c41a', 
+                          borderColor: '#52c41a',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        利润推算
+                      </Button>
 
-                    <Button 
-                      icon={<GlobalOutlined />}
-                      onClick={() => {
-                        if (selectedRowKeys.length === 0) {
-                          // 没有选中记录时，直接进入数量调整模式
-                          setProductStatusAction('数量调整');
-                        }
-                        setProductStatusModalVisible(true);
-                      }}
-                      size="small"
-                      style={{ backgroundColor: '#1890ff', borderColor: '#1890ff', color: 'white' }}
-                    >
-                      产品上下架
-                    </Button>
+                      <Button 
+                        icon={<PlusOutlined />}
+                        onClick={() => setNewLinksModalVisible(true)}
+                        size="small"
+                        style={{ 
+                          backgroundColor: '#1890ff', 
+                          borderColor: '#1890ff',
+                          color: 'white',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        新链接
+                      </Button>
 
+                      <Button 
+                        icon={<GlobalOutlined />}
+                        onClick={() => {
+                          if (selectedRowKeys.length === 0) {
+                            setProductStatusAction('数量调整');
+                          }
+                          setProductStatusModalVisible(true);
+                        }}
+                        size="small"
+                        style={{ 
+                          backgroundColor: '#722ed1', 
+                          borderColor: '#722ed1',
+                          color: 'white',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        上下架
+                      </Button>
 
-
-                  </Space>
+                      <Popconfirm
+                        title="确定要删除选中的记录吗？"
+                        onConfirm={handleBatchDelete}
+                        okText="确定"
+                        cancelText="取消"
+                        disabled={selectedRowKeys.length === 0}
+                      >
+                        <Button 
+                          danger
+                          icon={<DeleteOutlined />}
+                          disabled={selectedRowKeys.length === 0}
+                          size="small"
+                          style={{ 
+                            borderRadius: '6px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          批量删除
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  </div>
                 </div>
               </Col>
 
               {/* CPC相关操作 */}
-              <Col span={8}>
+              <Col xs={24} sm={12} lg={8}>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px', 
                   backgroundColor: '#fff', 
-                  borderRadius: '8px',
+                  borderRadius: '12px',
                   border: '1px solid #e8e8e8',
                   height: '100%',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                  transition: 'all 0.3s ease'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '10px', 
+                    marginBottom: '16px', 
                     color: '#d46b08',
-                    fontSize: '13px',
+                    fontSize: '14px',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    paddingBottom: '8px',
+                    borderBottom: '2px solid #fff2e8'
                   }}>
-                    <span style={{ marginRight: '6px' }}>🔬</span>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '10px',
+                      fontSize: '16px'
+                    }}>
+                      🔬
+                    </div>
                     CPC检测
                   </div>
-                  <Space size="small" wrap>
-                    <Button 
-                      type="primary"
-                      onClick={handleBatchSendCpcTest}
-                      disabled={selectedRowKeys.length === 0}
-                      size="small"
-                    >
-                      发送CPC测试申请
-                    </Button>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      marginBottom: '6px',
+                      fontWeight: '500'
+                    }}>
+                      检测流程管理
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      <Button 
+                        type="primary"
+                        onClick={handleBatchSendCpcTest}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                        style={{ 
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        发送测试申请
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      style={{ backgroundColor: '#fa8c16', borderColor: '#fa8c16' }}
-                      onClick={handleBatchCpcTestApproved}
-                      disabled={selectedRowKeys.length === 0}
-                      size="small"
-                    >
-                      CPC测试申请通过
-                    </Button>
+                      <Button 
+                        type="primary"
+                        style={{ 
+                          backgroundColor: '#fa8c16', 
+                          borderColor: '#fa8c16',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        onClick={handleBatchCpcTestApproved}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                      >
+                        申请通过
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                      onClick={handleBatchMarkCpcSampleSent}
-                      disabled={selectedRowKeys.length === 0}
-                      size="small"
-                    >
-                      标记CPC样品已发
-                    </Button>
+                      <Button 
+                        type="primary"
+                        style={{ 
+                          backgroundColor: '#52c41a', 
+                          borderColor: '#52c41a',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        onClick={handleBatchMarkCpcSampleSent}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                      >
+                        标记已发
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      danger
-                      onClick={handleBatchCancelCpcDetection}
-                      disabled={selectedRowKeys.length === 0}
-                      size="small"
-                      title="只能取消CPC测试情况为'CPC样品待采购'的记录"
-                    >
-                      取消检测
-                    </Button>
-                  </Space>
+                      <Button 
+                        type="primary"
+                        danger
+                        onClick={handleBatchCancelCpcDetection}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                        title="只能取消CPC测试情况为'CPC样品待采购'的记录"
+                        style={{ 
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        取消检测
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </Col>
 
               {/* 文档生成与管理 */}
-              <Col span={8}>
+              <Col xs={24} sm={12} lg={8}>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px', 
                   backgroundColor: '#fff', 
-                  borderRadius: '8px',
+                  borderRadius: '12px',
                   border: '1px solid #e8e8e8',
                   height: '100%',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                  transition: 'all 0.3s ease'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '10px', 
+                    marginBottom: '16px', 
                     color: '#1d39c4',
-                    fontSize: '13px',
+                    fontSize: '14px',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    paddingBottom: '8px',
+                    borderBottom: '2px solid #e6f7ff'
                   }}>
-                    <span style={{ marginRight: '6px' }}>📄</span>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '10px',
+                      fontSize: '16px'
+                    }}>
+                      📄
+                    </div>
                     文档管理
                   </div>
-                  <Space size="small" wrap>
-                    <Button 
-                      icon={<FileExcelOutlined />}
-                      onClick={handleOpenTemplateModal}
-                      loading={globalTemplateLoading}
-                      size="small"
-                    >
-                      管理资料模板
-                    </Button>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      marginBottom: '6px',
+                      fontWeight: '500'
+                    }}>
+                      资料表生成
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      <Button 
+                        icon={<FileExcelOutlined />}
+                        onClick={handleOpenTemplateModal}
+                        loading={globalTemplateLoading}
+                        size="small"
+                        style={{ 
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        管理模板
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      icon={<FileExcelOutlined />}
-                      onClick={handleGenerateUkDataSheet}
-                      disabled={selectedRowKeys.length === 0}
-                      style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                      size="small"
-                    >
-                      生成英国资料表
-                    </Button>
+                      <Button 
+                        type="primary"
+                        icon={<FileExcelOutlined />}
+                        onClick={handleGenerateUkDataSheet}
+                        disabled={selectedRowKeys.length === 0}
+                        style={{ 
+                          backgroundColor: '#52c41a', 
+                          borderColor: '#52c41a',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        size="small"
+                      >
+                        英国资料表
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      icon={<FileExcelOutlined />}
-                      onClick={handleGenerateOtherSiteDataSheet}
-                      style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
-                      size="small"
-                    >
-                      生成其他站点资料表
-                    </Button>
+                      <Button 
+                        type="primary"
+                        icon={<FileExcelOutlined />}
+                        onClick={handleGenerateOtherSiteDataSheet}
+                        style={{ 
+                          backgroundColor: '#722ed1', 
+                          borderColor: '#722ed1',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        size="small"
+                      >
+                        其他站点
+                      </Button>
 
-                    <Button 
-                      type="primary"
-                      icon={<FileExcelOutlined />}
-                      onClick={handleGenerateFbaSku}
-                      disabled={selectedRowKeys.length === 0}
-                      style={{ backgroundColor: '#fa8c16', borderColor: '#fa8c16' }}
-                      size="small"
-                    >
-                      添加FBASKU
-                    </Button>
-                  </Space>
+                      <Button 
+                        type="primary"
+                        icon={<FileExcelOutlined />}
+                        onClick={handleGenerateFbaSku}
+                        disabled={selectedRowKeys.length === 0}
+                        style={{ 
+                          backgroundColor: '#fa8c16', 
+                          borderColor: '#fa8c16',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        size="small"
+                      >
+                        添加FBASKU
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </Col>
             </Row>
