@@ -105,6 +105,30 @@ const { Option } = Select;
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
+// 处理ads_add字段的辅助函数
+const parseAdsAdd = (adsAdd: string | { US: string; UK: string } | undefined): { US: string; UK: string } => {
+  if (!adsAdd) return { US: '否', UK: '否' };
+  
+  if (typeof adsAdd === 'string') {
+    try {
+      const parsed = JSON.parse(adsAdd);
+      return {
+        US: parsed.US || '否',
+        UK: parsed.UK || '否'
+      };
+    } catch {
+      // 如果不是JSON格式，返回默认值
+      return { US: '否', UK: '否' };
+    }
+  }
+  
+  return adsAdd;
+};
+
+const formatAdsAdd = (adsAdd: { US: string; UK: string }): string => {
+  return JSON.stringify(adsAdd);
+};
+
 interface ProductRecord {
   id: number;
   parent_sku: string;
@@ -117,7 +141,7 @@ interface ProductRecord {
   cpc_submit: string;
   model_number: string;
   recommend_age: string;
-  ads_add: string;
+  ads_add: string | { US: string; UK: string }; // 支持JSON格式
   list_parent_sku: string;
   no_inventory_rate: string;
   sales_30days: string;
@@ -757,6 +781,12 @@ const Purchase: React.FC = () => {
   const [competitorLinksModalVisible, setCompetitorLinksModalVisible] = useState(false);
   const [currentCompetitorRecord, setCurrentCompetitorRecord] = useState<ProductRecord | null>(null);
   const [competitorLinksInput, setCompetitorLinksInput] = useState('');
+
+  // 广告创建站点选择相关状态
+  const [adsSiteModalVisible, setAdsSiteModalVisible] = useState(false);
+  const [currentAdsRecord, setCurrentAdsRecord] = useState<ProductRecord | null>(null);
+  const [adsUsStatus, setAdsUsStatus] = useState('否');
+  const [adsUkStatus, setAdsUkStatus] = useState('否');
 
   // 产品上下架功能相关状态
   const [productStatusModalVisible, setProductStatusModalVisible] = useState(false);
@@ -1613,7 +1643,7 @@ const Purchase: React.FC = () => {
         'CPC提交情况': record.cpc_submit || '',
         'Style Number': record.model_number || '',
         '推荐年龄': record.recommend_age || '',
-        '广告是否创建': record.ads_add || '',
+        '广告创建': record.ads_add || '',
         '上架母SKU': record.list_parent_sku || '',
         '缺货率': record.no_inventory_rate || '',
         '30天销量': record.sales_30days || '',
@@ -2072,7 +2102,7 @@ const Purchase: React.FC = () => {
       'cpc_submit': 'CPC提交情况',
       'model_number': 'Style Number',
       'recommend_age': '推荐年龄',
-      'ads_add': '广告是否创建',
+      'ads_add': '广告创建',
       'list_parent_sku': '上架母SKU',
       'no_inventory_rate': '缺货率',
       'sales_30days': '30天销量',
@@ -2697,7 +2727,7 @@ const Purchase: React.FC = () => {
       width: 80,
       render: (value: boolean, record: ProductRecord) => (
         <div
-          onDoubleClick={() => handleKeyProductToggle(record)}
+          onClick={() => handleKeyProductToggle(record)}
           style={{
             cursor: 'pointer',
             padding: '4px 8px',
@@ -2705,9 +2735,18 @@ const Purchase: React.FC = () => {
             textAlign: 'center',
             backgroundColor: value ? '#f6ffed' : '#fff2e8',
             border: `1px solid ${value ? '#52c41a' : '#d9d9d9'}`,
-            color: value ? '#52c41a' : '#999'
+            color: value ? '#52c41a' : '#999',
+            transition: 'all 0.2s ease'
           }}
-          title="双击切换重点款状态"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = value ? '#e6f7ff' : '#fff7e6';
+            e.currentTarget.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = value ? '#f6ffed' : '#fff2e8';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title="单击切换重点款状态"
         >
           {value ? '是' : '否'}
         </div>
@@ -2786,12 +2825,87 @@ const Purchase: React.FC = () => {
       sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || '')
     },
     { 
-      title: '广告是否创建', 
+      title: '广告创建', 
       dataIndex: 'ads_add', 
       key: 'ads_add', 
       align: 'center',
-      width: 120,
-      sorter: (a, b) => (a.ads_add || '').localeCompare(b.ads_add || '')
+      width: 150,
+      render: (value: string | { US: string; UK: string }, record: ProductRecord) => {
+        const adsStatus = parseAdsAdd(value);
+        const usStatus = adsStatus.US;
+        const ukStatus = adsStatus.UK;
+        
+        return (
+          <div
+            style={{
+              padding: '4px 8px',
+              borderRadius: '4px',
+              textAlign: 'center',
+              backgroundColor: '#f6ffed',
+              border: '1px solid #d9d9d9',
+              fontSize: '12px',
+              lineHeight: '1.4'
+            }}
+            title="点击站点切换广告状态，双击打开详细编辑"
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span 
+                onClick={() => handleAdsSiteToggle(record, 'US')}
+                onDoubleClick={() => handleAdsAddToggle(record)}
+                style={{ 
+                  color: usStatus === '是' ? '#52c41a' : '#999',
+                  fontWeight: usStatus === '是' ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  transition: 'background-color 0.2s',
+                  flex: 1,
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e6f7ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="点击切换美国站点广告状态"
+              >
+                🇺🇸{usStatus}
+              </span>
+              <span 
+                onClick={() => handleAdsSiteToggle(record, 'UK')}
+                onDoubleClick={() => handleAdsAddToggle(record)}
+                style={{ 
+                  color: ukStatus === '是' ? '#52c41a' : '#999',
+                  fontWeight: ukStatus === '是' ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  transition: 'background-color 0.2s',
+                  flex: 1,
+                  textAlign: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e6f7ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="点击切换英国站点广告状态"
+              >
+                🇬🇧{ukStatus}
+              </span>
+            </div>
+          </div>
+        );
+      },
+      sorter: (a, b) => {
+        const aStatus = parseAdsAdd(a.ads_add);
+        const bStatus = parseAdsAdd(b.ads_add);
+        const aStr = `${aStatus.US}${aStatus.UK}`;
+        const bStr = `${bStatus.US}${bStatus.UK}`;
+        return aStr.localeCompare(bStr);
+      }
     },
     { 
       title: '上架母SKU', 
@@ -4554,21 +4668,10 @@ ${selectedSkuIds.map(skuId => {
 
   // 重点款相关处理函数
   const handleKeyProductToggle = async (record: ProductRecord) => {
-    try {
-      const newValue = !record.is_key_product;
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_key_product: newValue }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      message.success(newValue ? '已设为重点款' : '已取消重点款');
-      
-      // 更新本地数据
+    const newValue = !record.is_key_product;
+    
+    // 乐观更新：立即更新本地状态
+    const updateLocalData = () => {
       setData(prevData => 
         prevData.map(item => 
           item.id === record.id 
@@ -4592,12 +4695,159 @@ ${selectedSkuIds.map(skuId => {
             : item
         )
       );
+    };
+
+    // 立即更新本地状态
+    updateLocalData();
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_key_product: newValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success(newValue ? '已设为重点款' : '已取消重点款');
       
       // 刷新统计信息
       fetchAllDataStatistics();
     } catch (e) {
       console.error('更新重点款状态失败:', e);
-      message.error('更新失败');
+      message.error('更新失败，已回滚更改');
+      
+      // 回滚本地状态
+      updateLocalData();
+    }
+  };
+
+  // 广告创建相关处理函数
+  const handleAdsAddToggle = (record: ProductRecord) => {
+    const currentStatus = parseAdsAdd(record.ads_add);
+    setCurrentAdsRecord(record);
+    setAdsUsStatus(currentStatus.US);
+    setAdsUkStatus(currentStatus.UK);
+    setAdsSiteModalVisible(true);
+  };
+
+  // 保存广告创建状态
+  const handleSaveAdsStatus = async () => {
+    if (!currentAdsRecord) return;
+
+    const newAdsStatus = { US: adsUsStatus, UK: adsUkStatus };
+    const newValue = formatAdsAdd(newAdsStatus);
+    
+    // 乐观更新：立即更新本地状态
+    const updateLocalData = () => {
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === currentAdsRecord.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          item.id === currentAdsRecord.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          item.id === currentAdsRecord.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+    };
+
+    // 立即更新本地状态
+    updateLocalData();
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${currentAdsRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ads_add: newValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success('广告创建状态已更新');
+      setAdsSiteModalVisible(false);
+    } catch (e) {
+      console.error('更新广告创建状态失败:', e);
+      message.error('更新失败，已回滚更改');
+      
+      // 回滚本地状态
+      updateLocalData();
+    }
+  };
+
+  // 处理单个站点广告状态切换
+  const handleAdsSiteToggle = async (record: ProductRecord, site: 'US' | 'UK') => {
+    const currentStatus = parseAdsAdd(record.ads_add);
+    const newStatus = currentStatus[site] === '是' ? '否' : '是';
+    const newAdsStatus = { ...currentStatus, [site]: newStatus };
+    const newValue = formatAdsAdd(newAdsStatus);
+    
+    // 乐观更新：立即更新本地状态
+    const updateLocalData = () => {
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          item.id === record.id 
+            ? { ...item, ads_add: newValue }
+            : item
+        )
+      );
+    };
+
+    // 立即更新本地状态
+    updateLocalData();
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ads_add: newValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const siteName = site === 'US' ? '美国' : '英国';
+      message.success(`${siteName}站点广告状态已更新为${newStatus === '是' ? '已创建' : '未创建'}`);
+    } catch (e) {
+      console.error('更新广告创建状态失败:', e);
+      message.error('更新失败，已回滚更改');
+      
+      // 回滚本地状态
+      updateLocalData();
     }
   };
 
@@ -5519,8 +5769,13 @@ ${selectedSkuIds.map(skuId => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="广告是否创建" name="ads_add">
-                <Input placeholder="请输入广告创建状态" />
+              <Form.Item label="广告创建" name="ads_add">
+                <Select placeholder="请选择广告创建状态" allowClear>
+                  <Option value='{"US":"是","UK":"是"}'>🇺🇸是 🇬🇧是</Option>
+                  <Option value='{"US":"是","UK":"否"}'>🇺🇸是 🇬🇧否</Option>
+                  <Option value='{"US":"否","UK":"是"}'>🇺🇸否 🇬🇧是</Option>
+                  <Option value='{"US":"否","UK":"否"}'>🇺🇸否 🇬🇧否</Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -7548,6 +7803,48 @@ ${selectedSkuIds.map(skuId => {
             </Text>
           </div>
         </Space>
+      </Modal>
+
+      {/* 广告创建站点选择弹窗 */}
+      <Modal
+        title={`设置广告创建状态 - ${currentAdsRecord?.parent_sku || ''}`}
+        open={adsSiteModalVisible}
+        onOk={handleSaveAdsStatus}
+        onCancel={() => {
+          setAdsSiteModalVisible(false);
+          setCurrentAdsRecord(null);
+        }}
+        okText="保存"
+        cancelText="取消"
+        width={500}
+      >
+        <div style={{ padding: '20px 0' }}>
+          <div style={{ marginBottom: 24 }}>
+            <Text strong style={{ display: 'block', marginBottom: 12 }}>🇺🇸 美国站点：</Text>
+            <Select
+              value={adsUsStatus}
+              onChange={setAdsUsStatus}
+              style={{ width: '100%' }}
+              size="large"
+            >
+              <Option value="是">已创建</Option>
+              <Option value="否">未创建</Option>
+            </Select>
+          </div>
+          
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 12 }}>🇬🇧 英国站点：</Text>
+            <Select
+              value={adsUkStatus}
+              onChange={setAdsUkStatus}
+              style={{ width: '100%' }}
+              size="large"
+            >
+              <Option value="是">已创建</Option>
+              <Option value="否">未创建</Option>
+            </Select>
+          </div>
+        </div>
       </Modal>
 
       {/* 产品上下架模态框 */}
