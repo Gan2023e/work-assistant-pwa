@@ -240,6 +240,12 @@ router.post('/search', async (req, res) => {
       orConditions = keywords.map(keyword => ({
         weblink: { [Op.like]: `%${keyword}%` }
       }));
+    } else if (searchType === 'competitor_asin') {
+      // 搜索竞争对手ASIN - 只支持模糊搜索
+      orConditions = keywords.map(keyword => {
+        console.log(`🔍 构建竞争对手ASIN搜索条件: competitor_links LIKE %${keyword}%`);
+        return { competitor_links: { [Op.like]: `%${keyword}%` } };
+      });
     } else {
       // 默认模式（auto）- 同时搜索SKU和产品链接
       orConditions = keywords.map(keyword => ({

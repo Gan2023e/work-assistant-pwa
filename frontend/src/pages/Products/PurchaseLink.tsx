@@ -860,7 +860,8 @@ const Purchase: React.FC = () => {
       .map(i => i.trim())
       .filter(Boolean);
     if (keywords.length === 0) {
-      const searchTypeName = searchType === 'sku' ? 'SKU' : '产品链接/ID';
+      const searchTypeName = searchType === 'sku' ? 'SKU' : 
+                            searchType === 'weblink' ? '产品链接/ID' : '竞争对手ASIN';
       message.warning(`请输入${searchTypeName}`);
       return;
     }
@@ -870,7 +871,7 @@ const Purchase: React.FC = () => {
       const requestPayload = { 
         keywords,
         searchType,
-        isFuzzy: searchType === 'weblink' ? true : isFuzzySearch // 产品链接搜索强制模糊搜索
+        isFuzzy: searchType === 'weblink' || searchType === 'competitor_asin' ? true : isFuzzySearch // 产品链接和竞争对手ASIN搜索强制模糊搜索
       };
       
       console.log('🔍 搜索请求参数:', requestPayload);
@@ -903,7 +904,8 @@ const Purchase: React.FC = () => {
       if (!searchData || searchData.length === 0) {
         message.info('未找到匹配的产品信息');
       } else {
-        const searchTypeName = searchType === 'sku' ? 'SKU' : '产品链接/ID';
+        const searchTypeName = searchType === 'sku' ? 'SKU' : 
+                              searchType === 'weblink' ? '产品链接/ID' : '竞争对手ASIN';
         const searchModeName = searchType === 'weblink' ? '模糊' : (isFuzzySearch ? '模糊' : '精确');
         message.success(`通过${searchModeName}搜索${searchTypeName}，找到 ${searchData.length} 条产品信息`);
       }
@@ -5215,52 +5217,63 @@ ${selectedSkuIds.map(skuId => {
 
   // 删除单个竞争对手ASIN
   const handleDeleteCompetitorAsin = async (record: ProductRecord, index: number) => {
+    let asins: string[] = [];
     try {
-      let asins: string[] = [];
-      try {
-        if (record.competitor_links) {
-          asins = JSON.parse(record.competitor_links);
-        }
-      } catch {
-        asins = [];
+      if (record.competitor_links) {
+        asins = JSON.parse(record.competitor_links);
       }
-
-      if (index < 0 || index >= asins.length) {
-        message.error('无效的索引');
-        return;
-      }
-
-      const deletedAsin = asins[index];
-      const updatedAsins = asins.filter((_, i) => i !== index);
-
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ competitor_links: JSON.stringify(updatedAsins) }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      message.success(`已删除竞争对手ASIN: ${deletedAsin}`);
-      
-      // 更新本地数据
-      const updateLocalData = (prevData: ProductRecord[]) => 
-        prevData.map(item => 
-          item.id === record.id 
-            ? { ...item, competitor_links: JSON.stringify(updatedAsins) }
-            : item
-        );
-      
-      setData(updateLocalData);
-      setOriginalData(updateLocalData);
-      setFilteredData(updateLocalData);
-      
-    } catch (e) {
-      console.error('删除竞争对手ASIN失败:', e);
-      message.error('删除失败');
+    } catch {
+      asins = [];
     }
+
+    if (index < 0 || index >= asins.length) {
+      message.error('无效的索引');
+      return;
+    }
+
+    const deletedAsin = asins[index];
+
+    // 显示确认对话框
+    Modal.confirm({
+      title: '确认删除竞争对手ASIN',
+      content: `确定要删除竞争对手ASIN "${deletedAsin}" 吗？`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const updatedAsins = asins.filter((_, i) => i !== index);
+
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${record.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ competitor_links: JSON.stringify(updatedAsins) }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+
+          message.success(`已删除竞争对手ASIN: ${deletedAsin}`);
+          
+          // 更新本地数据
+          const updateLocalData = (prevData: ProductRecord[]) => 
+            prevData.map(item => 
+              item.id === record.id 
+                ? { ...item, competitor_links: JSON.stringify(updatedAsins) }
+                : item
+            );
+          
+          setData(updateLocalData);
+          setOriginalData(updateLocalData);
+          setFilteredData(updateLocalData);
+          
+        } catch (e) {
+          console.error('删除竞争对手ASIN失败:', e);
+          message.error('删除失败');
+        }
+      }
+    });
   };
 
   const { Sider, Content } = Layout;
@@ -5329,24 +5342,54 @@ ${selectedSkuIds.map(skuId => {
           overflow: 'auto'
         }}>
 
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '16px' }}>
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {/* 搜索和筛选区域 */}
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <TextArea
-              rows={4}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                searchType === 'sku' 
-                  ? `请输入SKU（每行一个，支持${isFuzzySearch ? '模糊' : '精确'}查询）`
-                  : "请输入产品链接/ID（每行一个，支持模糊查询）"
-              }
-              style={{ width: 350 }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* 搜索和筛选区域 - 重新设计布局 */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '16px', 
+            alignItems: 'flex-start',
+            background: '#fff',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            border: '1px solid #f0f0f0'
+          }}>
+            {/* 左侧SKU输入区域 */}
+            <div style={{ 
+              width: '400px',
+              background: '#fafafa',
+              padding: '16px',
+              borderRadius: '6px',
+              border: '1px solid #e8e8e8'
+            }}>
+              
+              <TextArea
+                rows={4}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  searchType === 'sku' 
+                    ? `请输入SKU (每行一个,支持${isFuzzySearch ? '模糊' : '精确'}查询)`
+                    : searchType === 'weblink'
+                    ? "请输入产品链接/ID（每行一个，支持模糊查询）"
+                    : "请输入竞争对手ASIN（每行一个，支持模糊查询）"
+                }
+                style={{ 
+                  width: '100%',
+                  fontSize: '13px',
+                  resize: 'vertical'
+                }}
+              />
+              
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                alignItems: 'center',
+                marginTop: '12px',
+                flexWrap: 'nowrap'
+              }}>
                 <Select
                   value={searchType}
                   onChange={(value) => {
@@ -5358,59 +5401,90 @@ ${selectedSkuIds.map(skuId => {
                     setFilteredData([]);
                     setSelectedRowKeys([]);
                   }}
-                  style={{ width: 120 }}
+                  style={{ width: 180 }}
+                  size="small"
+                  dropdownMatchSelectWidth={false}
+                  dropdownStyle={{ minWidth: 180 }}
                 >
                   <Option value="sku">搜索SKU</Option>
                   <Option value="weblink">搜索产品链接/ID</Option>
+                  <Option value="competitor_asin">搜索竞争对手ASIN</Option>
                 </Select>
                 
                 {searchType === 'sku' && (
                   <Checkbox
                     checked={isFuzzySearch}
                     onChange={e => setIsFuzzySearch(e.target.checked)}
-                    style={{ fontSize: '12px' }}
+                    style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
                   >
                     模糊搜索
                   </Checkbox>
                 )}
                 
-                <Button type="primary" onClick={handleSearch} loading={loading}>
+                <Button 
+                  type="primary" 
+                  onClick={handleSearch} 
+                  loading={loading}
+                  size="small"
+                  icon={<SearchOutlined />}
+                >
                   搜索
                 </Button>
+                
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  onClick={() => {
+                    setInput('');
+                    setData([]);
+                    setOriginalData([]);
+                    setFilteredData([]);
+                    setSelectedRowKeys([]);
+                    // 重置搜索相关状态
+                    setSearchType('sku');
+                    setIsFuzzySearch(true);
+                    // 清空筛选条件
+                    setFilters({ status: '', cpc_status: '', cpc_submit: '', seller_name: '', dateRange: null });
+                    // 重新获取统计数据
+                    fetchAllDataStatistics();
+                  }}
+                  size="small"
+                >
+                  清空
+                </Button>
               </div>
-              
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={() => {
-                  setInput('');
-                  setData([]);
-                  setOriginalData([]);
-                  setFilteredData([]);
-                  setSelectedRowKeys([]);
-                  // 重置搜索相关状态
-                  setSearchType('sku');
-                  setIsFuzzySearch(true);
-                  // 清空筛选条件
-                  setFilters({ status: '', cpc_status: '', cpc_submit: '', seller_name: '', dateRange: null });
-                  // 重新获取统计数据
-                  fetchAllDataStatistics();
-                }}
-              >
-                清空
-              </Button>
             </div>
             
-            {/* 筛选条件区域 */}
-            <Card size="small" title={<><FilterOutlined /> 筛选条件</>} style={{ flex: 1 }} bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}>
-              <Row gutter={[12, 6]} align="middle">
+            {/* 右侧筛选条件区域 */}
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                marginBottom: '16px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                color: '#262626'
+              }}>
+                <FilterOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                筛选条件
+              </div>
+              
+              <Row gutter={[16, 12]} align="middle">
                 <Col span={4}>
-                  <div style={{ marginBottom: '4px' }}>产品状态：</div>
+                  <div style={{ 
+                    marginBottom: '6px', 
+                    fontSize: '13px',
+                    color: '#595959',
+                    fontWeight: '500'
+                  }}>
+                    产品状态：
+                  </div>
                   <Select
                     style={{ width: '100%' }}
                     placeholder="选择状态"
                     value={filters.status}
                     onChange={(value) => handleFilterChange('status', value)}
                     allowClear
+                    size="small"
                   >
                     {getUniqueStatuses().map(statusItem => (
                       <Option key={statusItem.value} value={statusItem.value}>
@@ -5419,14 +5493,23 @@ ${selectedSkuIds.map(skuId => {
                     ))}
                   </Select>
                 </Col>
+                
                 <Col span={4}>
-                  <div style={{ marginBottom: '4px' }}>CPC测试情况：</div>
+                  <div style={{ 
+                    marginBottom: '6px', 
+                    fontSize: '13px',
+                    color: '#595959',
+                    fontWeight: '500'
+                  }}>
+                    CPC测试情况：
+                  </div>
                   <Select
                     style={{ width: '100%' }}
                     placeholder="选择CPC状态"
                     value={filters.cpc_status}
                     onChange={(value) => handleFilterChange('cpc_status', value)}
                     allowClear
+                    size="small"
                   >
                     {getUniqueCpcStatuses().map(statusItem => (
                       <Option key={statusItem.value} value={statusItem.value}>
@@ -5435,17 +5518,26 @@ ${selectedSkuIds.map(skuId => {
                     ))}
                   </Select>
                 </Col>
+                
                 <Col span={4}>
-                  <div style={{ marginBottom: '4px' }}>CPC提交情况：</div>
+                  <div style={{ 
+                    marginBottom: '6px', 
+                    fontSize: '13px',
+                    color: '#595959',
+                    fontWeight: '500'
+                  }}>
+                    CPC提交情况：
+                  </div>
                   <AutoComplete
                     style={{ width: '100%' }}
-                    placeholder="选择或输入CPC提交情况"
+                    placeholder="选择或输入..."
                     value={filters.cpc_submit}
                     onChange={(value) => {
                       console.log('🔧 CPC提交情况筛选值改变:', value);
                       handleFilterChange('cpc_submit', value);
                     }}
                     allowClear
+                    size="small"
                     filterOption={(inputValue, option) =>
                       option?.value?.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1
                     }
@@ -5459,8 +5551,16 @@ ${selectedSkuIds.map(skuId => {
                     notFoundContent={allDataStats.cpcSubmitStats?.length === 0 ? "暂无CPC提交情况数据" : "暂无匹配数据"}
                   />
                 </Col>
+                
                 <Col span={4}>
-                  <div style={{ marginBottom: '4px' }}>供应商：</div>
+                  <div style={{ 
+                    marginBottom: '6px', 
+                    fontSize: '13px',
+                    color: '#595959',
+                    fontWeight: '500'
+                  }}>
+                    供应商：
+                  </div>
                   <Select
                     style={{ width: '100%' }}
                     placeholder="选择供应商"
@@ -5468,6 +5568,7 @@ ${selectedSkuIds.map(skuId => {
                     onChange={(value) => handleFilterChange('seller_name', value)}
                     allowClear
                     showSearch
+                    size="small"
                     filterOption={(input, option) =>
                       (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
                     }
@@ -5479,8 +5580,16 @@ ${selectedSkuIds.map(skuId => {
                     ))}
                   </Select>
                 </Col>
+                
                 <Col span={8}>
-                  <div style={{ marginBottom: '4px' }}>创建时间：</div>
+                  <div style={{ 
+                    marginBottom: '6px', 
+                    fontSize: '13px',
+                    color: '#595959',
+                    fontWeight: '500'
+                  }}>
+                    创建时间：
+                  </div>
                   <RangePicker
                     style={{ width: '100%' }}
                     placeholder={['开始日期', '结束日期']}
@@ -5490,52 +5599,90 @@ ${selectedSkuIds.map(skuId => {
                       handleFilterChange('dateRange', dateRange);
                     }}
                     allowClear
+                    size="small"
                   />
                 </Col>
-                {(filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) && (
-                  <Col span={24} style={{ textAlign: 'center', marginTop: '8px' }}>
-                    <span style={{ color: '#1890ff' }}>
-                      已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
-                    </span>
-                  </Col>
-                )}
               </Row>
-            </Card>
+              
+              {/* 筛选结果提示 */}
+              {(filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) && (
+                <div style={{ 
+                  textAlign: 'center', 
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  background: '#e6f7ff',
+                  borderRadius: '4px',
+                  border: '1px solid #91d5ff'
+                }}>
+                  <span style={{ color: '#1890ff', fontSize: '13px' }}>
+                    已筛选：显示 {(filteredData.length > 0 || filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange) ? filteredData.length : data.length} 条记录
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 批量操作区域 */}
           <Card 
             size="small" 
             title={
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                color: '#262626'
+              }}>
                 <span>批量操作</span>
                 {selectedRowKeys.length > 0 && (
-                  <span style={{ color: '#1890ff', fontSize: '14px', fontWeight: 'normal' }}>
+                  <span style={{ 
+                    color: '#1890ff', 
+                    fontSize: '13px', 
+                    fontWeight: 'normal',
+                    background: '#e6f7ff',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #91d5ff'
+                  }}>
                     已选择 {selectedRowKeys.length} 条记录
                   </span>
                 )}
               </div>
             }
-            style={{ marginBottom: '12px' }}
-            bodyStyle={{ paddingTop: '8px', paddingBottom: '8px' }}
+            style={{ 
+              marginBottom: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              border: '1px solid #f0f0f0'
+            }}
+            bodyStyle={{ 
+              paddingTop: '12px', 
+              paddingBottom: '12px',
+              background: '#fafafa'
+            }}
           >
             <Row gutter={[12, 8]}>
               {/* 数据管理 */}
               <Col span={8}>
                 <div style={{ 
-                  padding: '8px', 
-                  backgroundColor: '#f8f9fa', 
-                  borderRadius: '6px',
-                  border: '1px solid #e9ecef',
-                  height: '100%'
+                  padding: '12px', 
+                  backgroundColor: '#fff', 
+                  borderRadius: '8px',
+                  border: '1px solid #e8e8e8',
+                  height: '100%',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                  transition: 'all 0.3s ease'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '8px', 
-                    color: '#495057',
-                    fontSize: '13px'
+                    marginBottom: '10px', 
+                    color: '#262626',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center'
                   }}>
-                    📊 数据管理
+                    <span style={{ marginRight: '6px' }}>📊</span>
+                    数据管理
                   </div>
                   <Space size="small" wrap>
                     <Select
@@ -5644,19 +5791,24 @@ ${selectedSkuIds.map(skuId => {
               {/* CPC相关操作 */}
               <Col span={8}>
                 <div style={{ 
-                  padding: '8px', 
-                  backgroundColor: '#fff7e6', 
-                  borderRadius: '6px',
-                  border: '1px solid #ffd591',
-                  height: '100%'
+                  padding: '12px', 
+                  backgroundColor: '#fff', 
+                  borderRadius: '8px',
+                  border: '1px solid #e8e8e8',
+                  height: '100%',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                  transition: 'all 0.3s ease'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '8px', 
+                    marginBottom: '10px', 
                     color: '#d46b08',
-                    fontSize: '13px'
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center'
                   }}>
-                    🔬 CPC检测
+                    <span style={{ marginRight: '6px' }}>🔬</span>
+                    CPC检测
                   </div>
                   <Space size="small" wrap>
                     <Button 
@@ -5705,19 +5857,24 @@ ${selectedSkuIds.map(skuId => {
               {/* 文档生成与管理 */}
               <Col span={8}>
                 <div style={{ 
-                  padding: '8px', 
-                  backgroundColor: '#f0f5ff', 
-                  borderRadius: '6px',
-                  border: '1px solid #adc6ff',
-                  height: '100%'
+                  padding: '12px', 
+                  backgroundColor: '#fff', 
+                  borderRadius: '8px',
+                  border: '1px solid #e8e8e8',
+                  height: '100%',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                  transition: 'all 0.3s ease'
                 }}>
                   <div style={{ 
                     fontWeight: 'bold', 
-                    marginBottom: '8px', 
+                    marginBottom: '10px', 
                     color: '#1d39c4',
-                    fontSize: '13px'
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center'
                   }}>
-                    📄 文档管理
+                    <span style={{ marginRight: '6px' }}>📄</span>
+                    文档管理
                   </div>
                   <Space size="small" wrap>
                     <Button 
