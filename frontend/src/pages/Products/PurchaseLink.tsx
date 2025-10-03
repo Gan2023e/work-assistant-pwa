@@ -60,7 +60,9 @@ import {
   MenuOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ExperimentOutlined
+  ExperimentOutlined,
+  ExclamationCircleOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -361,6 +363,7 @@ const SidebarStatsPanel: React.FC<{
   handleCardClick: any;
   handleCanOrganizeDataClick: any;
   handleCpcPendingListingClick: any;
+  handleCpcTestedButNoAdsClick: any;
   handleKeyProductsClick: any;
   collapsed: boolean;
 }> = ({
@@ -370,6 +373,7 @@ const SidebarStatsPanel: React.FC<{
   handleCardClick,
   handleCanOrganizeDataClick,
   handleCpcPendingListingClick,
+  handleCpcTestedButNoAdsClick,
   handleKeyProductsClick,
   collapsed
 }) => (
@@ -461,7 +465,7 @@ const SidebarStatsPanel: React.FC<{
       title={collapsed ? "🔬" : "🔬 CPC检测流程"}
       backgroundColor="#fff7e6"
       total={collapsed ? undefined : statistics.cpcTestPending + statistics.cpcTesting + statistics.cpcSampleSent + 
-             statistics.cpcTestingInProgress + statistics.cpcPendingListing}
+             statistics.cpcTestingInProgress + statistics.cpcPendingListing + statistics.cpcTestedButNoAds}
       subtitle={collapsed ? undefined : "CPC测试全流程管理"}
       collapsed={cardGroupCollapsed.cpcTesting}
       onCollapse={collapsed ? undefined : () => setCardGroupCollapsed((prev: any) => ({
@@ -508,6 +512,14 @@ const SidebarStatsPanel: React.FC<{
           icon={<PlayCircleOutlined />}
           color="#722ed1"
           onClick={handleCpcPendingListingClick}
+          span={collapsed ? 24 : 12}
+        />
+        <StatCard
+          title="CPC已检测但广告未创建"
+          value={statistics.cpcTestedButNoAds}
+          icon={<ExclamationCircleOutlined />}
+          color="#ff4d4f"
+          onClick={handleCpcTestedButNoAdsClick}
           span={collapsed ? 24 : 12}
         />
       </Row>
@@ -642,7 +654,15 @@ const Purchase: React.FC = () => {
     cpcSampleSent: 0,
     cpcTestingInProgress: 0,  // 新增CPC测试中统计
     cpcPendingListing: 0,
+    cpcTestedButNoAds: 0,  // 新增CPC已检测但广告未创建统计
     keyProducts: 0  // 新增重点款统计
+  });
+
+  // 分页状态
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 50,
+    total: 0
   });
   
   // 生成其他站点资料表相关状态
@@ -873,6 +893,13 @@ const Purchase: React.FC = () => {
       setOriginalData(searchData);
       setFilteredData(searchData);
       
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: searchData.length
+      }));
+      
       if (!searchData || searchData.length === 0) {
         message.info('未找到匹配的产品信息');
       } else {
@@ -1001,6 +1028,13 @@ const Purchase: React.FC = () => {
       setOriginalData(filteredData);
       setFilteredData(filteredData);
       
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
+      
       // 更新筛选状态以反映当前筛选条件
       setFilters({ 
         ...filters, 
@@ -1012,6 +1046,49 @@ const Purchase: React.FC = () => {
     } catch (e) {
       console.error('筛选CPC待上架产品失败:', e);
       message.error('筛选CPC待上架产品失败');
+    }
+  };
+
+  // 点击CPC已检测但广告未创建产品数卡片的特殊处理
+  const handleCpcTestedButNoAdsClick = async () => {
+    try {
+      // 调用后端API获取筛选数据
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-cpc-tested-but-no-ads`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
+      
+      // 更新筛选状态以反映当前筛选条件
+      setFilters({ 
+        ...filters, 
+        cpc_status: '已测试'
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条CPC已检测但广告未创建产品记录`);
+    } catch (e) {
+      console.error('筛选CPC已检测但广告未创建产品失败:', e);
+      message.error('筛选CPC已检测但广告未创建产品失败');
     }
   };
 
@@ -1038,6 +1115,13 @@ const Purchase: React.FC = () => {
       setData(filteredData);
       setOriginalData(filteredData);
       setFilteredData(filteredData);
+      
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
       
       // 更新筛选状态以反映当前筛选条件
       setFilters({ 
@@ -2446,9 +2530,36 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 复制到剪贴板功能
+  const handleCopyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(`${type}已复制到剪贴板`);
+    } catch (err) {
+      // 降级方案：使用传统的复制方法
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        message.success(`${type}已复制到剪贴板`);
+      } catch (fallbackErr) {
+        message.error('复制失败，请手动复制');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   // 表格排序处理
-  const handleTableChange: TableProps<ProductRecord>['onChange'] = (pagination, filters, sorter) => {
-    // 这里可以实现服务端排序，或者让antd Table自动处理客户端排序
+  const handleTableChange: TableProps<ProductRecord>['onChange'] = (paginationInfo, filters, sorter) => {
+    if (paginationInfo) {
+      setPagination(prev => ({
+        ...prev,
+        current: paginationInfo.current || 1,
+        pageSize: paginationInfo.pageSize || 50
+      }));
+    }
   };
 
   // 表格列配置（添加排序功能）
@@ -2517,24 +2628,55 @@ const Purchase: React.FC = () => {
           );
         }
         
-        // 有值时显示可选择的文本
+        // 有值时显示可选择的文本和复制按钮
         return (
           <div
-            onClick={() => handleParentSkuClick(text)}
-            style={{ 
-              padding: '4px 8px',
-              cursor: 'pointer',
-              color: '#1890ff',
-              userSelect: 'text',
-              minHeight: '24px',
+            style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              wordBreak: 'break-all'
+              gap: '4px',
+              minHeight: '24px',
+              padding: '4px 8px'
             }}
-            title={`点击复制母SKU: ${text}`}
           >
-            {text}
+            <div
+              onClick={() => handleParentSkuClick(text)}
+              style={{
+                cursor: 'pointer',
+                color: '#1890ff',
+                fontWeight: 'bold',
+                wordBreak: 'break-all',
+                flex: 1,
+                userSelect: 'text'
+              }}
+              title={`点击复制母SKU: ${text}`}
+            >
+              {text}
+            </div>
+            <CopyOutlined
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopyToClipboard(text, '母SKU');
+              }}
+              style={{
+                cursor: 'pointer',
+                color: '#666',
+                fontSize: '12px',
+                padding: '2px',
+                borderRadius: '2px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#1890ff';
+                e.currentTarget.style.backgroundColor = '#f0f8ff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#666';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              title="复制母SKU"
+            />
           </div>
         );
       }
@@ -2572,21 +2714,53 @@ const Purchase: React.FC = () => {
         return (
           <Tooltip title={text}>
             <div
-              onClick={() => window.open(text, '_blank')}
-              style={{ 
-                display: 'block', 
-                overflow: 'hidden', 
-                textOverflow: 'ellipsis', 
-                whiteSpace: 'nowrap', 
-                maxWidth: '180px',
-                cursor: 'pointer',
-                color: '#1890ff',
-                userSelect: 'text',
-                padding: '4px 8px'
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                maxWidth: '180px'
               }}
-              title={`点击打开链接: ${text}`}
             >
-              {sequenceNumber}
+              <div
+                onClick={() => window.open(text, '_blank')}
+                style={{ 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap', 
+                  flex: 1,
+                  cursor: 'pointer',
+                  color: '#1890ff',
+                  userSelect: 'text',
+                  padding: '4px 8px'
+                }}
+                title={`点击打开链接: ${text}`}
+              >
+                {sequenceNumber}
+              </div>
+              <CopyOutlined
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyToClipboard(text, '产品链接');
+                }}
+                style={{
+                  cursor: 'pointer',
+                  color: '#666',
+                  fontSize: '12px',
+                  padding: '2px',
+                  borderRadius: '2px',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#1890ff';
+                  e.currentTarget.style.backgroundColor = '#f0f8ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#666';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="复制产品链接"
+              />
             </div>
           </Tooltip>
         );
@@ -4877,6 +5051,13 @@ ${selectedSkuIds.map(skuId => {
       setOriginalData(filteredData);
       setFilteredData(filteredData);
       
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
+      
       // 更新筛选状态
       setFilters({ 
         status: '',
@@ -5136,6 +5317,7 @@ ${selectedSkuIds.map(skuId => {
             handleCardClick={handleCardClick}
             handleCanOrganizeDataClick={handleCanOrganizeDataClick}
             handleCpcPendingListingClick={handleCpcPendingListingClick}
+            handleCpcTestedButNoAdsClick={handleCpcTestedButNoAdsClick}
             handleKeyProductsClick={handleKeyProductsClick}
             collapsed={sidebarCollapsed}
           />
@@ -5600,10 +5782,12 @@ ${selectedSkuIds.map(skuId => {
         bordered
         onChange={handleTableChange}
         pagination={{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          total: pagination.total,
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
-          pageSize: 50,
           pageSizeOptions: ['20', '50', '100', '200'],
         }}
         title={() => (

@@ -1453,6 +1453,7 @@ router.get('/statistics', async (req, res) => {
         [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '样品已发' THEN 1 ELSE 0 END")), 'cpcSampleSent'],
         [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '测试中' THEN 1 ELSE 0 END")), 'cpcTestingInProgress'],
         [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '已测试' AND (cpc_submit IS NULL OR cpc_submit = '') THEN 1 ELSE 0 END")), 'cpcPendingListing'],
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '已测试' AND (ads_add LIKE '%\"US\":\"否\"%' OR ads_add LIKE '%\"UK\":\"否\"%' OR ads_add IS NULL OR ads_add = '' OR ads_add = '{}') THEN 1 ELSE 0 END")), 'cpcTestedButNoAds'],
         
         // 重点款计数
         [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN is_key_product = true THEN 1 ELSE 0 END")), 'keyProducts']
@@ -1522,6 +1523,23 @@ router.get('/statistics', async (req, res) => {
     // 获取特定计数的结果
     const counts = specificCounts[0] || {};
     
+    // 手动计算CPC已测试但广告未创建的数量
+    const allTestedRecords = await ProductWeblink.findAll({
+      where: {
+        cpc_status: '已测试'
+      },
+      attributes: ['ads_add']
+    });
+    
+    const cpcTestedButNoAdsCount = allTestedRecords.filter(record => {
+      if (!record.ads_add) return true;
+      if (record.ads_add === '') return true;
+      if (record.ads_add === '{}') return true;
+      
+      const adsAddStr = typeof record.ads_add === 'string' ? record.ads_add : JSON.stringify(record.ads_add);
+      return adsAddStr.includes('"US":"否"') || adsAddStr.includes('"UK":"否"');
+    }).length;
+    
     const statistics = {
       newProductFirstReview: parseInt(counts.newProductFirstReview) || 0,
       infringementSecondReview: parseInt(counts.infringementSecondReview) || 0,
@@ -1533,6 +1551,7 @@ router.get('/statistics', async (req, res) => {
       cpcSampleSent: parseInt(counts.cpcSampleSent) || 0,
       cpcTestingInProgress: parseInt(counts.cpcTestingInProgress) || 0,
       cpcPendingListing: parseInt(counts.cpcPendingListing) || 0,
+      cpcTestedButNoAds: cpcTestedButNoAdsCount,
       keyProducts: parseInt(counts.keyProducts) || 0
     };
 
@@ -6552,6 +6571,68 @@ router.post('/send-status-email', async (req, res) => {
   } catch (error) {
     console.error('发送状态邮件失败:', error);
     res.status(500).json({ message: '服务器错误' });
+  }
+});
+
+// CPC已检测但广告未创建产品筛选接口
+router.post('/filter-cpc-tested-but-no-ads', async (req, res) => {
+  try {
+    console.log('🔍 开始查询CPC已测试但广告未创建的产品...');
+    
+    // 先查询所有已测试的记录
+    const allTested = await ProductWeblink.findAll({
+      where: {
+        cpc_status: '已测试'
+      },
+      attributes: ['id', 'parent_sku', 'ads_add']
+    });
+    
+    console.log(`📊 找到 ${allTested.length} 条已测试记录`);
+    
+    // 手动筛选符合条件的记录
+    const filtered = allTested.filter(record => {
+      if (!record.ads_add) return true;
+      if (record.ads_add === '') return true;
+      if (record.ads_add === '{}') return true;
+      
+      const adsAddStr = typeof record.ads_add === 'string' ? record.ads_add : JSON.stringify(record.ads_add);
+      return adsAddStr.includes('"US":"否"') || adsAddStr.includes('"UK":"否"');
+    });
+    
+    console.log(`✅ 筛选出 ${filtered.length} 条符合条件的记录`);
+    
+    // 获取完整记录
+    const result = await ProductWeblink.findAll({
+      where: {
+        id: { [Op.in]: filtered.map(r => r.id) }
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links'
+      ]
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error('筛选CPC已检测但广告未创建产品失败:', err);
+    res.status(500).json({ message: '筛选失败' });
   }
 });
 
