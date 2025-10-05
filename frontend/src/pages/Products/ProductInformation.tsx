@@ -1831,10 +1831,6 @@ const ProductInformation: React.FC = () => {
               >
                 {isExpanded ? '收起子产品' : '展开子产品'}
               </Button>
-              <Divider type="vertical" />
-              <span style={{ color: '#999', fontSize: '11px' }}>
-                母SKU组
-              </span>
             </Space>
           );
         } else {
