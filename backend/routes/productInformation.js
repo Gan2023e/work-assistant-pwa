@@ -605,9 +605,22 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       });
     }
 
-    // 获取第一个工作表
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    // 优先选择名为"Template"的工作表，如果没有则使用第一个工作表
+    let sheetName = workbook.SheetNames[0];
+    let worksheet = workbook.Sheets[sheetName];
+    
+    // 查找名为"Template"的工作表
+    const templateSheetName = workbook.SheetNames.find(name => 
+      name.toLowerCase().includes('template')
+    );
+    
+    if (templateSheetName) {
+      sheetName = templateSheetName;
+      worksheet = workbook.Sheets[templateSheetName];
+      console.log(`📋 使用Template工作表: ${templateSheetName}`);
+    } else {
+      console.log(`📋 未找到Template工作表，使用第一个工作表: ${sheetName}`);
+    }
     
     if (!worksheet) {
       return res.status(400).json({
@@ -638,10 +651,11 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
     headerRow = jsonData[2];
     dataStartIndex = 3; // 数据从第4行开始（索引为3）
 
-    console.log('🔍 调试信息 - 第3行内容:', JSON.stringify(headerRow));
-    console.log('🔍 调试信息 - 第3行长度:', headerRow ? headerRow.length : 'null');
-
-    // 验证标题行是否包含必要的字段
+    // 添加调试日志
+    console.log(`🔍 调试信息 - 第3行内容:`, JSON.stringify(headerRow));
+    console.log(`🔍 调试信息 - 第3行长度:`, headerRow ? headerRow.length : 'null');
+    
+    // 验证标题行是否包含必要的字段（更灵活的匹配）
     const hasValidHeader = headerRow && headerRow.some(cell => {
       if (typeof cell === 'string') {
         const lowerCell = cell.toLowerCase().trim();
