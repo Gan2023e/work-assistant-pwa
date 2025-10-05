@@ -1214,17 +1214,10 @@ router.post('/export-to-template', async (req, res) => {
     if (parentSkusInExport.length === 0) {
       // 如果仍然没有记录，使用国家代码
       fileName = `${countryCode}_导出.xlsx`;
-    } else if (parentSkusInExport.length === 1) {
-      // 单个母SKU或代表记录
-      fileName = `${countryCode}_${parentSkusInExport[0]}.xlsx`;
-    } else if (parentSkusInExport.length <= 3) {
-      // 2-3个母SKU，全部显示
+    } else {
+      // 显示所有母SKU，用下划线连接
       const parentSkuString = parentSkusInExport.join('_');
       fileName = `${countryCode}_${parentSkuString}.xlsx`;
-    } else {
-      // 超过3个母SKU，只显示前2个，后面用数量表示
-      const firstTwo = parentSkusInExport.slice(0, 2).join('_');
-      fileName = `${countryCode}_${firstTwo}_等${parentSkusInExport.length}个.xlsx`;
     }
 
     console.log(`✅ 导出完成，生成文件: ${fileName}`);
