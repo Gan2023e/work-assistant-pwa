@@ -1171,13 +1171,25 @@ router.post('/export-to-template', async (req, res) => {
       }
     });
     
+    // 如果没有找到母SKU，使用第一个记录作为代表
+    if (parentSkusInExport.length === 0 && sortedRecords.length > 0) {
+      // 使用第一个记录作为代表，并添加记录数量信息
+      const firstRecord = sortedRecords[0];
+      if (sortedRecords.length === 1) {
+        parentSkusInExport.push(firstRecord.item_sku);
+      } else {
+        // 多个记录时，使用第一个记录+数量
+        parentSkusInExport.push(`${firstRecord.item_sku}等${sortedRecords.length}个`);
+      }
+    }
+    
     // 生成文件名：国家简称_母SKU1_母SKU2.xlsx
     let fileName;
     if (parentSkusInExport.length === 0) {
-      // 如果没有母SKU，使用时间戳
-      fileName = `${countryCode}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      // 如果仍然没有记录，使用国家代码
+      fileName = `${countryCode}_导出.xlsx`;
     } else if (parentSkusInExport.length === 1) {
-      // 单个母SKU
+      // 单个母SKU或代表记录
       fileName = `${countryCode}_${parentSkusInExport[0]}.xlsx`;
     } else if (parentSkusInExport.length <= 3) {
       // 2-3个母SKU，全部显示
