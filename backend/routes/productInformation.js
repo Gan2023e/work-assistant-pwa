@@ -622,33 +622,30 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       defval: ''
     });
 
-    if (jsonData.length < 4) {
-      return res.status(400).json({
-        success: false,
-        message: 'Excel文件数据不足，至少需要包含表头和数据行'
-      });
-    }
-
-    // 查找表头行（通常在第3行，索引为2）
+    // 查找表头行（第3行，索引为2）
     let headerRow = null;
     let dataStartIndex = 0;
     
-    for (let i = 0; i < Math.min(jsonData.length, 5); i++) {
-      const row = jsonData[i];
-      if (row && row.some(cell => 
-        typeof cell === 'string' && 
-        (cell.includes('item_sku') || cell.includes('SKU') || cell.includes('sku'))
-      )) {
-        headerRow = row;
-        dataStartIndex = i + 1;
-        break;
-      }
-    }
-
-    if (!headerRow) {
+    // 确保至少有3行数据（第3行为标题行）
+    if (jsonData.length < 3) {
       return res.status(400).json({
         success: false,
-        message: '未找到有效的表头行，请确保Excel文件包含item_sku等字段'
+        message: 'Excel文件格式错误，至少需要包含前3行（第3行为标题行）'
+      });
+    }
+
+    // 直接使用第3行作为标题行（索引为2）
+    headerRow = jsonData[2];
+    dataStartIndex = 3; // 数据从第4行开始（索引为3）
+
+    // 验证标题行是否包含必要的字段
+    if (!headerRow || !headerRow.some(cell => 
+      typeof cell === 'string' && 
+      (cell.includes('item_sku') || cell.includes('SKU') || cell.includes('sku'))
+    )) {
+      return res.status(400).json({
+        success: false,
+        message: '第3行未找到有效的表头，请确保Excel文件第3行包含item_sku等字段'
       });
     }
 
