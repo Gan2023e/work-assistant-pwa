@@ -1215,8 +1215,9 @@ router.post('/export-to-template', async (req, res) => {
       // 如果仍然没有记录，使用国家代码
       fileName = `${countryCode}_导出.xlsx`;
     } else {
-      // 显示所有母SKU，用下划线连接
-      const parentSkuString = parentSkusInExport.join('_');
+      // 对母SKU进行升序排序，然后显示所有母SKU，用下划线连接
+      const sortedParentSkus = parentSkusInExport.sort();
+      const parentSkuString = sortedParentSkus.join('_');
       fileName = `${countryCode}_${parentSkuString}.xlsx`;
     }
 
