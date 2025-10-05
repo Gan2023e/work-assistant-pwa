@@ -992,6 +992,7 @@ router.post('/export-to-template', async (req, res) => {
       // 如果有parent_sku，收集母SKU
       if (record.parent_sku && record.parent_sku !== record.item_sku) {
         parentSkus.add(record.parent_sku);
+        console.log(`🔍 收集到母SKU: ${record.parent_sku} (来自子SKU: ${record.item_sku})`);
       }
       
       // 如果这是子SKU，标记
@@ -999,6 +1000,9 @@ router.post('/export-to-template', async (req, res) => {
         childSkus.add(record.item_sku);
       }
     });
+    
+    console.log(`📊 收集到的母SKU列表:`, Array.from(parentSkus));
+    console.log(`📊 收集到的子SKU列表:`, Array.from(childSkus));
     
     // 查找并添加缺失的母SKU记录
     if (parentSkus.size > 0) {
@@ -1010,7 +1014,7 @@ router.post('/export-to-template', async (req, res) => {
             item_sku: {
               [Op.in]: Array.from(parentSkus)
             },
-            site: countryCode  // 使用国家代码而不是中文国家名称
+            site: targetCountry  // 使用中文国家名称，因为数据库中的site字段存储的是中文
           }
         });
         
@@ -1168,18 +1172,40 @@ router.post('/export-to-template', async (req, res) => {
     sortedRecords.forEach(record => {
       if (record.parent_child === 'Parent' || (!childSkus.has(record.item_sku) && !record.parent_sku)) {
         parentSkusInExport.push(record.item_sku);
+        console.log(`✅ 识别为母SKU: ${record.item_sku}`);
       }
     });
     
-    // 如果没有找到母SKU，使用第一个记录作为代表
+    console.log(`📊 识别到的母SKU数量: ${parentSkusInExport.length}`);
+    
+    // 如果没有找到母SKU，尝试从子SKU的parent_sku中获取
     if (parentSkusInExport.length === 0 && sortedRecords.length > 0) {
-      // 使用第一个记录作为代表，并添加记录数量信息
-      const firstRecord = sortedRecords[0];
-      if (sortedRecords.length === 1) {
-        parentSkusInExport.push(firstRecord.item_sku);
+      console.log(`🔍 未找到母SKU，尝试从子SKU的parent_sku中获取...`);
+      const parentSkusFromChildren = new Set();
+      sortedRecords.forEach(record => {
+        if (record.parent_sku && record.parent_sku !== record.item_sku) {
+          parentSkusFromChildren.add(record.parent_sku);
+        }
+      });
+      
+      if (parentSkusFromChildren.size > 0) {
+        const parentSkuArray = Array.from(parentSkusFromChildren);
+        if (parentSkuArray.length === 1) {
+          parentSkusInExport.push(parentSkuArray[0]);
+          console.log(`✅ 从子SKU获取到母SKU: ${parentSkuArray[0]}`);
+        } else {
+          parentSkusInExport.push(`${parentSkuArray[0]}等${parentSkuArray.length}个`);
+          console.log(`✅ 从子SKU获取到多个母SKU: ${parentSkuArray.join(', ')}`);
+        }
       } else {
-        // 多个记录时，使用第一个记录+数量
-        parentSkusInExport.push(`${firstRecord.item_sku}等${sortedRecords.length}个`);
+        // 如果仍然没有母SKU，使用第一个记录作为代表
+        const firstRecord = sortedRecords[0];
+        if (sortedRecords.length === 1) {
+          parentSkusInExport.push(firstRecord.item_sku);
+        } else {
+          parentSkusInExport.push(`${firstRecord.item_sku}等${sortedRecords.length}个`);
+        }
+        console.log(`⚠️ 使用第一个记录作为代表: ${firstRecord.item_sku}`);
       }
     }
     
