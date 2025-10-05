@@ -1172,8 +1172,22 @@ router.post('/export-to-template', async (req, res) => {
     });
     
     // 生成文件名：国家简称_母SKU1_母SKU2.xlsx
-    const parentSkuString = parentSkusInExport.join('_');
-    const fileName = `${countryCode}_${parentSkuString}.xlsx`;
+    let fileName;
+    if (parentSkusInExport.length === 0) {
+      // 如果没有母SKU，使用时间戳
+      fileName = `${countryCode}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    } else if (parentSkusInExport.length === 1) {
+      // 单个母SKU
+      fileName = `${countryCode}_${parentSkusInExport[0]}.xlsx`;
+    } else if (parentSkusInExport.length <= 3) {
+      // 2-3个母SKU，全部显示
+      const parentSkuString = parentSkusInExport.join('_');
+      fileName = `${countryCode}_${parentSkuString}.xlsx`;
+    } else {
+      // 超过3个母SKU，只显示前2个，后面用数量表示
+      const firstTwo = parentSkusInExport.slice(0, 2).join('_');
+      fileName = `${countryCode}_${firstTwo}_等${parentSkusInExport.length}个.xlsx`;
+    }
 
     console.log(`✅ 导出完成，生成文件: ${fileName}`);
 

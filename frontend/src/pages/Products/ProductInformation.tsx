@@ -524,9 +524,9 @@ const ProductInformation: React.FC = () => {
             const a = document.createElement('a');
             a.href = url;
             
-            // 从响应头获取文件名
+            // 从响应头获取文件名（后端已优化为：国家简称_母SKU1_母SKU2.xlsx）
             const contentDisposition = response.headers.get('content-disposition');
-            let fileName = `产品资料_${country}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            let fileName = `产品资料_${country}_${new Date().toISOString().slice(0, 10)}.xlsx`; // 备用文件名
             if (contentDisposition) {
               const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
               if (fileNameMatch) {
@@ -576,9 +576,9 @@ const ProductInformation: React.FC = () => {
           const a = document.createElement('a');
           a.href = url;
           
-          // 从响应头获取文件名
+          // 从响应头获取文件名（后端已优化为：国家简称_母SKU1_母SKU2.xlsx）
           const contentDisposition = response.headers.get('content-disposition');
-          let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+          let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`; // 备用文件名
           if (contentDisposition) {
             const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
             if (fileNameMatch) {
