@@ -1843,14 +1843,20 @@ const ProductInformation: React.FC = () => {
           // 父级行的操作
           const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
           return (
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              width: '100%'
+            }}>
               <Button
                 type="text"
                 size="small"
                 onClick={() => handleExpand(record.key)}
                 style={{
                   color: isExpanded ? '#1890ff' : '#666',
-                  fontSize: '12px'
+                  fontSize: '12px',
+                  margin: '0 auto'
                 }}
               >
                 {isExpanded ? '收起子产品' : '展开子产品'}
@@ -1861,7 +1867,13 @@ const ProductInformation: React.FC = () => {
           // 子级行或普通行的操作
           const productRecord = record as ProductInformationData;
           return (
-            <div style={{ textAlign: 'center', marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              width: '100%',
+              marginLeft: isGroupedView ? '40px' : '0'
+            }}>
               <Space size="small">
                 <Tooltip title="查看详情">
                   <Button
