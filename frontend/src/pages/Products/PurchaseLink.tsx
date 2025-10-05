@@ -4964,6 +4964,9 @@ ${selectedSkuIds.map(skuId => {
 
       message.success('广告创建状态已更新');
       setAdsSiteModalVisible(false);
+      
+      // 更新广告创建状态后刷新统计数据
+      fetchAllDataStatistics();
     } catch (e) {
       console.error('更新广告创建状态失败:', e);
       message.error('更新失败，已回滚更改');
@@ -5023,6 +5026,9 @@ ${selectedSkuIds.map(skuId => {
 
       const siteName = site === 'US' ? '美国' : '英国';
       message.success(`${siteName}站点广告状态已更新为${newStatus === '是' ? '已创建' : '未创建'}`);
+      
+      // 更新广告创建状态后刷新统计数据
+      fetchAllDataStatistics();
     } catch (e) {
       console.error('更新广告创建状态失败:', e);
       message.error('更新失败，已回滚更改');
