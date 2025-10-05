@@ -642,10 +642,16 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
     console.log('🔍 调试信息 - 第3行长度:', headerRow ? headerRow.length : 'null');
 
     // 验证标题行是否包含必要的字段
-    if (!headerRow || !headerRow.some(cell => 
-      typeof cell === 'string' && 
-      (cell.includes('item_sku') || cell.includes('SKU') || cell.includes('sku'))
-    )) {
+    const hasValidHeader = headerRow && headerRow.some(cell => {
+      if (typeof cell === 'string') {
+        const lowerCell = cell.toLowerCase().trim();
+        console.log('🔍 检查字段:', cell, '-> 处理后:', lowerCell);
+        return lowerCell.includes('item_sku') || lowerCell === 'sku' || lowerCell.includes('sku');
+      }
+      return false;
+    });
+
+    if (!hasValidHeader) {
       console.log('❌ 表头验证失败 - 第3行内容:', headerRow);
       return res.status(400).json({
         success: false,
