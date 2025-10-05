@@ -2238,22 +2238,17 @@ const ProductInformation: React.FC = () => {
             上传资料表
           </Button>
 
-        </Space>
-
-        {/* 批量操作 */}
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Space>
-            {selectedRowKeys.length > 0 && <span>已选择 {selectedRowKeys.length} 项</span>}
-            <Button
-              type="primary"
-              icon={<ExportOutlined />}
-              onClick={handleExportToTemplate}
-              loading={exportLoading}
-              disabled={selectedRowKeys.length === 0}
-            >
-              导出到模板
-            </Button>
-          </Space>
+          {/* 批量操作按钮 */}
+          {selectedRowKeys.length > 0 && <span>已选择 {selectedRowKeys.length} 项</span>}
+          <Button
+            type="primary"
+            icon={<ExportOutlined />}
+            onClick={handleExportToTemplate}
+            loading={exportLoading}
+            disabled={selectedRowKeys.length === 0}
+          >
+            导出到模板
+          </Button>
           <Popconfirm
             title="确定批量删除选中的记录吗？"
             onConfirm={handleBatchDelete}
@@ -2266,7 +2261,8 @@ const ProductInformation: React.FC = () => {
               批量删除
             </Button>
           </Popconfirm>
-        </div>
+
+        </Space>
 
         {/* 数据表格 */}
         <div ref={tableRef}>
