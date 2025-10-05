@@ -1215,8 +1215,13 @@ router.post('/export-to-template', async (req, res) => {
       // 如果仍然没有记录，使用国家代码
       fileName = `${countryCode}_导出.xlsx`;
     } else {
-      // 对母SKU进行升序排序，然后显示所有母SKU，用下划线连接
-      const sortedParentSkus = parentSkusInExport.sort();
+      // 对母SKU进行数字排序（按数字部分排序），然后显示所有母SKU，用下划线连接
+      const sortedParentSkus = parentSkusInExport.sort((a, b) => {
+        // 提取数字部分进行比较
+        const numA = parseInt(a.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
       const parentSkuString = sortedParentSkus.join('_');
       fileName = `${countryCode}_${parentSkuString}.xlsx`;
     }
