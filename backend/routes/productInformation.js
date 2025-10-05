@@ -638,11 +638,15 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
     headerRow = jsonData[2];
     dataStartIndex = 3; // 数据从第4行开始（索引为3）
 
+    console.log('🔍 调试信息 - 第3行内容:', JSON.stringify(headerRow));
+    console.log('🔍 调试信息 - 第3行长度:', headerRow ? headerRow.length : 'null');
+
     // 验证标题行是否包含必要的字段
     if (!headerRow || !headerRow.some(cell => 
       typeof cell === 'string' && 
       (cell.includes('item_sku') || cell.includes('SKU') || cell.includes('sku'))
     )) {
+      console.log('❌ 表头验证失败 - 第3行内容:', headerRow);
       return res.status(400).json({
         success: false,
         message: '第3行未找到有效的表头，请确保Excel文件第3行包含item_sku等字段'
