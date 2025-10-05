@@ -1161,22 +1161,7 @@ router.post('/export-to-template', async (req, res) => {
     const outputBuffer = XLSX.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
 
     // 生成文件名：站点国家简称加所导出的母SKU
-    const countryCodeMapping = {
-      '美国': 'US',
-      '加拿大': 'CA', 
-      '英国': 'UK',
-      '德国': 'DE',
-      '法国': 'FR',
-      '意大利': 'IT',
-      '西班牙': 'ES',
-      '日本': 'JP',
-      '澳大利亚': 'AU',
-      '印度': 'IN',
-      '阿联酋': 'AE',
-      '新加坡': 'SG'
-    };
-    
-    const countryCode = countryCodeMapping[targetCountry] || targetCountry;
+    // 使用之前已定义的countryCodeMapping
     
     // 获取导出的母SKU列表
     const parentSkusInExport = [];
@@ -1186,10 +1171,9 @@ router.post('/export-to-template', async (req, res) => {
       }
     });
     
-    // 生成文件名：国家简称_母SKU1_母SKU2_时间戳.xlsx
+    // 生成文件名：国家简称_母SKU1_母SKU2.xlsx
     const parentSkuString = parentSkusInExport.join('_');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const fileName = `${countryCode}_${parentSkuString}_${timestamp}.xlsx`;
+    const fileName = `${countryCode}_${parentSkuString}.xlsx`;
 
     console.log(`✅ 导出完成，生成文件: ${fileName}`);
 
