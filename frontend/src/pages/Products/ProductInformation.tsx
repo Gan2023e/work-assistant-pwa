@@ -527,12 +527,22 @@ const ProductInformation: React.FC = () => {
             // 从响应头获取文件名（后端已优化为：国家简称_母SKU1_母SKU2.xlsx）
             const contentDisposition = response.headers.get('content-disposition');
             let fileName = `产品资料_${country}_${new Date().toISOString().slice(0, 10)}.xlsx`; // 备用文件名
+            console.log('🔍 Content-Disposition:', contentDisposition);
             if (contentDisposition) {
-              const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
+              // 支持多种Content-Disposition格式
+              let fileNameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
               if (fileNameMatch) {
                 fileName = decodeURIComponent(fileNameMatch[1]);
+                console.log('✅ 使用UTF-8编码文件名:', fileName);
+              } else {
+                fileNameMatch = contentDisposition.match(/filename=['"]?([^'";]+)/);
+                if (fileNameMatch) {
+                  fileName = decodeURIComponent(fileNameMatch[1]);
+                  console.log('✅ 使用标准文件名:', fileName);
+                }
               }
             }
+            console.log('📁 最终文件名:', fileName);
             
             a.download = fileName;
             document.body.appendChild(a);
@@ -580,9 +590,15 @@ const ProductInformation: React.FC = () => {
           const contentDisposition = response.headers.get('content-disposition');
           let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`; // 备用文件名
           if (contentDisposition) {
-            const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
+            // 支持多种Content-Disposition格式
+            let fileNameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
             if (fileNameMatch) {
               fileName = decodeURIComponent(fileNameMatch[1]);
+            } else {
+              fileNameMatch = contentDisposition.match(/filename=['"]?([^'";]+)/);
+              if (fileNameMatch) {
+                fileName = decodeURIComponent(fileNameMatch[1]);
+              }
             }
           }
           
