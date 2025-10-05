@@ -606,21 +606,20 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
     }
 
     // 优先选择名为"Template"的工作表，如果没有则使用第一个工作表
-    let sheetName = workbook.SheetNames[0];
-    let worksheet = workbook.Sheets[sheetName];
+    let sheetName;
+    let worksheet;
     
-    // 查找名为"Template"的工作表
-    const templateSheetName = workbook.SheetNames.find(name => 
-      name.toLowerCase().includes('template')
-    );
-    
-    if (templateSheetName) {
-      sheetName = templateSheetName;
-      worksheet = workbook.Sheets[templateSheetName];
-      console.log(`📋 使用Template工作表: ${templateSheetName}`);
+    if (workbook.Sheets['Template']) {
+      sheetName = 'Template';
+      worksheet = workbook.Sheets['Template'];
+      console.log('✅ 找到Template工作表，使用Template工作表');
     } else {
-      console.log(`📋 未找到Template工作表，使用第一个工作表: ${sheetName}`);
+      sheetName = workbook.SheetNames[0];
+      worksheet = workbook.Sheets[sheetName];
+      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
     }
+    
+    console.log(`📋 当前使用的工作表: ${sheetName}`);
     
     if (!worksheet) {
       return res.status(400).json({
@@ -669,7 +668,7 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       console.log('❌ 表头验证失败 - 第3行内容:', headerRow);
       return res.status(400).json({
         success: false,
-        message: '第3行未找到有效的表头，请确保Excel文件第3行包含item_sku等字段'
+        message: '未找到有效的表头行，请确保Excel文件包含item_sku等字段。标题行在文件中的第三行。'
       });
     }
 
@@ -677,7 +676,7 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
 
     // 创建字段映射
     const fieldMapping = {};
-    const requiredFields = ['item_sku', 'item_name', 'site'];
+    const requiredFields = ['item_sku', 'item_name']; // site字段将根据选择的国家自动设置
     
     headerRow.forEach((header, index) => {
       if (header && typeof header === 'string') {
@@ -757,14 +756,14 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       // 基本字段
       record.item_sku = row[fieldMapping.item_sku] || '';
       record.item_name = row[fieldMapping.item_name] || '';
-      record.site = row[fieldMapping.site] || country; // 默认使用选择的国家
+      record.site = country; // 始终使用用户选择的国家作为site值
       
       if (!record.item_sku) {
         errors.push(`第${i + 1}行: item_sku不能为空`);
         continue;
       }
 
-      // 可选字段
+      // 可选字段（排除site字段，因为site由用户选择的国家决定）
       Object.keys(fieldMapping).forEach(field => {
         if (field !== 'item_sku' && field !== 'item_name' && field !== 'site') {
           const value = row[fieldMapping[field]];

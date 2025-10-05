@@ -390,19 +390,20 @@ const ProductInformation: React.FC = () => {
     setEditVisible(true);
   };
 
-  // 保存编辑/新增
+  // 保存编辑
   const handleSaveEdit = async () => {
     try {
       const values = await form.validateFields();
       
-      // 如果currentRecord为null，表示新增记录
-      const isNewRecord = !currentRecord;
-      const url = isNewRecord 
-        ? `${API_BASE_URL}/api/product-information`
-        : `${API_BASE_URL}/api/product-information/${currentRecord?.site}/${currentRecord?.item_sku}`;
+      if (!currentRecord) {
+        message.error('无法保存：缺少记录信息');
+        return;
+      }
+      
+      const url = `${API_BASE_URL}/api/product-information/${currentRecord.site}/${currentRecord.item_sku}`;
       
       const response = await fetch(url, {
-        method: isNewRecord ? 'POST' : 'PUT',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -412,14 +413,14 @@ const ProductInformation: React.FC = () => {
       const result = await response.json();
 
       if (result.success) {
-        message.success(isNewRecord ? '新增成功' : '保存成功');
+        message.success('保存成功');
         setEditVisible(false);
         fetchData();
       } else {
-        message.error(result.message || (isNewRecord ? '新增失败' : '保存失败'));
+        message.error(result.message || '保存失败');
       }
     } catch (error) {
-      message.error((currentRecord ? '保存' : '新增') + '失败: ' + (error instanceof Error ? error.message : String(error)));
+      message.error('保存失败: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -544,19 +545,20 @@ const ProductInformation: React.FC = () => {
   };
 
   // 上传资料表
-  const handleUploadTemplate = async () => {
+  const handleUploadTemplate = async (file?: File) => {
     if (!uploadCountry) {
       message.error('请选择对应的国家');
       return;
     }
 
-    if (fileList.length === 0) {
+    const fileToUpload = file || (fileList.length > 0 ? fileList[0].originFileObj : null);
+    if (!fileToUpload) {
       message.error('请选择要上传的Excel文件');
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', fileList[0].originFileObj);
+    formData.append('file', fileToUpload);
     formData.append('country', uploadCountry);
 
     setUploadLoading(true);
@@ -2157,17 +2159,6 @@ const ProductInformation: React.FC = () => {
             上传资料表
           </Button>
 
-          <Button
-            type="default"
-            icon={<EditOutlined />}
-            onClick={() => {
-              // 新增记录功能
-              setCurrentRecord(null);
-              setEditVisible(true);
-            }}
-          >
-            新增记录
-          </Button>
         </Space>
 
         {/* 批量操作 */}
@@ -2320,12 +2311,12 @@ const ProductInformation: React.FC = () => {
 
       {/* 编辑弹窗 */}
       <Modal
-        title={currentRecord ? "编辑产品资料" : "新增产品资料"}
+        title="编辑产品资料"
         open={editVisible}
         onOk={handleSaveEdit}
         onCancel={() => setEditVisible(false)}
         width={1000}
-        okText={currentRecord ? "保存" : "新增"}
+        okText="保存"
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
@@ -2529,15 +2520,12 @@ const ProductInformation: React.FC = () => {
       <Modal
         title="上传资料表文件"
         open={uploadVisible}
-        onOk={handleUploadTemplate}
         onCancel={() => {
           setUploadVisible(false);
           setUploadCountry('');
           setFileList([]);
         }}
-        confirmLoading={uploadLoading}
-        okText="开始导入"
-        cancelText="取消"
+        footer={null}
         width={600}
       >
         <div style={{ padding: '16px 0' }}>
@@ -2596,7 +2584,15 @@ const ProductInformation: React.FC = () => {
                     return false;
                   }
                   
-                  return false; // 阻止自动上传
+                  // 检查是否选择了国家
+                  if (!uploadCountry) {
+                    message.error('请先选择对应的国家');
+                    return false;
+                  }
+                  
+                  // 自动上传文件
+                  handleUploadTemplate(file);
+                  return false; // 阻止默认上传行为
                 }}
                 maxCount={1}
                 accept=".xlsx,.xls"
@@ -2609,19 +2605,6 @@ const ProductInformation: React.FC = () => {
               <div style={{ marginTop: '8px', color: '#999', fontSize: '12px' }}>
                 支持.xlsx和.xls格式，文件大小限制10MB
               </div>
-            </div>
-            
-            <div style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, fontSize: '12px' }}>
-              <p style={{ margin: 0, color: '#666' }}>
-                📋 <strong>导入说明：</strong>
-              </p>
-              <ul style={{ margin: '8px 0 0 16px', color: '#666' }}>
-                <li>Excel文件需要包含 <code>item_sku</code>、<code>item_name</code> 等必需字段</li>
-                <li>系统会自动识别表头，支持中英文字段名</li>
-                <li>如果SKU已存在将更新记录，否则新增记录</li>
-                <li>支持批量导入，建议单次不超过1000条记录</li>
-                <li>导入完成后会显示详细统计信息和错误报告</li>
-              </ul>
             </div>
           </Space>
         </div>
