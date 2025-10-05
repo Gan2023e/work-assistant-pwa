@@ -1814,12 +1814,13 @@ const ProductInformation: React.FC = () => {
       key: 'action',
       width: 180,
       fixed: 'right',
+      align: 'center',
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 父级行的操作
           const isExpanded = expandedRowKeys.includes(`parent-${record.key}`);
           return (
-            <Space size="small">
+            <div style={{ textAlign: 'center' }}>
               <Button
                 type="text"
                 size="small"
@@ -1831,13 +1832,13 @@ const ProductInformation: React.FC = () => {
               >
                 {isExpanded ? '收起子产品' : '展开子产品'}
               </Button>
-            </Space>
+            </div>
           );
         } else {
           // 子级行或普通行的操作
           const productRecord = record as ProductInformationData;
           return (
-            <div style={{ marginLeft: isGroupedView ? '40px' : '0' }}>
+            <div style={{ textAlign: 'center', marginLeft: isGroupedView ? '40px' : '0' }}>
               <Space size="small">
                 <Tooltip title="查看详情">
                   <Button
