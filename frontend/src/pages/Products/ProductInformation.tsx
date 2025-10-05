@@ -809,6 +809,7 @@ const ProductInformation: React.FC = () => {
       key: 'site',
       width: 100,
       fixed: 'left',
+      align: 'center',
       render: (site: string) => <Tag color="blue">{site}</Tag>
     },
     {
@@ -817,6 +818,7 @@ const ProductInformation: React.FC = () => {
       key: 'item_sku',
       width: 220,
       fixed: 'left',
+      align: 'center',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1018,6 +1020,7 @@ const ProductInformation: React.FC = () => {
       title: '产品图片',
       key: 'product_images',
       width: 120,
+      align: 'center',
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 父级行显示第一个子产品的主图
@@ -1116,6 +1119,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'item_name',
       key: 'item_name',
       width: 250,
+      align: 'center',
       ellipsis: {
         showTitle: false,
       },
@@ -1162,6 +1166,7 @@ const ProductInformation: React.FC = () => {
       title: '外部产品ID',
       key: 'external_product_id_info',
       width: 160,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1196,6 +1201,7 @@ const ProductInformation: React.FC = () => {
       title: '品牌/制造商',
       key: 'brand_manufacturer',
       width: 160,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1298,6 +1304,7 @@ const ProductInformation: React.FC = () => {
       title: '价格信息',
       key: 'price_info',
       width: 140,
+      align: 'center',
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           // 计算价格范围
@@ -1349,6 +1356,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'quantity',
       key: 'quantity',
       width: 100,
+      align: 'center',
       render: (qty: number, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
           return (
@@ -1389,6 +1397,7 @@ const ProductInformation: React.FC = () => {
       title: '父SKU关系',
       key: 'parent_sku_info',
       width: 150,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1417,6 +1426,7 @@ const ProductInformation: React.FC = () => {
       title: '变体信息',
       key: 'variant_info',
       width: 170,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1476,6 +1486,7 @@ const ProductInformation: React.FC = () => {
       title: '颜色/尺寸映射',
       key: 'mapping_info',
       width: 120,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1496,6 +1507,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'product_description',
       key: 'product_description',
       width: 200,
+      align: 'center',
       ellipsis: {
         showTitle: false,
       },
@@ -1516,6 +1528,7 @@ const ProductInformation: React.FC = () => {
       title: '产品要点',
       key: 'bullet_points',
       width: 250,
+      align: 'center',
       ellipsis: {
         showTitle: false,
       },
@@ -1559,6 +1572,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'generic_keywords',
       key: 'generic_keywords',
       width: 150,
+      align: 'center',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1575,6 +1589,7 @@ const ProductInformation: React.FC = () => {
       title: '产品属性',
       key: 'product_attributes',
       width: 180,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1604,6 +1619,7 @@ const ProductInformation: React.FC = () => {
       title: '材质特性',
       key: 'material_features',
       width: 160,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1634,6 +1650,7 @@ const ProductInformation: React.FC = () => {
       title: '护理信息',
       key: 'care_info',
       width: 150,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1663,6 +1680,7 @@ const ProductInformation: React.FC = () => {
       title: '适用季节',
       key: 'seasons_info',
       width: 120,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1695,6 +1713,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'lifestyle1',
       key: 'lifestyle1',
       width: 100,
+      align: 'center',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1711,6 +1730,7 @@ const ProductInformation: React.FC = () => {
       title: '存储规格',
       key: 'storage_info',
       width: 140,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1736,6 +1756,7 @@ const ProductInformation: React.FC = () => {
       title: '尺寸规格',
       key: 'dimension_info',
       width: 160,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1771,6 +1792,7 @@ const ProductInformation: React.FC = () => {
       dataIndex: 'country_of_origin',
       key: 'country_of_origin',
       width: 100,
+      align: 'center',
       ellipsis: true,
       render: (value: string, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
@@ -1787,6 +1809,7 @@ const ProductInformation: React.FC = () => {
       title: '进口/安全信息',
       key: 'import_safety_info',
       width: 140,
+      align: 'center',
       ellipsis: true,
       render: (_, record: TableRowData) => {
         if (isGroupedView && 'isParent' in record && record.isParent) {
