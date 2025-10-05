@@ -862,24 +862,46 @@ router.post('/export-to-template', async (req, res) => {
 
     // OSS配置
     const ossConfig = {
-      region: process.env.ALICLOUD_OSS_REGION,
-      accessKeyId: process.env.ALICLOUD_ACCESS_KEY_ID,
-      accessKeySecret: process.env.ALICLOUD_ACCESS_KEY_SECRET,
-      bucket: process.env.ALICLOUD_OSS_BUCKET,
+      region: process.env.OSS_REGION || process.env.ALICLOUD_OSS_REGION,
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID || process.env.ALICLOUD_ACCESS_KEY_ID,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || process.env.ALICLOUD_ACCESS_KEY_SECRET,
+      bucket: process.env.OSS_BUCKET || process.env.ALICLOUD_OSS_BUCKET,
+      endpoint: process.env.OSS_ENDPOINT,
     };
 
     const client = new OSS(ossConfig);
 
     // 步骤1: 从数据库获取目标国家的模板文件
     console.log(`🔍 查找${targetCountry}站点的模板文件...`);
+    
+    // 国家中文名称转换为代码的映射表
+    const countryCodeMapping = {
+      '美国': 'US',
+      '加拿大': 'CA', 
+      '英国': 'UK',
+      '德国': 'DE',
+      '法国': 'FR',
+      '意大利': 'IT',
+      '西班牙': 'ES',
+      '日本': 'JP',
+      '澳大利亚': 'AU',
+      '印度': 'IN',
+      '阿联酋': 'AE',
+      '新加坡': 'SG'
+    };
+    
+    // 转换国家名称为国家代码
+    const countryCode = countryCodeMapping[targetCountry] || targetCountry;
+    console.log(`🔍 转换国家名称: ${targetCountry} -> ${countryCode}`);
+    
     const targetTemplate = await TemplateLink.findOne({
       where: {
-        country: targetCountry,
+        country: countryCode,
         file_name: {
           [Op.like]: '%.xlsx'
         }
       },
-      order: [['created_at', 'DESC']]
+      order: [['upload_time', 'DESC']]
     });
 
     if (!targetTemplate) {
@@ -934,10 +956,136 @@ router.post('/export-to-template', async (req, res) => {
     // 转换为数组格式
     const templateData = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
 
-    // 从第4行开始填写数据（保留模板原有结构）
+    // 找到标题行（第3行，索引为2）
+    const headerRow = templateData[2];
+    if (!headerRow) {
+      return res.status(400).json({
+        success: false,
+        message: '模板文件格式错误，未找到标题行'
+      });
+    }
+
+    console.log('📊 模板标题行:', headerRow.slice(0, 20));
+
+    // 创建字段名到列索引的映射
+    const fieldToColumnMap = {};
+    headerRow.forEach((fieldName, index) => {
+      if (fieldName) {
+        fieldToColumnMap[fieldName] = index;
+      }
+    });
+
+    console.log('📋 字段映射:', Object.keys(fieldToColumnMap).slice(0, 10));
+
+    // 步骤4.1: 处理母SKU和子SKU关系，重新排序记录
+    console.log('🔄 处理母SKU和子SKU关系...');
+    
+    // 收集所有相关的母SKU和子SKU
+    const allRecords = new Map(); // 用于存储所有记录，避免重复
+    const parentSkus = new Set(); // 收集所有母SKU
+    const childSkus = new Set(); // 收集所有子SKU
+    
+    // 首先添加选中的记录
+    selectedRecords.forEach(record => {
+      allRecords.set(record.item_sku, record);
+      
+      // 如果有parent_sku，收集母SKU
+      if (record.parent_sku && record.parent_sku !== record.item_sku) {
+        parentSkus.add(record.parent_sku);
+      }
+      
+      // 如果这是子SKU，标记
+      if (record.parent_child === 'Child' || (record.parent_sku && record.parent_sku !== record.item_sku)) {
+        childSkus.add(record.item_sku);
+      }
+    });
+    
+    // 查找并添加缺失的母SKU记录
+    if (parentSkus.size > 0) {
+      console.log(`🔍 查找 ${parentSkus.size} 个母SKU记录...`);
+      
+      try {
+        const parentRecords = await ProductInformation.findAll({
+          where: {
+            item_sku: {
+              [Op.in]: Array.from(parentSkus)
+            },
+            site: targetCountry  // 使用中文国家名称而不是国家代码
+          }
+        });
+        
+        parentRecords.forEach(record => {
+          if (!allRecords.has(record.item_sku)) {
+            allRecords.set(record.item_sku, record);
+            console.log(`✅ 找到母SKU记录: ${record.item_sku}`);
+          }
+        });
+      } catch (error) {
+        console.warn('⚠️ 查找母SKU记录失败:', error.message);
+      }
+    }
+    
+    // 重新排序：按母SKU分组，每个母SKU后面紧跟着它的子SKU
+    const sortedRecords = [];
+    const processedSkus = new Set();
+    
+    // 按母SKU分组子SKU记录
+    const childRecordsByParent = new Map();
+    allRecords.forEach(record => {
+      if (childSkus.has(record.item_sku) && record.parent_sku) {
+        if (!childRecordsByParent.has(record.parent_sku)) {
+          childRecordsByParent.set(record.parent_sku, []);
+        }
+        childRecordsByParent.get(record.parent_sku).push(record);
+      }
+    });
+    
+    // 收集所有母SKU记录
+    const parentRecords = [];
+    allRecords.forEach(record => {
+      if (record.parent_child === 'Parent' || (!childSkus.has(record.item_sku) && !record.parent_sku)) {
+        parentRecords.push(record);
+      }
+    });
+    
+    // 按母SKU分组排序：每个母SKU后面立即跟着它的子SKU
+    parentRecords.forEach(parentRecord => {
+      // 添加母SKU
+      sortedRecords.push(parentRecord);
+      processedSkus.add(parentRecord.item_sku);
+      
+      // 立即添加该母SKU的所有子SKU
+      if (childRecordsByParent.has(parentRecord.item_sku)) {
+        const children = childRecordsByParent.get(parentRecord.item_sku);
+        children.forEach(child => {
+          if (!processedSkus.has(child.item_sku)) {
+            sortedRecords.push(child);
+            processedSkus.add(child.item_sku);
+          }
+        });
+      }
+    });
+    
+    // 添加剩余的记录（没有子SKU的母SKU或独立记录）
+    allRecords.forEach(record => {
+      if (!processedSkus.has(record.item_sku)) {
+        sortedRecords.push(record);
+        processedSkus.add(record.item_sku);
+      }
+    });
+    
+    console.log(`📊 最终记录顺序: ${sortedRecords.length} 条记录`);
+    sortedRecords.forEach((record, index) => {
+      const type = record.parent_child === 'Parent' ? '母SKU' : 
+                   (childSkus.has(record.item_sku) ? '子SKU' : '普通');
+      console.log(`  ${index + 1}. ${record.item_sku} (${type})`);
+    });
+
+    // 步骤4.2: 填充数据到模板
+    console.log(`📝 开始填充 ${sortedRecords.length} 条记录到模板...`);
     const startRow = 3; // 第4行，索引为3
 
-    selectedRecords.forEach((record, index) => {
+    sortedRecords.forEach((record, index) => {
       const rowIndex = startRow + index;
 
       // 确保行存在
@@ -945,31 +1093,63 @@ router.post('/export-to-template', async (req, res) => {
         templateData[rowIndex] = [];
       }
 
-      // 根据模板列结构填充数据（这里需要根据实际模板格式调整）
+      // 根据模板列结构填充数据
       const row = templateData[rowIndex];
 
-      // 基本字段映射（根据实际模板调整列索引）
-      row[0] = record.item_sku || '';        // SKU
-      row[1] = record.item_name || '';       // 商品名称
-      row[2] = record.external_product_id || ''; // 外部产品ID
-      row[3] = record.brand_name || '';      // 品牌
-      row[4] = record.manufacturer || '';    // 制造商
-      row[5] = record.product_description || ''; // 产品描述
-      row[6] = record.bullet_point1 || '';   // 要点1
-      row[7] = record.bullet_point2 || '';   // 要点2
-      row[8] = record.bullet_point3 || '';   // 要点3
-      row[9] = record.bullet_point4 || '';   // 要点4
-      row[10] = record.bullet_point5 || '';  // 要点5
-      row[11] = record.generic_keywords || ''; // 关键词
-      row[12] = record.color_name || '';     // 颜色
-      row[13] = record.size_name || '';      // 尺寸
-      row[14] = record.standard_price || '';  // 标准价格
-      row[15] = record.list_price || '';     // 标价
-      row[16] = record.quantity || '';       // 数量
-      row[17] = record.main_image_url || ''; // 主图URL
-      row[18] = record.parent_sku || '';     // 父SKU
-      row[19] = record.variation_theme || ''; // 变体主题
-      row[20] = record.country_of_origin || ''; // 原产国
+      // 判断是否为母SKU
+      const isParentSku = record.parent_child === 'Parent' || (!childSkus.has(record.item_sku) && !record.parent_sku);
+      
+      // 根据实际模板字段映射数据
+      const fieldMappings = {
+        'item_sku': record.item_sku || '',
+        'item_name': record.item_name || '',
+        'external_product_id': record.external_product_id || '',
+        'external_product_id_type': isParentSku ? (record.external_product_id_type || '') : (record.external_product_id_type || 'ASIN'),
+        'brand_name': record.brand_name || '',
+        'manufacturer': record.manufacturer || '',
+        'product_description': record.product_description || '',
+        'bullet_point1': record.bullet_point1 || '',
+        'bullet_point2': record.bullet_point2 || '',
+        'bullet_point3': record.bullet_point3 || '',
+        'bullet_point4': record.bullet_point4 || '',
+        'bullet_point5': record.bullet_point5 || '',
+        'generic_keywords': record.generic_keywords || '',
+        'color_name': record.color_name || '',
+        'size_name': record.size_name || '',
+        'standard_price': record.standard_price || '',
+        'list_price': record.list_price || '',
+        'quantity': record.quantity || '',
+        'main_image_url': record.main_image_url || '',
+        'other_image_url1': record.other_image_url1 || '',
+        'other_image_url2': record.other_image_url2 || '',
+        'other_image_url3': record.other_image_url3 || '',
+        'other_image_url4': record.other_image_url4 || '',
+        'other_image_url5': record.other_image_url5 || '',
+        'other_image_url6': record.other_image_url6 || '',
+        'other_image_url7': record.other_image_url7 || '',
+        'other_image_url8': record.other_image_url8 || '',
+        'parent_sku': record.parent_sku || '',
+        'variation_theme': record.variation_theme || '',
+        'country_of_origin': record.country_of_origin || '',
+        'parent_child': record.parent_child || (childSkus.has(record.item_sku) ? 'Child' : 'Parent'),
+        'relationship_type': record.relationship_type || (childSkus.has(record.item_sku) ? 'Variation' : ''),
+        'feed_product_type': record.feed_product_type || 'backpack',
+        'age_range_description': record.age_range_description || '',
+        'target_gender': record.target_gender || '',
+        'department_name': record.department_name || '',
+        'depth_front_to_back': record.depth_front_to_back || '',
+        'depth_width_side_to_side': record.depth_width_side_to_side || '',
+        'depth_height_floor_to_top': record.depth_height_floor_to_top || '',
+        'recommended_browse_nodes': record.recommended_browse_nodes || ''
+      };
+
+      // 根据映射填充数据
+      Object.entries(fieldMappings).forEach(([fieldName, value]) => {
+        const columnIndex = fieldToColumnMap[fieldName];
+        if (columnIndex !== undefined) {
+          row[columnIndex] = value;
+        }
+      });
     });
 
     // 步骤5: 生成新的Excel文件

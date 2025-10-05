@@ -181,14 +181,12 @@ const ProductInformation: React.FC = () => {
   // 弹窗状态
   const [detailVisible, setDetailVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
-  const [exportVisible, setExportVisible] = useState(false);
   const [uploadVisible, setUploadVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ProductInformationData | null>(null);
   const [form] = Form.useForm();
   
   // 导出相关状态
   const [exportLoading, setExportLoading] = useState(false);
-  const [targetCountry, setTargetCountry] = useState<string>('');
   
   // 上传相关状态
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -482,14 +480,22 @@ const ProductInformation: React.FC = () => {
 
   // 导出到模板
   const handleExportToTemplate = async () => {
-    if (!targetCountry) {
-      message.error('请选择目标国家');
-      return;
-    }
-
     if (selectedRows.length === 0) {
       message.error('请选择要导出的记录');
       return;
+    }
+
+    // 根据选中的记录自动确定目标国家
+    const countries = Array.from(new Set(selectedRows.map(record => record.site)));
+    if (countries.length === 0) {
+      message.error('选中的记录中没有有效的站点信息');
+      return;
+    }
+
+    // 如果选中记录来自多个国家，使用第一个国家
+    const targetCountry = countries[0];
+    if (countries.length > 1) {
+      message.warning(`选中的记录来自多个国家（${countries.join(', ')}），将使用 ${targetCountry} 的模板进行导出`);
     }
 
     setExportLoading(true);
@@ -529,8 +535,6 @@ const ProductInformation: React.FC = () => {
         document.body.removeChild(a);
 
         message.success(`导出成功！已下载 ${selectedRows.length} 条记录到 ${targetCountry} 模板`);
-        setExportVisible(false);
-        setTargetCountry('');
         setSelectedRowKeys([]);
         setSelectedRows([]);
       } else {
@@ -2168,7 +2172,8 @@ const ProductInformation: React.FC = () => {
             <Button
               type="primary"
               icon={<ExportOutlined />}
-              onClick={() => setExportVisible(true)}
+              onClick={handleExportToTemplate}
+              loading={exportLoading}
             >
               导出到模板
             </Button>
@@ -2456,65 +2461,6 @@ const ProductInformation: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 导出弹窗 */}
-      <Modal
-        title="导出到资料模板"
-        open={exportVisible}
-        onOk={handleExportToTemplate}
-        onCancel={() => {
-          setExportVisible(false);
-          setTargetCountry('');
-        }}
-        confirmLoading={exportLoading}
-        okText="开始导出"
-        cancelText="取消"
-        width={500}
-      >
-        <div style={{ padding: '16px 0' }}>
-          <p style={{ marginBottom: 16, color: '#666' }}>
-            将选中的 <strong>{selectedRows.length}</strong> 条记录导出到指定国家的亚马逊资料模板中
-          </p>
-          
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
-                选择目标国家：
-              </label>
-              <Select
-                style={{ width: '100%' }}
-                placeholder="请选择要导出的国家站点"
-                value={targetCountry}
-                onChange={setTargetCountry}
-                size="large"
-              >
-                <Option value="美国">美国</Option>
-                <Option value="英国">英国</Option>
-                <Option value="德国">德国</Option>
-                <Option value="法国">法国</Option>
-                <Option value="意大利">意大利</Option>
-                <Option value="西班牙">西班牙</Option>
-                <Option value="日本">日本</Option>
-                <Option value="加拿大">加拿大</Option>
-                <Option value="澳大利亚">澳大利亚</Option>
-                <Option value="印度">印度</Option>
-                <Option value="阿联酋">阿联酋</Option>
-              </Select>
-            </div>
-            
-            <div style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, fontSize: '12px' }}>
-              <p style={{ margin: 0, color: '#666' }}>
-                📋 <strong>导出说明：</strong>
-              </p>
-              <ul style={{ margin: '8px 0 0 16px', color: '#666' }}>
-                <li>将从阿里云OSS获取对应国家的亚马逊资料模板</li>
-                <li>选中的产品数据会自动填入模板的对应字段</li>
-                <li>导出完成后将自动下载到本地</li>
-                <li>请确保目标国家的模板已上传到"亚马逊资料模板管理"</li>
-              </ul>
-            </div>
-          </Space>
-        </div>
-      </Modal>
 
       {/* 上传弹窗 */}
       <Modal
