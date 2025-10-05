@@ -1010,7 +1010,7 @@ router.post('/export-to-template', async (req, res) => {
             item_sku: {
               [Op.in]: Array.from(parentSkus)
             },
-            site: targetCountry  // 使用中文国家名称而不是国家代码
+            site: countryCode  // 使用国家代码而不是中文国家名称
           }
         });
         

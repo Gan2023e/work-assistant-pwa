@@ -492,59 +492,118 @@ const ProductInformation: React.FC = () => {
       return;
     }
 
-    // 如果选中记录来自多个国家，使用第一个国家
-    const targetCountry = countries[0];
+    // 如果选中记录来自多个国家，按国家分组处理
     if (countries.length > 1) {
-      message.warning(`选中的记录来自多个国家（${countries.join(', ')}），将使用 ${targetCountry} 的模板进行导出`);
-    }
+      message.warning(`选中的记录来自多个国家（${countries.join(', ')}），将分别按国家导出`);
+      
+      // 按国家分组记录
+      const recordsByCountry = countries.reduce((acc, country) => {
+        acc[country] = selectedRows.filter(record => record.site === country);
+        return acc;
+      }, {} as Record<string, typeof selectedRows>);
 
-    setExportLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/product-information/export-to-template`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          selectedRecords: selectedRows,
-          targetCountry: targetCountry
-        }),
-      });
+      setExportLoading(true);
+      try {
+        // 为每个国家分别导出
+        for (const [country, records] of Object.entries(recordsByCountry)) {
+          const response = await fetch(`${API_BASE_URL}/api/product-information/export-to-template`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              selectedRecords: records,
+              targetCountry: country
+            }),
+          });
 
-      if (response.ok) {
-        // 下载文件
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        
-        // 从响应头获取文件名
-        const contentDisposition = response.headers.get('content-disposition');
-        let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-        if (contentDisposition) {
-          const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
-          if (fileNameMatch) {
-            fileName = decodeURIComponent(fileNameMatch[1]);
+          if (response.ok) {
+            // 下载文件
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // 从响应头获取文件名
+            const contentDisposition = response.headers.get('content-disposition');
+            let fileName = `产品资料_${country}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            if (contentDisposition) {
+              const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
+              if (fileNameMatch) {
+                fileName = decodeURIComponent(fileNameMatch[1]);
+              }
+            }
+            
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          } else {
+            const errorResult = await response.json();
+            message.error(`${country} 导出失败: ${errorResult.message || '导出失败'}`);
           }
         }
         
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        message.success(`导出成功！已下载 ${selectedRows.length} 条记录到 ${targetCountry} 模板`);
+        message.success(`多站点导出完成！共导出 ${selectedRows.length} 条记录`);
         setSelectedRowKeys([]);
         setSelectedRows([]);
-      } else {
-        const errorResult = await response.json();
-        message.error(errorResult.message || '导出失败');
+      } catch (error) {
+        message.error('导出失败: ' + (error instanceof Error ? error.message : String(error)));
+      } finally {
+        setExportLoading(false);
       }
-    } catch (error) {
-      message.error('导出失败: ' + (error instanceof Error ? error.message : String(error)));
-    } finally {
-      setExportLoading(false);
+    } else {
+      // 单站点导出
+      const targetCountry = countries[0];
+      setExportLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/product-information/export-to-template`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            selectedRecords: selectedRows,
+            targetCountry: targetCountry
+          }),
+        });
+
+        if (response.ok) {
+          // 下载文件
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          
+          // 从响应头获取文件名
+          const contentDisposition = response.headers.get('content-disposition');
+          let fileName = `产品资料_${targetCountry}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+          if (contentDisposition) {
+            const fileNameMatch = contentDisposition.match(/filename\*?=['"]?([^'";]+)/);
+            if (fileNameMatch) {
+              fileName = decodeURIComponent(fileNameMatch[1]);
+            }
+          }
+          
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          message.success(`导出成功！已下载 ${selectedRows.length} 条记录到 ${targetCountry} 模板`);
+          setSelectedRowKeys([]);
+          setSelectedRows([]);
+        } else {
+          const errorResult = await response.json();
+          message.error(errorResult.message || '导出失败');
+        }
+      } catch (error) {
+        message.error('导出失败: ' + (error instanceof Error ? error.message : String(error)));
+      } finally {
+        setExportLoading(false);
+      }
     }
   };
 
@@ -2166,28 +2225,32 @@ const ProductInformation: React.FC = () => {
         </Space>
 
         {/* 批量操作 */}
-        {selectedRowKeys.length > 0 && (
-          <Space style={{ marginBottom: 16 }}>
-            <span>已选择 {selectedRowKeys.length} 项</span>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space>
+            {selectedRowKeys.length > 0 && <span>已选择 {selectedRowKeys.length} 项</span>}
             <Button
               type="primary"
               icon={<ExportOutlined />}
               onClick={handleExportToTemplate}
               loading={exportLoading}
+              disabled={selectedRowKeys.length === 0}
             >
               导出到模板
             </Button>
-            <Popconfirm
-              title="确定批量删除选中的记录吗？"
-              onConfirm={handleBatchDelete}
-              okText="确定"
-              cancelText="取消"
-              icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}
-            >
-              <Button danger>批量删除</Button>
-            </Popconfirm>
           </Space>
-        )}
+          <Popconfirm
+            title="确定批量删除选中的记录吗？"
+            onConfirm={handleBatchDelete}
+            okText="确定"
+            cancelText="取消"
+            icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}
+            disabled={selectedRowKeys.length === 0}
+          >
+            <Button danger disabled={selectedRowKeys.length === 0}>
+              批量删除
+            </Button>
+          </Popconfirm>
+        </div>
 
         {/* 数据表格 */}
         <div ref={tableRef}>
