@@ -550,8 +550,22 @@ const ProductInformation: React.FC = () => {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
           } else {
-            const errorResult = await response.json();
-            message.error(`${country} 导出失败: ${errorResult.message || '导出失败'}`);
+            // 处理错误响应
+            let errorMessage = '导出失败';
+            try {
+              const errorResult = await response.json();
+              errorMessage = errorResult.message || errorMessage;
+            } catch (jsonError) {
+              // 如果响应不是JSON，可能是HTML错误页面
+              const errorText = await response.text();
+              console.error(`${country} 导出失败，响应内容:`, errorText);
+              if (errorText.includes('<!DOCTYPE')) {
+                errorMessage = '服务器返回了错误页面，请检查后端服务状态';
+              } else {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+              }
+            }
+            message.error(`${country} 导出失败: ${errorMessage}`);
           }
         }
         
@@ -612,8 +626,22 @@ const ProductInformation: React.FC = () => {
           setSelectedRowKeys([]);
           setSelectedRows([]);
         } else {
-          const errorResult = await response.json();
-          message.error(errorResult.message || '导出失败');
+          // 处理错误响应
+          let errorMessage = '导出失败';
+          try {
+            const errorResult = await response.json();
+            errorMessage = errorResult.message || errorMessage;
+          } catch (jsonError) {
+            // 如果响应不是JSON，可能是HTML错误页面
+            const errorText = await response.text();
+            console.error('导出失败，响应内容:', errorText);
+            if (errorText.includes('<!DOCTYPE')) {
+              errorMessage = '服务器返回了错误页面，请检查后端服务状态';
+            } else {
+              errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+          }
+          message.error(errorMessage);
         }
       } catch (error) {
         message.error('导出失败: ' + (error instanceof Error ? error.message : String(error)));

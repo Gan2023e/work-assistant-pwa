@@ -38,7 +38,9 @@ app.use(cors({
   exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'] // 暴露响应头给前端
 }));
 
-app.use(express.json());
+// 增加请求体大小限制，支持大文件上传和批量操作
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 健康检查端点 - 增强版本
 app.get('/health', async (req, res) => {
