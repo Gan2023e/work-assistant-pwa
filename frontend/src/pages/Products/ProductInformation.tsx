@@ -2180,103 +2180,107 @@ const ProductInformation: React.FC = () => {
         )}
 
         {/* 搜索和筛选 */}
-        <Space size="middle" style={{ marginBottom: 16 }}>
-          <Search
-            placeholder="搜索SKU/商品名称/品牌"
-            allowClear
-            style={{ width: 300 }}
-            value={queryParams.search}
-            onChange={(e) => updateQueryParams({ search: e.target.value })}
-            onSearch={() => fetchData()}
-          />
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space size="middle">
+            <Search
+              placeholder="搜索SKU/商品名称/品牌"
+              allowClear
+              style={{ width: 300 }}
+              value={queryParams.search}
+              onChange={(e) => updateQueryParams({ search: e.target.value })}
+              onSearch={() => fetchData()}
+            />
+            
+            <Select
+              style={{ width: 120 }}
+              placeholder="选择站点"
+              value={queryParams.site}
+              onChange={(value) => {
+                updateQueryParams({ site: value });
+                // 站点筛选后自动触发数据获取
+                setTimeout(() => fetchData(), 100);
+              }}
+            >
+              <Option value="all">全部站点</Option>
+              {siteList.map(site => (
+                <Option key={site} value={site}>{site}</Option>
+              ))}
+            </Select>
+
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={() => fetchData()}
+            >
+              搜索
+            </Button>
+
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                updateQueryParams({
+                  page: 1,
+                  search: '',
+                  site: 'all'
+                });
+              }}
+            >
+              重置
+            </Button>
+
+            {/* 视图切换按钮 */}
+            <Button.Group>
+              <Button 
+                type={isGroupedView ? "primary" : "default"}
+                onClick={() => {
+                  if (!isGroupedView) {
+                    setIsGroupedView(true);
+                    // 切换到分组视图时重置分页到第一页
+                    updateQueryParams({ page: 1 });
+                  }
+                }}
+                icon={<span>📁</span>}
+              >
+                分组视图
+              </Button>
+              <Button 
+                type={!isGroupedView ? "primary" : "default"}
+                onClick={() => {
+                  if (isGroupedView) {
+                    setIsGroupedView(false);
+                    // 切换到列表视图时重置分页到第一页
+                    updateQueryParams({ page: 1 });
+                  }
+                }}
+                icon={<span>📄</span>}
+              >
+                列表视图
+              </Button>
+            </Button.Group>
+
+            {/* 数据操作按钮 */}
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={() => setUploadVisible(true)}
+            >
+              上传资料表
+            </Button>
+
+            {/* 批量操作按钮 */}
+            {selectedRowKeys.length > 0 && <span>已选择 {selectedRowKeys.length} 项</span>}
+            <Button
+              type="primary"
+              icon={<ExportOutlined />}
+              onClick={handleExportToTemplate}
+              loading={exportLoading}
+              disabled={selectedRowKeys.length === 0}
+            >
+              导出到模板
+            </Button>
+          </Space>
           
-          <Select
-            style={{ width: 120 }}
-            placeholder="选择站点"
-            value={queryParams.site}
-            onChange={(value) => {
-              updateQueryParams({ site: value });
-              // 站点筛选后自动触发数据获取
-              setTimeout(() => fetchData(), 100);
-            }}
-          >
-            <Option value="all">全部站点</Option>
-            {siteList.map(site => (
-              <Option key={site} value={site}>{site}</Option>
-            ))}
-          </Select>
-
-          <Button
-            type="primary"
-            icon={<SearchOutlined />}
-            onClick={() => fetchData()}
-          >
-            搜索
-          </Button>
-
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              updateQueryParams({
-                page: 1,
-                search: '',
-                site: 'all'
-              });
-            }}
-          >
-            重置
-          </Button>
-
-          {/* 视图切换按钮 */}
-          <Button.Group>
-            <Button 
-              type={isGroupedView ? "primary" : "default"}
-              onClick={() => {
-                if (!isGroupedView) {
-                  setIsGroupedView(true);
-                  // 切换到分组视图时重置分页到第一页
-                  updateQueryParams({ page: 1 });
-                }
-              }}
-              icon={<span>📁</span>}
-            >
-              分组视图
-            </Button>
-            <Button 
-              type={!isGroupedView ? "primary" : "default"}
-              onClick={() => {
-                if (isGroupedView) {
-                  setIsGroupedView(false);
-                  // 切换到列表视图时重置分页到第一页
-                  updateQueryParams({ page: 1 });
-                }
-              }}
-              icon={<span>📄</span>}
-            >
-              列表视图
-            </Button>
-          </Button.Group>
-
-          {/* 数据操作按钮 */}
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={() => setUploadVisible(true)}
-          >
-            上传资料表
-          </Button>
-
-          {/* 批量操作按钮 */}
-          {selectedRowKeys.length > 0 && <span>已选择 {selectedRowKeys.length} 项</span>}
-          <Button
-            type="primary"
-            icon={<ExportOutlined />}
-            onClick={handleExportToTemplate}
-            loading={exportLoading}
-            disabled={selectedRowKeys.length === 0}
-          >
-            导出到模板
-          </Button>
+          {/* 批量删除按钮 - 放置在最右边 */}
           <Popconfirm
             title="确定批量删除选中的记录吗？"
             onConfirm={handleBatchDelete}
@@ -2289,8 +2293,7 @@ const ProductInformation: React.FC = () => {
               批量删除
             </Button>
           </Popconfirm>
-
-        </Space>
+        </div>
 
         {/* 数据表格 */}
         <div ref={tableRef}>
