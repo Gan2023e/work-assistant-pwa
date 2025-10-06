@@ -406,6 +406,7 @@ router.post('/orders', async (req, res) => {
 
     // 生成需求单号（格式：日期+序号）
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    // 优化：利用新创建的need_num索引提升查询性能
     const existingCount = await WarehouseProductsNeed.count({
       where: {
         need_num: {
@@ -474,12 +475,14 @@ router.post('/orders', async (req, res) => {
     };
 
     // 发送钉钉通知（异步，不影响响应）
-    try {
-      await sendDingTalkNotification(notificationData);
-    } catch (notifyError) {
-      console.error('\x1b[33m%s\x1b[0m', '⚠️ 钉钉通知发送失败:', notifyError.message);
-      // 不影响主流程
-    }
+    setImmediate(async () => {
+      try {
+        await sendDingTalkNotification(notificationData);
+      } catch (notifyError) {
+        console.error('\x1b[33m%s\x1b[0m', '⚠️ 钉钉通知发送失败:', notifyError.message);
+        // 不影响主流程
+      }
+    });
 
     res.json({
       code: 0,
@@ -515,6 +518,7 @@ router.post('/check-conflicts', async (req, res) => {
     }
 
     // 查询待发货的需求单中是否有相同的SKU
+    // 优化查询：利用新创建的复合索引提升查询性能
     const existingNeeds = await WarehouseProductsNeed.findAll({
       where: {
         sku: { [Op.in]: skus },
@@ -522,7 +526,9 @@ router.post('/check-conflicts', async (req, res) => {
         marketplace: marketplace,
         status: { [Op.in]: ['待发货', '部分发出'] }
       },
-      attributes: ['record_num', 'need_num', 'sku', 'ori_quantity', 'status']
+      attributes: ['record_num', 'need_num', 'sku', 'ori_quantity', 'status'],
+      // 添加查询优化
+      order: [['create_date', 'DESC']] // 按创建时间倒序，优先处理最新的需求
     });
 
     // 批量查询所有已发货数量 - 性能优化
@@ -532,6 +538,7 @@ router.post('/check-conflicts', async (req, res) => {
     let shippedMap = {};
     if (recordNums.length > 0) {
       // 批量查询所有相关记录的已发货数量
+      // 优化：利用新创建的索引提升查询性能
       const shippedQuantities = await ShipmentItem.findAll({
         where: { order_item_id: { [Op.in]: recordNums } },
         attributes: [

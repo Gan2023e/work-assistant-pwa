@@ -433,6 +433,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         return;
       }
 
+      // 显示检查冲突的进度
+      message.loading('正在检查SKU冲突...', 0);
+
       // 检查每个SKU是否有待发需求
       const response = await fetch(`${API_BASE_URL}/api/order-management/check-conflicts`, {
         method: 'POST',
@@ -473,6 +476,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
           setConflictModalVisible(true);
         } else {
           // 没有冲突，直接创建需求单
+          message.loading('正在创建需求单...', 0);
           await createNewOrder({
             ...orderInfo,
             sku_data: skuData
@@ -644,6 +648,7 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       }
     } catch (error) {
       console.error('创建需求单失败:', error);
+      message.error('创建需求单失败，请重试');
       throw error;
     }
   };
@@ -687,8 +692,19 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
   // 添加需求单处理函数
   const handleAddOrder = async (values: any) => {
-    // 检查SKU冲突
-    await checkSkuConflicts(values.sku_data, values);
+    // 显示加载状态
+    const loadingMessage = message.loading('正在处理需求单，请稍候...', 0);
+    
+    try {
+      // 检查SKU冲突
+      await checkSkuConflicts(values.sku_data, values);
+    } catch (error) {
+      console.error('处理需求单失败:', error);
+      message.error('处理需求单失败，请重试');
+    } finally {
+      // 关闭加载提示
+      loadingMessage();
+    }
   };
 
   // 获取状态颜色
