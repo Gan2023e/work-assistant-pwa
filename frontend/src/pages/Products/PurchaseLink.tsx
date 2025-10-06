@@ -1657,6 +1657,92 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 直接处理产品上架操作（无需确认对话框）
+  const handleDirectProductOnline = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要上架的记录');
+      return;
+    }
+
+    try {
+      // 获取选中记录的详细信息
+      const selectedRecords = data.filter(item => selectedRowKeys.includes(item.id));
+      const parentSkus = selectedRecords.map(record => record.parent_sku);
+
+      // 更新数据库状态（移除状态检查限制）
+      const ids = selectedRecords.map(record => record.id);
+      await apiClient.post('/api/product_weblink/batch-update-status', {
+        ids: ids,
+        status: '已经上传',
+        old_status: selectedRecords[0]?.status || '商品已下架' // 使用第一个记录的状态作为旧状态
+      });
+
+      // 发送邮件
+      const emailContent = `产品上架\n${parentSkus.join('\n')}`;
+      await apiClient.post('/api/product_weblink/send-status-email', {
+        subject: '产品手动上下架及数量调整',
+        content: emailContent
+      });
+
+      message.success('产品上架操作成功');
+      
+      // 刷新数据
+      if (input.trim()) {
+        handleSearch();
+      } else {
+        setData([]);
+        setOriginalData([]);
+      }
+    } catch (error) {
+      console.error('产品上架操作失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`产品上架操作失败: ${errorMessage}`);
+    }
+  };
+
+  // 直接处理产品下架操作（无需确认对话框）
+  const handleDirectProductOffline = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要下架的记录');
+      return;
+    }
+
+    try {
+      // 获取选中记录的详细信息
+      const selectedRecords = data.filter(item => selectedRowKeys.includes(item.id));
+      const parentSkus = selectedRecords.map(record => record.parent_sku);
+
+      // 更新数据库状态（移除状态检查限制）
+      const ids = selectedRecords.map(record => record.id);
+      await apiClient.post('/api/product_weblink/batch-update-status', {
+        ids: ids,
+        status: '商品已下架',
+        old_status: selectedRecords[0]?.status || '已经上传' // 使用第一个记录的状态作为旧状态
+      });
+
+      // 发送邮件
+      const emailContent = `产品下架\n${parentSkus.join('\n')}`;
+      await apiClient.post('/api/product_weblink/send-status-email', {
+        subject: '产品手动上下架及数量调整',
+        content: emailContent
+      });
+
+      message.success('产品下架操作成功');
+      
+      // 刷新数据
+      if (input.trim()) {
+        handleSearch();
+      } else {
+        setData([]);
+        setOriginalData([]);
+      }
+    } catch (error) {
+      console.error('产品下架操作失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`产品下架操作失败: ${errorMessage}`);
+    }
+  };
+
   // 批量删除
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
@@ -8405,7 +8491,7 @@ ${selectedSkuIds.map(skuId => {
                         borderRadius: '8px',
                         boxShadow: '0 2px 8px rgba(24, 144, 255, 0.2)'
                       }}
-                      onClick={() => setProductStatusAction('上架')}
+                      onClick={handleDirectProductOnline}
                     >
                       产品上架
                     </Button>
@@ -8422,7 +8508,7 @@ ${selectedSkuIds.map(skuId => {
                         borderRadius: '8px',
                         boxShadow: '0 2px 8px rgba(255, 77, 79, 0.2)'
                       }}
-                      onClick={() => setProductStatusAction('下架')}
+                      onClick={handleDirectProductOffline}
                     >
                       产品下架
                     </Button>
