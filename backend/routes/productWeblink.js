@@ -13,7 +13,7 @@ const path = require('path');
 const pdf = require('pdf-parse');
 const xlsx = require('xlsx');
 const { uploadToOSS, deleteFromOSS } = require('../utils/oss');
-const { sendProductStatusEmail, sendCustomEmail } = require('../utils/emailService');
+const { sendProductStatusEmail, sendCustomEmail } = require('../utils/resendService');
 
 // 国家代码转换为中文名称的映射表
 function convertCountryCodeToChinese(countryCode) {
@@ -6586,17 +6586,27 @@ router.post('/send-status-email', async (req, res) => {
       return res.status(400).json({ message: '邮件标题和内容不能为空' });
     }
 
-    // 使用自定义邮件服务发送邮件
+    // 使用 Resend 服务发送邮件
     const emailResult = await sendCustomEmail(subject, content);
     
     if (emailResult.success) {
-      res.json({ message: '邮件发送成功' });
+      res.json({ 
+        success: true,
+        message: '邮件发送成功',
+        messageId: emailResult.messageId
+      });
     } else {
-      res.status(500).json({ message: '邮件发送失败: ' + emailResult.error });
+      res.status(500).json({ 
+        success: false,
+        message: '邮件发送失败: ' + emailResult.error 
+      });
     }
   } catch (error) {
     console.error('发送状态邮件失败:', error);
-    res.status(500).json({ message: '服务器错误' });
+    res.status(500).json({ 
+      success: false,
+      message: '服务器错误: ' + error.message 
+    });
   }
 });
 

@@ -18,6 +18,7 @@ const inventoryRouter = require('./routes/inventory');
 const listingsRouter = require('./routes/listings');
 const peakSeasonRouter = require('./routes/peakSeason');
 const productInformationRouter = require('./routes/productInformation');
+const resendRouter = require('./routes/resend');
 const { router: authRouter } = require('./routes/auth');
 
 // 强制触发Railway重新部署 - 2025-01-08 - 修复URL配置
@@ -70,7 +71,10 @@ app.get('/api/config/email', (req, res) => {
   try {
     res.json({
       receiver: process.env.EMAIL_RECEIVER,
-      subject: process.env.EMAIL_SUBJECT
+      cc: process.env.EMAIL_CC || null,
+      subject: process.env.EMAIL_SUBJECT,
+      fromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@resend.dev',
+      service: 'resend'
     });
   } catch (error) {
     console.error('获取邮件配置失败:', error);
@@ -98,6 +102,7 @@ app.use('/api/inventory', inventoryRouter);
 app.use('/api/listings', listingsRouter);
 app.use('/api/peak-season', peakSeasonRouter);
 app.use('/api/product-information', productInformationRouter);
+app.use('/api/resend', resendRouter);
 console.log('✅ API routes registered');
 
 // 静态文件服务 - 用于图片访问
@@ -132,7 +137,12 @@ app.get('/', (req, res) => {
       '/api/listings/statistics',
       '/api/listings/mappings/batch',
       '/api/product-information/list',
-      '/api/product-information/statistics'
+      '/api/product-information/statistics',
+      '/api/resend/test',
+      '/api/resend/product-status',
+      '/api/resend/custom',
+      '/api/resend/bulk',
+      '/api/resend/with-attachments'
     ]
   });
 });
