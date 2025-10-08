@@ -942,7 +942,7 @@ router.post('/export-to-template', async (req, res) => {
       });
     }
 
-    const templateSheet = workbook.Sheets['Template'] || workbook.Sheets[workbook.SheetNames[0]];
+    let templateSheet = workbook.Sheets['Template'] || workbook.Sheets[workbook.SheetNames[0]];
     if (!templateSheet) {
       return res.status(400).json({
         success: false,
@@ -1085,21 +1085,45 @@ router.post('/export-to-template', async (req, res) => {
       console.log(`  ${index + 1}. ${record.item_sku} (${type})`);
     });
 
-    // 步骤4.2: 填充数据到模板
-    console.log(`📝 开始填充 ${sortedRecords.length} 条记录到模板...`);
-    const startRow = 3; // 第4行，索引为3
+    // 注意：数据填充逻辑已移至步骤5中，直接写入原Template工作表
 
+    // 步骤5: 直接修改原模板文件的Template工作表
+    console.log('📋 开始修改原模板文件的Template工作表...');
+    
+    // 直接修改原工作簿的Template工作表，保留所有格式和样式
+    templateSheet = workbook.Sheets['Template'];
+    if (!templateSheet) {
+      return res.status(400).json({
+        success: false,
+        message: '模板文件中未找到Template工作表'
+      });
+    }
+
+    // 将填充的数据直接写入原Template工作表
+    console.log('📝 将数据写入原Template工作表...');
+    
+    // 清空原有数据行（保留前3行：标题、说明、列标题）
+    const startRow = 3; // 从第4行开始，索引为3
+    const totalRows = templateData.length;
+    
+    // 删除原有数据行（从第4行开始）
+    for (let i = startRow; i < totalRows; i++) {
+      delete templateSheet[`A${i + 1}`];
+      delete templateSheet[`B${i + 1}`];
+      // 可以根据需要删除更多列
+    }
+    
+    // 更新工作表范围
+    if (templateSheet['!ref']) {
+      const range = XLSX.utils.decode_range(templateSheet['!ref']);
+      range.e.r = Math.max(2, startRow + sortedRecords.length - 1); // 至少保留到第3行
+      templateSheet['!ref'] = XLSX.utils.encode_range(range);
+    }
+
+    // 将新数据写入Template工作表
     sortedRecords.forEach((record, index) => {
       const rowIndex = startRow + index;
-
-      // 确保行存在
-      if (!templateData[rowIndex]) {
-        templateData[rowIndex] = [];
-      }
-
-      // 根据模板列结构填充数据
-      const row = templateData[rowIndex];
-
+      
       // 判断是否为母SKU
       const isParentSku = record.parent_child === 'Parent' || (!childSkus.has(record.item_sku) && !record.parent_sku);
       
@@ -1146,23 +1170,25 @@ router.post('/export-to-template', async (req, res) => {
         'depth_height_floor_to_top': record.depth_height_floor_to_top || '',
         'recommended_browse_nodes': record.recommended_browse_nodes || ''
       };
-
+      
       // 根据映射填充数据
       Object.entries(fieldMappings).forEach(([fieldName, value]) => {
         const columnIndex = fieldToColumnMap[fieldName];
         if (columnIndex !== undefined) {
-          row[columnIndex] = value;
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+          templateSheet[cellAddress] = { v: value, t: 's' };
         }
       });
     });
 
-    // 步骤5: 生成新的Excel文件
-    const newWorkbook = XLSX.utils.book_new();
-    const newSheet = XLSX.utils.aoa_to_sheet(templateData);
-    XLSX.utils.book_append_sheet(newWorkbook, newSheet, 'Template');
+    console.log(`✅ 已更新Template工作表，填充了 ${sortedRecords.length} 条记录`);
 
-    // 生成文件内容
-    const outputBuffer = XLSX.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
+    // 生成文件内容（直接使用修改后的原工作簿）
+    const outputBuffer = XLSX.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      cellStyles: true // 保留单元格样式
+    });
 
     // 生成文件名：站点国家简称加所导出的母SKU
     // 使用之前已定义的countryCodeMapping
