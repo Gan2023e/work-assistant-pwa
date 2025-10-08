@@ -1614,8 +1614,7 @@ const Purchase: React.FC = () => {
     
     try {
       setIsProcessing(true);
-      let emailContent = '';
-      let emailSubject = '产品手动上下架及数量调整';
+      let result;
 
       if (action === '数量调整') {
         if (!quantityAdjustmentText.trim()) {
@@ -1635,7 +1634,14 @@ const Purchase: React.FC = () => {
           return;
         }
         
-        emailContent = `产品数量调整\n${quantityAdjustmentText}`;
+        // 数量调整需要单独发送邮件
+        const emailContent = `产品数量调整\n${quantityAdjustmentText}`;
+        const emailSubject = '产品手动上下架及数量调整';
+        
+        result = await apiClient.post('/api/product_weblink/send-status-email', {
+          subject: emailSubject,
+          content: emailContent
+        });
       } else {
         // 上架或下架操作需要选中记录
         if (selectedRowKeys.length === 0) {
@@ -1655,7 +1661,6 @@ const Purchase: React.FC = () => {
             message.error(`以下记录状态不是"商品已下架"，无法执行上架操作：${invalidRecords.map(r => r.parent_sku).join(', ')}`);
             return;
           }
-          emailContent = `产品上架\n${parentSkus.join('\n')}`;
         } else if (action === '下架') {
           // 检查状态是否为"已经上传"
           const invalidRecords = selectedRecords.filter(record => record.status !== '已经上传');
@@ -1663,25 +1668,18 @@ const Purchase: React.FC = () => {
             message.error(`以下记录状态不是"已经上传"，无法执行下架操作：${invalidRecords.map(r => r.parent_sku).join(', ')}`);
             return;
           }
-          emailContent = `产品下架\n${parentSkus.join('\n')}`;
         }
 
-        // 先更新数据库状态
+        // 更新数据库状态（后端会自动发送邮件）
         const ids = selectedRecords.map(record => record.id);
         const newStatus = action === '上架' ? '已经上传' : '商品已下架';
         
-        await apiClient.post('/api/product_weblink/batch-update-status', {
+        result = await apiClient.post('/api/product_weblink/batch-update-status', {
           ids: ids,
           status: newStatus,
           old_status: action === '上架' ? '商品已下架' : '已经上传'
         });
       }
-
-      // 然后发送邮件
-      const result = await apiClient.post('/api/product_weblink/send-status-email', {
-        subject: emailSubject,
-        content: emailContent
-      });
 
       // 检查API响应
       if (result && result.message) {

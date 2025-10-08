@@ -32,7 +32,7 @@ const createTransporter = () => {
 const sendProductStatusEmail = async (action, parentSkus) => {
   try {
     // 检查邮件配置
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.EMAIL_RECEIVER) {
       console.error('邮件配置不完整，无法发送邮件');
       return { success: false, error: '邮件配置不完整' };
     }
