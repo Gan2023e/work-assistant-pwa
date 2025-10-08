@@ -637,8 +637,12 @@ async function sendDingTalkNotification(newProductCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认值
-    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+    // 使用配置的手机号
+    const mobileNumber = MOBILE_NUM_GERRY;
+    if (!mobileNumber) {
+      console.error('MOBILE_NUM_GERRY 环境变量未配置');
+      return res.status(500).json({ message: '手机号配置错误' });
+    }
 
     const message = {
       msgtype: 'text',
@@ -696,8 +700,12 @@ async function sendCpcTestNotification(cpcTestCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认值
-    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+    // 使用配置的手机号
+    const mobileNumber = MOBILE_NUM_GERRY;
+    if (!mobileNumber) {
+      console.error('MOBILE_NUM_GERRY 环境变量未配置');
+      return res.status(500).json({ message: '手机号配置错误' });
+    }
 
     const message = {
       msgtype: 'text',
@@ -755,8 +763,12 @@ async function sendCpcSampleSentNotification(sampleCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认值
-    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+    // 使用配置的手机号
+    const mobileNumber = MOBILE_NUM_GERRY;
+    if (!mobileNumber) {
+      console.error('MOBILE_NUM_GERRY 环境变量未配置');
+      return res.status(500).json({ message: '手机号配置错误' });
+    }
 
     const message = {
       msgtype: 'text',
@@ -814,8 +826,12 @@ async function sendCpcTestApprovedNotification(approvedCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认值
-    const mobileNumber = MOBILE_NUM_MOM || '18676689673';
+    // 使用配置的手机号
+    const mobileNumber = MOBILE_NUM_MOM;
+    if (!mobileNumber) {
+      console.error('MOBILE_NUM_MOM 环境变量未配置');
+      return res.status(500).json({ message: '手机号配置错误' });
+    }
 
     const message = {
       msgtype: 'text',
@@ -873,8 +889,12 @@ async function sendCpcCancelNotification(cancelCount) {
       webhookUrl = urlObj.toString();
     }
 
-    // 使用配置的手机号，如果没有配置则使用默认值
-    const mobileNumber = MOBILE_NUM_GERRY || '18676689673';
+    // 使用配置的手机号
+    const mobileNumber = MOBILE_NUM_GERRY;
+    if (!mobileNumber) {
+      console.error('MOBILE_NUM_GERRY 环境变量未配置');
+      return res.status(500).json({ message: '手机号配置错误' });
+    }
 
     const message = {
       msgtype: 'text',

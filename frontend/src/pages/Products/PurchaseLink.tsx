@@ -8675,11 +8675,11 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>rpa@xianchun.ltd</Text>
+                      <Text code style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_RECEIVER || 'rpa@xianchun.ltd'}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>产品手动上下架及数量调整</Text>
+                      <Text style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_SUBJECT || '产品手动上下架及数量调整'}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>内容：</Text>
@@ -8704,11 +8704,11 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>rpa@xianchun.ltd</Text>
+                      <Text code style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_RECEIVER || 'rpa@xianchun.ltd'}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>产品手动上下架及数量调整</Text>
+                      <Text style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_SUBJECT || '产品手动上下架及数量调整'}</Text>
                     </div>
                     <div>
                       <Text strong>内容：</Text>
