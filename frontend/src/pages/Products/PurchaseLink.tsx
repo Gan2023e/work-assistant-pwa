@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Button, 
   Input, 
@@ -590,6 +590,12 @@ const Purchase: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
   
+  // 邮件配置状态
+  const [emailConfig, setEmailConfig] = useState({
+    receiver: 'rpa@xianchun.ltd',
+    subject: '产品手动上下架及数量调整'
+  });
+  
   // CPC文件相关状态
   const [cpcModalVisible, setCpcModalVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ProductRecord | null>(null);
@@ -850,6 +856,22 @@ const Purchase: React.FC = () => {
     fetchAllDataStatistics();
     // 默认显示可整理资料记录
     handleCanOrganizeDataClick();
+  }, []);
+
+  // 获取邮件配置
+  React.useEffect(() => {
+    const fetchEmailConfig = async () => {
+      try {
+        const response = await fetch('/api/config/email');
+        if (response.ok) {
+          const config = await response.json();
+          setEmailConfig(config);
+        }
+      } catch (error) {
+        console.error('获取邮件配置失败:', error);
+      }
+    };
+    fetchEmailConfig();
   }, []);
 
 
@@ -8675,11 +8697,11 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_RECEIVER || 'rpa@xianchun.ltd'}</Text>
+                      <Text code style={{ marginLeft: '8px' }}>{emailConfig.receiver}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_SUBJECT || '产品手动上下架及数量调整'}</Text>
+                      <Text style={{ marginLeft: '8px' }}>{emailConfig.subject}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>内容：</Text>
@@ -8704,11 +8726,11 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_RECEIVER || 'rpa@xianchun.ltd'}</Text>
+                      <Text code style={{ marginLeft: '8px' }}>{emailConfig.receiver}</Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>{process.env.REACT_APP_EMAIL_SUBJECT || '产品手动上下架及数量调整'}</Text>
+                      <Text style={{ marginLeft: '8px' }}>{emailConfig.subject}</Text>
                     </div>
                     <div>
                       <Text strong>内容：</Text>

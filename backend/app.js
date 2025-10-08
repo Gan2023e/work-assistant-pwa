@@ -65,6 +65,19 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// 获取邮件配置端点
+app.get('/api/config/email', (req, res) => {
+  try {
+    res.json({
+      receiver: process.env.EMAIL_RECEIVER,
+      subject: process.env.EMAIL_SUBJECT
+    });
+  } catch (error) {
+    console.error('获取邮件配置失败:', error);
+    res.status(500).json({ message: '获取邮件配置失败' });
+  }
+});
+
 // API路由
 console.log('🔗 Registering API routes...');
 app.use('/api/auth', authRouter);
