@@ -812,6 +812,7 @@ const Purchase: React.FC = () => {
   const [productStatusModalVisible, setProductStatusModalVisible] = useState(false);
   const [productStatusAction, setProductStatusAction] = useState<'上架' | '下架' | '数量调整' | null>(null);
   const [quantityAdjustmentText, setQuantityAdjustmentText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
@@ -1580,7 +1581,10 @@ const Purchase: React.FC = () => {
 
   // 处理产品上下架操作
   const handleProductStatusAction = async (action: '上架' | '下架' | '数量调整') => {
+    if (isProcessing) return; // 防止重复点击
+    
     try {
+      setIsProcessing(true);
       let emailContent = '';
       let emailSubject = '产品手动上下架及数量调整';
 
@@ -1589,6 +1593,19 @@ const Purchase: React.FC = () => {
           message.warning('请输入SKU及数量信息');
           return;
         }
+        
+        // 验证输入格式
+        const lines = quantityAdjustmentText.split('\n').filter(line => line.trim());
+        const invalidLines = lines.filter(line => {
+          const parts = line.trim().split(/\s+/);
+          return parts.length < 2 || isNaN(Number(parts[1])) || Number(parts[1]) < 0;
+        });
+        
+        if (invalidLines.length > 0) {
+          message.error(`以下行格式不正确，请确保每行格式为"SKU 数量"：\n${invalidLines.join('\n')}`);
+          return;
+        }
+        
         emailContent = `产品数量调整\n${quantityAdjustmentText}`;
       } else {
         // 上架或下架操作需要选中记录
@@ -1637,23 +1654,37 @@ const Purchase: React.FC = () => {
         content: emailContent
       });
 
-      message.success(`${action}操作成功`);
-      setProductStatusModalVisible(false);
-      setProductStatusAction(null);
-      setQuantityAdjustmentText('');
-      
-      // 刷新数据 - 重新执行当前搜索
-      if (input.trim()) {
-        handleSearch();
+      // 检查API响应
+      if (result && result.message) {
+        message.success(`${action}操作成功`);
+        setProductStatusModalVisible(false);
+        setProductStatusAction(null);
+        setQuantityAdjustmentText('');
+        
+        // 刷新数据 - 重新执行当前搜索
+        if (input.trim()) {
+          handleSearch();
+        } else {
+          // 如果没有搜索条件，清空数据
+          setData([]);
+          setOriginalData([]);
+        }
       } else {
-        // 如果没有搜索条件，清空数据
-        setData([]);
-        setOriginalData([]);
+        throw new Error('服务器响应异常');
       }
     } catch (error) {
       console.error(`${action}操作失败:`, error);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      let errorMessage = '未知错误';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message);
+      }
+      
       message.error(`${action}操作失败: ${errorMessage}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -8602,7 +8633,30 @@ ${selectedSkuIds.map(skuId => {
                       borderRadius: '6px'
                     }}
                   />
-                  <div style={{ marginTop: '8px', textAlign: 'right' }}>
+                  <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      {(() => {
+                        const lines = quantityAdjustmentText.split('\n').filter(line => line.trim());
+                        const invalidLines = lines.filter(line => {
+                          const parts = line.trim().split(/\s+/);
+                          return parts.length < 2 || isNaN(Number(parts[1])) || Number(parts[1]) < 0;
+                        });
+                        
+                        if (invalidLines.length > 0) {
+                          return (
+                            <Text type="danger" style={{ fontSize: '12px' }}>
+                              ⚠️ {invalidLines.length} 行格式不正确
+                            </Text>
+                          );
+                        }
+                        
+                        return (
+                          <Text type="success" style={{ fontSize: '12px' }}>
+                            ✅ 格式正确
+                          </Text>
+                        );
+                      })()}
+                    </div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
                       {quantityAdjustmentText.split('\n').filter(line => line.trim()).length} 行数据
                     </Text>
@@ -8684,15 +8738,28 @@ ${selectedSkuIds.map(skuId => {
                 <Button
                   type="primary"
                   size="large"
-                  icon={<CheckCircleOutlined />}
+                  icon={isProcessing ? <LoadingOutlined /> : <CheckCircleOutlined />}
                   onClick={() => handleProductStatusAction(productStatusAction)}
-                  disabled={productStatusAction === '数量调整' && !quantityAdjustmentText.trim()}
+                  disabled={
+                    isProcessing || 
+                    (productStatusAction === '数量调整' && (
+                      !quantityAdjustmentText.trim() || 
+                      (() => {
+                        const lines = quantityAdjustmentText.split('\n').filter(line => line.trim());
+                        return lines.some(line => {
+                          const parts = line.trim().split(/\s+/);
+                          return parts.length < 2 || isNaN(Number(parts[1])) || Number(parts[1]) < 0;
+                        });
+                      })()
+                    ))
+                  }
+                  loading={isProcessing}
                   style={{ 
                     borderRadius: '6px',
                     minWidth: '120px'
                   }}
                 >
-                  确认发送
+                  {isProcessing ? '处理中...' : '确认发送'}
                 </Button>
               </div>
             </div>
