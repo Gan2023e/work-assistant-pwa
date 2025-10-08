@@ -592,8 +592,8 @@ const Purchase: React.FC = () => {
   
   // 邮件配置状态
   const [emailConfig, setEmailConfig] = useState({
-    receiver: 'rpa@xianchun.ltd',
-    subject: '产品手动上下架及数量调整'
+    receiver: '',
+    subject: ''
   });
   
   // CPC文件相关状态
@@ -865,7 +865,14 @@ const Purchase: React.FC = () => {
         const response = await fetch('/api/config/email');
         if (response.ok) {
           const config = await response.json();
-          setEmailConfig(config);
+          // 只有在获取到有效配置时才更新状态
+          if (config.receiver && config.subject) {
+            setEmailConfig(config);
+          } else {
+            console.error('邮件配置不完整:', config);
+          }
+        } else {
+          console.error('获取邮件配置失败，状态码:', response.status);
         }
       } catch (error) {
         console.error('获取邮件配置失败:', error);
@@ -8697,11 +8704,15 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>{emailConfig.receiver}</Text>
+                      <Text code style={{ marginLeft: '8px' }}>
+                        {emailConfig.receiver || '加载中...'}
+                      </Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>{emailConfig.subject}</Text>
+                      <Text style={{ marginLeft: '8px' }}>
+                        {emailConfig.subject || '加载中...'}
+                      </Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>内容：</Text>
@@ -8726,11 +8737,15 @@ ${selectedSkuIds.map(skuId => {
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>收件人：</Text>
-                      <Text code style={{ marginLeft: '8px' }}>{emailConfig.receiver}</Text>
+                      <Text code style={{ marginLeft: '8px' }}>
+                        {emailConfig.receiver || '加载中...'}
+                      </Text>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
                       <Text strong>标题：</Text>
-                      <Text style={{ marginLeft: '8px' }}>{emailConfig.subject}</Text>
+                      <Text style={{ marginLeft: '8px' }}>
+                        {emailConfig.subject || '加载中...'}
+                      </Text>
                     </div>
                     <div>
                       <Text strong>内容：</Text>
