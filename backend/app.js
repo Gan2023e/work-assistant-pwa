@@ -30,7 +30,7 @@ console.log('🚀 Starting backend server...');
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://work-assistant-pwa.netlify.app',
+    process.env.FRONTEND_URL || 'https://work-assistant-pwa.netlify.app',
     /\.netlify\.app$/,
     /\.railway\.app$/
   ],

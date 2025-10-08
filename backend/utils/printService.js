@@ -17,7 +17,7 @@ class PrintService {
 
     setupMiddleware() {
         this.app.use(cors({
-            origin: ['http://localhost:3000', 'https://work-assistant-pwa.netlify.app'],
+            origin: ['http://localhost:3000', process.env.FRONTEND_URL || 'https://work-assistant-pwa.netlify.app'],
             methods: ['GET', 'POST'],
             credentials: true
         }));

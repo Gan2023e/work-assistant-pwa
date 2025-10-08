@@ -16,7 +16,7 @@ async function createAdmin() {
     const adminUser = await User.create({
       username: 'admin',
       password: 'admin123',
-      email: 'admin@example.com',
+      email: process.env.ADMIN_EMAIL || 'admin@example.com',
       role: 'admin'
     });
 
@@ -31,7 +31,7 @@ async function createAdmin() {
     const normalUser = await User.create({
       username: 'user1',
       password: 'user123',
-      email: 'user1@example.com',
+      email: process.env.USER_EMAIL || 'user1@example.com',
       role: 'user'
     });
 
@@ -61,7 +61,7 @@ async function createUser() {
     const user = await User.create({
       username: 'user1',
       password: 'user123',
-      email: 'user1@example.com',
+      email: process.env.USER_EMAIL || 'user1@example.com',
       role: 'user'
     });
 

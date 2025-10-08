@@ -1,7 +1,7 @@
 
 // API地址配置 - 优先使用环境变量，开发环境默认使用本地地址
 export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 
-  (process.env.NODE_ENV === 'production' ? 'https://work-assistant-pwa-production-d9cf.up.railway.app' : 'http://localhost:3001');
+  (process.env.NODE_ENV === 'production' ? process.env.REACT_APP_PRODUCTION_API_URL || 'http://localhost:3001' : 'http://localhost:3001');
 
 // API端点
 export const API_ENDPOINTS = {

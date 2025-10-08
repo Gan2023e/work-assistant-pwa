@@ -3597,7 +3597,7 @@ Room 825, Building C, Part C
 Qinghu Tech Park
 Shenzhen, Longhua, Guangdong 518000
 CN
-8618123615703`;
+${process.env.MANUFACTURER_PHONE || '8618123615703'}`;
         } else {
           // 其他站点保持原有逻辑
           data[currentRowIndex][manufacturerContactInformationCol] = recordData.manufacturer_contact_information || '';
@@ -4529,7 +4529,7 @@ Room 825, Building C, Part C
 Qinghu Tech Park
 Shenzhen, Longhua, Guangdong 518000
 CN
-8618123615703`;
+${process.env.MANUFACTURER_PHONE || '8618123615703'}`;
         } else {
           // 其他站点保持原有逻辑
           updatedData[rowIndex][manufacturerContactInformationCol] = data.manufacturer_contact_information || '';
@@ -5298,7 +5298,7 @@ Room 825, Building C, Part C
 Qinghu Tech Park
 Shenzhen, Longhua, Guangdong 518000
 CN
-8618123615703`;
+${process.env.MANUFACTURER_PHONE || '8618123615703'}`;
         } else {
           // 其他站点保持原有逻辑
           data[currentRowIndex][manufacturerContactInformationCol] = record.manufacturer_contact_information || '';
