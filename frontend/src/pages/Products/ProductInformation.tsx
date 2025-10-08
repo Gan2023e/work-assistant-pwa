@@ -1115,11 +1115,11 @@ const ProductInformation: React.FC = () => {
       }
     },
     {
-      title: '商品名称',
+      title: <div style={{ textAlign: 'center' }}>商品名称</div>,
       dataIndex: 'item_name',
       key: 'item_name',
       width: 250,
-      align: 'center',
+      align: 'left',
       ellipsis: {
         showTitle: false,
       },
