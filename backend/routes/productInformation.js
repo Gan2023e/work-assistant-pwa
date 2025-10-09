@@ -591,12 +591,15 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       });
     }
 
-    console.log(`📤 开始处理${country}资料表上传，文件: ${req.file.originalname}`);
+    console.log(`📤 开始处理${country}资料表上传，文件: ${req.file.originalname}，大小: ${(req.file.size / 1024 / 1024).toFixed(2)}MB`);
 
     // 解析Excel文件
     let workbook;
+    const parseStartTime = Date.now();
     try {
       workbook = XLSX.read(req.file.buffer);
+      const parseTime = Date.now() - parseStartTime;
+      console.log(`✅ Excel文件解析完成，耗时: ${parseTime}ms`);
     } catch (parseError) {
       console.error('❌ 解析Excel文件失败:', parseError);
       return res.status(400).json({
@@ -744,6 +747,7 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
     // 解析数据行
     const records = [];
     const errors = [];
+    const dataParseStartTime = Date.now();
     
     for (let i = dataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
@@ -787,30 +791,75 @@ router.post('/upload-template', upload.single('file'), async (req, res) => {
       });
     }
 
-    console.log(`📊 解析完成，共${records.length}条记录待导入`);
+    const dataParseTime = Date.now() - dataParseStartTime;
+    console.log(`📊 数据解析完成，共${records.length}条记录待导入，耗时: ${dataParseTime}ms`);
 
-    // 批量插入数据库
+    // 批量插入数据库 - 优化性能
     let insertedCount = 0;
     let updatedCount = 0;
     let errorCount = 0;
 
-    for (const record of records) {
+    console.log(`🚀 开始批量导入${records.length}条记录...`);
+    const startTime = Date.now();
+
+    // 分批处理，每批100条记录
+    const batchSize = 100;
+    const batches = [];
+    for (let i = 0; i < records.length; i += batchSize) {
+      batches.push(records.slice(i, i + batchSize));
+    }
+
+    console.log(`📦 数据分为${batches.length}批处理，每批最多${batchSize}条记录`);
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`🔄 处理第${batchIndex + 1}/${batches.length}批，包含${batch.length}条记录`);
+      
       try {
-        const [productInfo, created] = await ProductInformation.upsert(record, {
+        // 使用bulkCreate进行批量插入，提高性能
+        const results = await ProductInformation.bulkCreate(batch, {
+          updateOnDuplicate: [
+            'item_name', 'external_product_id', 'brand_name', 'manufacturer',
+            'product_description', 'bullet_point1', 'bullet_point2', 'bullet_point3',
+            'bullet_point4', 'bullet_point5', 'generic_keywords', 'color_name',
+            'size_name', 'standard_price', 'list_price', 'quantity', 'main_image_url',
+            'parent_sku', 'parent_child', 'variation_theme', 'country_of_origin'
+          ],
           returning: true
         });
+
+        // 统计结果（bulkCreate不区分插入和更新，所以这里简化统计）
+        insertedCount += batch.length;
+        console.log(`✅ 第${batchIndex + 1}批处理完成`);
         
-        if (created) {
-          insertedCount++;
-        } else {
-          updatedCount++;
+      } catch (batchError) {
+        console.error(`❌ 第${batchIndex + 1}批处理失败:`, batchError.message);
+        
+        // 如果批量操作失败，回退到逐条处理
+        console.log(`🔄 回退到逐条处理第${batchIndex + 1}批...`);
+        for (const record of batch) {
+          try {
+            const [productInfo, created] = await ProductInformation.upsert(record, {
+              returning: true
+            });
+            
+            if (created) {
+              insertedCount++;
+            } else {
+              updatedCount++;
+            }
+          } catch (dbError) {
+            errorCount++;
+            console.error(`❌ 导入记录失败 (${record.item_sku}):`, dbError.message);
+            errors.push(`${record.item_sku}: ${dbError.message}`);
+          }
         }
-      } catch (dbError) {
-        errorCount++;
-        console.error(`❌ 导入记录失败 (${record.item_sku}):`, dbError.message);
-        errors.push(`${record.item_sku}: ${dbError.message}`);
       }
     }
+
+    const endTime = Date.now();
+    const processingTime = ((endTime - startTime) / 1000).toFixed(2);
+    console.log(`⏱️ 批量导入完成，耗时: ${processingTime}秒`);
 
     console.log(`✅ 导入完成: 新增${insertedCount}条，更新${updatedCount}条，失败${errorCount}条`);
 

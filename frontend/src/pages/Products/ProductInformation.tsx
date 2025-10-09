@@ -20,7 +20,7 @@ import {
   Empty,
   Upload,
   Badge,
-  Divider
+  Progress
 } from 'antd';
 import {
   SearchOutlined,
@@ -32,7 +32,8 @@ import {
   ExportOutlined,
   UploadOutlined,
   DownOutlined,
-  RightOutlined
+  RightOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { API_BASE_URL } from '../../config/api';
@@ -192,6 +193,8 @@ const ProductInformation: React.FC = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadCountry, setUploadCountry] = useState<string>('');
   const [fileList, setFileList] = useState<any[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
 
 
@@ -669,15 +672,58 @@ const ProductInformation: React.FC = () => {
     formData.append('country', uploadCountry);
 
     setUploadLoading(true);
+    setUploadProgress(0);
+    setUploadStatus('正在上传文件...');
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/product-information/upload-template`, {
-        method: 'POST',
-        body: formData,
+      // 创建XMLHttpRequest以支持进度监控
+      const xhr = new XMLHttpRequest();
+      
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percentComplete);
+            if (percentComplete < 100) {
+              setUploadStatus(`正在上传文件... ${percentComplete}%`);
+            } else {
+              setUploadStatus('文件上传完成，正在处理数据...');
+            }
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const result = JSON.parse(xhr.responseText);
+              resolve(result);
+            } catch (parseError) {
+              reject(new Error('响应解析失败'));
+            }
+          } else {
+            reject(new Error(`上传失败: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('网络错误'));
+        });
+
+        xhr.addEventListener('timeout', () => {
+          reject(new Error('请求超时'));
+        });
+
+        xhr.open('POST', `${API_BASE_URL}/api/product-information/upload-template`);
+        xhr.timeout = 300000; // 5分钟超时
+        xhr.send(formData);
       });
 
-      const result = await response.json();
+      const result = await uploadPromise as any;
 
       if (result.success) {
+        setUploadProgress(100);
+        setUploadStatus('导入完成！');
+        
         message.success(
           `${result.message}！新增${result.data.inserted}条，更新${result.data.updated}条记录${
             result.data.errors > 0 ? `，${result.data.errors}条失败` : ''
@@ -714,14 +760,21 @@ const ProductInformation: React.FC = () => {
           });
         }
 
-        setUploadVisible(false);
-        setUploadCountry('');
-        setFileList([]);
-        fetchData(); // 刷新数据
+        // 延迟关闭弹窗，让用户看到完成状态
+        setTimeout(() => {
+          setUploadVisible(false);
+          setUploadCountry('');
+          setFileList([]);
+          setUploadProgress(0);
+          setUploadStatus('');
+          fetchData(); // 刷新数据
+        }, 1500);
       } else {
+        setUploadStatus('上传失败');
         message.error(result.message || '上传失败');
       }
     } catch (error) {
+      setUploadStatus('上传失败');
       message.error('上传失败: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setUploadLoading(false);
@@ -2605,12 +2658,17 @@ const ProductInformation: React.FC = () => {
         title="上传资料表文件"
         open={uploadVisible}
         onCancel={() => {
-          setUploadVisible(false);
-          setUploadCountry('');
-          setFileList([]);
+          if (!uploadLoading) {
+            setUploadVisible(false);
+            setUploadCountry('');
+            setFileList([]);
+            setUploadProgress(0);
+            setUploadStatus('');
+          }
         }}
         footer={null}
         width={600}
+        closable={!uploadLoading}
       >
         <div style={{ padding: '16px 0' }}>
           <p style={{ marginBottom: 16, color: '#666' }}>
@@ -2628,6 +2686,7 @@ const ProductInformation: React.FC = () => {
                 value={uploadCountry}
                 onChange={setUploadCountry}
                 size="large"
+                disabled={uploadLoading}
               >
                 <Option value="美国">美国</Option>
                 <Option value="英国">英国</Option>
@@ -2681,15 +2740,46 @@ const ProductInformation: React.FC = () => {
                 maxCount={1}
                 accept=".xlsx,.xls"
                 style={{ width: '100%' }}
+                disabled={uploadLoading}
               >
-                <Button icon={<UploadOutlined />} size="large" style={{ width: '100%' }}>
-                  选择Excel文件
+                <Button 
+                  icon={<UploadOutlined />} 
+                  size="large" 
+                  style={{ width: '100%' }}
+                  loading={uploadLoading}
+                >
+                  {uploadLoading ? '上传中...' : '选择Excel文件'}
                 </Button>
               </Upload>
               <div style={{ marginTop: '8px', color: '#999', fontSize: '12px' }}>
                 支持.xlsx和.xls格式，文件大小限制10MB
               </div>
             </div>
+
+            {/* 上传进度显示 */}
+            {uploadLoading && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold', color: '#1677ff' }}>{uploadStatus}</span>
+                  <span style={{ color: '#666', fontSize: '12px' }}>{uploadProgress}%</span>
+                </div>
+                <Progress 
+                  percent={uploadProgress} 
+                  status={uploadProgress === 100 ? 'success' : 'active'}
+                  strokeColor={{
+                    '0%': '#108ee9',
+                    '100%': '#87d068',
+                  }}
+                  showInfo={false}
+                />
+                {uploadProgress === 100 && (
+                  <div style={{ textAlign: 'center', marginTop: '8px', color: '#52c41a' }}>
+                    <CheckCircleOutlined style={{ marginRight: '4px' }} />
+                    导入完成，即将关闭窗口...
+                  </div>
+                )}
+              </div>
+            )}
           </Space>
         </div>
       </Modal>
