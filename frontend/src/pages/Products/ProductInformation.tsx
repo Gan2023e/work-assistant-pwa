@@ -20,7 +20,6 @@ import {
   Empty,
   Upload,
   Badge,
-  Divider,
   Progress
 } from 'antd';
 import {
@@ -719,7 +718,16 @@ const ProductInformation: React.FC = () => {
         xhr.send(formData);
       });
 
-      const result = await uploadPromise;
+      const result = await uploadPromise as {
+        success: boolean;
+        message: string;
+        data: {
+          inserted: number;
+          updated: number;
+          errors: number;
+          errorDetails: string[];
+        };
+      };
 
       if (result.success) {
         setUploadProgress(100);
