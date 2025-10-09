@@ -715,6 +715,11 @@ const Purchase: React.FC = () => {
   const [generationInProgress, setGenerationInProgress] = useState(false); // 是否正在生成
   const [completedCountries, setCompletedCountries] = useState<string[]>([]); // 已完成生成的站点
   const [downloadHistory, setDownloadHistory] = useState<Record<string, { blob: Blob; fileName: string; generatedAt: string }>>({});
+  
+  // 新增：上传进度相关状态
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
 
   // 全库统计数据
   const [allDataStats, setAllDataStats] = useState({
@@ -3868,7 +3873,7 @@ const Purchase: React.FC = () => {
     await generateOtherSiteDataSheet();
   };
 
-  // 新增：步骤1 - 上传源数据到数据库
+  // 新增：步骤1 - 上传源数据到数据库（优化版本）
   const handleUploadSourceData = async (file?: File) => {
     const fileToUpload = file || sourceFile;
     if (!fileToUpload || !sourceCountry) {
@@ -3878,32 +3883,178 @@ const Purchase: React.FC = () => {
 
     try {
       setOtherSiteLoading(prev => ({ ...prev, [sourceCountry]: true }));
+      setIsUploading(true);
+      setUploadProgress(0);
+      setUploadStatus('正在准备上传...');
+      
+      // 显示文件信息
+      const fileSize = (fileToUpload.size / 1024 / 1024).toFixed(2);
+      console.log(`📤 开始上传文件: ${fileToUpload.name}, 大小: ${fileSize}MB`);
       
       const formData = new FormData();
       formData.append('file', fileToUpload);
       formData.append('site', sourceCountry);
 
-      const response = await fetch(`${API_BASE_URL}/api/product_weblink/upload-source-data`, {
-        method: 'POST',
-        body: formData
+      // 使用XMLHttpRequest以支持进度监控
+      const xhr = new XMLHttpRequest();
+      
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percentComplete);
+            if (percentComplete < 100) {
+              setUploadStatus(`正在上传文件... ${percentComplete}%`);
+            } else {
+              setUploadStatus('文件上传完成，正在处理数据...');
+            }
+            console.log(`📊 上传进度: ${percentComplete}%`);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            // 检查响应类型
+            const contentType = xhr.getResponseHeader('content-type');
+            
+            if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+              // 如果是Excel文件，说明有验证错误
+              const blob = new Blob([xhr.response], { 
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+              });
+              
+              // 从响应头获取文件名
+              const contentDisposition = xhr.getResponseHeader('content-disposition');
+              let fileName = `${sourceCountry}_错误报告_${new Date().toISOString().slice(0, 10)}.xlsx`;
+              if (contentDisposition) {
+                const fileNameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                if (fileNameMatch) {
+                  fileName = fileNameMatch[1];
+                }
+              }
+              
+              // 自动下载错误报告
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = fileName;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              window.URL.revokeObjectURL(url);
+              
+              // 显示错误提示
+              message.error(`数据验证失败！发现错误，已生成错误报告并下载到本地。请检查并修正错误后重新上传。`);
+              
+              resolve({
+                success: false,
+                hasErrors: true,
+                message: '数据验证失败，已下载错误报告',
+                fileName: fileName
+              });
+            } else {
+              // 如果是JSON响应，说明上传成功
+              try {
+                const result = JSON.parse(xhr.responseText);
+                resolve(result);
+              } catch (parseError) {
+                reject(new Error('响应解析失败'));
+              }
+            }
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              reject(new Error(errorData.message || `HTTP错误: ${xhr.status}`));
+            } catch {
+              reject(new Error(`HTTP错误: ${xhr.status}`));
+            }
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('网络错误'));
+        });
+
+        xhr.addEventListener('timeout', () => {
+          reject(new Error('请求超时'));
+        });
+
+        xhr.open('POST', `${API_BASE_URL}/api/product_weblink/upload-source-data`);
+        xhr.timeout = 300000; // 5分钟超时
+        xhr.send(formData);
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '上传失败');
-      }
-
-      const result = await response.json();
+      const result = await uploadPromise as {
+        success: boolean;
+        hasErrors?: boolean;
+        message: string;
+        recordCount?: number;
+        errorCount?: number;
+        fileName?: string;
+        processingTime?: number;
+      };
       
-      setSourceDataUploaded(true);
-      setCurrentStep(1); // 进入步骤2
-      message.success(`成功上传${result.recordCount}条记录到数据库`);
+      if (result.success) {
+        setSourceDataUploaded(true);
+        setCurrentStep(1); // 进入步骤2
+        
+        // 显示详细的上传结果
+        const successMessage = `✅ 上传完成！成功导入 ${result.recordCount} 条记录`;
+        const errorMessage = result.errorCount && result.errorCount > 0 ? `，${result.errorCount} 条记录有错误` : '';
+        const timeMessage = result.processingTime ? `（耗时: ${(result.processingTime / 1000).toFixed(1)}秒）` : '';
+        
+        message.success(successMessage + errorMessage + timeMessage);
+        
+      } else if (result.hasErrors) {
+        // 有验证错误，已下载错误报告
+        setSourceDataUploaded(false); // 重置上传状态
+        setCurrentStep(0); // 保持在步骤1
+        
+        // 显示错误提示
+        Modal.error({
+          title: '数据验证失败',
+          width: 600,
+          content: (
+            <div>
+              <p>❌ 数据验证失败，发现错误记录！</p>
+              <p>已生成包含错误标记的Excel文件并自动下载到本地：</p>
+              <div style={{ 
+                background: '#fff2f0', 
+                padding: '12px', 
+                borderRadius: '6px',
+                border: '1px solid #ffccc7',
+                margin: '12px 0'
+              }}>
+                <p style={{ margin: 0, fontWeight: 'bold', color: '#cf1322' }}>
+                  📁 {result.fileName}
+                </p>
+              </div>
+              <p style={{ color: '#666', fontSize: '14px' }}>
+                请按照以下步骤修复错误：
+              </p>
+              <ol style={{ color: '#666', fontSize: '14px', paddingLeft: '20px' }}>
+                <li>打开下载的错误报告Excel文件</li>
+                <li>查看"验证错误"列中的具体错误信息</li>
+                <li>根据错误提示修正对应的数据</li>
+                <li>删除"验证错误"列后重新上传</li>
+              </ol>
+            </div>
+          ),
+          okText: '我知道了'
+        });
+        
+      } else {
+        throw new Error(result.message || '上传失败');
+      }
       
     } catch (error: any) {
       console.error('上传源数据失败:', error);
       message.error('上传失败: ' + error.message);
     } finally {
       setOtherSiteLoading(prev => ({ ...prev, [sourceCountry]: false }));
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
@@ -6913,6 +7064,25 @@ ${selectedSkuIds.map(skuId => {
                           <Text type="success">✓ 数据已成功上传到数据库</Text>
                         </>
                       )}
+                    </div>
+                  )}
+                  
+                  {/* 上传进度显示 */}
+                  {isUploading && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong style={{ color: '#1677ff' }}>{uploadStatus}</Text>
+                        <Text type="secondary">{uploadProgress}%</Text>
+                      </div>
+                      <Progress 
+                        percent={uploadProgress} 
+                        status={uploadProgress === 100 ? 'success' : 'active'}
+                        strokeColor={{
+                          '0%': '#108ee9',
+                          '100%': '#87d068',
+                        }}
+                        showInfo={false}
+                      />
                     </div>
                   )}
                 </Space>

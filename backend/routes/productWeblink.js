@@ -29,6 +29,167 @@ function convertCountryCodeToChinese(countryCode) {
   return countryMapping[countryCode] || countryCode;
 }
 
+// 生成错误报告Excel文件的函数
+async function generateErrorReport(originalWorkbook, validationErrors, originalFileName, site) {
+  try {
+    console.log(`📋 开始生成错误报告，错误记录数: ${validationErrors.length}`);
+    
+    // 复制原始工作簿
+    const errorWorkbook = xlsx.utils.book_new();
+    
+    // 获取原始工作表
+    const originalSheetName = originalWorkbook.SheetNames[0];
+    const originalWorksheet = originalWorkbook.Sheets[originalSheetName];
+    
+    // 转换为JSON数据
+    const jsonData = xlsx.utils.sheet_to_json(originalWorksheet, { header: 1 });
+    
+    // 创建错误列
+    const errorColumnIndex = jsonData[2] ? jsonData[2].length : 0; // 在第3行（标题行）后添加错误列
+    
+    // 添加错误列标题
+    if (jsonData[2]) {
+      jsonData[2][errorColumnIndex] = '验证错误';
+    }
+    
+    // 标记错误行
+    validationErrors.forEach(error => {
+      const rowIndex = error.row - 1; // 转换为0基索引
+      if (rowIndex < jsonData.length) {
+        // 确保行有足够的列
+        while (jsonData[rowIndex].length <= errorColumnIndex) {
+          jsonData[rowIndex].push('');
+        }
+        // 设置错误信息
+        jsonData[rowIndex][errorColumnIndex] = error.errors.join('; ');
+        
+        // 为错误行添加背景色标记（通过添加特殊标记）
+        if (!jsonData[rowIndex][errorColumnIndex + 1]) {
+          jsonData[rowIndex][errorColumnIndex + 1] = 'ERROR_ROW';
+        }
+      }
+    });
+    
+    // 添加错误统计信息到第一行
+    const errorSummary = [
+      `数据验证错误报告 - ${site}站点`,
+      `生成时间: ${new Date().toLocaleString('zh-CN')}`,
+      `总错误数: ${validationErrors.length}`,
+      `错误详情: 请查看"验证错误"列中的具体错误信息`,
+      `修复建议: 请根据错误信息修正数据后重新上传`
+    ];
+    
+    // 在数据前插入错误摘要
+    jsonData.unshift(['', '', '', '', '']); // 空行
+    jsonData.unshift(errorSummary);
+    
+    // 创建工作表
+    const errorWorksheet = xlsx.utils.aoa_to_sheet(jsonData);
+    
+    // 设置列宽
+    const colWidths = [];
+    for (let i = 0; i < errorColumnIndex + 2; i++) {
+      if (i === errorColumnIndex) {
+        colWidths.push({ wch: 50 }); // 错误列设置较宽
+      } else {
+        colWidths.push({ wch: 15 });
+      }
+    }
+    errorWorksheet['!cols'] = colWidths;
+    
+    // 添加工作表到工作簿
+    xlsx.utils.book_append_sheet(errorWorkbook, errorWorksheet, '错误报告');
+    
+    // 生成文件名
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const fileName = `${site}_错误报告_${timestamp}.xlsx`;
+    
+    // 生成Excel文件buffer
+    const buffer = xlsx.write(errorWorkbook, { type: 'buffer', bookType: 'xlsx' });
+    
+    console.log(`✅ 错误报告生成成功: ${fileName}, 大小: ${buffer.length} 字节`);
+    
+    return {
+      success: true,
+      fileName: fileName,
+      buffer: buffer,
+      errorCount: validationErrors.length
+    };
+    
+  } catch (error) {
+    console.error('❌ 生成错误报告失败:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+// 批量验证记录的工具函数
+function validateRecord(record, rowNumber) {
+  const errors = [];
+  
+  // 验证必填字段
+  if (!record.item_sku || record.item_sku.toString().trim() === '') {
+    errors.push('item_sku字段不能为空');
+  }
+  
+  // 验证item_sku格式
+  if (record.item_sku && record.item_sku.toString().length > 30) {
+    errors.push('item_sku长度不能超过30个字符');
+  }
+  
+  // 验证site字段
+  if (!record.site || record.site.toString().trim() === '') {
+    errors.push('site字段不能为空');
+  }
+  
+  // 验证item_name长度
+  if (record.item_name && record.item_name.toString().length > 500) {
+    errors.push('item_name长度不能超过500个字符');
+  }
+  
+  // 验证brand_name长度
+  if (record.brand_name && record.brand_name.toString().length > 30) {
+    errors.push('brand_name长度不能超过30个字符');
+  }
+  
+  // 验证数值字段
+  if (record.standard_price !== undefined && record.standard_price !== null && record.standard_price !== '') {
+    const price = parseFloat(record.standard_price);
+    if (isNaN(price) || price < 0) {
+      errors.push('standard_price必须是有效的非负数');
+    }
+  }
+  
+  if (record.quantity !== undefined && record.quantity !== null && record.quantity !== '') {
+    const qty = parseInt(record.quantity);
+    if (isNaN(qty) || qty < 0) {
+      errors.push('quantity必须是有效的非负整数');
+    }
+  }
+  
+  // 验证URL字段格式
+  const urlFields = ['main_image_url', 'swatch_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3', 'other_image_url4', 'other_image_url5', 'other_image_url6', 'other_image_url7', 'other_image_url8'];
+  for (const field of urlFields) {
+    if (record[field] && record[field].toString().trim() !== '') {
+      const url = record[field].toString().trim();
+      if (url.length > 255) {
+        errors.push(`${field}长度不能超过255个字符`);
+      }
+      // 简单的URL格式验证
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('//')) {
+        errors.push(`${field}格式不正确，应以http://、https://或//开头`);
+      }
+    }
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+}
+
 // 过滤和验证ProductInformation数据的工具函数
 function filterValidFields(data) {
   // ProductInformation模型中定义的字段及其长度限制
@@ -5596,7 +5757,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     
     console.log(`💾 准备保存 ${records.length} 条记录到product_information表...`);
     
-    // 批量保存到数据库 - 适配复合主键
+    // 批量保存到数据库 - 优化版本
     try {
       // 首先删除相同站点的旧数据
       await ProductInformation.destroy({
@@ -5605,28 +5766,99 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       
       console.log(`🗑️ 已清理站点 ${site} 的旧数据`);
       
-      // 逐条插入数据（因为复合主键的特殊性，使用upsert更安全）
-      let successCount = 0;
-      let errorCount = 0;
+      // 批量验证和过滤数据
+      console.log(`🔍 开始批量验证 ${records.length} 条记录...`);
+      const validationStartTime = Date.now();
       
-      for (const record of records) {
+      const validRecords = [];
+      const validationErrors = [];
+      
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
         try {
-          // 过滤和验证数据，只保留模型中定义的字段
-          const filteredRecord = filterValidFields(record);
-          
-          await ProductInformation.upsert(filteredRecord, {
-            returning: false, // 提高性能
-            validate: true // 启用验证
-          });
-          successCount++;
+          // 批量验证数据
+          const validationResult = validateRecord(record, i + 4); // i+4 因为数据从第4行开始
+          if (validationResult.isValid) {
+            // 过滤和验证数据，只保留模型中定义的字段
+            const filteredRecord = filterValidFields(record);
+            validRecords.push(filteredRecord);
+          } else {
+            validationErrors.push({
+              row: i + 4,
+              errors: validationResult.errors,
+              data: record
+            });
+          }
         } catch (error) {
-          console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
-          console.error(`原始数据字段数量: ${Object.keys(record).length}, 过滤后字段数量: ${Object.keys(filterValidFields(record)).length}`);
-          errorCount++;
+          validationErrors.push({
+            row: i + 4,
+            errors: [error.message],
+            data: record
+          });
         }
       }
       
-      console.log(`✅ 成功保存 ${successCount} 条记录到数据库${errorCount > 0 ? `，${errorCount}条失败` : ''}`);
+      const validationTime = Date.now() - validationStartTime;
+      console.log(`✅ 批量验证完成，耗时: ${validationTime}ms，有效记录: ${validRecords.length}，错误记录: ${validationErrors.length}`);
+      
+      // 如果有验证错误，停止上传到数据库，生成错误报告
+      if (validationErrors.length > 0) {
+        console.warn(`⚠️ 发现 ${validationErrors.length} 条验证错误记录，停止上传到数据库`);
+        
+        // 生成包含错误标记的Excel文件
+        const errorReportResult = await generateErrorReport(workbook, validationErrors, file.originalname, site);
+        
+        if (errorReportResult.success) {
+          // 返回错误报告文件
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', `attachment; filename="${errorReportResult.fileName}"`);
+          res.send(errorReportResult.buffer);
+          return;
+        } else {
+          throw new Error('生成错误报告失败: ' + errorReportResult.message);
+        }
+      }
+      
+      // 如果没有错误，正常批量插入数据
+      let successCount = 0;
+      let errorCount = 0;
+      
+      if (validRecords.length > 0) {
+        console.log(`💾 开始批量插入 ${validRecords.length} 条记录...`);
+        const insertStartTime = Date.now();
+        
+        try {
+          // 使用批量插入提高性能
+          await ProductInformation.bulkCreate(validRecords, {
+            validate: false, // 批量插入时关闭验证以提高性能
+            ignoreDuplicates: true, // 忽略重复记录
+            returning: false
+          });
+          
+          successCount = validRecords.length;
+          const insertTime = Date.now() - insertStartTime;
+          console.log(`✅ 批量插入完成，耗时: ${insertTime}ms，成功: ${successCount} 条`);
+          
+        } catch (bulkError) {
+          console.error('❌ 批量插入失败，回退到逐条插入:', bulkError.message);
+          
+          // 如果批量插入失败，回退到逐条插入
+          for (const record of validRecords) {
+            try {
+              await ProductInformation.upsert(record, {
+                returning: false,
+                validate: true
+              });
+              successCount++;
+            } catch (error) {
+              console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+              errorCount++;
+            }
+          }
+        }
+      }
+      
+      console.log(`✅ 数据处理完成: 成功 ${successCount} 条，错误 ${errorCount} 条`);
       
       // 返回成功响应
       res.json({
@@ -5635,7 +5867,8 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         recordCount: successCount,
         errorCount: errorCount,
         site: site,
-        fileName: file.originalname
+        fileName: file.originalname,
+        processingTime: Date.now() - startTime
       });
       
     } catch (dbError) {
