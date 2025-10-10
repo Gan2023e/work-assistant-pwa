@@ -64,7 +64,6 @@ import {
   ExperimentOutlined,
   ExclamationCircleOutlined,
   CopyOutlined,
-  SettingOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
@@ -573,7 +572,6 @@ const Purchase: React.FC = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
   const [addTemplateModalVisible, setAddTemplateModalVisible] = useState(false);
-  const [categoryManageModalVisible, setCategoryManageModalVisible] = useState(false);
   // 多站点模板文件管理
   const [allTemplateFiles, setAllTemplateFiles] = useState<Record<string, any[]>>({
     US: [],
@@ -608,10 +606,6 @@ const Purchase: React.FC = () => {
   const [globalTemplateLoading, setGlobalTemplateLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // 类目管理相关状态
-  const [categoryManageForm] = Form.useForm();
-  const [editingCategory, setEditingCategory] = useState<any>(null);
-  const [categoryManageLoading, setCategoryManageLoading] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
   
   // 添加模板表单状态
@@ -3404,116 +3398,6 @@ const Purchase: React.FC = () => {
     }
   };
 
-  // 添加新类目
-  const handleAddCategory = async (values: any) => {
-    try {
-      setCategoryManageLoading(true);
-      
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          category: values.category,
-          country: selectedUploadCountry
-        })
-      });
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        message.success('类目添加成功');
-        categoryManageForm.resetFields();
-        setEditingCategory(null);
-        // 刷新类目列表
-        await fetchTemplateCategories(selectedUploadCountry);
-      } else {
-        message.error(result.message || '添加类目失败');
-      }
-    } catch (error) {
-      console.error('添加类目失败:', error);
-      message.error('添加类目失败');
-    } finally {
-      setCategoryManageLoading(false);
-    }
-  };
-
-  // 更新类目
-  const handleUpdateCategory = async (values: any) => {
-    try {
-      setCategoryManageLoading(true);
-      
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories/${editingCategory.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          category: values.category
-        })
-      });
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        message.success('类目更新成功');
-        categoryManageForm.resetFields();
-        setEditingCategory(null);
-        // 刷新类目列表
-        await fetchTemplateCategories(selectedUploadCountry);
-      } else {
-        message.error(result.message || '更新类目失败');
-      }
-    } catch (error) {
-      console.error('更新类目失败:', error);
-      message.error('更新类目失败');
-    } finally {
-      setCategoryManageLoading(false);
-    }
-  };
-
-  // 删除类目
-  const handleDeleteCategory = async (categoryId: string) => {
-    try {
-      console.log('🗑️ 开始删除类目，ID:', categoryId);
-      
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories/${categoryId}`, {
-        method: 'DELETE'
-      });
-      
-      console.log('📡 删除请求响应状态:', res.status);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('❌ 删除请求失败:', res.status, errorText);
-        message.error(`删除失败: ${res.status} ${res.statusText}`);
-        return;
-      }
-      
-      const result = await res.json();
-      console.log('📋 删除响应结果:', result);
-      
-      if (result.success) {
-        message.success('类目删除成功');
-        // 刷新类目列表
-        await fetchTemplateCategories(selectedUploadCountry);
-      } else {
-        message.error(result.message || '删除类目失败');
-      }
-    } catch (error) {
-      console.error('删除类目失败:', error);
-      message.error('删除类目失败: ' + (error as Error).message);
-    }
-  };
-
-  // 编辑类目
-  const handleEditCategory = (category: any) => {
-    setEditingCategory(category);
-    categoryManageForm.setFieldsValue({
-      category: category.value
-    });
-  };
 
   // 批量获取所有站点的模板文件和类目
   const fetchAllTemplateFiles = async () => {
@@ -7247,102 +7131,6 @@ ${selectedSkuIds.map(skuId => {
         </Space>
        </Modal>
 
-       {/* 类目管理对话框 */}
-       <Modal
-         title="类目管理"
-         open={categoryManageModalVisible}
-         onCancel={() => {
-           setCategoryManageModalVisible(false);
-           categoryManageForm.resetFields();
-           setEditingCategory(null);
-         }}
-         footer={null}
-         width={800}
-       >
-         <div style={{ marginBottom: '16px' }}>
-           <h4>当前站点：{selectedUploadCountry === 'US' ? '美国' : 
-                        selectedUploadCountry === 'CA' ? '加拿大' :
-                        selectedUploadCountry === 'UK' ? '英国' :
-                        selectedUploadCountry === 'AE' ? '阿联酋' :
-                        selectedUploadCountry === 'AU' ? '澳大利亚' : selectedUploadCountry}</h4>
-         </div>
-         
-         <Form
-           form={categoryManageForm}
-           onFinish={editingCategory ? handleUpdateCategory : handleAddCategory}
-           layout="vertical"
-         >
-          <Form.Item
-            label="类目名称"
-            name="category"
-            rules={[{ required: true, message: '请输入类目名称' }]}
-          >
-            <Input placeholder="请输入类目名称" />
-          </Form.Item>
-           
-           <Form.Item>
-             <Space>
-               <Button 
-                 type="primary" 
-                 htmlType="submit" 
-                 loading={categoryManageLoading}
-               >
-                 {editingCategory ? '更新' : '添加'}
-               </Button>
-               {editingCategory && (
-                 <Button onClick={() => {
-                   setEditingCategory(null);
-                   categoryManageForm.resetFields();
-                 }}>
-                   取消编辑
-                 </Button>
-               )}
-             </Space>
-           </Form.Item>
-         </Form>
-         
-         <Divider />
-         
-         <div>
-           <h4>现有类目列表</h4>
-           <List
-             dataSource={templateCategories[selectedUploadCountry] || []}
-             renderItem={(category) => (
-               <List.Item
-                 actions={[
-                   <Button 
-                     type="link" 
-                     icon={<EditOutlined />}
-                     onClick={() => handleEditCategory(category)}
-                   >
-                     编辑
-                   </Button>,
-                   <Popconfirm
-                     title="确定要删除这个类目吗？"
-                     description="删除后无法恢复，请确认没有模板正在使用该类目。"
-                     onConfirm={() => handleDeleteCategory(category.id)}
-                     okText="确定"
-                     cancelText="取消"
-                   >
-                     <Button 
-                       type="link" 
-                       danger
-                       icon={<DeleteOutlined />}
-                     >
-                       删除
-                     </Button>
-                   </Popconfirm>
-                 ]}
-               >
-                 <List.Item.Meta
-                   title={category.value}
-                   description={`类目代码: ${category.value}`}
-                 />
-               </List.Item>
-             )}
-           />
-         </div>
-       </Modal>
 
              {/* 亚马逊模板管理对话框 */}
        <Modal
@@ -7460,18 +7248,6 @@ ${selectedSkuIds.map(skuId => {
                    </Option>
                  ))}
                </Select>
-               <Button 
-                 type="default" 
-                 icon={<SettingOutlined />}
-                 onClick={() => {
-                   console.log('管理按钮被点击');
-                   setCategoryManageModalVisible(true);
-                 }}
-                 title="管理类目"
-                 style={{ backgroundColor: '#f0f0f0', borderColor: '#d9d9d9' }}
-               >
-                 管理
-               </Button>
              </div>
            </Form.Item>
 
