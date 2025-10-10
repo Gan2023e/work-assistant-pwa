@@ -7176,14 +7176,20 @@ ${selectedSkuIds.map(skuId => {
            >
              <Select
                value={selectedUploadCategory}
-               onChange={setSelectedUploadCategory}
+               onChange={(value) => {
+                 // 处理tags模式返回的数组，取第一个值
+                 const categoryValue = Array.isArray(value) ? value[0] : value;
+                 setSelectedUploadCategory(categoryValue);
+               }}
                placeholder="选择或输入类目"
-               mode="combobox"
+               mode="tags"
+               maxTagCount={1}
                showSearch
                allowClear
-               filterOption={(input, option) =>
-                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-               }
+               filterOption={(input, option) => {
+                 const label = typeof option?.label === 'string' ? option.label : String(option?.label || '');
+                 return label.toLowerCase().includes(input.toLowerCase());
+               }}
                onDropdownVisibleChange={(open) => {
                  if (open && selectedUploadCountry) {
                    fetchTemplateCategories(selectedUploadCountry);
