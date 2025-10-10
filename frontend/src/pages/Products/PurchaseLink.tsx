@@ -7203,12 +7203,14 @@ ${selectedSkuIds.map(skuId => {
                  placeholder="选择或输入类目"
                  showSearch
                  allowClear
+                 value={selectedUploadCategory}
                  style={{ flex: 1 }}
                  filterOption={(input, option) => {
                    const label = typeof option?.label === 'string' ? option.label : String(option?.label || '');
                    return label.toLowerCase().includes(input.toLowerCase());
                  }}
                  onChange={(value) => {
+                   console.log('🔄 onChange 触发，值:', value);
                    // 更新状态变量
                    setSelectedUploadCategory(value || '');
                    // 确保表单值也被更新
@@ -7237,6 +7239,10 @@ ${selectedSkuIds.map(skuId => {
                        console.log('💾 onInputKeyDown 保存类目:', inputValue);
                        addTemplateForm.setFieldValue('category', inputValue);
                        setSelectedUploadCategory(inputValue);
+                       // 强制更新Select的值
+                       setTimeout(() => {
+                         addTemplateForm.setFieldValue('category', inputValue);
+                       }, 0);
                      }
                    }
                  }}
@@ -7248,6 +7254,11 @@ ${selectedSkuIds.map(skuId => {
                      console.log('💾 onBlur 保存类目:', inputValue);
                      addTemplateForm.setFieldValue('category', inputValue);
                      setSelectedUploadCategory(inputValue);
+                     // 延迟再次设置值，确保不被清空
+                     setTimeout(() => {
+                       addTemplateForm.setFieldValue('category', inputValue);
+                       console.log('🔄 延迟设置值:', inputValue);
+                     }, 100);
                    }
                  }}
                  notFoundContent={null}
