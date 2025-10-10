@@ -2244,33 +2244,40 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
         file_size: uploadResult.size
       });
       
-      // 先将同站点同类目的旧模板设为非激活状态
-      await TemplateLink.update(
-        { is_active: false },
-        { 
-          where: { 
-            country: country, 
-            template_type: 'amazon',
-            category: category,
-            is_active: true 
-          } 
-        }
-      );
-      console.log(`🔄 已将${country}站点${category}类目的旧模板设为非激活状态`);
-      
-      templateLink = await TemplateLink.create({
-        template_type: 'amazon',
-        country: country,
-        category: category,
-        file_name: originalFileName.substring(0, 255),
-        oss_object_name: uploadResult.name.substring(0, 255),
-        oss_url: uploadResult.url.substring(0, 255),
-        file_size: uploadResult.size,
-        upload_time: new Date(),
-        is_active: true
+      // 使用事务确保操作的原子性
+      const { sequelize } = require('../models/database');
+      await sequelize.transaction(async (transaction) => {
+        // 先将同站点同模板类型同类目的所有旧模板设为非激活状态
+        await TemplateLink.update(
+          { is_active: false },
+          { 
+            where: { 
+              country: country, 
+              template_type: 'amazon',
+              category: category,
+              is_active: true 
+            },
+            transaction: transaction
+          }
+        );
+        console.log(`🔄 已将${country}站点amazon类型${category}类目的旧模板设为非激活状态`);
+        
+        // 创建新模板记录
+        templateLink = await TemplateLink.create({
+          template_type: 'amazon',
+          country: country,
+          category: category,
+          file_name: originalFileName.substring(0, 255),
+          oss_object_name: uploadResult.name.substring(0, 255),
+          oss_url: uploadResult.url.substring(0, 255),
+          file_size: uploadResult.size,
+          upload_time: new Date(),
+          is_active: true
+        }, { transaction: transaction });
+        
+        console.log(`📊 模板信息已保存到数据库，ID: ${templateLink.id}`);
       });
       
-      console.log(`📊 模板信息已保存到数据库，ID: ${templateLink.id}`);
     } catch (dbError) {
       console.error('❌ 保存模板信息到数据库失败:', dbError);
       console.error('❌ 错误详情:', {
@@ -2335,10 +2342,9 @@ router.get('/amazon-templates', async (req, res) => {
     
     console.log(`📋 从数据库获取亚马逊模板列表，站点: ${country || '全部'}, 类目: ${category || '全部'}`);
     
-    // 构建查询条件
+    // 构建查询条件 - 移除 is_active 限制，显示所有模板
     const whereConditions = {
-      template_type: 'amazon',
-      is_active: true
+      template_type: 'amazon'
     };
     
     if (country) {
@@ -2364,7 +2370,8 @@ router.get('/amazon-templates', async (req, res) => {
       url: template.oss_url,
       country: template.country,
       category: template.category,
-      id: template.id
+      id: template.id,
+      isActive: template.is_active
     }));
 
     console.log(`📊 从数据库找到 ${files.length} 个模板文件`);
@@ -2388,10 +2395,9 @@ router.get('/amazon-templates/categories', async (req, res) => {
     
     console.log(`📋 获取亚马逊模板类目列表，站点: ${country || '全部'}`);
     
-    // 构建查询条件
+    // 构建查询条件 - 移除 is_active 限制，显示所有类目
     const whereConditions = {
-      template_type: 'amazon',
-      is_active: true
+      template_type: 'amazon'
     };
     
     if (country) {
@@ -5707,6 +5713,7 @@ ${process.env.MANUFACTURER_PHONE}`;
 
 // ==================== 3步流程 - 步骤1：上传源数据到数据库 ====================
 router.post('/upload-source-data', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
   try {
     console.log('🔄 开始上传源数据到数据库...');
     
@@ -5984,9 +5991,99 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     }
     
   } catch (error) {
-    console.error('❌ 上传源数据失败:', error);
+    const processingTime = Date.now() - startTime;
+    console.error(`❌ 上传源数据失败 (耗时: ${processingTime}ms):`, error);
     res.status(500).json({
       message: '上传失败: ' + error.message,
+      error: error.toString(),
+      processingTime: processingTime
+    });
+  }
+});
+
+// ==================== 模板管理API ====================
+// 激活/禁用模板
+router.put('/amazon-templates/:id/toggle-active', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+    
+    console.log(`🔄 切换模板激活状态，ID: ${id}, 激活状态: ${isActive}`);
+    
+    // 查找模板
+    const template = await TemplateLink.findByPk(id);
+    if (!template) {
+      return res.status(404).json({ message: '模板不存在' });
+    }
+    
+    // 使用事务确保操作的原子性
+    const { sequelize } = require('../models/database');
+    await sequelize.transaction(async (transaction) => {
+      if (isActive) {
+        // 如果要激活模板，先将同站点同模板类型同类目的所有其他模板设为非激活状态
+        await TemplateLink.update(
+          { is_active: false },
+          { 
+            where: { 
+              country: template.country, 
+              template_type: template.template_type,
+              category: template.category,
+              id: { [require('sequelize').Op.ne]: id } // 排除当前模板
+            },
+            transaction: transaction
+          }
+        );
+        console.log(`🔄 已将${template.country}站点${template.template_type}类型${template.category}类目的其他模板设为非激活状态`);
+      }
+      
+      // 更新当前模板的激活状态
+      await TemplateLink.update(
+        { is_active: isActive },
+        { 
+          where: { id: id },
+          transaction: transaction
+        }
+      );
+      
+      console.log(`✅ 模板 ${template.file_name} 已${isActive ? '激活' : '禁用'}`);
+    });
+    
+    res.json({
+      message: `模板已${isActive ? '激活' : '禁用'}`,
+      success: true
+    });
+    
+  } catch (error) {
+    console.error('切换模板激活状态失败:', error);
+    res.status(500).json({
+      message: '操作失败: ' + error.message,
+      success: false
+    });
+  }
+});
+
+// 检查模板约束问题
+router.get('/debug-template-constraint', async (req, res) => {
+  try {
+    const { country, template_type } = req.query;
+    
+    // 查询所有相关记录
+    const allRecords = await TemplateLink.findAll({
+      where: {
+        country: country || 'US',
+        template_type: template_type || 'amazon'
+      },
+      order: [['upload_time', 'DESC']]
+    });
+    
+    res.json({
+      message: '查询成功',
+      data: allRecords,
+      count: allRecords.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: '查询失败: ' + error.message,
       error: error.toString()
     });
   }
