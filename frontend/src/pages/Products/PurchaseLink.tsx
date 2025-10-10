@@ -3416,7 +3416,6 @@ const Purchase: React.FC = () => {
         },
         body: JSON.stringify({
           category: values.category,
-          label: values.label,
           country: selectedUploadCountry
         })
       });
@@ -3451,8 +3450,7 @@ const Purchase: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          category: values.category,
-          label: values.label
+          category: values.category
         })
       });
       
@@ -3478,11 +3476,23 @@ const Purchase: React.FC = () => {
   // 删除类目
   const handleDeleteCategory = async (categoryId: string) => {
     try {
+      console.log('🗑️ 开始删除类目，ID:', categoryId);
+      
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories/${categoryId}`, {
         method: 'DELETE'
       });
       
+      console.log('📡 删除请求响应状态:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ 删除请求失败:', res.status, errorText);
+        message.error(`删除失败: ${res.status} ${res.statusText}`);
+        return;
+      }
+      
       const result = await res.json();
+      console.log('📋 删除响应结果:', result);
       
       if (result.success) {
         message.success('类目删除成功');
@@ -3493,7 +3503,7 @@ const Purchase: React.FC = () => {
       }
     } catch (error) {
       console.error('删除类目失败:', error);
-      message.error('删除类目失败');
+      message.error('删除类目失败: ' + (error as Error).message);
     }
   };
 
@@ -3501,8 +3511,7 @@ const Purchase: React.FC = () => {
   const handleEditCategory = (category: any) => {
     setEditingCategory(category);
     categoryManageForm.setFieldsValue({
-      category: category.value,
-      label: category.label
+      category: category.value
     });
   };
 
@@ -3713,16 +3722,27 @@ const Purchase: React.FC = () => {
 
   // 处理添加模板
   const handleAddTemplate = async (values: any) => {
+    console.log('📤 开始处理添加模板，表单值:', values);
+    
     const file = values.file?.fileList?.[0]?.originFileObj;
     if (!file) {
       message.error('请选择文件');
       return;
     }
 
+    // 检查类目是否已选择
+    if (!values.category) {
+      console.log('❌ 类目未选择，当前表单值:', values);
+      message.error('请选择或输入类目');
+      return;
+    }
+    
+    console.log('✅ 表单验证通过，准备上传');
+
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('country', selectedUploadCountry);
-    formData.append('category', selectedUploadCategory);
+    formData.append('country', values.country);
+    formData.append('category', values.category);
     formData.append('originalFileName', file.name);
 
     try {
@@ -7252,21 +7272,13 @@ ${selectedSkuIds.map(skuId => {
            onFinish={editingCategory ? handleUpdateCategory : handleAddCategory}
            layout="vertical"
          >
-           <Form.Item
-             label="类目名称"
-             name="category"
-             rules={[{ required: true, message: '请输入类目名称' }]}
-           >
-             <Input placeholder="请输入类目名称（英文）" />
-           </Form.Item>
-           
-           <Form.Item
-             label="显示标签"
-             name="label"
-             rules={[{ required: true, message: '请输入显示标签' }]}
-           >
-             <Input placeholder="请输入显示标签（中文）" />
-           </Form.Item>
+          <Form.Item
+            label="类目名称"
+            name="category"
+            rules={[{ required: true, message: '请输入类目名称' }]}
+          >
+            <Input placeholder="请输入类目名称" />
+          </Form.Item>
            
            <Form.Item>
              <Space>
@@ -7323,7 +7335,7 @@ ${selectedSkuIds.map(skuId => {
                  ]}
                >
                  <List.Item.Meta
-                   title={category.label}
+                   title={category.value}
                    description={`类目代码: ${category.value}`}
                  />
                </List.Item>
@@ -7366,14 +7378,24 @@ ${selectedSkuIds.map(skuId => {
            >
              <Select
                placeholder="选择站点"
-               onChange={(value) => {
+               onChange={async (value) => {
                  setSelectedUploadCountry(value);
                  // 当站点变化时，获取该类目的模板列表
                  if (value) {
-                   fetchTemplateCategories(value);
+                   await fetchTemplateCategories(value);
+                   // 获取类目列表后，设置默认值
+                   setTimeout(() => {
+                     const categories = templateCategories[value] || [];
+                     if (categories.length > 0) {
+                       addTemplateForm.setFieldValue('category', categories[0].value);
+                       setSelectedUploadCategory(categories[0].value);
+                     }
+                   }, 100);
+                 } else {
+                   // 清空类目选择
+                   addTemplateForm.setFieldValue('category', undefined);
+                   setSelectedUploadCategory('');
                  }
-                 // 清空类目选择
-                 addTemplateForm.setFieldValue('category', undefined);
                }}
              >
                <Option value="US">美国 (US)</Option>
@@ -7399,6 +7421,12 @@ ${selectedSkuIds.map(skuId => {
                    const label = typeof option?.label === 'string' ? option.label : String(option?.label || '');
                    return label.toLowerCase().includes(input.toLowerCase());
                  }}
+                 onChange={(value) => {
+                   // 更新状态变量
+                   setSelectedUploadCategory(value || '');
+                   // 确保表单值也被更新
+                   addTemplateForm.setFieldValue('category', value);
+                 }}
                  onDropdownVisibleChange={(open) => {
                    if (open && selectedUploadCountry) {
                      fetchTemplateCategories(selectedUploadCountry);
@@ -7409,6 +7437,8 @@ ${selectedSkuIds.map(skuId => {
                    if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
                      // 通过Form.Item的name属性设置值
                      addTemplateForm.setFieldValue('category', value);
+                     // 同时更新状态变量
+                     setSelectedUploadCategory(value);
                    }
                  }}
                  notFoundContent={null}

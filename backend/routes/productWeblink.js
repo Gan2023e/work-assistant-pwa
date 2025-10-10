@@ -2412,39 +2412,18 @@ router.get('/amazon-templates/categories', async (req, res) => {
       order: [['category', 'ASC']]
     });
     
-    // 预定义的常用类目
-    const predefinedCategories = [
-      { value: 'backpack', label: '双肩背包' },
-      { value: 'handbag', label: '单肩包' }
-    ];
-    
-    // 合并数据库中的类目和预定义类目
-    const dbCategories = categories.map(item => {
+    // 直接使用数据库中的类目，不需要预定义类目
+    const categoryList = categories.map(item => {
       // 检查是否是类目定义记录
       const isCategoryDefinition = item.file_name && item.file_name.startsWith('__CATEGORY_DEFINITION__');
       
       return {
         value: item.category,
-        label: item.category === 'backpack' ? '双肩背包' : 
-               item.category === 'handbag' ? '单肩包' : item.category,
+        label: item.category, // 直接使用category作为显示标签
         id: item.id,
         isDefinition: isCategoryDefinition
       };
     });
-    
-    // 合并并去重（忽略大小写）
-    const allCategories = [...predefinedCategories];
-    dbCategories.forEach(dbCat => {
-      // 检查是否已存在（忽略大小写）
-      const exists = allCategories.find(cat => 
-        cat.value.toLowerCase() === dbCat.value.toLowerCase()
-      );
-      if (!exists) {
-        allCategories.push(dbCat);
-      }
-    });
-    
-    const categoryList = allCategories;
     
     console.log(`📊 找到 ${categoryList.length} 个类目`);
     
@@ -2462,12 +2441,12 @@ router.get('/amazon-templates/categories', async (req, res) => {
 // 添加新的类目
 router.post('/amazon-templates/categories', async (req, res) => {
   try {
-    const { category, label, country } = req.body;
+    const { category, country } = req.body;
     
-    console.log(`📝 添加新类目请求: ${category} (${label}), 站点: ${country || '全部'}`);
+    console.log(`📝 添加新类目请求: ${category}, 站点: ${country || '全部'}`);
     
-    if (!category || !label) {
-      return res.status(400).json({ message: '类目名称和标签不能为空' });
+    if (!category) {
+      return res.status(400).json({ message: '类目名称不能为空' });
     }
     
     // 检查类目是否已存在
@@ -2497,7 +2476,7 @@ router.post('/amazon-templates/categories', async (req, res) => {
       is_active: false // 类目定义记录不激活
     });
     
-    console.log(`✅ 新类目添加成功: ${category} (${label}), ID: ${categoryRecord.id}`);
+    console.log(`✅ 新类目添加成功: ${category}, ID: ${categoryRecord.id}`);
     
     res.json({
       message: '类目添加成功',
@@ -2505,7 +2484,6 @@ router.post('/amazon-templates/categories', async (req, res) => {
       data: {
         id: categoryRecord.id,
         category: category,
-        label: label,
         country: country || 'GLOBAL'
       }
     });
@@ -2523,12 +2501,12 @@ router.post('/amazon-templates/categories', async (req, res) => {
 router.put('/amazon-templates/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { category, label } = req.body;
+    const { category } = req.body;
     
-    console.log(`📝 更新类目请求: ID ${id}, 新名称: ${category} (${label})`);
+    console.log(`📝 更新类目请求: ID ${id}, 新名称: ${category}`);
     
-    if (!category || !label) {
-      return res.status(400).json({ message: '类目名称和标签不能为空' });
+    if (!category) {
+      return res.status(400).json({ message: '类目名称不能为空' });
     }
     
     const categoryRecord = await TemplateLink.findByPk(id);
@@ -2558,7 +2536,7 @@ router.put('/amazon-templates/categories/:id', async (req, res) => {
       oss_url: `__CATEGORY_DEFINITION__${category}`
     });
     
-    console.log(`✅ 类目更新成功: ${category} (${label})`);
+    console.log(`✅ 类目更新成功: ${category}`);
     
     res.json({
       message: '类目更新成功',
@@ -2566,7 +2544,6 @@ router.put('/amazon-templates/categories/:id', async (req, res) => {
       data: {
         id: categoryRecord.id,
         category: category,
-        label: label,
         country: categoryRecord.country
       }
     });
