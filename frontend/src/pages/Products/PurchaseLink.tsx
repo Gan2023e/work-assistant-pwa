@@ -63,7 +63,8 @@ import {
   MenuUnfoldOutlined,
   ExperimentOutlined,
   ExclamationCircleOutlined,
-  CopyOutlined
+  CopyOutlined,
+  SettingOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
