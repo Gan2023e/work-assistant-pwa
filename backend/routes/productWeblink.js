@@ -2697,6 +2697,30 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
       return res.status(400).json({ message: '缺少文件名参数' });
     }
 
+    // 检查是否是类目定义记录
+    const isCategoryDefinition = objectName.startsWith('__CATEGORY_DEFINITION__');
+    
+    if (isCategoryDefinition) {
+      console.log('📝 检测到类目定义记录，只删除数据库记录');
+      
+      // 对于类目定义记录，只删除数据库记录，不操作OSS
+      const deletedCount = await TemplateLink.destroy({
+        where: {
+          oss_object_name: objectName
+        }
+      });
+      
+      if (deletedCount > 0) {
+        console.log(`📊 已从数据库删除 ${deletedCount} 条类目定义记录`);
+        res.json({ message: '类目删除成功', success: true });
+      } else {
+        console.log('⚠️ 未找到要删除的类目定义记录');
+        res.status(404).json({ message: '未找到要删除的类目' });
+      }
+      return;
+    }
+
+    // 对于实际模板文件，执行完整的删除流程
     const { deleteTemplateFromOSS, backupTemplate } = require('../utils/oss');
     
     // 删除前先备份
