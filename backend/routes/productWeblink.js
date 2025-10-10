@@ -3382,16 +3382,60 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
     }
 
-    // 步骤2: 处理数据并保存到数据库，同时准备填写到Excel
-    console.log('💾 保存数据到数据库并准备填写到Excel...');
+    // 步骤1.5: 检查feed_product_type列去重后的内容
+    console.log('🔍 检查feed_product_type列内容...');
     
-    // 获取标题行（第3行是标题行，索引为2）
     if (jsonData.length < 4) {
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
     }
     
     const headers = jsonData[2]; // 第3行是标题行
     const dataRows = jsonData.slice(3); // 第4行开始是数据行
+    
+    // 查找feed_product_type列
+    const feedProductTypeColIndex = headers.findIndex(header => 
+      header && header.toString().toLowerCase().replace(/\s+/g, '_') === 'feed_product_type'
+    );
+    
+    if (feedProductTypeColIndex === -1) {
+      return res.status(400).json({ 
+        message: 'Excel文件中未找到feed_product_type列，请确保文件包含此列并重新上传。',
+        missingColumn: 'feed_product_type'
+      });
+    } else {
+      console.log(`📍 找到feed_product_type列，位置: ${feedProductTypeColIndex}`);
+      
+      // 收集所有feed_product_type值
+      const feedProductTypes = new Set();
+      for (const row of dataRows) {
+        if (row && row[feedProductTypeColIndex] !== undefined && row[feedProductTypeColIndex] !== null && row[feedProductTypeColIndex] !== '') {
+          const value = row[feedProductTypeColIndex].toString().trim();
+          if (value) {
+            feedProductTypes.add(value);
+          }
+        }
+      }
+      
+      console.log(`📊 发现${feedProductTypes.size}种不同的feed_product_type:`, Array.from(feedProductTypes));
+      
+      // 如果有多个不同的feed_product_type，返回错误提示
+      if (feedProductTypes.size > 1) {
+        const uniqueTypes = Array.from(feedProductTypes);
+        return res.status(400).json({ 
+          message: `检测到多个不同的商品类型：${uniqueTypes.join('、')}。请按商品类型分开上传，每次只上传一种类型的商品。`,
+          feedProductTypes: uniqueTypes,
+          hasMultipleTypes: true
+        });
+      } else if (feedProductTypes.size === 1) {
+        const detectedType = Array.from(feedProductTypes)[0];
+        console.log(`✅ 检测到单一商品类型: ${detectedType}`);
+      } else {
+        console.log('⚠️ 未检测到任何feed_product_type值');
+      }
+    }
+
+    // 步骤2: 处理数据并保存到数据库，同时准备填写到Excel
+    console.log('💾 保存数据到数据库并准备填写到Excel...');
     
     const savedRecords = [];
     const processedRecords = []; // 用于Excel填写的干净数据
@@ -3442,23 +3486,60 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log(`✅ 成功保存 ${savedRecords.length} 条记录到数据库`);
     console.log(`✅ 准备了 ${processedRecords.length} 条记录用于Excel填写`);
 
-    // 步骤3: 获取对应国家的模板文件
+    // 步骤3: 根据feed_product_type获取对应国家的模板文件
     console.log(`🔍 查找${actualCountry}站点的模板文件...`);
+    
+    // 确定要使用的模板类目
+    let templateCategory = 'backpack'; // 默认类目
+    if (feedProductTypeColIndex !== -1) {
+      const feedProductTypes = new Set();
+      for (const row of dataRows) {
+        if (row && row[feedProductTypeColIndex] !== undefined && row[feedProductTypeColIndex] !== null && row[feedProductTypeColIndex] !== '') {
+          const value = row[feedProductTypeColIndex].toString().trim();
+          if (value) {
+            feedProductTypes.add(value);
+          }
+        }
+      }
+      
+      if (feedProductTypes.size === 1) {
+        const detectedType = Array.from(feedProductTypes)[0].toLowerCase();
+        // 根据feed_product_type映射到模板类目
+        if (detectedType === 'handbag') {
+          templateCategory = 'handbag';
+        } else if (detectedType === 'backpack') {
+          templateCategory = 'backpack';
+        } else {
+          // 如果检测到的类型不是handbag或backpack，尝试直接使用检测到的类型
+          templateCategory = detectedType;
+        }
+        console.log(`🎯 根据feed_product_type选择模板类目: ${detectedType} -> ${templateCategory}`);
+      }
+    }
+    
+    console.log(`🔍 查找${actualCountry}站点类目为${templateCategory}的模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
         template_type: 'amazon',
         country: actualCountry,
+        category: templateCategory,
         is_active: true
       },
       order: [['upload_time', 'DESC']]
     });
     
     if (!countryTemplate) {
-      return res.status(400).json({ message: `未找到${actualCountry}站点的资料模板，请先上传${actualCountry}模板文件` });
+      return res.status(400).json({ 
+        message: `未找到${actualCountry}站点类目为${templateCategory}的资料模板，请先上传${actualCountry}站点${templateCategory}类目的模板文件。`,
+        missingTemplate: {
+          country: actualCountry,
+          category: templateCategory
+        }
+      });
+    } else {
+      console.log(`📄 使用${actualCountry}站点类目为${templateCategory}的模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
     }
-
-    console.log(`📄 使用${actualCountry}模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
 
     // 步骤4: 下载模板文件
     console.log(`📥 下载${actualCountry}模板文件...`);
@@ -5205,13 +5286,96 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含标题行和数据行' });
     }
 
-    // 步骤2: 获取目标国家的模板文件
+    // 步骤1.5: 检查feed_product_type列去重后的内容
+    console.log('🔍 检查feed_product_type列内容...');
+    
+    if (jsonData.length < 4) {
+      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
+    }
+    
+    const headers = jsonData[2]; // 第3行是标题行
+    const dataRows = jsonData.slice(3); // 第4行开始是数据行
+    
+    // 查找feed_product_type列
+    const feedProductTypeColIndex = headers.findIndex(header => 
+      header && header.toString().toLowerCase().replace(/\s+/g, '_') === 'feed_product_type'
+    );
+    
+    if (feedProductTypeColIndex === -1) {
+      return res.status(400).json({ 
+        message: 'Excel文件中未找到feed_product_type列，请确保文件包含此列并重新上传。',
+        missingColumn: 'feed_product_type'
+      });
+    } else {
+      console.log(`📍 找到feed_product_type列，位置: ${feedProductTypeColIndex}`);
+      
+      // 收集所有feed_product_type值
+      const feedProductTypes = new Set();
+      for (const row of dataRows) {
+        if (row && row[feedProductTypeColIndex] !== undefined && row[feedProductTypeColIndex] !== null && row[feedProductTypeColIndex] !== '') {
+          const value = row[feedProductTypeColIndex].toString().trim();
+          if (value) {
+            feedProductTypes.add(value);
+          }
+        }
+      }
+      
+      console.log(`📊 发现${feedProductTypes.size}种不同的feed_product_type:`, Array.from(feedProductTypes));
+      
+      // 如果有多个不同的feed_product_type，返回错误提示
+      if (feedProductTypes.size > 1) {
+        const uniqueTypes = Array.from(feedProductTypes);
+        return res.status(400).json({ 
+          message: `检测到多个不同的商品类型：${uniqueTypes.join('、')}。请按商品类型分开上传，每次只上传一种类型的商品。`,
+          feedProductTypes: uniqueTypes,
+          hasMultipleTypes: true
+        });
+      } else if (feedProductTypes.size === 1) {
+        const detectedType = Array.from(feedProductTypes)[0];
+        console.log(`✅ 检测到单一商品类型: ${detectedType}`);
+      } else {
+        console.log('⚠️ 未检测到任何feed_product_type值');
+      }
+    }
+
+    // 步骤2: 根据feed_product_type获取目标国家的模板文件
     console.log(`🔍 查找${targetCountry}站点的模板文件...`);
+    
+    // 确定要使用的模板类目
+    let templateCategory = 'backpack'; // 默认类目
+    if (feedProductTypeColIndex !== -1) {
+      const feedProductTypes = new Set();
+      for (const row of dataRows) {
+        if (row && row[feedProductTypeColIndex] !== undefined && row[feedProductTypeColIndex] !== null && row[feedProductTypeColIndex] !== '') {
+          const value = row[feedProductTypeColIndex].toString().trim();
+          if (value) {
+            feedProductTypes.add(value);
+          }
+        }
+      }
+      
+      if (feedProductTypes.size === 1) {
+        const detectedType = Array.from(feedProductTypes)[0].toLowerCase();
+        // 根据feed_product_type映射到模板类目
+        if (detectedType === 'handbag') {
+          templateCategory = 'handbag';
+        } else if (detectedType === 'backpack') {
+          templateCategory = 'backpack';
+        } else {
+          // 如果检测到的类型不是handbag或backpack，尝试直接使用检测到的类型
+          templateCategory = detectedType;
+        }
+        console.log(`🎯 根据feed_product_type选择模板类目: ${detectedType} -> ${templateCategory}`);
+      }
+    }
+    
+    console.log(`🔍 查找${targetCountry}站点类目为${templateCategory}的模板文件...`);
     
     const targetTemplate = await TemplateLink.findOne({
       where: {
         template_type: 'amazon',
         country: targetCountry,
+        category: templateCategory,
         is_active: true
       },
       order: [['upload_time', 'DESC']]
@@ -5219,11 +5383,15 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     
     if (!targetTemplate) {
       return res.status(400).json({ 
-        message: `未找到${targetCountry}站点的资料模板，请先上传${targetCountry}模板文件` 
+        message: `未找到${targetCountry}站点类目为${templateCategory}的资料模板，请先上传${targetCountry}站点${templateCategory}类目的模板文件。`,
+        missingTemplate: {
+          country: targetCountry,
+          category: templateCategory
+        }
       });
+    } else {
+      console.log(`📄 使用${targetCountry}站点类目为${templateCategory}的模板: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
     }
-
-    console.log(`📄 使用${targetCountry}模板: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
 
     // 步骤3: 下载目标模板文件
     console.log(`📥 下载${targetCountry}模板文件...`);
@@ -5244,14 +5412,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     // 步骤4: 处理数据转换
     console.log('🔄 开始数据转换处理...');
     const { ProductInformation } = require('../models');
-    
-    // 获取标题行（第3行是标题行，索引为2）
-    if (jsonData.length < 4) {
-      return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
-    }
-    
-    const headers = jsonData[2]; // 第3行是标题行
-    const dataRows = jsonData.slice(3); // 第4行开始是数据行
     
     const transformedRecords = [];
     

@@ -4045,6 +4045,38 @@ const Purchase: React.FC = () => {
         // 尝试解析错误信息
         try {
           const errorResult = await response.json();
+          
+          // 特殊处理feed_product_type检查错误
+          if (errorResult.hasMultipleTypes && errorResult.feedProductTypes) {
+            const types = errorResult.feedProductTypes.join('、');
+            message.error({
+              content: `检测到多个不同的商品类型：${types}。请按商品类型分开上传，每次只上传一种类型的商品。`,
+              duration: 8,
+              style: { marginTop: '20vh' }
+            });
+            return; // 不抛出错误，直接返回
+          }
+          
+          // 特殊处理缺少feed_product_type列的错误
+          if (errorResult.missingColumn === 'feed_product_type') {
+            message.error({
+              content: errorResult.message,
+              duration: 8,
+              style: { marginTop: '20vh' }
+            });
+            return; // 不抛出错误，直接返回
+          }
+          
+          // 特殊处理缺少模板的错误
+          if (errorResult.missingTemplate) {
+            message.error({
+              content: errorResult.message,
+              duration: 8,
+              style: { marginTop: '20vh' }
+            });
+            return; // 不抛出错误，直接返回
+          }
+          
           throw new Error(errorResult.message || `HTTP error! status: ${response.status}`);
         } catch {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -4515,7 +4547,51 @@ const Purchase: React.FC = () => {
           });
 
           if (!response.ok) {
-            throw new Error(`生成${targetCountry}站点资料表失败: ${response.statusText}`);
+            // 尝试解析错误信息
+            try {
+              const errorResult = await response.json();
+              
+              // 特殊处理feed_product_type检查错误
+              if (errorResult.hasMultipleTypes && errorResult.feedProductTypes) {
+                const types = errorResult.feedProductTypes.join('、');
+                message.error({
+                  content: `检测到多个不同的商品类型：${types}。请按商品类型分开上传，每次只上传一种类型的商品。`,
+                  duration: 8,
+                  style: { marginTop: '20vh' }
+                });
+                // 停止批量生成
+                setBatchGenerating(false);
+                return;
+              }
+              
+              // 特殊处理缺少feed_product_type列的错误
+              if (errorResult.missingColumn === 'feed_product_type') {
+                message.error({
+                  content: errorResult.message,
+                  duration: 8,
+                  style: { marginTop: '20vh' }
+                });
+                // 停止批量生成
+                setBatchGenerating(false);
+                return;
+              }
+              
+              // 特殊处理缺少模板的错误
+              if (errorResult.missingTemplate) {
+                message.error({
+                  content: errorResult.message,
+                  duration: 8,
+                  style: { marginTop: '20vh' }
+                });
+                // 停止批量生成
+                setBatchGenerating(false);
+                return;
+              }
+              
+              throw new Error(errorResult.message || `生成${targetCountry}站点资料表失败: ${response.statusText}`);
+            } catch {
+              throw new Error(`生成${targetCountry}站点资料表失败: ${response.statusText}`);
+            }
           }
 
           const blob = await response.blob();
