@@ -7220,18 +7220,32 @@ ${selectedSkuIds.map(skuId => {
                    }
                  }}
                  onSearch={(value) => {
-                   // 当用户输入时，如果输入的值不在现有选项中，允许设置为该值
-                   if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
-                     // 通过Form.Item的name属性设置值
+                   // 当用户输入时，保存输入的值
+                   console.log('🔍 onSearch 输入值:', value);
+                   if (value) {
+                     console.log('💾 onSearch 保存类目:', value);
                      addTemplateForm.setFieldValue('category', value);
-                     // 同时更新状态变量
                      setSelectedUploadCategory(value);
                    }
                  }}
+                 onInputKeyDown={(e) => {
+                   // 当用户按回车键时，保存当前输入的值
+                   if (e.key === 'Enter') {
+                     const inputValue = (e.target as HTMLInputElement).value;
+                     console.log('🔍 onInputKeyDown 输入值:', inputValue);
+                     if (inputValue) {
+                       console.log('💾 onInputKeyDown 保存类目:', inputValue);
+                       addTemplateForm.setFieldValue('category', inputValue);
+                       setSelectedUploadCategory(inputValue);
+                     }
+                   }
+                 }}
                  onBlur={(e) => {
-                   // 当失焦时，如果输入框有内容且不在现有选项中，保存该值
+                   // 当失焦时，获取当前输入的值并保存
                    const inputValue = (e.target as HTMLInputElement)?.value;
-                   if (inputValue && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === inputValue)) {
+                   console.log('🔍 onBlur 输入值:', inputValue);
+                   if (inputValue) {
+                     console.log('💾 onBlur 保存类目:', inputValue);
                      addTemplateForm.setFieldValue('category', inputValue);
                      setSelectedUploadCategory(inputValue);
                    }
