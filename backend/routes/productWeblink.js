@@ -6021,7 +6021,9 @@ router.put('/amazon-templates/:id/toggle-active', async (req, res) => {
     await sequelize.transaction(async (transaction) => {
       if (isActive) {
         // 如果要激活模板，先将同站点同模板类型同类目的所有其他模板设为非激活状态
-        await TemplateLink.update(
+        console.log(`[DEBUG] 准备禁用其他模板 - 国家: ${template.country}, 类型: ${template.template_type}, 类目: ${template.category}, 排除ID: ${id}`);
+        
+        const updateResult = await TemplateLink.update(
           { is_active: false },
           { 
             where: { 
@@ -6033,6 +6035,8 @@ router.put('/amazon-templates/:id/toggle-active', async (req, res) => {
             transaction: transaction
           }
         );
+        
+        console.log(`[DEBUG] 禁用其他模板的结果: ${updateResult[0]} 行受影响`);
         console.log(`🔄 已将${template.country}站点${template.template_type}类型${template.category}类目的其他模板设为非激活状态`);
       }
       
