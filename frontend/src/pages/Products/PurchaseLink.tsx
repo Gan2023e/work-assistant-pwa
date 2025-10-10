@@ -7228,6 +7228,14 @@ ${selectedSkuIds.map(skuId => {
                      setSelectedUploadCategory(value);
                    }
                  }}
+                 onBlur={(e) => {
+                   // 当失焦时，如果输入框有内容且不在现有选项中，保存该值
+                   const inputValue = (e.target as HTMLInputElement)?.value;
+                   if (inputValue && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === inputValue)) {
+                     addTemplateForm.setFieldValue('category', inputValue);
+                     setSelectedUploadCategory(inputValue);
+                   }
+                 }}
                  notFoundContent={null}
                  dropdownRender={(menu) => (
                    <div>
