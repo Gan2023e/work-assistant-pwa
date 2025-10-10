@@ -3794,7 +3794,13 @@ const Purchase: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setAddTemplateModalVisible(true)}
+            onClick={() => {
+              // 重置所有相关状态
+              setSelectedUploadCountry('');
+              setSelectedUploadCategory('');
+              addTemplateForm.resetFields();
+              setAddTemplateModalVisible(true);
+            }}
             size="large"
           >
             添加模板
@@ -7148,6 +7154,8 @@ ${selectedSkuIds.map(skuId => {
          open={addTemplateModalVisible}
          onCancel={() => {
            setAddTemplateModalVisible(false);
+           setSelectedUploadCountry('');
+           setSelectedUploadCategory('');
            addTemplateForm.resetFields();
          }}
          footer={null}
@@ -7170,14 +7178,9 @@ ${selectedSkuIds.map(skuId => {
                  // 当站点变化时，获取该类目的模板列表
                  if (value) {
                    await fetchTemplateCategories(value);
-                   // 获取类目列表后，设置默认值
-                   setTimeout(() => {
-                     const categories = templateCategories[value] || [];
-                     if (categories.length > 0) {
-                       addTemplateForm.setFieldValue('category', categories[0].value);
-                       setSelectedUploadCategory(categories[0].value);
-                     }
-                   }, 100);
+                   // 清空类目选择，让用户手动选择
+                   addTemplateForm.setFieldValue('category', undefined);
+                   setSelectedUploadCategory('');
                  } else {
                    // 清空类目选择
                    addTemplateForm.setFieldValue('category', undefined);
