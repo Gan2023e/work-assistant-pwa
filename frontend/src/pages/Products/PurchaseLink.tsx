@@ -7365,15 +7365,16 @@ ${selectedSkuIds.map(skuId => {
              rules={[{ required: true, message: '请选择站点' }]}
            >
              <Select
-               value={selectedUploadCountry}
+               placeholder="选择站点"
                onChange={(value) => {
                  setSelectedUploadCountry(value);
                  // 当站点变化时，获取该类目的模板列表
                  if (value) {
                    fetchTemplateCategories(value);
                  }
+                 // 清空类目选择
+                 addTemplateForm.setFieldValue('category', undefined);
                }}
-               placeholder="选择站点"
              >
                <Option value="US">美国 (US)</Option>
                <Option value="CA">加拿大 (CA)</Option>
@@ -7390,8 +7391,6 @@ ${selectedSkuIds.map(skuId => {
            >
              <div style={{ display: 'flex', gap: '8px' }}>
                <Select
-                 value={selectedUploadCategory}
-                 onChange={setSelectedUploadCategory}
                  placeholder="选择或输入类目"
                  showSearch
                  allowClear
@@ -7408,7 +7407,8 @@ ${selectedSkuIds.map(skuId => {
                  onSearch={(value) => {
                    // 当用户输入时，如果输入的值不在现有选项中，允许设置为该值
                    if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
-                     setSelectedUploadCategory(value);
+                     // 通过Form.Item的name属性设置值
+                     addTemplateForm.setFieldValue('category', value);
                    }
                  }}
                  notFoundContent={null}
