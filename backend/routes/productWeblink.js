@@ -2194,12 +2194,12 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
       return res.status(400).json({ message: '请选择要上传的文件' });
     }
 
-    const { country } = req.body;
+    const { country, category = 'backpack' } = req.body;
     if (!country) {
       return res.status(400).json({ message: '请指定站点' });
     }
 
-    console.log(`📋 文件信息: ${req.file.originalname}, 大小: ${req.file.size} 字节, 站点: ${country}`);
+    console.log(`📋 文件信息: ${req.file.originalname}, 大小: ${req.file.size} 字节, 站点: ${country}, 类目: ${category}`);
 
     // 验证文件类型
     const validTypes = [
@@ -2231,12 +2231,40 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
     // 保存模板信息到数据库
     let templateLink = null;
     try {
+      console.log('📝 准备保存到数据库:', {
+        template_type: 'amazon',
+        country: country,
+        category: category,
+        file_name: originalFileName,
+        file_name_length: originalFileName.length,
+        oss_object_name: uploadResult.name,
+        oss_object_name_length: uploadResult.name.length,
+        oss_url: uploadResult.url,
+        oss_url_length: uploadResult.url.length,
+        file_size: uploadResult.size
+      });
+      
+      // 先将同站点同类目的旧模板设为非激活状态
+      await TemplateLink.update(
+        { is_active: false },
+        { 
+          where: { 
+            country: country, 
+            template_type: 'amazon',
+            category: category,
+            is_active: true 
+          } 
+        }
+      );
+      console.log(`🔄 已将${country}站点${category}类目的旧模板设为非激活状态`);
+      
       templateLink = await TemplateLink.create({
         template_type: 'amazon',
         country: country,
-        file_name: originalFileName,
-        oss_object_name: uploadResult.name,
-        oss_url: uploadResult.url,
+        category: category,
+        file_name: originalFileName.substring(0, 255),
+        oss_object_name: uploadResult.name.substring(0, 255),
+        oss_url: uploadResult.url.substring(0, 255),
         file_size: uploadResult.size,
         upload_time: new Date(),
         is_active: true
@@ -2244,8 +2272,16 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
       
       console.log(`📊 模板信息已保存到数据库，ID: ${templateLink.id}`);
     } catch (dbError) {
-      console.warn('⚠️ 保存模板信息到数据库失败:', dbError.message);
+      console.error('❌ 保存模板信息到数据库失败:', dbError);
+      console.error('❌ 错误详情:', {
+        message: dbError.message,
+        name: dbError.name,
+        errors: dbError.errors,
+        stack: dbError.stack
+      });
+      
       // 不阻断上传流程，只是警告
+      console.warn('⚠️ 数据库保存失败，但文件已上传成功');
     }
 
     const uploadTime = Date.now() - startTime;
@@ -2258,6 +2294,7 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
       objectName: uploadResult.name,
       size: uploadResult.size,
       country: country,
+      category: category,
       uploadTime: new Date().toISOString(),
       processingTime: uploadTime
     };
@@ -2294,9 +2331,9 @@ router.post('/amazon-templates/upload', upload.single('file'), async (req, res) 
 // 获取亚马逊模板列表
 router.get('/amazon-templates', async (req, res) => {
   try {
-    const { country } = req.query;
+    const { country, category } = req.query;
     
-    console.log(`📋 从数据库获取亚马逊模板列表，站点: ${country || '全部'}`);
+    console.log(`📋 从数据库获取亚马逊模板列表，站点: ${country || '全部'}, 类目: ${category || '全部'}`);
     
     // 构建查询条件
     const whereConditions = {
@@ -2306,6 +2343,10 @@ router.get('/amazon-templates', async (req, res) => {
     
     if (country) {
       whereConditions.country = country;
+    }
+    
+    if (category) {
+      whereConditions.category = category;
     }
     
     // 从数据库查询模板列表
@@ -2322,6 +2363,7 @@ router.get('/amazon-templates', async (req, res) => {
       lastModified: template.upload_time,
       url: template.oss_url,
       country: template.country,
+      category: template.category,
       id: template.id
     }));
 
@@ -2336,6 +2378,71 @@ router.get('/amazon-templates', async (req, res) => {
   } catch (error) {
     console.error('从数据库获取亚马逊模板列表失败:', error);
     res.status(500).json({ message: '获取模板列表失败: ' + error.message });
+  }
+});
+
+// 获取亚马逊模板类目列表
+router.get('/amazon-templates/categories', async (req, res) => {
+  try {
+    const { country } = req.query;
+    
+    console.log(`📋 获取亚马逊模板类目列表，站点: ${country || '全部'}`);
+    
+    // 构建查询条件
+    const whereConditions = {
+      template_type: 'amazon',
+      is_active: true
+    };
+    
+    if (country) {
+      whereConditions.country = country;
+    }
+    
+    // 查询所有不重复的类目
+    const categories = await TemplateLink.findAll({
+      where: whereConditions,
+      attributes: ['category'],
+      group: ['category'],
+      order: [['category', 'ASC']]
+    });
+    
+    // 预定义的常用类目
+    const predefinedCategories = [
+      { value: 'backpack', label: '双肩背包' },
+      { value: 'handbag', label: '单肩包' }
+    ];
+    
+    // 合并数据库中的类目和预定义类目
+    const dbCategories = categories.map(item => ({
+      value: item.category,
+      label: item.category === 'backpack' ? '双肩背包' : 
+             item.category === 'handbag' ? '单肩包' : item.category
+    }));
+    
+    // 合并并去重（忽略大小写）
+    const allCategories = [...predefinedCategories];
+    dbCategories.forEach(dbCat => {
+      // 检查是否已存在（忽略大小写）
+      const exists = allCategories.find(cat => 
+        cat.value.toLowerCase() === dbCat.value.toLowerCase()
+      );
+      if (!exists) {
+        allCategories.push(dbCat);
+      }
+    });
+    
+    const categoryList = allCategories;
+    
+    console.log(`📊 找到 ${categoryList.length} 个类目`);
+    
+    res.json({
+      message: '获取成功',
+      data: categoryList
+    });
+    
+  } catch (error) {
+    console.error('获取亚马逊模板类目列表失败:', error);
+    res.status(500).json({ message: '获取类目列表失败: ' + error.message });
   }
 });
 

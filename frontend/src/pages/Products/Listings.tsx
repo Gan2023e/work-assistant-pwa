@@ -112,8 +112,35 @@ const Listings: React.FC = () => {
   }>>([]);
   const [generateLoading, setGenerateLoading] = useState(false);
   
+  // 模板类目选择状态
+  const [templateCategories, setTemplateCategories] = useState<Record<string, any[]>>({});
+  const [selectedTemplateCategory, setSelectedTemplateCategory] = useState<Record<string, string>>({
+    US: 'backpack',
+    CA: 'backpack',
+    UK: 'backpack',
+    AE: 'backpack',
+    AU: 'backpack'
+  });
+  
   // 表单实例
   const [addForm] = Form.useForm();
+
+  // 获取模板类目列表
+  const fetchTemplateCategories = async (countryCode: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories?country=${countryCode}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      const result = await res.json();
+      setTemplateCategories(prev => ({
+        ...prev,
+        [countryCode]: result.data || []
+      }));
+    } catch (error) {
+      console.error(`获取${countryCode}站点类目列表失败:`, error);
+    }
+  };
 
   // 获取Listings数据
   const fetchListings = useCallback(async () => {
@@ -463,16 +490,19 @@ const Listings: React.FC = () => {
         const [countryName, countryCode] = Object.entries(countryCodeMap)[i];
         
         try {
-          // 1. 获取该国家的模板文件列表
-          const templateRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${countryCode}`);
+          // 1. 获取该国家的模板文件列表（支持类目筛选）
+          const category = selectedTemplateCategory[countryCode] || 'backpack';
+          const templateRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=${countryCode}&category=${category}`);
           const templateResult = await templateRes.json();
           
           if (!templateResult.data || templateResult.data.length === 0) {
-            console.warn(`${countryName} 没有找到亚马逊资料模板，跳过生成`);
+            const categoryName = category === 'backpack' ? '双肩背包' : 
+                                category === 'handbag' ? '单肩包' : category;
+            console.warn(`${countryName} 没有找到${categoryName}的亚马逊资料模板，跳过生成`);
             updatedFiles[i] = {
               ...updatedFiles[i],
               status: 'error',
-              errorMessage: '没有找到亚马逊资料模板'
+              errorMessage: `没有找到${categoryName}的亚马逊资料模板`
             };
             setGeneratedFiles([...updatedFiles]);
             continue;
@@ -1896,6 +1926,48 @@ const Listings: React.FC = () => {
           <p style={{ marginBottom: 16 }}>
             将为选中的 <strong>{selectedRowKeys.length}</strong> 条记录生成SKU删除资料表，每个国家生成对应的Excel文件。
           </p>
+          
+          {/* 类目选择区域 */}
+          <div style={{ marginBottom: 16, padding: 16, background: '#f0f8ff', borderRadius: 6 }}>
+            <h4 style={{ marginBottom: 12, color: '#1677ff' }}>选择模板类目：</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              {Object.entries({
+                'US': '美国',
+                'CA': '加拿大', 
+                'UK': '英国',
+                'AE': '阿联酋',
+                'AU': '澳大利亚'
+              }).map(([countryCode, countryName]) => (
+                <div key={countryCode}>
+                  <div style={{ marginBottom: 8, fontWeight: 'bold' }}>{countryName}:</div>
+                  <Select
+                    value={selectedTemplateCategory[countryCode] || 'backpack'}
+                    onChange={(value) => {
+                      setSelectedTemplateCategory(prev => ({
+                        ...prev,
+                        [countryCode]: value
+                      }));
+                      // 获取该类目的模板列表
+                      fetchTemplateCategories(countryCode);
+                    }}
+                    style={{ width: '100%' }}
+                    placeholder="选择类目"
+                    onDropdownVisibleChange={(open) => {
+                      if (open && !templateCategories[countryCode]) {
+                        fetchTemplateCategories(countryCode);
+                      }
+                    }}
+                  >
+                    {templateCategories[countryCode]?.map(category => (
+                      <Option key={category.value} value={category.value}>
+                        {category.label}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
           
           {generatedFiles.length > 0 && (
             <div>

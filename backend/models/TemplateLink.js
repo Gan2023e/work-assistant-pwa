@@ -17,6 +17,12 @@ const TemplateLink = sequelize.define('TemplateLink', {
     allowNull: false,
     comment: '国家代码，如UK、US、DE等'
   },
+  category: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'backpack',
+    comment: '模板类目，如电子产品、服装、家居等'
+  },
   file_name: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -53,6 +59,10 @@ const TemplateLink = sequelize.define('TemplateLink', {
     {
       unique: false,
       fields: ['template_type', 'country']
+    },
+    {
+      unique: false,
+      fields: ['template_type', 'country', 'category']
     }
   ]
 });
