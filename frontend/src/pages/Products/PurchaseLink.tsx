@@ -572,6 +572,7 @@ const Purchase: React.FC = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
   const [addTemplateModalVisible, setAddTemplateModalVisible] = useState(false);
+  const [categoryManageModalVisible, setCategoryManageModalVisible] = useState(false);
   // 多站点模板文件管理
   const [allTemplateFiles, setAllTemplateFiles] = useState<Record<string, any[]>>({
     US: [],
@@ -605,6 +606,11 @@ const Purchase: React.FC = () => {
   });
   const [globalTemplateLoading, setGlobalTemplateLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 类目管理相关状态
+  const [categoryManageForm] = Form.useForm();
+  const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [categoryManageLoading, setCategoryManageLoading] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
   
   // 添加模板表单状态
@@ -3395,6 +3401,108 @@ const Purchase: React.FC = () => {
     } catch (error) {
       console.error(`❌ 获取${country}站点类目列表失败:`, error);
     }
+  };
+
+  // 添加新类目
+  const handleAddCategory = async (values: any) => {
+    try {
+      setCategoryManageLoading(true);
+      
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: values.category,
+          label: values.label,
+          country: selectedUploadCountry
+        })
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        message.success('类目添加成功');
+        categoryManageForm.resetFields();
+        setEditingCategory(null);
+        // 刷新类目列表
+        await fetchTemplateCategories(selectedUploadCountry);
+      } else {
+        message.error(result.message || '添加类目失败');
+      }
+    } catch (error) {
+      console.error('添加类目失败:', error);
+      message.error('添加类目失败');
+    } finally {
+      setCategoryManageLoading(false);
+    }
+  };
+
+  // 更新类目
+  const handleUpdateCategory = async (values: any) => {
+    try {
+      setCategoryManageLoading(true);
+      
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories/${editingCategory.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: values.category,
+          label: values.label
+        })
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        message.success('类目更新成功');
+        categoryManageForm.resetFields();
+        setEditingCategory(null);
+        // 刷新类目列表
+        await fetchTemplateCategories(selectedUploadCountry);
+      } else {
+        message.error(result.message || '更新类目失败');
+      }
+    } catch (error) {
+      console.error('更新类目失败:', error);
+      message.error('更新类目失败');
+    } finally {
+      setCategoryManageLoading(false);
+    }
+  };
+
+  // 删除类目
+  const handleDeleteCategory = async (categoryId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories/${categoryId}`, {
+        method: 'DELETE'
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        message.success('类目删除成功');
+        // 刷新类目列表
+        await fetchTemplateCategories(selectedUploadCountry);
+      } else {
+        message.error(result.message || '删除类目失败');
+      }
+    } catch (error) {
+      console.error('删除类目失败:', error);
+      message.error('删除类目失败');
+    }
+  };
+
+  // 编辑类目
+  const handleEditCategory = (category: any) => {
+    setEditingCategory(category);
+    categoryManageForm.setFieldsValue({
+      category: category.value,
+      label: category.label
+    });
   };
 
   // 批量获取所有站点的模板文件和类目
@@ -7116,7 +7224,112 @@ ${selectedSkuIds.map(skuId => {
             locale={{ emptyText: '暂无CPC文件' }}
           />
         </Space>
-      </Modal>
+       </Modal>
+
+       {/* 类目管理对话框 */}
+       <Modal
+         title="类目管理"
+         open={categoryManageModalVisible}
+         onCancel={() => {
+           setCategoryManageModalVisible(false);
+           categoryManageForm.resetFields();
+           setEditingCategory(null);
+         }}
+         footer={null}
+         width={800}
+       >
+         <div style={{ marginBottom: '16px' }}>
+           <h4>当前站点：{selectedUploadCountry === 'US' ? '美国' : 
+                        selectedUploadCountry === 'CA' ? '加拿大' :
+                        selectedUploadCountry === 'UK' ? '英国' :
+                        selectedUploadCountry === 'AE' ? '阿联酋' :
+                        selectedUploadCountry === 'AU' ? '澳大利亚' : selectedUploadCountry}</h4>
+         </div>
+         
+         <Form
+           form={categoryManageForm}
+           onFinish={editingCategory ? handleUpdateCategory : handleAddCategory}
+           layout="vertical"
+         >
+           <Form.Item
+             label="类目名称"
+             name="category"
+             rules={[{ required: true, message: '请输入类目名称' }]}
+           >
+             <Input placeholder="请输入类目名称（英文）" />
+           </Form.Item>
+           
+           <Form.Item
+             label="显示标签"
+             name="label"
+             rules={[{ required: true, message: '请输入显示标签' }]}
+           >
+             <Input placeholder="请输入显示标签（中文）" />
+           </Form.Item>
+           
+           <Form.Item>
+             <Space>
+               <Button 
+                 type="primary" 
+                 htmlType="submit" 
+                 loading={categoryManageLoading}
+               >
+                 {editingCategory ? '更新' : '添加'}
+               </Button>
+               {editingCategory && (
+                 <Button onClick={() => {
+                   setEditingCategory(null);
+                   categoryManageForm.resetFields();
+                 }}>
+                   取消编辑
+                 </Button>
+               )}
+             </Space>
+           </Form.Item>
+         </Form>
+         
+         <Divider />
+         
+         <div>
+           <h4>现有类目列表</h4>
+           <List
+             dataSource={templateCategories[selectedUploadCountry] || []}
+             renderItem={(category) => (
+               <List.Item
+                 actions={[
+                   <Button 
+                     type="link" 
+                     icon={<EditOutlined />}
+                     onClick={() => handleEditCategory(category)}
+                   >
+                     编辑
+                   </Button>,
+                   <Popconfirm
+                     title="确定要删除这个类目吗？"
+                     description="删除后无法恢复，请确认没有模板正在使用该类目。"
+                     onConfirm={() => handleDeleteCategory(category.id)}
+                     okText="确定"
+                     cancelText="取消"
+                   >
+                     <Button 
+                       type="link" 
+                       danger
+                       icon={<DeleteOutlined />}
+                     >
+                       删除
+                     </Button>
+                   </Popconfirm>
+                 ]}
+               >
+                 <List.Item.Meta
+                   title={category.label}
+                   description={`类目代码: ${category.value}`}
+                 />
+               </List.Item>
+             )}
+           />
+         </div>
+       </Modal>
 
              {/* 亚马逊模板管理对话框 */}
        <Modal
@@ -7174,46 +7387,57 @@ ${selectedSkuIds.map(skuId => {
              name="category"
              rules={[{ required: true, message: '请选择或输入类目' }]}
            >
-             <Select
-               value={selectedUploadCategory}
-               onChange={setSelectedUploadCategory}
-               placeholder="选择或输入类目"
-               showSearch
-               allowClear
-               filterOption={(input, option) => {
-                 const label = typeof option?.label === 'string' ? option.label : String(option?.label || '');
-                 return label.toLowerCase().includes(input.toLowerCase());
-               }}
-               onDropdownVisibleChange={(open) => {
-                 if (open && selectedUploadCountry) {
-                   fetchTemplateCategories(selectedUploadCountry);
-                 }
-               }}
-               onSearch={(value) => {
-                 // 当用户输入时，如果输入的值不在现有选项中，允许设置为该值
-                 if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
-                   setSelectedUploadCategory(value);
-                 }
-               }}
-               notFoundContent={null}
-               dropdownRender={(menu) => (
-                 <div>
-                   {menu}
-                   <Divider style={{ margin: '8px 0' }} />
-                   <div style={{ padding: '0 8px 4px' }}>
-                     <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
-                       提示：可以直接输入新的类目名称
+             <div style={{ display: 'flex', gap: '8px' }}>
+               <Select
+                 value={selectedUploadCategory}
+                 onChange={setSelectedUploadCategory}
+                 placeholder="选择或输入类目"
+                 showSearch
+                 allowClear
+                 style={{ flex: 1 }}
+                 filterOption={(input, option) => {
+                   const label = typeof option?.label === 'string' ? option.label : String(option?.label || '');
+                   return label.toLowerCase().includes(input.toLowerCase());
+                 }}
+                 onDropdownVisibleChange={(open) => {
+                   if (open && selectedUploadCountry) {
+                     fetchTemplateCategories(selectedUploadCountry);
+                   }
+                 }}
+                 onSearch={(value) => {
+                   // 当用户输入时，如果输入的值不在现有选项中，允许设置为该值
+                   if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
+                     setSelectedUploadCategory(value);
+                   }
+                 }}
+                 notFoundContent={null}
+                 dropdownRender={(menu) => (
+                   <div>
+                     {menu}
+                     <Divider style={{ margin: '8px 0' }} />
+                     <div style={{ padding: '0 8px 4px' }}>
+                       <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
+                         提示：可以直接输入新的类目名称
+                       </div>
                      </div>
                    </div>
-                 </div>
-               )}
-             >
-               {templateCategories[selectedUploadCountry]?.map(category => (
-                 <Option key={category.value} value={category.value} label={category.label}>
-                   {category.label}
-                 </Option>
-               ))}
-             </Select>
+                 )}
+               >
+                 {templateCategories[selectedUploadCountry]?.map(category => (
+                   <Option key={category.value} value={category.value} label={category.label}>
+                     {category.label}
+                   </Option>
+                 ))}
+               </Select>
+               <Button 
+                 type="default" 
+                 icon={<SettingOutlined />}
+                 onClick={() => setCategoryManageModalVisible(true)}
+                 title="管理类目"
+               >
+                 管理
+               </Button>
+             </div>
            </Form.Item>
 
            <Form.Item

@@ -2404,10 +2404,10 @@ router.get('/amazon-templates/categories', async (req, res) => {
       whereConditions.country = country;
     }
     
-    // 查询所有不重复的类目
+    // 查询所有不重复的类目（包括类目定义记录和实际模板记录）
     const categories = await TemplateLink.findAll({
       where: whereConditions,
-      attributes: ['category'],
+      attributes: ['category', 'id', 'file_name'],
       group: ['category'],
       order: [['category', 'ASC']]
     });
@@ -2419,11 +2419,18 @@ router.get('/amazon-templates/categories', async (req, res) => {
     ];
     
     // 合并数据库中的类目和预定义类目
-    const dbCategories = categories.map(item => ({
-      value: item.category,
-      label: item.category === 'backpack' ? '双肩背包' : 
-             item.category === 'handbag' ? '单肩包' : item.category
-    }));
+    const dbCategories = categories.map(item => {
+      // 检查是否是类目定义记录
+      const isCategoryDefinition = item.file_name && item.file_name.startsWith('__CATEGORY_DEFINITION__');
+      
+      return {
+        value: item.category,
+        label: item.category === 'backpack' ? '双肩背包' : 
+               item.category === 'handbag' ? '单肩包' : item.category,
+        id: item.id,
+        isDefinition: isCategoryDefinition
+      };
+    });
     
     // 合并并去重（忽略大小写）
     const allCategories = [...predefinedCategories];
@@ -2449,6 +2456,174 @@ router.get('/amazon-templates/categories', async (req, res) => {
   } catch (error) {
     console.error('获取亚马逊模板类目列表失败:', error);
     res.status(500).json({ message: '获取类目列表失败: ' + error.message });
+  }
+});
+
+// 添加新的类目
+router.post('/amazon-templates/categories', async (req, res) => {
+  try {
+    const { category, label, country } = req.body;
+    
+    console.log(`📝 添加新类目请求: ${category} (${label}), 站点: ${country || '全部'}`);
+    
+    if (!category || !label) {
+      return res.status(400).json({ message: '类目名称和标签不能为空' });
+    }
+    
+    // 检查类目是否已存在
+    const existingCategory = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        category: category,
+        ...(country && { country: country })
+      }
+    });
+    
+    if (existingCategory) {
+      return res.status(409).json({ message: '该类目已存在' });
+    }
+    
+    // 创建新类目（通过创建一个虚拟模板记录来存储类目信息）
+    // 这里我们使用一个特殊的文件名来标识这是类目定义记录
+    const categoryRecord = await TemplateLink.create({
+      template_type: 'amazon',
+      country: country || 'GLOBAL', // 如果没有指定国家，使用GLOBAL
+      category: category,
+      file_name: `__CATEGORY_DEFINITION__${category}`,
+      oss_object_name: `__CATEGORY_DEFINITION__${category}`,
+      oss_url: `__CATEGORY_DEFINITION__${category}`,
+      file_size: 0,
+      upload_time: new Date(),
+      is_active: false // 类目定义记录不激活
+    });
+    
+    console.log(`✅ 新类目添加成功: ${category} (${label}), ID: ${categoryRecord.id}`);
+    
+    res.json({
+      message: '类目添加成功',
+      success: true,
+      data: {
+        id: categoryRecord.id,
+        category: category,
+        label: label,
+        country: country || 'GLOBAL'
+      }
+    });
+    
+  } catch (error) {
+    console.error('添加类目失败:', error);
+    res.status(500).json({
+      message: '添加类目失败: ' + error.message,
+      success: false
+    });
+  }
+});
+
+// 更新类目信息
+router.put('/amazon-templates/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { category, label } = req.body;
+    
+    console.log(`📝 更新类目请求: ID ${id}, 新名称: ${category} (${label})`);
+    
+    if (!category || !label) {
+      return res.status(400).json({ message: '类目名称和标签不能为空' });
+    }
+    
+    const categoryRecord = await TemplateLink.findByPk(id);
+    if (!categoryRecord) {
+      return res.status(404).json({ message: '类目不存在' });
+    }
+    
+    // 检查新名称是否与其他类目冲突
+    const existingCategory = await TemplateLink.findOne({
+      where: {
+        template_type: 'amazon',
+        category: category,
+        country: categoryRecord.country,
+        id: { [require('sequelize').Op.ne]: id }
+      }
+    });
+    
+    if (existingCategory) {
+      return res.status(409).json({ message: '该类目名称已存在' });
+    }
+    
+    // 更新类目名称
+    await categoryRecord.update({
+      category: category,
+      file_name: `__CATEGORY_DEFINITION__${category}`,
+      oss_object_name: `__CATEGORY_DEFINITION__${category}`,
+      oss_url: `__CATEGORY_DEFINITION__${category}`
+    });
+    
+    console.log(`✅ 类目更新成功: ${category} (${label})`);
+    
+    res.json({
+      message: '类目更新成功',
+      success: true,
+      data: {
+        id: categoryRecord.id,
+        category: category,
+        label: label,
+        country: categoryRecord.country
+      }
+    });
+    
+  } catch (error) {
+    console.error('更新类目失败:', error);
+    res.status(500).json({
+      message: '更新类目失败: ' + error.message,
+      success: false
+    });
+  }
+});
+
+// 删除类目
+router.delete('/amazon-templates/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`🗑️ 删除类目请求: ID ${id}`);
+    
+    const categoryRecord = await TemplateLink.findByPk(id);
+    if (!categoryRecord) {
+      return res.status(404).json({ message: '类目不存在' });
+    }
+    
+    // 检查是否有模板使用该类目
+    const templatesUsingCategory = await TemplateLink.count({
+      where: {
+        template_type: 'amazon',
+        category: categoryRecord.category,
+        country: categoryRecord.country,
+        id: { [require('sequelize').Op.ne]: id }
+      }
+    });
+    
+    if (templatesUsingCategory > 0) {
+      return res.status(409).json({ 
+        message: `无法删除该类目，还有 ${templatesUsingCategory} 个模板正在使用` 
+      });
+    }
+    
+    // 删除类目定义记录
+    await categoryRecord.destroy();
+    
+    console.log(`✅ 类目删除成功: ${categoryRecord.category}`);
+    
+    res.json({
+      message: '类目删除成功',
+      success: true
+    });
+    
+  } catch (error) {
+    console.error('删除类目失败:', error);
+    res.status(500).json({
+      message: '删除类目失败: ' + error.message,
+      success: false
+    });
   }
 });
 
