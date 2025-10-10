@@ -2740,7 +2740,7 @@ const Purchase: React.FC = () => {
       title: '母SKU', 
       dataIndex: 'parent_sku', 
       key: 'parent_sku', 
-      align: 'center',
+      align: 'center' as const,
       fixed: 'left',
       sorter: (a, b) => a.parent_sku.localeCompare(b.parent_sku),
       render: (text: string, record: ProductRecord) => {
@@ -2856,7 +2856,7 @@ const Purchase: React.FC = () => {
       title: '产品链接', 
       dataIndex: 'weblink', 
       key: 'weblink', 
-      align: 'center',
+      align: 'center' as const,
       width: 200,
       fixed: 'left',
       render: (text: string) => {
@@ -2941,7 +2941,7 @@ const Purchase: React.FC = () => {
       title: '备注', 
       dataIndex: 'notice', 
       key: 'notice', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       fixed: 'left',
       sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
@@ -2950,7 +2950,7 @@ const Purchase: React.FC = () => {
       title: 'Style Number', 
       dataIndex: 'model_number', 
       key: 'model_number', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       sorter: (a, b) => (a.model_number || '').localeCompare(b.model_number || '')
     },
@@ -2958,7 +2958,7 @@ const Purchase: React.FC = () => {
       title: '推荐年龄', 
       dataIndex: 'recommend_age', 
       key: 'recommend_age', 
-      align: 'center',
+      align: 'center' as const,
       width: 100,
       sorter: (a, b) => (a.recommend_age || '').localeCompare(b.recommend_age || '')
     },
@@ -2966,7 +2966,7 @@ const Purchase: React.FC = () => {
       title: '竞争对手ASIN', 
       dataIndex: 'competitor_links', 
       key: 'competitor_links', 
-      align: 'center',
+      align: 'center' as const,
       width: 200,
       render: (text: string, record: ProductRecord) => {
         let asins: string[] = [];
@@ -3049,7 +3049,7 @@ const Purchase: React.FC = () => {
       dataIndex: 'update_time', 
       key: 'update_time', 
       render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '', 
-      align: 'center',
+      align: 'center' as const,
       width: 160,
       sorter: (a, b) => dayjs(a.update_time).unix() - dayjs(b.update_time).unix(),
     },
@@ -3058,7 +3058,7 @@ const Purchase: React.FC = () => {
       dataIndex: 'check_time', 
       key: 'check_time', 
       render: (text: string) => text ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '', 
-      align: 'center',
+      align: 'center' as const,
       width: 160,
       sorter: (a, b) => dayjs(a.check_time || 0).unix() - dayjs(b.check_time || 0).unix(),
     },
@@ -3066,7 +3066,7 @@ const Purchase: React.FC = () => {
       title: '产品状态', 
       dataIndex: 'status', 
       key: 'status', 
-      align: 'center',
+      align: 'center' as const,
       width: 100,
       sorter: (a, b) => (a.status || '').localeCompare(b.status || '')
     },
@@ -3074,7 +3074,7 @@ const Purchase: React.FC = () => {
       title: '重点款', 
       dataIndex: 'is_key_product', 
       key: 'is_key_product', 
-      align: 'center',
+      align: 'center' as const,
       width: 80,
       render: (value: boolean, record: ProductRecord) => (
         <div
@@ -3108,7 +3108,7 @@ const Purchase: React.FC = () => {
       title: 'CPC文件', 
       dataIndex: 'cpc_files', 
       key: 'cpc_files', 
-      align: 'center',
+      align: 'center' as const,
       width: 140,
       render: (text: string, record: ProductRecord) => {
         const fileCount = getCpcFileCount(record);
@@ -3163,7 +3163,7 @@ const Purchase: React.FC = () => {
       title: 'CPC测试情况', 
       dataIndex: 'cpc_status', 
       key: 'cpc_status', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       sorter: (a, b) => (a.cpc_status || '').localeCompare(b.cpc_status || '')
     },
@@ -3171,7 +3171,7 @@ const Purchase: React.FC = () => {
       title: 'CPC提交情况', 
       dataIndex: 'cpc_submit', 
       key: 'cpc_submit', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       sorter: (a, b) => (a.cpc_submit || '').localeCompare(b.cpc_submit || '')
     },
@@ -3179,7 +3179,7 @@ const Purchase: React.FC = () => {
       title: '广告创建', 
       dataIndex: 'ads_add', 
       key: 'ads_add', 
-      align: 'center',
+      align: 'center' as const,
       width: 150,
       render: (value: string | { US: string; UK: string }, record: ProductRecord) => {
         const adsStatus = parseAdsAdd(value);
@@ -3262,7 +3262,7 @@ const Purchase: React.FC = () => {
       title: '上架母SKU', 
       dataIndex: 'list_parent_sku', 
       key: 'list_parent_sku', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       sorter: (a, b) => (a.list_parent_sku || '').localeCompare(b.list_parent_sku || '')
     },
@@ -3270,7 +3270,7 @@ const Purchase: React.FC = () => {
       title: '缺货率', 
       dataIndex: 'no_inventory_rate', 
       key: 'no_inventory_rate', 
-      align: 'center',
+      align: 'center' as const,
       width: 100,
       sorter: (a, b) => (parseFloat(a.no_inventory_rate) || 0) - (parseFloat(b.no_inventory_rate) || 0)
     },
@@ -3278,7 +3278,7 @@ const Purchase: React.FC = () => {
       title: '30天销量', 
       dataIndex: 'sales_30days', 
       key: 'sales_30days', 
-      align: 'center',
+      align: 'center' as const,
       width: 100,
       sorter: (a, b) => (parseInt(a.sales_30days) || 0) - (parseInt(b.sales_30days) || 0)
     },
@@ -3286,14 +3286,14 @@ const Purchase: React.FC = () => {
       title: '供应商', 
       dataIndex: 'seller_name', 
       key: 'seller_name', 
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       sorter: (a, b) => (a.seller_name || '').localeCompare(b.seller_name || '')
     },
     {
       title: '编辑',
       key: 'actions',
-      align: 'center',
+      align: 'center' as const,
       width: 120,
       render: (text: any, record: ProductRecord) => (
           <Button
@@ -3526,6 +3526,50 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 切换模板激活状态
+  const handleToggleTemplateActive = async (templateId: number, isActive: boolean) => {
+    try {
+      console.log(`🔄 切换模板激活状态，ID: ${templateId}, 激活状态: ${isActive}`);
+      
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/${templateId}/toggle-active`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isActive })
+      });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const result = await res.json();
+      console.log('✅ 模板状态切换成功:', result);
+      
+      // 直接更新本地状态，然后重新获取数据
+      setAllTemplateFiles(prev => {
+        const newState = { ...prev };
+        // 找到对应的模板并更新其状态
+        Object.keys(newState).forEach(country => {
+          if (newState[country]) {
+            newState[country] = newState[country].map(file => 
+              file.id === templateId ? { ...file, isActive } : file
+            );
+          }
+        });
+        return newState;
+      });
+      
+      // 重新获取所有站点的模板列表和类目列表
+      await fetchAllTemplateFiles();
+      
+      message.success(`模板已${isActive ? '激活' : '禁用'}`);
+    } catch (error) {
+      console.error('❌ 切换模板状态失败:', error);
+      message.error('操作失败: ' + (error as Error).message);
+    }
+  };
+
   const handleTemplateDownload = (objectName: string, fileName: string) => {
     const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
     const link = document.createElement('a');
@@ -3631,7 +3675,8 @@ const Purchase: React.FC = () => {
           uploadTime: file.lastModified,
           url: file.url,
           objectName: file.name,
-          id: file.id
+          id: file.id,
+          isActive: file.isActive
         });
       });
     });
@@ -3676,6 +3721,26 @@ const Purchase: React.FC = () => {
         key: 'uploadTime',
         width: 180,
         render: (time: any) => new Date(time).toLocaleString(),
+      },
+      {
+        title: '状态',
+        dataIndex: 'isActive',
+        key: 'isActive',
+        width: 80,
+        align: 'center' as const,
+        render: (isActive: boolean, record: any) => (
+          <Tag 
+            color={isActive ? 'green' : 'default'}
+            style={{ 
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+            onClick={() => handleToggleTemplateActive(record.id, !isActive)}
+            title={`点击${isActive ? '禁用' : '激活'}此模板`}
+          >
+            {isActive ? '激活' : '禁用'}
+          </Tag>
+        ),
       },
       {
         title: '操作',
@@ -8335,7 +8400,7 @@ ${selectedSkuIds.map(skuId => {
                        dataIndex: 'line',
                        key: 'line',
                        width: 60,
-                       align: 'center'
+                       align: 'center' as const
                      },
                      {
                        title: '提取的链接',
@@ -8381,7 +8446,7 @@ ${selectedSkuIds.map(skuId => {
                       dataIndex: 'line',
                       key: 'line',
                       width: 60,
-                      align: 'center'
+                      align: 'center' as const
                     },
                     {
                       title: '原始输入',
@@ -8559,21 +8624,21 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'skuid',
               key: 'skuid',
               width: 180,
-              align: 'center',
+              align: 'center' as const,
             },
             {
               title: '子SKU',
               dataIndex: 'child_sku',
               key: 'child_sku',
               width: 150,
-              align: 'center',
+              align: 'center' as const,
             },
             {
               title: '卖家货号',
               dataIndex: 'vendor_sku',
               key: 'vendor_sku',
               width: 150,
-              align: 'center',
+              align: 'center' as const,
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8594,7 +8659,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'sellercolorname',
               key: 'sellercolorname',
               width: 200,
-              align: 'center',
+              align: 'center' as const,
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8615,7 +8680,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'sellersizename',
               key: 'sellersizename',
               width: 150,
-              align: 'center',
+              align: 'center' as const,
               render: (text: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8636,7 +8701,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'qty_per_box',
               key: 'qty_per_box',
               width: 120,
-              align: 'center',
+              align: 'center' as const,
               render: (text: number, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8658,7 +8723,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'price',
               key: 'price',
               width: 120,
-              align: 'center',
+              align: 'center' as const,
               render: (value: number, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8682,7 +8747,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'weight',
               key: 'weight',
               width: 120,
-              align: 'center',
+              align: 'center' as const,
               render: (value: number, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8708,7 +8773,7 @@ ${selectedSkuIds.map(skuId => {
               dataIndex: 'weight_type',
               key: 'weight_type',
               width: 100,
-              align: 'center',
+              align: 'center' as const,
               render: (value: string, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
@@ -8734,7 +8799,7 @@ ${selectedSkuIds.map(skuId => {
               title: '操作',
               key: 'action',
               width: 120,
-              align: 'center',
+              align: 'center' as const,
               render: (text: any, record: SellerInventorySkuRecord) => {
                 const isEditing = record.skuid === sellerSkuEditingKey;
                 return isEditing ? (
