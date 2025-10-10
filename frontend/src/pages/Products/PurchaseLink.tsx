@@ -7433,8 +7433,12 @@ ${selectedSkuIds.map(skuId => {
                <Button 
                  type="default" 
                  icon={<SettingOutlined />}
-                 onClick={() => setCategoryManageModalVisible(true)}
+                 onClick={() => {
+                   console.log('管理按钮被点击');
+                   setCategoryManageModalVisible(true);
+                 }}
                  title="管理类目"
+                 style={{ backgroundColor: '#f0f0f0', borderColor: '#d9d9d9' }}
                >
                  管理
                </Button>
