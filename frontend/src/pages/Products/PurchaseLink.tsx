@@ -7176,14 +7176,8 @@ ${selectedSkuIds.map(skuId => {
            >
              <Select
                value={selectedUploadCategory}
-               onChange={(value) => {
-                 // 处理tags模式返回的数组，取第一个值
-                 const categoryValue = Array.isArray(value) ? value[0] : value;
-                 setSelectedUploadCategory(categoryValue);
-               }}
+               onChange={setSelectedUploadCategory}
                placeholder="选择或输入类目"
-               mode="tags"
-               maxTagCount={1}
                showSearch
                allowClear
                filterOption={(input, option) => {
@@ -7193,6 +7187,12 @@ ${selectedSkuIds.map(skuId => {
                onDropdownVisibleChange={(open) => {
                  if (open && selectedUploadCountry) {
                    fetchTemplateCategories(selectedUploadCountry);
+                 }
+               }}
+               onSearch={(value) => {
+                 // 当用户输入时，如果输入的值不在现有选项中，允许设置为该值
+                 if (value && !templateCategories[selectedUploadCountry]?.find(cat => cat.value === value)) {
+                   setSelectedUploadCategory(value);
                  }
                }}
                notFoundContent={null}
