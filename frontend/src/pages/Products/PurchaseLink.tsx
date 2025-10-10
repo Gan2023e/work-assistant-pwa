@@ -3681,8 +3681,7 @@ const Purchase: React.FC = () => {
           key: `${country.code}-${file.id}`,
           country: country.name,
           countryCode: country.code,
-          category: file.category === 'backpack' ? '双肩背包' : 
-                   file.category === 'handbag' ? '单肩包' : file.category,
+          category: file.category,
           categoryCode: file.category,
           fileName: file.fileName,
           fileSize: file.size,
@@ -3709,10 +3708,10 @@ const Purchase: React.FC = () => {
         dataIndex: 'category',
         key: 'category',
         width: 120,
-        filters: [
-          { text: '双肩背包', value: '双肩背包' },
-          { text: '单肩包', value: '单肩包' }
-        ],
+        filters: Array.from(new Set(tableData.map(item => item.category))).map(cat => ({
+          text: cat,
+          value: cat
+        })),
         onFilter: (value: any, record: any) => record.category === value,
       },
       {
