@@ -18,6 +18,7 @@ import {
   Col,
   Statistic,
   DatePicker,
+  Divider,
   Checkbox,
   AutoComplete,
   Upload,
@@ -7151,7 +7152,13 @@ ${selectedSkuIds.map(skuId => {
            >
              <Select
                value={selectedUploadCountry}
-               onChange={setSelectedUploadCountry}
+               onChange={(value) => {
+                 setSelectedUploadCountry(value);
+                 // 当站点变化时，获取该类目的模板列表
+                 if (value) {
+                   fetchTemplateCategories(value);
+                 }
+               }}
                placeholder="选择站点"
              >
                <Option value="US">美国 (US)</Option>
@@ -7165,15 +7172,41 @@ ${selectedSkuIds.map(skuId => {
            <Form.Item
              label="选择类目"
              name="category"
-             rules={[{ required: true, message: '请选择类目' }]}
+             rules={[{ required: true, message: '请选择或输入类目' }]}
            >
              <Select
                value={selectedUploadCategory}
                onChange={setSelectedUploadCategory}
-               placeholder="选择类目"
+               placeholder="选择或输入类目"
+               mode="combobox"
+               showSearch
+               allowClear
+               filterOption={(input, option) =>
+                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+               }
+               onDropdownVisibleChange={(open) => {
+                 if (open && selectedUploadCountry) {
+                   fetchTemplateCategories(selectedUploadCountry);
+                 }
+               }}
+               notFoundContent={null}
+               dropdownRender={(menu) => (
+                 <div>
+                   {menu}
+                   <Divider style={{ margin: '8px 0' }} />
+                   <div style={{ padding: '0 8px 4px' }}>
+                     <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
+                       提示：可以直接输入新的类目名称
+                     </div>
+                   </div>
+                 </div>
+               )}
              >
-               <Option value="backpack">双肩背包</Option>
-               <Option value="handbag">单肩包</Option>
+               {templateCategories[selectedUploadCountry]?.map(category => (
+                 <Option key={category.value} value={category.value} label={category.label}>
+                   {category.label}
+                 </Option>
+               ))}
              </Select>
            </Form.Item>
 
