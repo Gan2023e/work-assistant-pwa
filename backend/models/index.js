@@ -26,6 +26,8 @@ const PeakSeasonInventoryPrep = require('./PeakSeasonInventoryPrep');
 const SupplierShipmentsPeakSeason = require('./SupplierShipmentsPeakSeason');
 const BulkPaymentsPeakSeason = require('./BulkPaymentsPeakSeason');
 const SupplierShippingCost = require('./SupplierShippingCost');
+const FbaCustomCategory = require('./FbaCustomCategory');
+const FbaSkuCategory = require('./FbaSkuCategory');
 
 // 设置模型关联关系
 
@@ -84,6 +86,28 @@ Invoice.hasMany(PurchaseOrder, {
   as: 'purchaseOrders'
 });
 
+// FBA自定义类目与SKU类目映射的关联关系
+FbaCustomCategory.hasMany(FbaSkuCategory, {
+  foreignKey: 'category_id',
+  as: 'skuCategories'
+});
+FbaSkuCategory.belongsTo(FbaCustomCategory, {
+  foreignKey: 'category_id',
+  as: 'category'
+});
+
+// FBA库存与SKU类目映射的关联关系
+FbaInventory.hasMany(FbaSkuCategory, {
+  foreignKey: 'sku',
+  sourceKey: 'sku',
+  as: 'skuCategories'
+});
+FbaSkuCategory.belongsTo(FbaInventory, {
+  foreignKey: 'sku',
+  targetKey: 'sku',
+  as: 'fbaInventory'
+});
+
 // 注意：need_num字段使用逻辑关联，不设置数据库级外键约束
 // 因为原表没有对need_num字段建立索引
 
@@ -112,5 +136,7 @@ module.exports = {
   PeakSeasonInventoryPrep,
   SupplierShipmentsPeakSeason,
   BulkPaymentsPeakSeason,
-  SupplierShippingCost
+  SupplierShippingCost,
+  FbaCustomCategory,
+  FbaSkuCategory
 };

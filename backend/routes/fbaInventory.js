@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { FbaInventory, SheinProduct, AmzSkuMapping, sequelize } = require('../models');
+const { FbaInventory, SheinProduct, AmzSkuMapping, FbaCustomCategory, FbaSkuCategory, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
 
@@ -13,6 +13,8 @@ router.get('/', async (req, res) => {
       page = 1, 
       limit = 20, 
       sku, 
+      fnsku,
+      asin,
       site, 
       store,
       condition,
@@ -24,7 +26,27 @@ router.get('/', async (req, res) => {
     const whereCondition = {};
     
     if (sku) {
-      whereCondition.sku = { [Op.like]: `%${sku}%` };
+      // 支持多行搜索，按换行符分割
+      const skuList = sku.split('\n').map(s => s.trim()).filter(s => s);
+      if (skuList.length > 0) {
+        whereCondition.sku = { [Op.in]: skuList };
+      }
+    }
+    
+    if (fnsku) {
+      // 支持多行搜索，按换行符分割
+      const fnskuList = fnsku.split('\n').map(s => s.trim()).filter(s => s);
+      if (fnskuList.length > 0) {
+        whereCondition.fnsku = { [Op.in]: fnskuList };
+      }
+    }
+    
+    if (asin) {
+      // 支持多行搜索，按换行符分割
+      const asinList = asin.split('\n').map(s => s.trim()).filter(s => s);
+      if (asinList.length > 0) {
+        whereCondition.asin = { [Op.in]: asinList };
+      }
     }
     
     if (site) {
@@ -296,6 +318,48 @@ router.put('/:sku/:site', async (req, res) => {
   }
 });
 
+// 删除自定义类目
+router.delete('/categories/:id', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到删除自定义类目请求');
+  
+  try {
+    const { id } = req.params;
+    const categoryId = parseInt(id);
+    
+    console.log('\x1b[36m%s\x1b[0m', '🔍 尝试删除类目ID:', categoryId);
+    
+    const category = await FbaCustomCategory.findByPk(categoryId);
+    if (!category) {
+      console.log('\x1b[31m%s\x1b[0m', '❌ 类目不存在，ID:', categoryId);
+      return res.status(404).json({
+        code: 1,
+        message: '类目不存在'
+      });
+    }
+
+    // 删除相关的SKU映射
+    await FbaSkuCategory.destroy({
+      where: { category_id: categoryId }
+    });
+
+    await category.destroy();
+    
+    console.log('\x1b[33m%s\x1b[0m', '✅ 删除自定义类目成功:', category.name);
+    
+    res.json({
+      code: 0,
+      message: '删除成功'
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 删除自定义类目失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '删除失败',
+      error: error.message
+    });
+  }
+});
+
 // 删除FBA库存记录 - 使用复合主键
 router.delete('/:sku/:site', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到删除FBA库存请求');
@@ -529,6 +593,300 @@ router.get('/generate-shein-sync', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '生成同步文件失败',
+      error: error.message
+    });
+  }
+});
+
+// ==================== 自定义类目相关API ====================
+
+// 获取所有自定义类目
+router.get('/categories', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取自定义类目请求');
+  
+  try {
+    const categories = await FbaCustomCategory.findAll({
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: categories
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取自定义类目失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 创建自定义类目
+router.post('/categories', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '📝 收到创建自定义类目请求');
+  
+  try {
+    const { name, description, color } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({
+        code: 1,
+        message: '类目名称不能为空'
+      });
+    }
+
+    const category = await FbaCustomCategory.create({
+      name,
+      description: description || '',
+      color: color || '#1890ff'
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '✅ 创建自定义类目成功:', category.name);
+    
+    res.json({
+      code: 0,
+      message: '创建成功',
+      data: category
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 创建自定义类目失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '创建失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新自定义类目
+router.put('/categories/:id', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '📝 收到更新自定义类目请求');
+  
+  try {
+    const { id } = req.params;
+    const { name, description, color } = req.body;
+    
+    const category = await FbaCustomCategory.findByPk(id);
+    if (!category) {
+      return res.status(404).json({
+        code: 1,
+        message: '类目不存在'
+      });
+    }
+
+    await category.update({
+      name: name || category.name,
+      description: description !== undefined ? description : category.description,
+      color: color || category.color
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', '✅ 更新自定义类目成功:', category.name);
+    
+    res.json({
+      code: 0,
+      message: '更新成功',
+      data: category
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 更新自定义类目失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '更新失败',
+      error: error.message
+    });
+  }
+});
+
+
+// 为SKU分配类目
+router.post('/categories/assign', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '📝 收到SKU分配类目请求');
+  
+  try {
+    const { sku, site, category_id } = req.body;
+    
+    if (!sku || !site || !category_id) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU、站点和类目ID不能为空'
+      });
+    }
+
+    // 检查SKU是否存在
+    const fbaRecord = await FbaInventory.findOne({
+      where: { sku, site }
+    });
+    
+    if (!fbaRecord) {
+      return res.status(404).json({
+        code: 1,
+        message: 'FBA库存记录不存在'
+      });
+    }
+
+    // 检查类目是否存在
+    const category = await FbaCustomCategory.findByPk(category_id);
+    if (!category) {
+      return res.status(404).json({
+        code: 1,
+        message: '类目不存在'
+      });
+    }
+
+    // 创建或更新映射关系
+    const [skuCategory, created] = await FbaSkuCategory.findOrCreate({
+      where: { sku, site, category_id },
+      defaults: { sku, site, category_id }
+    });
+    
+    console.log('\x1b[33m%s\x1b[0m', `✅ SKU分配类目${created ? '成功' : '已存在'}:`, `${sku}-${site} -> ${category.name}`);
+    
+    res.json({
+      code: 0,
+      message: created ? '分配成功' : '已存在',
+      data: skuCategory
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ SKU分配类目失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '分配失败',
+      error: error.message
+    });
+  }
+});
+
+// 移除SKU的类目分配
+router.delete('/categories/assign', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🗑️ 收到移除SKU类目分配请求');
+  
+  try {
+    const { sku, site, category_id } = req.query;
+    
+    if (!sku || !site || !category_id) {
+      return res.status(400).json({
+        code: 1,
+        message: 'SKU、站点和类目ID不能为空'
+      });
+    }
+
+    const deletedCount = await FbaSkuCategory.destroy({
+      where: { sku, site, category_id }
+    });
+    
+    if (deletedCount === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '映射关系不存在'
+      });
+    }
+    
+    console.log('\x1b[33m%s\x1b[0m', '✅ 移除SKU类目分配成功:', `${sku}-${site} -> ${category_id}`);
+    
+    res.json({
+      code: 0,
+      message: '移除成功'
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 移除SKU类目分配失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '移除失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取类目统计信息（包含数量）
+router.get('/categories/stats', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取类目统计请求');
+  
+  try {
+    const categories = await FbaCustomCategory.findAll({
+      include: [{
+        model: FbaSkuCategory,
+        as: 'skuCategories',
+        include: [{
+          model: FbaInventory,
+          as: 'fbaInventory',
+          attributes: ['sku', 'site', 'afn-fulfillable-quantity']
+        }]
+      }]
+    });
+
+    const stats = categories.map(category => {
+      const skuCount = category.skuCategories.length;
+      const totalQuantity = category.skuCategories.reduce((sum, skuCategory) => {
+        return sum + (skuCategory.fbaInventory ? (skuCategory.fbaInventory['afn-fulfillable-quantity'] || 0) : 0);
+      }, 0);
+
+      return {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        color: category.color,
+        sku_count: skuCount,
+        total_quantity: totalQuantity,
+        created_at: category.created_at,
+        updated_at: category.updated_at
+      };
+    });
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: stats
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取类目统计失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
+      error: error.message
+    });
+  }
+});
+
+// 根据类目获取SKU列表
+router.get('/categories/:id/skus', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到获取类目SKU列表请求');
+  
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    const { count, rows } = await FbaSkuCategory.findAndCountAll({
+      where: { category_id: id },
+      include: [{
+        model: FbaInventory,
+        as: 'fbaInventory',
+        attributes: ['sku', 'fnsku', 'asin', 'product-name', 'your-price', 'site', 'afn-fulfillable-quantity', 'afn-warehouse-quantity', 'afn-reserved-quantity', 'afn-total-quantity']
+      }],
+      limit: parseInt(limit),
+      offset: offset,
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        total: count,
+        current: parseInt(page),
+        pageSize: parseInt(limit),
+        records: rows
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取类目SKU列表失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
       error: error.message
     });
   }
