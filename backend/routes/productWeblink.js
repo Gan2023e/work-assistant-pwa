@@ -1643,7 +1643,10 @@ router.get('/statistics', async (req, res) => {
         [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN cpc_status = '已测试' AND (ads_add LIKE '%\"US\":\"否\"%' OR ads_add LIKE '%\"UK\":\"否\"%' OR ads_add IS NULL OR ads_add = '' OR ads_add = '{}') THEN 1 ELSE 0 END")), 'cpcTestedButNoAds'],
         
         // 重点款计数
-        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN is_key_product = true THEN 1 ELSE 0 END")), 'keyProducts']
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN is_key_product = true THEN 1 ELSE 0 END")), 'keyProducts'],
+        
+        // 自定义类目计数
+        [require('sequelize').fn('SUM', require('sequelize').literal("CASE WHEN custom_category IS NOT NULL AND custom_category != '' THEN 1 ELSE 0 END")), 'customCategories']
       ],
       raw: true
     });
@@ -1739,7 +1742,8 @@ router.get('/statistics', async (req, res) => {
       cpcTestingInProgress: parseInt(counts.cpcTestingInProgress) || 0,
       cpcPendingListing: parseInt(counts.cpcPendingListing) || 0,
       cpcTestedButNoAds: cpcTestedButNoAdsCount,
-      keyProducts: parseInt(counts.keyProducts) || 0
+      keyProducts: parseInt(counts.keyProducts) || 0,
+      customCategories: parseInt(counts.customCategories) || 0
     };
 
     const endTime = Date.now();
@@ -7446,6 +7450,248 @@ router.post('/filter-cpc-tested-but-no-ads', async (req, res) => {
   } catch (err) {
     console.error('筛选CPC已检测但广告未创建产品失败:', err);
     res.status(500).json({ message: '筛选失败' });
+  }
+});
+
+// 筛选有自定义类目的产品
+router.post('/filter-custom-categories', async (req, res) => {
+  try {
+    console.log('🔍 开始查询有自定义类目的产品...');
+    
+    const result = await ProductWeblink.findAll({
+      where: {
+        custom_category: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      attributes: [
+        'id',
+        'parent_sku',
+        'weblink',
+        'update_time',
+        'check_time',
+        'status',
+        'notice',
+        'cpc_status',
+        'cpc_submit',
+        'model_number',
+        'recommend_age',
+        'ads_add',
+        'list_parent_sku',
+        'no_inventory_rate',
+        'sales_30days',
+        'seller_name',
+        'cpc_files',
+        'is_key_product',
+        'competitor_links',
+        'custom_category'
+      ],
+      order: [['update_time', 'DESC']]
+    });
+    
+    console.log(`✅ 找到 ${result.length} 条有自定义类目的记录`);
+    
+    res.json({
+      success: true,
+      data: result,
+      count: result.length
+    });
+  } catch (err) {
+    console.error('筛选自定义类目产品失败:', err);
+    res.status(500).json({ message: '筛选失败' });
+  }
+});
+
+// 获取所有自定义类目列表
+router.get('/custom-categories', async (req, res) => {
+  try {
+    console.log('🔍 开始获取自定义类目列表...');
+    
+    const result = await ProductWeblink.findAll({
+      attributes: [
+        'custom_category',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      where: {
+        custom_category: {
+          [Op.ne]: null,
+          [Op.ne]: ''
+        }
+      },
+      group: ['custom_category'],
+      order: [[require('sequelize').fn('COUNT', require('sequelize').col('id')), 'DESC']],
+      raw: true
+    });
+    
+    const categories = result.map(item => ({
+      name: item.custom_category,
+      count: parseInt(item.count)
+    }));
+    
+    console.log(`✅ 找到 ${categories.length} 个自定义类目`);
+    
+    res.json({
+      success: true,
+      data: categories
+    });
+  } catch (err) {
+    console.error('获取自定义类目列表失败:', err);
+    res.status(500).json({ message: '获取失败' });
+  }
+});
+
+// 批量更新自定义类目
+router.post('/batch-update-custom-category', async (req, res) => {
+  try {
+    const { ids, action, categoryName } = req.body;
+    
+    console.log('🔍 开始批量更新自定义类目...', { ids: ids.length, action, categoryName });
+    
+    if (!ids || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要操作的记录' });
+    }
+    
+    let updateData = {};
+    
+    switch (action) {
+      case 'set':
+        if (!categoryName || categoryName.trim() === '') {
+          return res.status(400).json({ message: '请输入类目名称' });
+        }
+        updateData.custom_category = categoryName.trim();
+        break;
+      case 'add':
+        if (!categoryName || categoryName.trim() === '') {
+          return res.status(400).json({ message: '请选择要添加到的类目' });
+        }
+        // 对于添加到现有类目，我们需要先查询现有记录，然后更新
+        const existingRecords = await ProductWeblink.findAll({
+          where: { id: { [Op.in]: ids } },
+          attributes: ['id', 'custom_category']
+        });
+        
+        const updatePromises = existingRecords.map(record => {
+          let newCategory = categoryName.trim();
+          if (record.custom_category && record.custom_category.trim() !== '') {
+            // 如果已有类目，追加到现有类目
+            newCategory = `${record.custom_category}, ${categoryName.trim()}`;
+          }
+          return ProductWeblink.update(
+            { custom_category: newCategory },
+            { where: { id: record.id } }
+          );
+        });
+        
+        await Promise.all(updatePromises);
+        
+        console.log(`✅ 成功将 ${ids.length} 条记录添加到类目: ${categoryName}`);
+        return res.json({
+          success: true,
+          message: `成功将 ${ids.length} 条记录添加到类目: ${categoryName}`
+        });
+      case 'clear':
+        updateData.custom_category = null;
+        break;
+      default:
+        return res.status(400).json({ message: '无效的操作类型' });
+    }
+    
+    const result = await ProductWeblink.update(updateData, {
+      where: { id: { [Op.in]: ids } }
+    });
+    
+    console.log(`✅ 成功更新 ${result[0]} 条记录的自定义类目`);
+    
+    res.json({
+      success: true,
+      message: `成功更新 ${result[0]} 条记录的自定义类目`,
+      updatedCount: result[0]
+    });
+  } catch (err) {
+    console.error('批量更新自定义类目失败:', err);
+    res.status(500).json({ message: '更新失败' });
+  }
+});
+
+// 重命名自定义类目
+router.put('/custom-categories/rename', async (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+    
+    console.log('🔍 开始重命名自定义类目...', { oldName, newName });
+    
+    if (!oldName || !newName) {
+      return res.status(400).json({ message: '请提供旧类目名称和新类目名称' });
+    }
+    
+    if (oldName === newName) {
+      return res.status(400).json({ message: '新类目名称不能与旧类目名称相同' });
+    }
+    
+    // 更新所有使用该类目的记录
+    const result = await ProductWeblink.update(
+      { custom_category: newName },
+      { 
+        where: { 
+          custom_category: oldName 
+        } 
+      }
+    );
+    
+    console.log(`✅ 成功重命名类目: ${oldName} -> ${newName}，影响 ${result[0]} 条记录`);
+    
+    res.json({
+      success: true,
+      message: `成功将类目"${oldName}"重命名为"${newName}"，影响 ${result[0]} 条记录`,
+      updatedCount: result[0]
+    });
+  } catch (err) {
+    console.error('重命名自定义类目失败:', err);
+    res.status(500).json({ message: '重命名失败' });
+  }
+});
+
+// 删除自定义类目（清空该类目下所有记录的自定义类目字段）
+router.delete('/custom-categories/delete', async (req, res) => {
+  try {
+    const { categoryName } = req.body;
+    
+    console.log('🔍 开始删除自定义类目...', { categoryName });
+    
+    if (!categoryName) {
+      return res.status(400).json({ message: '请提供要删除的类目名称' });
+    }
+    
+    // 先查询该类目下有多少条记录
+    const count = await ProductWeblink.count({
+      where: { custom_category: categoryName }
+    });
+    
+    if (count === 0) {
+      return res.status(404).json({ message: '该类目不存在或已被删除' });
+    }
+    
+    // 清空该类目下所有记录的自定义类目字段
+    const result = await ProductWeblink.update(
+      { custom_category: null },
+      { 
+        where: { 
+          custom_category: categoryName 
+        } 
+      }
+    );
+    
+    console.log(`✅ 成功删除类目: ${categoryName}，清空了 ${result[0]} 条记录的自定义类目`);
+    
+    res.json({
+      success: true,
+      message: `成功删除类目"${categoryName}"，清空了 ${result[0]} 条记录的自定义类目`,
+      updatedCount: result[0]
+    });
+  } catch (err) {
+    console.error('删除自定义类目失败:', err);
+    res.status(500).json({ message: '删除失败' });
   }
 });
 

@@ -153,6 +153,7 @@ interface ProductRecord {
   // 新增字段
   is_key_product?: boolean;
   competitor_links?: string;
+  custom_category?: string; // 自定义类目
 }
 
 interface SellerInventorySkuRecord {
@@ -366,6 +367,9 @@ const SidebarStatsPanel: React.FC<{
   handleCpcPendingListingClick: any;
   handleCpcTestedButNoAdsClick: any;
   handleKeyProductsClick: any;
+  handleCustomCategoriesClick: any;
+  handleCategoryClick: any;
+  categories: Array<{name: string, count: number}>;
   collapsed: boolean;
 }> = ({
   statistics,
@@ -376,6 +380,9 @@ const SidebarStatsPanel: React.FC<{
   handleCpcPendingListingClick,
   handleCpcTestedButNoAdsClick,
   handleKeyProductsClick,
+  handleCustomCategoriesClick,
+  handleCategoryClick,
+  categories,
   collapsed
 }) => (
   <div style={{ 
@@ -530,8 +537,8 @@ const SidebarStatsPanel: React.FC<{
     <CardGroup 
       title={collapsed ? "⭐" : "⭐ 特殊标记"}
       backgroundColor="#fff1f0"
-      total={collapsed ? undefined : statistics.keyProducts}
-      subtitle={collapsed ? undefined : "重要产品标识"}
+      total={collapsed ? undefined : statistics.keyProducts + statistics.customCategories}
+      subtitle={collapsed ? undefined : "重要产品标识与自定义分类"}
       collapsed={cardGroupCollapsed.special}
       onCollapse={collapsed ? undefined : () => setCardGroupCollapsed((prev: any) => ({
         ...prev,
@@ -545,8 +552,32 @@ const SidebarStatsPanel: React.FC<{
           icon={<CheckCircleOutlined />}
           color="#f5222d"
           onClick={handleKeyProductsClick}
-          span={24}
+          span={12}
         />
+        {categories.length > 0 ? (
+          // 显示具体的自定义类目，每行最多2个
+          categories.slice(0, 6).map((category, index) => (
+            <Tooltip key={category.name} title={`点击查看"${category.name}"类目的产品`}>
+              <StatCard
+                title={category.name.length > 8 ? `${category.name.substring(0, 8)}...` : category.name}
+                value={category.count}
+                icon={<ExperimentOutlined />}
+                color="#1890ff"
+                onClick={() => handleCategoryClick(category.name)}
+                span={12} // 每行最多2个，所以每个占12个栅格
+              />
+            </Tooltip>
+          ))
+        ) : (
+          <StatCard
+            title="自定义类目"
+            value={statistics.customCategories}
+            icon={<ExperimentOutlined />}
+            color="#1890ff"
+            onClick={handleCustomCategoriesClick}
+            span={12}
+          />
+        )}
       </Row>
     </CardGroup>
   </div>
@@ -684,7 +715,8 @@ const Purchase: React.FC = () => {
     cpcTestingInProgress: 0,  // 新增CPC测试中统计
     cpcPendingListing: 0,
     cpcTestedButNoAds: 0,  // 新增CPC已检测但广告未创建统计
-    keyProducts: 0  // 新增重点款统计
+    keyProducts: 0,  // 新增重点款统计
+    customCategories: 0  // 新增自定义类目统计
   });
 
   // 分页状态
@@ -848,6 +880,27 @@ const Purchase: React.FC = () => {
   const [quantityAdjustmentText, setQuantityAdjustmentText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 自定义类目相关状态
+  const [customCategoryModalVisible, setCustomCategoryModalVisible] = useState(false);
+  const [currentCustomCategoryRecord, setCurrentCustomCategoryRecord] = useState<ProductRecord | null>(null);
+  const [customCategoryValue, setCustomCategoryValue] = useState('');
+  
+  // 类目管理相关状态
+  const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
+  const [categories, setCategories] = useState<Array<{name: string, count: number}>>([]);
+  const [categoryManagerLoading, setCategoryManagerLoading] = useState(false);
+  
+  // 类目编辑相关状态
+  const [editingCategory, setEditingCategory] = useState<{name: string, count: number} | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryModalVisible, setEditCategoryModalVisible] = useState(false);
+  const [editCategoryLoading, setEditCategoryLoading] = useState(false);
+  
+  // 批量操作相关状态
+  const [batchCategoryModalVisible, setBatchCategoryModalVisible] = useState(false);
+  const [batchAction, setBatchAction] = useState<'set' | 'add' | 'clear'>('set');
+  const [batchCategoryName, setBatchCategoryName] = useState('');
+
   // 获取全库统计数据
   const fetchAllDataStatistics = async () => {
     try {
@@ -882,6 +935,7 @@ const Purchase: React.FC = () => {
   // 页面加载时获取统计数据并默认显示可整理资料记录
   React.useEffect(() => {
     fetchAllDataStatistics();
+    fetchCategories(); // 获取类目数据
     // 默认显示可整理资料记录
     handleCanOrganizeDataClick();
   }, []);
@@ -3105,6 +3159,61 @@ const Purchase: React.FC = () => {
         </div>
       ),
       sorter: (a, b) => (a.is_key_product ? 1 : 0) - (b.is_key_product ? 1 : 0)
+    },
+    { 
+      title: '自定义类目', 
+      dataIndex: 'custom_category', 
+      key: 'custom_category', 
+      align: 'center' as const,
+      width: 120,
+      render: (text: string, record: ProductRecord) => {
+        if (!text || text.trim() === '') {
+          return (
+            <Button
+              size="small"
+              type="dashed"
+              onClick={() => handleCustomCategoryEdit(record)}
+              icon={<PlusOutlined />}
+              style={{ fontSize: '12px' }}
+            >
+              添加类目
+            </Button>
+          );
+        }
+        
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Tag
+              color="blue"
+              style={{ 
+                cursor: 'pointer',
+                maxWidth: '80px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+              onClick={() => handleCustomCategoryEdit(record)}
+              title={`点击编辑类目: ${text}`}
+            >
+              {text}
+            </Tag>
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleCustomCategoryEdit(record)}
+              style={{ 
+                width: '20px', 
+                height: '20px', 
+                minWidth: '20px',
+                padding: 0
+              }}
+              title="编辑类目"
+            />
+          </div>
+        );
+      },
+      sorter: (a, b) => (a.custom_category || '').localeCompare(b.custom_category || '')
     },
     { 
       title: 'CPC文件', 
@@ -5511,6 +5620,71 @@ ${selectedSkuIds.map(skuId => {
     }
   };
 
+  // 自定义类目相关处理函数
+  const handleCustomCategoryEdit = (record: ProductRecord) => {
+    setCurrentCustomCategoryRecord(record);
+    setCustomCategoryValue(record.custom_category || '');
+    setCustomCategoryModalVisible(true);
+  };
+
+  // 保存自定义类目
+  const handleSaveCustomCategory = async () => {
+    if (!currentCustomCategoryRecord) return;
+
+    const newValue = customCategoryValue.trim();
+    
+    // 乐观更新：立即更新本地状态
+    const updateLocalData = () => {
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === currentCustomCategoryRecord.id 
+            ? { ...item, custom_category: newValue }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          item.id === currentCustomCategoryRecord.id 
+            ? { ...item, custom_category: newValue }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          item.id === currentCustomCategoryRecord.id 
+            ? { ...item, custom_category: newValue }
+            : item
+        )
+      );
+    };
+
+    // 立即更新本地状态
+    updateLocalData();
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/update/${currentCustomCategoryRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_category: newValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      message.success(newValue ? '自定义类目已保存' : '自定义类目已清空');
+      setCustomCategoryModalVisible(false);
+    } catch (e) {
+      console.error('更新自定义类目失败:', e);
+      message.error('更新失败，已回滚更改');
+      
+      // 回滚本地状态
+      updateLocalData();
+    }
+  };
+
   // 广告创建相关处理函数
   const handleAdsAddToggle = (record: ProductRecord) => {
     const currentStatus = parseAdsAdd(record.ads_add);
@@ -5685,6 +5859,267 @@ ${selectedSkuIds.map(skuId => {
       console.error('筛选重点款失败:', e);
       message.error('筛选重点款失败');
     }
+  };
+
+  // 点击自定义类目卡片显示有自定义类目的记录
+  const handleCustomCategoriesClick = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-custom-categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const filteredData = result.data || [];
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
+      
+      // 更新筛选状态
+      setFilters({ 
+        status: '',
+        cpc_status: '',
+        cpc_submit: '',
+        seller_name: '',
+        dateRange: null
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条有自定义类目的记录`);
+    } catch (e) {
+      console.error('筛选自定义类目失败:', e);
+      message.error('筛选自定义类目失败');
+    }
+  };
+
+  // 点击具体类目卡片显示该类目的记录
+  const handleCategoryClick = async (categoryName: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/filter-custom-categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      const allFilteredData = result.data || [];
+      
+      // 筛选出指定类目的记录
+      const filteredData = allFilteredData.filter((record: ProductRecord) => 
+        record.custom_category === categoryName
+      );
+      
+      setData(filteredData);
+      setOriginalData(filteredData);
+      setFilteredData(filteredData);
+      
+      // 更新分页状态
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: filteredData.length
+      }));
+      
+      // 更新筛选状态
+      setFilters({ 
+        status: '',
+        cpc_status: '',
+        cpc_submit: '',
+        seller_name: '',
+        dateRange: null
+      });
+      
+      message.success(`筛选完成，找到 ${filteredData.length} 条"${categoryName}"类目的记录`);
+    } catch (e) {
+      console.error('筛选类目失败:', e);
+      message.error('筛选类目失败');
+    }
+  };
+
+  // 类目管理相关处理函数
+  const fetchCategories = async () => {
+    try {
+      setCategoryManagerLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/custom-categories`);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const result = await res.json();
+      setCategories(result.data || []);
+    } catch (e) {
+      console.error('获取类目列表失败:', e);
+      message.error('获取类目列表失败');
+    } finally {
+      setCategoryManagerLoading(false);
+    }
+  };
+
+  const handleCategoryManagerOpen = () => {
+    setCategoryManagerVisible(true);
+    fetchCategories();
+  };
+
+  const handleBatchCategoryOpen = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要操作的记录');
+      return;
+    }
+    setBatchCategoryModalVisible(true);
+    setBatchAction('set');
+    setBatchCategoryName('');
+  };
+
+  const handleBatchCategorySubmit = async () => {
+    if (batchAction !== 'clear' && !batchCategoryName.trim()) {
+      message.warning('请输入类目名称');
+      return;
+    }
+
+    try {
+      setBatchLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-update-custom-category`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: selectedRowKeys,
+          action: batchAction,
+          categoryName: batchCategoryName.trim()
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      
+      // 刷新数据
+      handleCanOrganizeDataClick();
+      fetchAllDataStatistics();
+      
+      // 清空选择
+      setSelectedRowKeys([]);
+      setBatchCategoryModalVisible(false);
+    } catch (e) {
+      console.error('批量更新失败:', e);
+      message.error('批量更新失败');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // 类目编辑相关处理函数
+  const handleEditCategory = (category: {name: string, count: number}) => {
+    setEditingCategory(category);
+    setEditCategoryName(category.name);
+    setEditCategoryModalVisible(true);
+  };
+
+  const handleSaveCategoryEdit = async () => {
+    if (!editingCategory || !editCategoryName.trim()) {
+      message.warning('请输入类目名称');
+      return;
+    }
+
+    if (editCategoryName.trim() === editingCategory.name) {
+      message.warning('类目名称没有变化');
+      return;
+    }
+
+    try {
+      setEditCategoryLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/custom-categories/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oldName: editingCategory.name,
+          newName: editCategoryName.trim()
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(result.message);
+      
+      // 刷新类目列表和数据
+      fetchCategories();
+      fetchAllDataStatistics();
+      handleCanOrganizeDataClick();
+      
+      setEditCategoryModalVisible(false);
+      setEditingCategory(null);
+      setEditCategoryName('');
+    } catch (e) {
+      console.error('重命名类目失败:', e);
+      message.error('重命名类目失败');
+    } finally {
+      setEditCategoryLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = (category: {name: string, count: number}) => {
+    Modal.confirm({
+      title: '确认删除类目',
+      content: (
+        <div>
+          <p>确定要删除类目 <strong>"{category.name}"</strong> 吗？</p>
+          <p style={{ color: '#ff4d4f', marginTop: '8px' }}>
+            ⚠️ 此操作将清空 {category.count} 条记录的自定义类目，但不会删除记录本身
+          </p>
+        </div>
+      ),
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/custom-categories/delete`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              categoryName: category.name
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+
+          const result = await res.json();
+          message.success(result.message);
+          
+          // 刷新类目列表和数据
+          fetchCategories();
+          fetchAllDataStatistics();
+          handleCanOrganizeDataClick();
+        } catch (e) {
+          console.error('删除类目失败:', e);
+          message.error('删除类目失败');
+        }
+      }
+    });
   };
 
   // 竞争对手链接相关处理函数
@@ -5943,6 +6378,9 @@ ${selectedSkuIds.map(skuId => {
             handleCpcPendingListingClick={handleCpcPendingListingClick}
             handleCpcTestedButNoAdsClick={handleCpcTestedButNoAdsClick}
             handleKeyProductsClick={handleKeyProductsClick}
+            handleCustomCategoriesClick={handleCustomCategoriesClick}
+            handleCategoryClick={handleCategoryClick}
+            categories={categories}
             collapsed={sidebarCollapsed}
           />
         </Sider>
@@ -6720,6 +7158,21 @@ ${selectedSkuIds.map(skuId => {
                 </span>
               </div>
               <Space>
+                <Button 
+                  icon={<ExperimentOutlined />}
+                  onClick={handleCategoryManagerOpen}
+                  type="default"
+                >
+                  类目管理
+                </Button>
+                <Button 
+                  icon={<EditOutlined />}
+                  onClick={handleBatchCategoryOpen}
+                  disabled={selectedRowKeys.length === 0}
+                  type="default"
+                >
+                  批量设置类目
+                </Button>
                 <Button 
                   icon={<FileExcelOutlined />}
                   onClick={handleBatchExport}
@@ -9108,6 +9561,278 @@ ${selectedSkuIds.map(skuId => {
               <Option value="否">未创建</Option>
             </Select>
           </div>
+        </div>
+      </Modal>
+
+      {/* 自定义类目编辑模态框 */}
+      <Modal
+        title={`编辑自定义类目 - ${currentCustomCategoryRecord?.parent_sku || ''}`}
+        open={customCategoryModalVisible}
+        onOk={handleSaveCustomCategory}
+        onCancel={() => {
+          setCustomCategoryModalVisible(false);
+          setCurrentCustomCategoryRecord(null);
+          setCustomCategoryValue('');
+        }}
+        width={500}
+        okText="保存"
+        cancelText="取消"
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Form layout="vertical">
+            <Form.Item label="自定义类目">
+              <Input
+                value={customCategoryValue}
+                onChange={(e) => setCustomCategoryValue(e.target.value)}
+                placeholder="请输入自定义类目名称"
+                maxLength={100}
+                showCount
+              />
+            </Form.Item>
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: '#f6f8fa', 
+              borderRadius: '6px',
+              fontSize: '12px',
+              color: '#666'
+            }}>
+              <div>💡 提示：</div>
+              <div>• 自定义类目用于对产品进行分类标记</div>
+              <div>• 类目名称最多100个字符</div>
+              <div>• 留空将清空自定义类目</div>
+            </div>
+          </Form>
+        </div>
+      </Modal>
+
+      {/* 类目管理模态框 */}
+      <Modal
+        title="自定义类目管理"
+        open={categoryManagerVisible}
+        onCancel={() => setCategoryManagerVisible(false)}
+        footer={[
+          <Button key="refresh" onClick={fetchCategories} loading={categoryManagerLoading}>
+            刷新
+          </Button>,
+          <Button key="close" onClick={() => setCategoryManagerVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={600}
+      >
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          {categoryManagerLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <LoadingOutlined style={{ fontSize: '24px' }} />
+              <div style={{ marginTop: '16px' }}>加载中...</div>
+            </div>
+          ) : categories.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+              <ExperimentOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
+              <div>暂无自定义类目</div>
+              <div style={{ fontSize: '12px', marginTop: '8px' }}>
+                在表格中为产品添加自定义类目后，这里会显示统计信息
+              </div>
+            </div>
+          ) : (
+            <Table
+              dataSource={categories}
+              columns={[
+                {
+                  title: '类目名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  render: (text: string) => (
+                    <Tag color="blue" style={{ fontSize: '14px', padding: '4px 8px' }}>
+                      {text}
+                    </Tag>
+                  )
+                },
+                {
+                  title: '产品数量',
+                  dataIndex: 'count',
+                  key: 'count',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (count: number) => (
+                    <Badge count={count} style={{ backgroundColor: '#52c41a' }} />
+                  )
+                },
+                {
+                  title: '操作',
+                  key: 'actions',
+                  width: 120,
+                  align: 'center' as const,
+                  render: (_, record: {name: string, count: number}) => (
+                    <Space size="small">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => handleEditCategory(record)}
+                        title="编辑类目名称"
+                        style={{ color: '#1890ff' }}
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteCategory(record)}
+                        title="删除类目"
+                        style={{ color: '#ff4d4f' }}
+                      />
+                    </Space>
+                  )
+                }
+              ]}
+              pagination={false}
+              size="small"
+              rowKey="name"
+            />
+          )}
+        </div>
+      </Modal>
+
+      {/* 编辑类目名称模态框 */}
+      <Modal
+        title={`编辑类目名称 - ${editingCategory?.name || ''}`}
+        open={editCategoryModalVisible}
+        onOk={handleSaveCategoryEdit}
+        onCancel={() => {
+          setEditCategoryModalVisible(false);
+          setEditingCategory(null);
+          setEditCategoryName('');
+        }}
+        confirmLoading={editCategoryLoading}
+        width={500}
+        okText="保存"
+        cancelText="取消"
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Form layout="vertical">
+            <Form.Item label="原类目名称">
+              <Input
+                value={editingCategory?.name || ''}
+                disabled
+                style={{ backgroundColor: '#f5f5f5' }}
+              />
+            </Form.Item>
+            <Form.Item label="新类目名称">
+              <Input
+                value={editCategoryName}
+                onChange={(e) => setEditCategoryName(e.target.value)}
+                placeholder="请输入新的类目名称"
+                maxLength={100}
+                showCount
+              />
+            </Form.Item>
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#f6f8fa',
+              borderRadius: '6px',
+              fontSize: '12px',
+              color: '#666'
+            }}>
+              <div>💡 提示：</div>
+              <div>• 重命名后，所有使用该类目的产品记录都会更新</div>
+              <div>• 类目名称最多100个字符</div>
+              <div>• 新名称不能与现有类目重复</div>
+            </div>
+          </Form>
+        </div>
+      </Modal>
+
+      {/* 批量设置类目模态框 */}
+      <Modal
+        title={`批量设置自定义类目 (已选择 ${selectedRowKeys.length} 条记录)`}
+        open={batchCategoryModalVisible}
+        onOk={handleBatchCategorySubmit}
+        onCancel={() => {
+          setBatchCategoryModalVisible(false);
+          setBatchAction('set');
+          setBatchCategoryName('');
+        }}
+        confirmLoading={batchLoading}
+        width={500}
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Form layout="vertical">
+            <Form.Item label="操作方式">
+              <Radio.Group 
+                value={batchAction} 
+                onChange={(e) => setBatchAction(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Radio value="set">
+                    <div>
+                      <div style={{ fontWeight: 'bold' }}>设置为新类目</div>
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        将选中记录的自定义类目设置为指定的新类目
+                      </div>
+                    </div>
+                  </Radio>
+                  <Radio value="add">
+                    <div>
+                      <div style={{ fontWeight: 'bold' }}>添加到现有类目</div>
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        将选中记录添加到已存在的类目中（会保留原有类目）
+                      </div>
+                    </div>
+                  </Radio>
+                  <Radio value="clear">
+                    <div>
+                      <div style={{ fontWeight: 'bold' }}>清空自定义类目</div>
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        清空选中记录的自定义类目
+                      </div>
+                    </div>
+                  </Radio>
+                </Space>
+              </Radio.Group>
+            </Form.Item>
+            
+            {batchAction !== 'clear' && (
+              <Form.Item label="类目名称">
+                {batchAction === 'add' ? (
+                  <Select
+                    value={batchCategoryName}
+                    onChange={setBatchCategoryName}
+                    placeholder="选择要添加到的类目"
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={categories.map(cat => ({
+                      value: cat.name,
+                      label: `${cat.name} (${cat.count}个产品)`
+                    }))}
+                  />
+                ) : (
+                  <Input
+                    value={batchCategoryName}
+                    onChange={(e) => setBatchCategoryName(e.target.value)}
+                    placeholder="请输入新类目名称"
+                    maxLength={100}
+                    showCount
+                  />
+                )}
+              </Form.Item>
+            )}
+            
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: '#f6f8fa', 
+              borderRadius: '6px',
+              fontSize: '12px',
+              color: '#666'
+            }}>
+              <div>💡 提示：</div>
+              <div>• 设置为新类目：会覆盖现有的自定义类目</div>
+              <div>• 添加到现有类目：会保留原有类目，追加新类目</div>
+              <div>• 清空自定义类目：会删除所有自定义类目</div>
+            </div>
+          </Form>
         </div>
       </Modal>
 

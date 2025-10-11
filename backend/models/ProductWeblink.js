@@ -38,6 +38,12 @@ const ProductWeblink = sequelize.define('ProductWeblink', {
   competitor_links: {
     type: DataTypes.TEXT,
     comment: '竞争对手链接，JSON格式存储多个链接'
+  },
+  // 新增自定义类目字段
+  custom_category: {
+    type: DataTypes.STRING(100),
+    defaultValue: null,
+    comment: '自定义类目'
   }
 }, {
   tableName: 'product_weblink',
