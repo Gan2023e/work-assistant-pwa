@@ -529,14 +529,14 @@ router.post('/mixed-boxes', async (req, res) => {
           
           console.log('\x1b[33m%s\x1b[0m', `🔍 混合箱数据Amazon SKU映射查询: 找到${allMappings.length}条映射记录`);
 
-          // 为每个local_sku+country选择最佳映射（优先FBA SKU）
+          // 为每个local_sku+country选择最佳映射（只选择FBA SKU）
           const bestMappings = new Map();
           allMappings.forEach(mapping => {
             const key = `${mapping.local_sku}_${mapping.country}`;
             const existing = bestMappings.get(key);
             
-            // 如果没有现有映射，或者当前映射是FBA SKU而现有的不是，则使用当前映射
-            if (!existing || (mapping.sku_type === 'FBA SKU' && existing.sku_type !== 'FBA SKU')) {
+            // 只选择FBA SKU类型的映射
+            if (mapping.sku_type === 'FBA SKU') {
               bestMappings.set(key, mapping);
             }
           });
@@ -1055,7 +1055,7 @@ router.get('/merged-data', async (req, res) => {
         HAVING SUM(total_quantity - COALESCE(shipped_quantity, 0)) > 0
       ),
       BestMapping AS (
-        -- 第二步：为每个local_sku+country选择最优映射（优先FBA SKU）
+        -- 第二步：为每个local_sku+country选择最优映射（只选择FBA SKU）
         SELECT 
           local_sku,
           country,
@@ -1064,11 +1064,10 @@ router.get('/merged-data', async (req, res) => {
           site,
           ROW_NUMBER() OVER (
             PARTITION BY local_sku, country 
-            ORDER BY 
-              CASE WHEN sku_type = 'FBA SKU' THEN 1 ELSE 2 END,
-              update_time DESC
+            ORDER BY update_time DESC
           ) as rn
         FROM pbi_amzsku_sku
+        WHERE sku_type = 'FBA SKU'
       )
       SELECT 
         inv.local_sku,
@@ -1175,27 +1174,18 @@ router.get('/merged-data', async (req, res) => {
     const inventoryMap = new Map();
     
     inventoryWithMapping.forEach(inv => {
-      // 基于sku_type字段的Amazon渠道检查逻辑
+      // 由于BestMapping查询已经过滤了只选择FBA SKU，这里直接处理
       const isFbaSku = inv.sku_type === 'FBA SKU';
-      const hasAmazonChannel = isFbaSku || (inv.fulfillment_channel && (
-        inv.fulfillment_channel.includes('Amazon') || 
-        inv.fulfillment_channel.includes('AMAZON') ||
-        inv.fulfillment_channel.startsWith('AMAZON_') ||
-        inv.fulfillment_channel.startsWith('Amazon_')
-      ));
       
       // 添加调试日志
-      console.log(`🔍 检查SKU: ${inv.local_sku}_${inv.country}`);
+      console.log(`🔍 检查FBA SKU: ${inv.local_sku}_${inv.country}`);
       console.log(`   sku_type: "${inv.sku_type}"`);
       console.log(`   fulfillment_channel: "${inv.fulfillment_channel}"`);
       console.log(`   amazon_sku: "${inv.amazon_sku}"`);
       console.log(`   isFbaSku: ${isFbaSku}`);
-      console.log(`   hasAmazonChannel: ${hasAmazonChannel}`);
       
-      // 根据是否有Amazon渠道决定状态和Amazon SKU
-      if (hasAmazonChannel) {
-        // 有Amazon渠道，正常显示
-        // 修复：使用local_sku_country作为键，确保能正确关联到需求数据
+      // 只处理FBA SKU类型的映射
+      if (isFbaSku && inv.amazon_sku) {
         const key = `${inv.local_sku}_${inv.country}`;
         inventoryMap.set(key, {
           local_sku: inv.local_sku,
@@ -1211,29 +1201,9 @@ router.get('/merged-data', async (req, res) => {
           total_available: parseInt(inv.total_available) || 0,
           country: inv.country,
           data_source: 'mapped_inventory',
-          mapping_method: isFbaSku ? 'fba_sku_type' : 'amazon_channel_matching'
+          mapping_method: 'fba_sku_type'
         });
-        console.log(`✅ 已映射库存(Amazon渠道): ${key} - 可用数量: ${inv.total_available}, SKU类型: ${inv.sku_type || '未知'}`);
-      } else {
-        // 没有Amazon渠道，归类为"库存未映射"
-        const key = `${inv.local_sku}_${inv.country}`;
-        inventoryMap.set(key, {
-          local_sku: inv.local_sku,
-          amz_sku: '', // Amazon SKU留空
-          amazon_sku: '', // Amazon SKU留空
-          site: inv.site,
-          fulfillment_channel: inv.fulfillment_channel,
-          sku_type: inv.sku_type,
-          whole_box_quantity: parseInt(inv.whole_box_quantity) || 0,
-          whole_box_count: parseInt(inv.whole_box_count) || 0,
-          available_box_count: parseFloat(inv.available_box_count) || 0,
-          mixed_box_quantity: parseInt(inv.mixed_box_quantity) || 0,
-          total_available: parseInt(inv.total_available) || 0,
-          country: inv.country,
-          data_source: 'unmapped_inventory',
-          mapping_method: 'no_amazon_channel'
-        });
-        console.log(`⚠️ 库存未映射(非Amazon渠道): ${key} - 可用数量: ${inv.total_available}, 渠道: ${inv.fulfillment_channel}, SKU类型: ${inv.sku_type || '未知'}`);
+        console.log(`✅ 已映射FBA库存: ${key} - 可用数量: ${inv.total_available}, SKU类型: ${inv.sku_type}`);
       }
     });
 

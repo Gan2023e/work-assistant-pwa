@@ -1386,11 +1386,9 @@ const ShippingPage: React.FC = () => {
               </Text>
             </Button>
           ) : (
-            <div>{amzSku}</div>
-          )}
-          {record.amazon_sku && record.amazon_sku !== amzSku && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              新映射: {record.amazon_sku}
+            <div>
+              {/* 只显示FBA SKU，如果没有则留空 */}
+              {record.amazon_sku || ''}
             </div>
           )}
           {record.mapping_method === 'new_amazon_listings' && (
