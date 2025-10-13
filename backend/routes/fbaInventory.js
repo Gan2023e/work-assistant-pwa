@@ -251,7 +251,7 @@ router.get('/by-country/:country', async (req, res) => {
   
   try {
     const { country } = req.params;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, sort_by = 'sku', sort_order = 'ASC' } = req.query;
     
     // 根据国家找到对应的站点
     const sites = Object.keys(siteToCountryMap).filter(site => 
@@ -274,7 +274,7 @@ router.get('/by-country/:country', async (req, res) => {
     
     const { count, rows } = await FbaInventory.findAndCountAll({
       where: whereCondition,
-      order: [['sku', 'ASC']],
+      order: [[sort_by, sort_order.toUpperCase()]],
       limit: parseInt(limit),
       offset: offset
     });

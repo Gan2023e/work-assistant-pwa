@@ -160,6 +160,15 @@ const FbaInventory: React.FC = () => {
   });
   const [countryLoading, setCountryLoading] = useState(false);
 
+  // 排序状态
+  const [sortConfig, setSortConfig] = useState<{
+    key: string | null;
+    direction: 'asc' | 'desc' | null;
+  }>({
+    key: null,
+    direction: null
+  });
+
   // 加载数据
   const fetchData = useCallback(async (page: number = 1, pageSize: number = 20) => {
     setLoading(true);
@@ -243,6 +252,122 @@ const FbaInventory: React.FC = () => {
       message.error('获取数据失败');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // 带排序的数据获取函数
+  const fetchDataWithSort = useCallback(async (page: number = 1, pageSize: number = 20, sortBy: string, sortOrder: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        ...searchFilters
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setRecords(result.data.records);
+        setPagination({
+          current: result.data.current,
+          pageSize: result.data.pageSize,
+          total: result.data.total
+        });
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      console.error('获取FBA库存数据失败:', error);
+      message.error('获取数据失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [searchFilters]);
+
+  // 带排序的国家数据获取函数
+  const fetchCountryDataWithSort = useCallback(async (country: string, page: number = 1, pageSize: number = 20, sortBy: string, sortOrder: string) => {
+    setCountryLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        sort_by: sortBy,
+        sort_order: sortOrder
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/by-country/${encodeURIComponent(country)}?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setCountryRecords(result.data.records);
+        setCountryPagination({
+          current: result.data.current,
+          pageSize: result.data.pageSize,
+          total: result.data.total
+        });
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      console.error('获取国家库存数据失败:', error);
+      message.error('获取数据失败');
+    } finally {
+      setCountryLoading(false);
+    }
+  }, []);
+
+  // 带排序的类目数据获取函数
+  const fetchCategorySkusWithSort = useCallback(async (categoryId: number, sortBy: string, sortOrder: string) => {
+    setCategorySkusLoading(true);
+    try {
+      const params = new URLSearchParams({
+        sort_by: sortBy,
+        sort_order: sortOrder
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/categories/${categoryId}/skus?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        const skus = result.data.records.map((item: any) => item.fbaInventory).filter(Boolean);
+        setCategorySkus(skus);
+      }
+    } catch (error) {
+      console.error('获取类目SKU失败:', error);
+      message.error('获取数据失败');
+    } finally {
+      setCategorySkusLoading(false);
     }
   }, []);
 
@@ -466,6 +591,33 @@ const FbaInventory: React.FC = () => {
     setCategorySkus([]);
     fetchCountryData(country, 1, countryPagination.pageSize);
   };
+
+  // 处理列排序
+  const handleSort = async (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+
+    // 如果是AFN库存详情列，需要重新获取数据
+    if (key === 'afn-total-quantity') {
+      const sortBy = 'afn-total-quantity';
+      const sortOrder = direction.toUpperCase();
+      
+      if (selectedCountry) {
+        // 按国家筛选时的排序
+        await fetchCountryDataWithSort(selectedCountry, 1, countryPagination.pageSize, sortBy, sortOrder);
+      } else if (selectedCategory) {
+        // 按类目筛选时的排序
+        await fetchCategorySkusWithSort(selectedCategory, sortBy, sortOrder);
+      } else {
+        // 全部数据时的排序
+        await fetchDataWithSort(1, pagination.pageSize, sortBy, sortOrder);
+      }
+    }
+  };
+
 
   // 批量分配类目
   const handleBatchAssignCategory = async (values: any) => {
@@ -777,7 +929,26 @@ const FbaInventory: React.FC = () => {
       render: (text) => <Tag color="blue">{text}</Tag>
     },
     {
-      title: 'AFN库存详情',
+      title: (
+        <div 
+          style={{ 
+            cursor: 'pointer', 
+            userSelect: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px'
+          }}
+          onClick={() => handleSort('afn-total-quantity')}
+        >
+          AFN库存详情
+          {sortConfig.key === 'afn-total-quantity' && (
+            <span style={{ fontSize: '12px', color: '#1890ff' }}>
+              {sortConfig.direction === 'asc' ? '↑' : '↓'}
+            </span>
+          )}
+        </div>
+      ),
       key: 'afn-details',
       width: 100,
       align: 'center',
@@ -937,9 +1108,23 @@ const FbaInventory: React.FC = () => {
   // 分页处理
   const handleTableChange = (pag: any) => {
     if (selectedCountry) {
-      fetchCountryData(selectedCountry, pag.current, pag.pageSize);
+      if (sortConfig.key === 'afn-total-quantity') {
+        fetchCountryDataWithSort(selectedCountry, pag.current, pag.pageSize, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+      } else {
+        fetchCountryData(selectedCountry, pag.current, pag.pageSize);
+      }
+    } else if (selectedCategory) {
+      if (sortConfig.key === 'afn-total-quantity') {
+        fetchCategorySkusWithSort(selectedCategory, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+      } else {
+        fetchCategorySkus(selectedCategory);
+      }
     } else {
-      fetchData(pag.current, pag.pageSize);
+      if (sortConfig.key === 'afn-total-quantity') {
+        fetchDataWithSort(pag.current, pag.pageSize, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+      } else {
+        fetchData(pag.current, pag.pageSize);
+      }
     }
   };
 
@@ -1001,15 +1186,102 @@ const FbaInventory: React.FC = () => {
   };
 
   // 导出Excel
-  const handleExport = () => {
+  const handleExport = async () => {
     const currentData = selectedCategory ? categorySkus : selectedCountry ? countryRecords : records;
+    
+    // 如果没有勾选记录，导出所有数据
+    if (selectedRowKeys.length === 0) {
+      try {
+        message.loading('正在获取全部数据...', 0);
+        
+        // 构建查询参数
+        const params = new URLSearchParams({
+          page: '1',
+          limit: '10000', // 设置一个较大的值获取所有数据
+          ...searchFilters
+        });
+
+        // 如果有排序，添加排序参数
+        if (sortConfig.key === 'afn-total-quantity') {
+          params.append('sort_by', 'afn-total-quantity');
+          params.append('sort_order', sortConfig.direction!.toUpperCase());
+        }
+
+        // 根据当前筛选模式选择API
+        let apiUrl = `${API_BASE_URL}/api/fba-inventory?${params}`;
+        if (selectedCountry) {
+          apiUrl = `${API_BASE_URL}/api/fba-inventory/by-country/${encodeURIComponent(selectedCountry)}?${params}`;
+        } else if (selectedCategory) {
+          // 对于类目，需要获取类目下的所有SKU
+          const response = await fetch(`${API_BASE_URL}/api/fba-inventory/categories/${selectedCategory}/skus?page=1&limit=10000`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const result = await response.json();
+          if (result.code === 0) {
+            const allCategorySkus = result.data.records.map((item: any) => item.fbaInventory).filter(Boolean);
+            message.destroy();
+            exportToExcel(allCategorySkus);
+            return;
+          } else {
+            throw new Error(result.message);
+          }
+        }
+
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        message.destroy();
+        
+        if (result.code === 0) {
+          exportToExcel(result.data.records);
+        } else {
+          message.error(result.message);
+        }
+      } catch (error) {
+        message.destroy();
+        console.error('获取全部数据失败:', error);
+        message.error('获取数据失败');
+      }
+      return;
+    }
+
+    // 如果有勾选记录，导出选中的数据
     if (currentData.length === 0) {
       message.warning('没有数据可导出');
       return;
     }
 
+    const selectedRecords = currentData.filter(record => 
+      selectedRowKeys.includes(`${record.sku}-${record.site}`)
+    );
+    
+    if (selectedRecords.length === 0) {
+      message.warning('没有选中任何记录');
+      return;
+    }
+
+    exportToExcel(selectedRecords);
+  };
+
+  // 导出到Excel的通用函数
+  const exportToExcel = (data: FbaInventoryRecord[]) => {
     try {
-      const exportData = currentData.map(record => ({
+      const exportData = data.map(record => ({
         'SKU': record.sku,
         'FNSKU': record.fnsku || '',
         'ASIN': record.asin || '',
@@ -1375,14 +1647,26 @@ const FbaInventory: React.FC = () => {
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => {
-                  fetchData();
+                  if (sortConfig.key === 'afn-total-quantity') {
+                    // 如果有排序，使用排序的刷新
+                    if (selectedCountry) {
+                      fetchCountryDataWithSort(selectedCountry, countryPagination.current, countryPagination.pageSize, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+                    } else if (selectedCategory) {
+                      fetchCategorySkusWithSort(selectedCategory, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+                    } else {
+                      fetchDataWithSort(pagination.current, pagination.pageSize, 'afn-total-quantity', sortConfig.direction!.toUpperCase());
+                    }
+                  } else {
+                    // 没有排序，使用普通刷新
+                    fetchData();
+                    if (selectedCountry) {
+                      fetchCountryData(selectedCountry, countryPagination.current, countryPagination.pageSize);
+                    }
+                    if (selectedCategory) {
+                      fetchCategorySkus(selectedCategory);
+                    }
+                  }
                   fetchStats();
-                  if (selectedCountry) {
-                    fetchCountryData(selectedCountry, countryPagination.current, countryPagination.pageSize);
-                  }
-                  if (selectedCategory) {
-                    fetchCategorySkus(selectedCategory);
-                  }
                 }}
               >
                 刷新
