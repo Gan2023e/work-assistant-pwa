@@ -93,6 +93,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// 站点到国家的映射
+const siteToCountryMap = {
+  'www.amazon.com': '美国',
+  'www.amazon.ca': '加拿大',
+  'www.amazon.com.mx': '墨西哥',
+  'www.amazon.co.uk': '英国',
+  'www.amazon.de': '德国',
+  'www.amazon.fr': '法国',
+  'www.amazon.it': '意大利',
+  'www.amazon.es': '西班牙',
+  'www.amazon.nl': '荷兰',
+  'www.amazon.se': '瑞典',
+  'www.amazon.pl': '波兰',
+  'www.amazon.com.au': '澳大利亚',
+  'www.amazon.co.jp': '日本',
+  'www.amazon.in': '印度',
+  'www.amazon.com.br': '巴西',
+  'www.amazon.sg': '新加坡',
+  'www.amazon.ae': '阿联酋',
+  'www.amazon.sa': '沙特阿拉伯',
+  'www.amazon.eg': '埃及',
+  'www.amazon.com.tr': '土耳其'
+};
+
 // 获取FBA库存统计数据
 router.get('/stats', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 收到FBA库存统计查询请求');
@@ -116,6 +140,63 @@ router.get('/stats', async (req, res) => {
       where: whereCondition,
       group: ['site'],
       raw: true
+    });
+
+    // 按国家统计 - 基于站点映射
+    const countryStats = await FbaInventory.findAll({
+      attributes: [
+        'site',
+        [FbaInventory.sequelize.fn('COUNT', FbaInventory.sequelize.col('sku')), 'sku_count'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-fulfillable-quantity')), 'total_afn_fulfillable'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-reserved-quantity')), 'total_afn_reserved'],
+        [FbaInventory.sequelize.fn('SUM', FbaInventory.sequelize.col('afn-inbound-working-quantity')), 'total_afn_inbound']
+      ],
+      where: whereCondition,
+      group: ['site'],
+      raw: true
+    });
+
+    // 将站点统计转换为国家统计
+    const countryStatsMap = {};
+    countryStats.forEach(stat => {
+      const country = siteToCountryMap[stat.site] || '其他';
+      if (!countryStatsMap[country]) {
+        countryStatsMap[country] = {
+          country: country,
+          sku_count: 0,
+          total_afn_fulfillable: 0,
+          total_afn_reserved: 0,
+          total_afn_inbound: 0,
+          sites: []
+        };
+      }
+      countryStatsMap[country].sku_count += parseInt(stat.sku_count) || 0;
+      countryStatsMap[country].total_afn_fulfillable += parseInt(stat.total_afn_fulfillable) || 0;
+      countryStatsMap[country].total_afn_reserved += parseInt(stat.total_afn_reserved) || 0;
+      countryStatsMap[country].total_afn_inbound += parseInt(stat.total_afn_inbound) || 0;
+      countryStatsMap[country].sites.push(stat.site);
+    });
+
+    // 按指定顺序排序国家统计
+    const countryOrder = ['美国', '英国', '澳大利亚', '阿联酋'];
+    const by_country = Object.values(countryStatsMap).sort((a, b) => {
+      const indexA = countryOrder.indexOf(a.country);
+      const indexB = countryOrder.indexOf(b.country);
+      
+      // 如果两个国家都在排序列表中，按列表顺序排序
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      // 如果只有a在排序列表中，a排在前面
+      if (indexA !== -1) {
+        return -1;
+      }
+      // 如果只有b在排序列表中，b排在前面
+      if (indexB !== -1) {
+        return 1;
+      }
+      // 如果都不在排序列表中，按国家名称字母顺序排序
+      return a.country.localeCompare(b.country);
     });
 
     // 按店铺统计
@@ -150,6 +231,7 @@ router.get('/stats', async (req, res) => {
       data: {
         ...totalStats,
         by_site: siteStats,
+        by_country: by_country,
         by_store: storeStats
       }
     });
@@ -158,6 +240,64 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       code: 1,
       message: '获取统计失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取特定国家的库存记录
+router.get('/by-country/:country', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 收到按国家查询FBA库存请求');
+  
+  try {
+    const { country } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    // 根据国家找到对应的站点
+    const sites = Object.keys(siteToCountryMap).filter(site => 
+      siteToCountryMap[site] === country
+    );
+    
+    if (sites.length === 0) {
+      return res.status(404).json({
+        code: 1,
+        message: '未找到对应的站点'
+      });
+    }
+    
+    const whereCondition = {
+      site: { [Op.in]: sites }
+    };
+    
+    // 分页查询
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    const { count, rows } = await FbaInventory.findAndCountAll({
+      where: whereCondition,
+      order: [['sku', 'ASC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    console.log('\x1b[33m%s\x1b[0m', `📦 查询到${country}的FBA库存记录: ${rows.length} 条，总计: ${count} 条`);
+
+    res.json({
+      code: 0,
+      message: '获取成功',
+      data: {
+        country: country,
+        sites: sites,
+        total: count,
+        current: parseInt(page),
+        pageSize: parseInt(limit),
+        records: rows
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 获取国家库存记录失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '获取失败',
       error: error.message
     });
   }

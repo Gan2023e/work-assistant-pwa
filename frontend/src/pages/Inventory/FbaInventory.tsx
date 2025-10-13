@@ -81,6 +81,14 @@ interface FbaInventoryStats {
     total_afn_reserved: number;
     total_afn_inbound: number;
   }>;
+  by_country: Array<{
+    country: string;
+    sku_count: number;
+    total_afn_fulfillable: number;
+    total_afn_reserved: number;
+    total_afn_inbound: number;
+    sites: string[];
+  }>;
   by_store: Array<{
     store: string;
     sku_count: number;
@@ -141,6 +149,16 @@ const FbaInventory: React.FC = () => {
   const [searchType, setSearchType] = useState<string>('sku');
   const [searchSite, setSearchSite] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
+
+  // 按国家筛选状态
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [countryRecords, setCountryRecords] = useState<FbaInventoryRecord[]>([]);
+  const [countryPagination, setCountryPagination] = useState({
+    current: 1,
+    pageSize: 20,
+    total: 0
+  });
+  const [countryLoading, setCountryLoading] = useState(false);
 
   // 加载数据
   const fetchData = useCallback(async (page: number = 1, pageSize: number = 20) => {
@@ -297,6 +315,45 @@ const FbaInventory: React.FC = () => {
     }
   }, []);
 
+  // 获取特定国家的库存数据
+  const fetchCountryData = useCallback(async (country: string, page: number = 1, pageSize: number = 20) => {
+    setCountryLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/fba-inventory/by-country/${encodeURIComponent(country)}?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.code === 0) {
+        setCountryRecords(result.data.records);
+        setCountryPagination({
+          current: result.data.current,
+          pageSize: result.data.pageSize,
+          total: result.data.total
+        });
+      } else {
+        message.error(result.message);
+      }
+    } catch (error) {
+      console.error('获取国家库存数据失败:', error);
+      message.error('获取数据失败');
+    } finally {
+      setCountryLoading(false);
+    }
+  }, []);
+
   // 创建或更新类目
   const handleCategorySubmit = async (values: any) => {
     try {
@@ -402,6 +459,14 @@ const FbaInventory: React.FC = () => {
     fetchCategorySkus(category.id);
   };
 
+  // 点击国家统计卡片
+  const handleCountryClick = (country: string) => {
+    setSelectedCountry(country);
+    setSelectedCategory(null); // 清除类目选择
+    setCategorySkus([]);
+    fetchCountryData(country, 1, countryPagination.pageSize);
+  };
+
   // 批量分配类目
   const handleBatchAssignCategory = async (values: any) => {
     if (selectedRowKeys.length === 0) {
@@ -411,7 +476,7 @@ const FbaInventory: React.FC = () => {
 
     try {
       const { category_id } = values;
-      const currentData = selectedCategory ? categorySkus : records;
+      const currentData = selectedCategory ? categorySkus : selectedCountry ? countryRecords : records;
       const selectedRecords = currentData.filter(record => 
         selectedRowKeys.includes(`${record.sku}-${record.site}`)
       );
@@ -472,7 +537,7 @@ const FbaInventory: React.FC = () => {
     }
 
     try {
-      const currentData = selectedCategory ? categorySkus : records;
+      const currentData = selectedCategory ? categorySkus : selectedCountry ? countryRecords : records;
       const selectedRecords = currentData.filter(record => 
         selectedRowKeys.includes(`${record.sku}-${record.site}`)
       );
@@ -533,9 +598,9 @@ const FbaInventory: React.FC = () => {
       title: (
         <input
           type="checkbox"
-          checked={selectedRowKeys.length > 0 && selectedRowKeys.length === (selectedCategory ? categorySkus.length : records.length)}
+          checked={selectedRowKeys.length > 0 && selectedRowKeys.length === (selectedCategory ? categorySkus.length : selectedCountry ? countryRecords.length : records.length)}
           onChange={(e) => {
-            const currentData = selectedCategory ? categorySkus : records;
+            const currentData = selectedCategory ? categorySkus : selectedCountry ? countryRecords : records;
             if (e.target.checked) {
               // 全选
               const allKeys = currentData.map(record => `${record.sku}-${record.site}`);
@@ -871,7 +936,11 @@ const FbaInventory: React.FC = () => {
 
   // 分页处理
   const handleTableChange = (pag: any) => {
-    fetchData(pag.current, pag.pageSize);
+    if (selectedCountry) {
+      fetchCountryData(selectedCountry, pag.current, pag.pageSize);
+    } else {
+      fetchData(pag.current, pag.pageSize);
+    }
   };
 
   // 搜索处理
@@ -933,13 +1002,14 @@ const FbaInventory: React.FC = () => {
 
   // 导出Excel
   const handleExport = () => {
-    if (records.length === 0) {
+    const currentData = selectedCategory ? categorySkus : selectedCountry ? countryRecords : records;
+    if (currentData.length === 0) {
       message.warning('没有数据可导出');
       return;
     }
 
     try {
-      const exportData = records.map(record => ({
+      const exportData = currentData.map(record => ({
         'SKU': record.sku,
         'FNSKU': record.fnsku || '',
         'ASIN': record.asin || '',
@@ -1112,6 +1182,62 @@ const FbaInventory: React.FC = () => {
             </Card>
           )}
 
+          {/* 按国家统计卡片 */}
+          {stats && stats.by_country && stats.by_country.length > 0 && (
+            <Card 
+              title="按国家统计" 
+              size="small" 
+              style={{ marginBottom: 16 }}
+              extra={
+                selectedCountry && (
+                  <Button 
+                    size="small" 
+                    onClick={() => {
+                      setSelectedCountry(null);
+                      setCountryRecords([]);
+                    }}
+                  >
+                    返回全部
+                  </Button>
+                )
+              }
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {stats.by_country.map((countryStat, index) => (
+                  <div
+                    key={countryStat.country}
+                    style={{ 
+                      border: selectedCountry === countryStat.country ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      backgroundColor: selectedCountry === countryStat.country ? '#f0f9ff' : '#fff',
+                      transition: 'all 0.2s'
+                    }}
+                    onClick={() => handleCountryClick(countryStat.country)}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '12px', color: '#1890ff' }}>
+                        {countryStat.country}
+                      </span>
+                      <Tag color="blue" style={{ fontSize: '10px' }}>
+                        {countryStat.sites.length}个站点
+                      </Tag>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666' }}>
+                      <span>SKU: {countryStat.sku_count}</span>
+                      <span style={{ color: '#52c41a' }}>可售: {countryStat.total_afn_fulfillable}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', marginTop: '2px' }}>
+                      <span style={{ color: '#f5222d' }}>预留: {countryStat.total_afn_reserved}</span>
+                      <span style={{ color: '#1890ff' }}>入库: {countryStat.total_afn_inbound}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* 自定义类目卡片栏 */}
           <Card 
             title={
@@ -1240,7 +1366,7 @@ const FbaInventory: React.FC = () => {
               <Button
                 icon={<DownloadOutlined />}
                 onClick={handleExport}
-                disabled={records.length === 0}
+                disabled={(selectedCategory ? categorySkus.length : selectedCountry ? countryRecords.length : records.length) === 0}
               >
                 导出Excel
               </Button>
@@ -1251,6 +1377,12 @@ const FbaInventory: React.FC = () => {
                 onClick={() => {
                   fetchData();
                   fetchStats();
+                  if (selectedCountry) {
+                    fetchCountryData(selectedCountry, countryPagination.current, countryPagination.pageSize);
+                  }
+                  if (selectedCategory) {
+                    fetchCategorySkus(selectedCategory);
+                  }
                 }}
               >
                 刷新
@@ -1488,11 +1620,11 @@ const FbaInventory: React.FC = () => {
           {/* 数据表格 */}
           <Table
             columns={columns}
-            dataSource={selectedCategory ? categorySkus : records}
-            rowKey="sku"
-            loading={selectedCategory ? categorySkusLoading : loading}
+            dataSource={selectedCategory ? categorySkus : selectedCountry ? countryRecords : records}
+            rowKey={(record) => `${record.sku}-${record.site}`}
+            loading={selectedCategory ? categorySkusLoading : selectedCountry ? countryLoading : loading}
             pagination={selectedCategory ? false : {
-              ...pagination,
+              ...(selectedCountry ? countryPagination : pagination),
               showSizeChanger: true,
               showQuickJumper: true,
               showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
@@ -1500,23 +1632,44 @@ const FbaInventory: React.FC = () => {
             onChange={selectedCategory ? undefined : handleTableChange}
             scroll={{ x: 800 }}
             size="small"
-            title={() => selectedCategory ? (
-              <Space>
-                <span>类目SKU列表</span>
-                <Tag color={categories.find(c => c.id === selectedCategory)?.color}>
-                  {categories.find(c => c.id === selectedCategory)?.name}
-                </Tag>
-                <Button 
-                  size="small" 
-                  onClick={() => {
-                    setSelectedCategory(null);
-                    setCategorySkus([]);
-                  }}
-                >
-                  返回全部数据
-                </Button>
-              </Space>
-            ) : undefined}
+            title={() => {
+              if (selectedCategory) {
+                return (
+                  <Space>
+                    <span>类目SKU列表</span>
+                    <Tag color={categories.find(c => c.id === selectedCategory)?.color}>
+                      {categories.find(c => c.id === selectedCategory)?.name}
+                    </Tag>
+                    <Button 
+                      size="small" 
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        setCategorySkus([]);
+                      }}
+                    >
+                      返回全部数据
+                    </Button>
+                  </Space>
+                );
+              } else if (selectedCountry) {
+                return (
+                  <Space>
+                    <span>国家库存列表</span>
+                    <Tag color="blue">{selectedCountry}</Tag>
+                    <Button 
+                      size="small" 
+                      onClick={() => {
+                        setSelectedCountry(null);
+                        setCountryRecords([]);
+                      }}
+                    >
+                      返回全部数据
+                    </Button>
+                  </Space>
+                );
+              }
+              return undefined;
+            }}
           />
         </Col>
       </Row>
