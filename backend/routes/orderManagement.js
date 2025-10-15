@@ -373,6 +373,65 @@ router.get('/orders/:needNum/details', async (req, res) => {
   }
 });
 
+// 验证SKU是否为Amazon SKU
+router.post('/validate-amazon-sku', async (req, res) => {
+  console.log('\x1b[32m%s\x1b[0m', '🔍 验证SKU是否为Amazon SKU:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { skus, country } = req.body;
+
+    if (!skus || !Array.isArray(skus) || skus.length === 0) {
+      return res.status(400).json({
+        code: 1,
+        message: '请提供要验证的SKU列表'
+      });
+    }
+
+    // 查询SKU映射关系，检查是否为Amazon SKU
+    const skuMappingQuery = `
+      SELECT 
+        ams.amz_sku,
+        ams.local_sku,
+        ams.country,
+        ams.sku_type,
+        ams.site
+      FROM pbi_amzsku_sku ams
+      WHERE ams.amz_sku IN (${skus.map(sku => `'${sku.replace(/'/g, "''")}'`).join(',')})
+        AND ams.country = '${country.replace(/'/g, "''")}'
+        AND ams.sku_type = 'FBA SKU'
+    `;
+
+    const amazonSkus = await sequelize.query(skuMappingQuery, {
+      type: sequelize.QueryTypes.SELECT,
+      raw: true
+    });
+
+    const amazonSkuSet = new Set(amazonSkus.map(item => item.amz_sku));
+    const invalidSkus = skus.filter(sku => !amazonSkuSet.has(sku));
+
+    console.log('\x1b[33m%s\x1b[0m', `📊 SKU验证结果: 总SKU=${skus.length}, Amazon SKU=${amazonSkus.length}, 非Amazon SKU=${invalidSkus.length}`);
+
+    res.json({
+      code: 0,
+      message: 'SKU验证完成',
+      data: {
+        totalSkus: skus.length,
+        amazonSkus: amazonSkus.length,
+        invalidSkus: invalidSkus.length,
+        invalidSkuList: invalidSkus,
+        isValid: invalidSkus.length === 0
+      }
+    });
+  } catch (error) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ 验证SKU类型失败:', error);
+    res.status(500).json({
+      code: 1,
+      message: '验证失败',
+      error: error.message
+    });
+  }
+});
+
 // 创建新需求单
 router.post('/orders', async (req, res) => {
   console.log('\x1b[32m%s\x1b[0m', '🔍 创建新需求单请求:', JSON.stringify(req.body, null, 2));

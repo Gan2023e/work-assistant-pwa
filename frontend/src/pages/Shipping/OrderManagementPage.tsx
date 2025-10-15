@@ -417,6 +417,9 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
 
   // 检查SKU冲突
   const checkSkuConflicts = async (skuData: string, orderInfo: any) => {
+    let validationLoadingMessage: any = null;
+    let conflictLoadingMessage: any = null;
+    
     try {
       // 解析SKU数据
       const skuLines = skuData.trim().split('\n').filter(line => line.trim());
@@ -433,8 +436,51 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         return;
       }
 
-      // 显示检查冲突的进度
-      message.loading('正在检查SKU冲突...', 0);
+      // 首先验证SKU是否为Amazon SKU
+      validationLoadingMessage = message.loading('正在验证SKU类型...', 0);
+      
+      try {
+        const validationResponse = await fetch(`${API_BASE_URL}/api/order-management/validate-amazon-sku`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+          },
+          body: JSON.stringify({
+            skus: skus.map(s => s.sku),
+            country: orderInfo.country
+          })
+        });
+
+        const validationResult = await validationResponse.json();
+        
+        // 关闭验证loading
+        validationLoadingMessage();
+        validationLoadingMessage = null;
+        
+        if (validationResult.code !== 0) {
+          message.error(validationResult.message || 'SKU类型验证失败');
+          return;
+        }
+
+        // 检查是否有非Amazon SKU
+        if (!validationResult.data.isValid) {
+          const invalidSkus = validationResult.data.invalidSkuList;
+          message.error(`以下SKU不是Amazon SKU，请检查：${invalidSkus.join(', ')}`);
+          return;
+        }
+
+        // 显示检查冲突的进度
+        conflictLoadingMessage = message.loading('正在检查SKU冲突...', 0);
+      } catch (validationError) {
+        // 确保关闭loading消息
+        if (validationLoadingMessage) {
+          validationLoadingMessage();
+        }
+        console.error('SKU类型验证失败:', validationError);
+        message.error('SKU类型验证失败，请重试');
+        return;
+      }
 
       // 检查每个SKU是否有待发需求
       const response = await fetch(`${API_BASE_URL}/api/order-management/check-conflicts`, {
@@ -451,6 +497,12 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
       });
 
       const result = await response.json();
+      
+      // 关闭冲突检查loading
+      if (conflictLoadingMessage) {
+        conflictLoadingMessage();
+        conflictLoadingMessage = null;
+      }
       
       if (result.code === 0) {
         const conflicts = result.data.conflicts || [];
@@ -486,6 +538,13 @@ const OrderManagementPage: React.FC<OrderManagementPageProps> = ({ needNum }) =>
         message.error(result.message || '检查SKU冲突失败');
       }
     } catch (error) {
+      // 确保关闭所有loading消息
+      if (validationLoadingMessage) {
+        validationLoadingMessage();
+      }
+      if (conflictLoadingMessage) {
+        conflictLoadingMessage();
+      }
       console.error('检查SKU冲突失败:', error);
       message.error('检查SKU冲突失败');
     }

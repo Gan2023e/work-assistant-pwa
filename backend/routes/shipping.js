@@ -2869,6 +2869,18 @@ router.post('/amazon-template/generate', async (req, res) => {
         // 完全以完成页面Amazon SKU列显示的值为准
         const displayedAmzSku = item.amz_sku; // 使用完成页面Amazon SKU列的原始显示值
         
+        // 调试日志：检查SFXBA293A相关数据
+        if (displayedAmzSku === 'SFXBA293A' || item.local_sku === 'XBA293A' || item.amz_sku === 'SFXBA293A') {
+          console.log('🔍 后端发现SFXBA293A相关数据:', {
+            displayedAmzSku,
+            local_sku: item.local_sku,
+            amz_sku: item.amz_sku,
+            quantity: item.quantity,
+            box_num: item.box_num,
+            country: item.country
+          });
+        }
+        
         // 为了避免undefined/null作为对象key的问题，使用字符串表示
         const skuKey = displayedAmzSku !== undefined && displayedAmzSku !== null ? 
           String(displayedAmzSku) : ''; // 空字符串表示完成页面显示为空的Amazon SKU

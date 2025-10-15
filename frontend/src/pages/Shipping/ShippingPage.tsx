@@ -536,6 +536,17 @@ const ShippingPage: React.FC = () => {
       const displayedAmzSku = item.amz_sku; // 使用完成页面中Amazon SKU列实际显示的值
       const localSku = item.local_sku || item.sku || '';
       
+      // 调试日志：检查SFXBA293A相关数据
+      if (displayedAmzSku === 'SFXBA293A' || localSku === 'XBA293A' || item.amz_sku === 'SFXBA293A') {
+        console.log('🔍 发现SFXBA293A相关数据:', {
+          displayedAmzSku,
+          localSku,
+          amz_sku: item.amz_sku,
+          quantity: item.quantity,
+          box_num: item.box_num
+        });
+      }
+      
       // 从selectedRows中找到对应的国家信息，或使用item中的国家信息
       const selectedRecord = selectedRows.find((row: MergedShippingData) => 
         row.amz_sku === item.amz_sku || row.local_sku === localSku
