@@ -113,9 +113,14 @@ const PWAManager: React.FC = () => {
     // 定期检查更新
     const checkForUpdates = () => {
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'CHECK_UPDATE'
-        });
+        try {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'CHECK_UPDATE'
+          });
+        } catch (error) {
+          // 静默处理扩展通信错误
+          console.debug('Service Worker通信失败，可能是浏览器扩展问题:', error.message);
+        }
       }
     };
 

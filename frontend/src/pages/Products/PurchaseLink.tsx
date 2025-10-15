@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Button, 
   Input, 
@@ -10,7 +10,6 @@ import {
   Modal, 
   Popconfirm,
   Form,
-  FormInstance,
   Tooltip,
   Typography,
   Card,
@@ -26,15 +25,14 @@ import {
   Badge,
   Tag,
   Progress,
-  Tabs,
   Switch,
   Radio,
   Steps,
   Layout,
-  Drawer
 } from 'antd';
 
 import { useTaskContext } from '../../contexts/TaskContext';
+import { logger } from '../../utils/logger';
 import { 
   UploadOutlined, 
   DeleteOutlined, 
@@ -58,7 +56,6 @@ import {
   CalculatorOutlined,
   DownOutlined,
   UpOutlined,
-  MenuOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ExperimentOutlined,
@@ -910,7 +907,7 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      console.log('🔍 获取到的统计数据:', result);
+      logger.debug('获取到的统计数据:', result);
       
       setStatistics(result.statistics);
       setAllDataStats({
@@ -921,14 +918,14 @@ const Purchase: React.FC = () => {
       });
       
       // 添加调试日志
-      console.log('📊 CPC提交情况统计数据:', result.cpcSubmitStats);
+      logger.debug('CPC提交情况统计数据:', result.cpcSubmitStats);
       if (result.cpcSubmitStats && result.cpcSubmitStats.length > 0) {
-        console.log('✅ CPC提交情况数据加载成功，共', result.cpcSubmitStats.length, '种状态');
+        logger.success(`CPC提交情况数据加载成功，共 ${result.cpcSubmitStats.length} 种状态`);
       } else {
-        console.warn('⚠️  CPC提交情况数据为空');
+        logger.warn('CPC提交情况数据为空');
       }
     } catch (e) {
-      console.error('获取统计数据失败:', e);
+      logger.error('获取统计数据失败:', e);
     }
   };
 
@@ -986,7 +983,7 @@ const Purchase: React.FC = () => {
         isFuzzy: searchType === 'weblink' || searchType === 'competitor_asin' ? true : isFuzzySearch // 产品链接和竞争对手ASIN搜索强制模糊搜索
       };
       
-      console.log('🔍 搜索请求参数:', requestPayload);
+      logger.debug('搜索请求参数:', requestPayload);
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/search`, {
         method: 'POST',
@@ -3454,7 +3451,7 @@ const Purchase: React.FC = () => {
   const fetchTemplateFiles = async (country: string, category?: string) => {
     try {
       setTemplateLoading(prev => ({ ...prev, [country]: true }));
-      console.log(`📥 获取${country}站点模板列表...`);
+      logger.template(`获取${country}站点模板列表...`);
       
       const url = new URL(`${API_BASE_URL}/api/product_weblink/amazon-templates`);
       url.searchParams.set('country', country);
@@ -3467,7 +3464,7 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      console.log(`✅ ${country}站点模板列表获取成功:`, result.data?.length || 0, '个文件');
+      logger.template(`${country}站点模板列表获取成功: ${result.data?.length || 0} 个文件`);
       
       setAllTemplateFiles(prev => ({
         ...prev,
@@ -3487,7 +3484,7 @@ const Purchase: React.FC = () => {
   // 获取类目列表
   const fetchTemplateCategories = async (country: string) => {
     try {
-      console.log(`📥 获取${country}站点类目列表...`);
+      logger.template(`获取${country}站点类目列表...`);
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/categories?country=${country}`);
       
@@ -3496,7 +3493,7 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      console.log(`✅ ${country}站点类目列表获取成功:`, result.data?.length || 0, '个类目');
+      logger.template(`${country}站点类目列表获取成功: ${result.data?.length || 0} 个类目`);
       
       setTemplateCategories(prev => ({
         ...prev,
@@ -3514,7 +3511,7 @@ const Purchase: React.FC = () => {
     
     try {
       setGlobalTemplateLoading(true);
-      console.log('🚀 开始批量加载所有站点模板数据和类目...');
+      logger.template('开始批量加载所有站点模板数据和类目...');
       
       const promises = countries.flatMap(country => [
         fetchTemplateFiles(country),
@@ -3522,9 +3519,9 @@ const Purchase: React.FC = () => {
       ]);
       await Promise.all(promises);
       
-      console.log('✅ 所有站点模板数据和类目加载完成');
+      logger.template('所有站点模板数据和类目加载完成');
     } catch (error) {
-      console.error('❌ 批量加载模板数据时发生错误:', error);
+      logger.error('批量加载模板数据时发生错误:', error);
       message.error('加载模板数据失败，请重试');
     } finally {
       setGlobalTemplateLoading(false);
@@ -3574,7 +3571,7 @@ const Purchase: React.FC = () => {
       }
 
       const result = await res.json();
-      console.log('✅ 模板上传成功:', result);
+      logger.success('模板上传成功:', result);
       message.success(result.message);
       
       // 重新获取模板列表和类目列表
@@ -3641,7 +3638,7 @@ const Purchase: React.FC = () => {
   // 切换模板激活状态
   const handleToggleTemplateActive = async (templateId: number, isActive: boolean) => {
     try {
-      console.log(`🔄 切换模板激活状态，ID: ${templateId}, 激活状态: ${isActive}`);
+      logger.debug(`切换模板激活状态，ID: ${templateId}, 激活状态: ${isActive}`);
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/${templateId}/toggle-active`, {
         method: 'PUT',
@@ -3656,7 +3653,7 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      console.log('✅ 模板状态切换成功:', result);
+      logger.success('模板状态切换成功:', result);
       
       // 直接更新本地状态，然后重新获取数据
       setAllTemplateFiles(prev => {
@@ -3677,14 +3674,14 @@ const Purchase: React.FC = () => {
       
       message.success(`模板已${isActive ? '激活' : '禁用'}`);
     } catch (error) {
-      console.error('❌ 切换模板状态失败:', error);
+      logger.error('切换模板状态失败:', error);
       message.error('操作失败: ' + (error as Error).message);
     }
   };
 
   const handleTemplateDownload = async (objectName: string, fileName: string) => {
     try {
-      console.log(`🔽 开始下载模板文件: ${fileName}`);
+      logger.template(`开始下载模板文件: ${fileName}`);
       
       const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
       
@@ -3722,7 +3719,7 @@ const Purchase: React.FC = () => {
       message.success(`模板文件 ${fileName} 下载成功`);
       
     } catch (error) {
-      console.error('❌ 下载模板文件失败:', error);
+      logger.error('下载模板文件失败:', error);
       message.error('下载失败：网络错误，请稍后重试');
     }
   };
@@ -3760,12 +3757,12 @@ const Purchase: React.FC = () => {
 
     // 检查类目是否已选择
     if (!values.category) {
-      console.log('❌ 类目未选择，当前表单值:', values);
+      logger.warn('类目未选择，当前表单值:', values);
       message.error('请选择或输入类目');
       return;
     }
     
-    console.log('✅ 表单验证通过，准备上传');
+    logger.success('表单验证通过，准备上传');
 
     const formData = new FormData();
     formData.append('file', file);
@@ -3788,7 +3785,7 @@ const Purchase: React.FC = () => {
       }
 
       const result = await res.json();
-      console.log('✅ 模板上传成功:', result);
+      logger.success('模板上传成功:', result);
       message.success(result.message);
       
       // 重新获取所有站点的模板列表
@@ -4060,7 +4057,7 @@ const Purchase: React.FC = () => {
       
       // 检查后端是否设置了文件名
       const contentDisposition = generateRes.headers.get('Content-Disposition');
-      console.log('🔍 后端Content-Disposition:', contentDisposition);
+      logger.debug('后端Content-Disposition:', contentDisposition);
       
       let fileName = `UK_${parentSkus.join('_')}.xlsx`;
       
@@ -5534,10 +5531,10 @@ ${selectedSkuIds.map(skuId => {
           });
           
           if (notificationRes.ok) {
-            console.log('✅ 钉钉通知发送成功');
+            logger.success('钉钉通知发送成功');
           }
         } catch (error) {
-          console.error('钉钉通知发送失败:', error);
+          logger.error('钉钉通知发送失败:', error);
           // 钉钉通知失败不影响主要功能
         }
         }
@@ -7777,22 +7774,22 @@ ${selectedSkuIds.map(skuId => {
                    return label.toLowerCase().includes(input.toLowerCase());
                  }}
                  onChange={(value) => {
-                   console.log('🔄 onChange 触发，值:', value);
+                   logger.debug('onChange 触发，值:', value);
                    // 更新状态变量
                    setSelectedUploadCategory(value || '');
                    // 确保表单值也被更新
                    addTemplateForm.setFieldValue('category', value);
                  }}
-                 onDropdownVisibleChange={(open) => {
-                   if (open && selectedUploadCountry) {
-                     fetchTemplateCategories(selectedUploadCountry);
-                   }
-                 }}
+                onOpenChange={(open) => {
+                  if (open && selectedUploadCountry) {
+                    fetchTemplateCategories(selectedUploadCountry);
+                  }
+                }}
                  onSearch={(value) => {
                    // 当用户输入时，保存输入的值
-                   console.log('🔍 onSearch 输入值:', value);
+                   logger.debug('onSearch 输入值:', value);
                    if (value) {
-                     console.log('💾 onSearch 保存类目:', value);
+                     logger.debug('onSearch 保存类目:', value);
                      addTemplateForm.setFieldValue('category', value);
                      setSelectedUploadCategory(value);
                    }
@@ -7824,15 +7821,15 @@ ${selectedSkuIds.map(skuId => {
                      // 延迟再次设置值，确保不被清空
                      setTimeout(() => {
                        addTemplateForm.setFieldValue('category', inputValue);
-                       console.log('🔄 延迟设置值:', inputValue);
+                       logger.debug('延迟设置值:', inputValue);
                      }, 100);
                    }
                  }}
                  notFoundContent={null}
-                 dropdownRender={(menu) => (
-                   <div>
-                     {menu}
-                     <Divider style={{ margin: '8px 0' }} />
+                popupRender={(menu) => (
+                  <div>
+                    {menu}
+                    <Divider style={{ margin: '8px 0' }} />
                      <div style={{ padding: '0 8px 4px' }}>
                        <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
                          提示：可以直接输入新的类目名称
