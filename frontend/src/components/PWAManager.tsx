@@ -3,7 +3,6 @@ import { notification, Button, Card, Space, Modal, Progress } from 'antd';
 import { 
   WifiOutlined, 
   DownloadOutlined, 
-  SyncOutlined,
   CloudServerOutlined,
   MobileOutlined,
   ExclamationCircleOutlined,
@@ -20,7 +19,7 @@ const PWAManager: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [, setUpdateAvailable] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
@@ -119,7 +118,7 @@ const PWAManager: React.FC = () => {
           });
         } catch (error) {
           // 静默处理扩展通信错误
-          console.debug('Service Worker通信失败，可能是浏览器扩展问题:', error.message);
+          console.debug('Service Worker通信失败，可能是浏览器扩展问题:', error instanceof Error ? error.message : String(error));
         }
       }
     };
