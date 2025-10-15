@@ -3682,14 +3682,49 @@ const Purchase: React.FC = () => {
     }
   };
 
-  const handleTemplateDownload = (objectName: string, fileName: string) => {
-    const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleTemplateDownload = async (objectName: string, fileName: string) => {
+    try {
+      console.log(`🔽 开始下载模板文件: ${fileName}`);
+      
+      const downloadUrl = `${API_BASE_URL}/api/product_weblink/amazon-templates/download/${encodeURIComponent(objectName)}`;
+      
+      // 使用fetch下载文件，这样可以处理错误响应
+      const response = await fetch(downloadUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        
+        if (response.status === 403) {
+          message.error('下载失败：OSS访问权限不足，请联系管理员检查配置');
+        } else if (response.status === 404) {
+          message.error('下载失败：模板文件不存在');
+        } else {
+          message.error(`下载失败：${errorData.message || response.statusText}`);
+        }
+        return;
+      }
+      
+      // 获取文件内容
+      const blob = await response.blob();
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理URL对象
+      window.URL.revokeObjectURL(url);
+      
+      message.success(`模板文件 ${fileName} 下载成功`);
+      
+    } catch (error) {
+      console.error('❌ 下载模板文件失败:', error);
+      message.error('下载失败：网络错误，请稍后重试');
+    }
   };
 
 
@@ -3873,7 +3908,7 @@ const Purchase: React.FC = () => {
             <Button
               type="link"
               icon={<DownloadOutlined />}
-              onClick={() => window.open(record.url, '_blank')}
+              onClick={() => handleTemplateDownload(record.objectName, record.fileName)}
             >
               下载
             </Button>

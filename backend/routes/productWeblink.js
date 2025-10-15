@@ -2637,7 +2637,24 @@ router.get('/amazon-templates/download/:objectName*', async (req, res) => {
     
     if (!result.success) {
       console.error(`❌ 下载失败: ${result.message}`);
-      return res.status(404).json({ message: result.message || '模板文件不存在' });
+      
+      // 根据错误类型返回不同的状态码
+      if (result.message && result.message.includes('访问权限不足')) {
+        return res.status(403).json({ 
+          message: 'OSS访问权限不足，请联系管理员检查AccessKey配置',
+          error: 'AccessDenied'
+        });
+      } else if (result.message && result.message.includes('不存在')) {
+        return res.status(404).json({ 
+          message: result.message || '模板文件不存在',
+          error: 'FileNotFound'
+        });
+      } else {
+        return res.status(500).json({ 
+          message: result.message || '下载失败',
+          error: 'DownloadError'
+        });
+      }
     }
 
     console.log(`📤 准备发送文件: ${result.fileName} (${result.size} 字节)`);
