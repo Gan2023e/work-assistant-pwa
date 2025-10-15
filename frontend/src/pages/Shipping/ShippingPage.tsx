@@ -543,7 +543,10 @@ const ShippingPage: React.FC = () => {
       const country = item.country || selectedRecord?.country || '默认';
       
       // 创建唯一标识，使用完成页面显示的amz_sku值
-      const uniqueKey = `${displayedAmzSku || 'EMPTY'}_${localSku}_${country}`;
+      // 与后端保持一致：null/undefined转换为空字符串，而不是'EMPTY'
+      const normalizedAmzSku = displayedAmzSku !== undefined && displayedAmzSku !== null ? 
+        String(displayedAmzSku) : '';
+      const uniqueKey = `${normalizedAmzSku}_${localSku}_${country}`;
       
       if (skuSummary.has(uniqueKey)) {
           // 如果已存在，累加数量
@@ -552,7 +555,7 @@ const ShippingPage: React.FC = () => {
         } else {
         // 如果不存在，创建新记录，使用完成页面Amazon SKU列的原始显示值
         skuSummary.set(uniqueKey, {
-          amz_sku: displayedAmzSku, // 完全使用完成页面Amazon SKU列显示的值（可能为null/undefined/空字符串）
+          amz_sku: displayedAmzSku, // 保持原始值用于显示
           local_sku: localSku,
             quantity: item.quantity,
             country: country

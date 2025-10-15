@@ -1,7 +1,10 @@
 const { Resend } = require('resend');
 
-// 创建 Resend 实例
-const resend = new Resend(process.env.RESEND_API_KEY);
+// 创建 Resend 实例（仅在API密钥存在时）
+let resend = null;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+}
 
 /**
  * 发送产品上下架邮件 - 使用 Resend
@@ -12,7 +15,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const sendProductStatusEmail = async (action, parentSkus) => {
   try {
     // 检查 Resend API Key 配置
-    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
+    if (!resend || !process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
       console.error('Resend 配置不完整，无法发送邮件');
       return { success: false, error: 'Resend 配置不完整' };
     }
@@ -86,7 +89,7 @@ const sendProductStatusEmail = async (action, parentSkus) => {
 const sendCustomEmail = async (subject, content, htmlContent = null) => {
   try {
     // 检查 Resend API Key 配置
-    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
+    if (!resend || !process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
       console.error('Resend 配置不完整，无法发送邮件');
       return { success: false, error: 'Resend 配置不完整' };
     }
@@ -148,7 +151,7 @@ const sendCustomEmail = async (subject, content, htmlContent = null) => {
 const sendBulkEmail = async (recipients, subject, content, htmlContent = null) => {
   try {
     // 检查 Resend API Key 配置
-    if (!process.env.RESEND_API_KEY || !recipients || recipients.length === 0) {
+    if (!resend || !process.env.RESEND_API_KEY || !recipients || recipients.length === 0) {
       console.error('Resend 配置不完整或收件人列表为空');
       return { success: false, error: 'Resend 配置不完整或收件人列表为空' };
     }
@@ -203,7 +206,7 @@ const sendBulkEmail = async (recipients, subject, content, htmlContent = null) =
 const sendEmailWithAttachments = async (subject, content, attachments = [], htmlContent = null) => {
   try {
     // 检查 Resend API Key 配置
-    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
+    if (!resend || !process.env.RESEND_API_KEY || !process.env.EMAIL_RECEIVER) {
       console.error('Resend 配置不完整，无法发送邮件');
       return { success: false, error: 'Resend 配置不完整' };
     }
