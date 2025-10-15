@@ -3953,12 +3953,7 @@ const Purchase: React.FC = () => {
           columns={columns}
           dataSource={tableData}
           loading={globalTemplateLoading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个模板`,
-          }}
+          pagination={false}
           scroll={{ x: 1000 }}
         />
       </div>
