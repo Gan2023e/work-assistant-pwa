@@ -21,7 +21,7 @@ export const API_ENDPOINTS = {
   productWeblink: {
     list: '/api/product_weblink',
     create: '/api/product_weblink',
-    update: (id: number) => `/api/product_weblink/${id}`,
+    update: (id: number) => `/api/product_weblink/update/${id}`,
     delete: (id: number) => `/api/product_weblink/${id}`,
     search: '/api/product_weblink/search',
   },

@@ -64,7 +64,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
-import { API_BASE_URL, apiClient } from '../../config/api';
+import { API_BASE_URL, API_ENDPOINTS, apiClient } from '../../config/api';
 import ProfitCalculator from '../../components/ProfitCalculator';
 
 // 添加CSS样式
@@ -592,6 +592,11 @@ const Purchase: React.FC = () => {
   // 母SKU编辑相关状态
   const [editingParentSku, setEditingParentSku] = useState<{id: number, currentValue: string} | null>(null);
   const [parentSkuInputValue, setParentSkuInputValue] = useState<string>('');
+  
+  // 备注编辑相关状态
+  const [editingNotice, setEditingNotice] = useState<{id: number, currentValue: string} | null>(null);
+  const [noticeInputValue, setNoticeInputValue] = useState<string>('');
+  const [isSavingNotice, setIsSavingNotice] = useState<boolean>(false);
   
   // 行编辑相关状态
   const [editingRecord, setEditingRecord] = useState<ProductRecord | null>(null);
@@ -2423,16 +2428,6 @@ const Purchase: React.FC = () => {
     return fieldNameMap[field] || field;
   };
 
-  // 双击编辑处理
-  const handleCellDoubleClick = (record: ProductRecord, field: string) => {
-    setEditingCell({
-      id: record.id,
-      field,
-      value: record[field as keyof ProductRecord]?.toString() || ''
-    });
-    setEditModalVisible(true);
-    (editForm as any).setFieldsValue({ value: record[field as keyof ProductRecord] || '' });
-  };
 
   // 保存编辑
   const handleSaveEdit = async () => {
@@ -2558,37 +2553,6 @@ const Purchase: React.FC = () => {
   };
 
   // 处理记录删除
-  const handleRecordDelete = async (recordId: number) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/product_weblink/${recordId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      message.success('删除成功');
-      
-      // 从本地数据中移除删除的记录
-      const removeFromData = (prevData: ProductRecord[]) => 
-        prevData.filter(item => item.id !== recordId);
-      
-      setData(removeFromData);
-      setOriginalData(removeFromData);
-      setFilteredData(removeFromData);
-      
-      // 如果删除的记录在选中列表中，也移除
-      setSelectedRowKeys(prev => prev.filter(key => Number(key) !== recordId));
-      
-      // 刷新统计信息
-      fetchAllDataStatistics();
-    } catch (e: unknown) {
-      console.error('删除记录失败:', e);
-      const errorMessage = e instanceof Error ? e.message : '删除失败';
-      message.error(errorMessage);
-    }
-  };
 
   // 处理母SKU双击编辑
   const handleParentSkuDoubleClick = (record: ProductRecord) => {
@@ -2644,6 +2608,69 @@ const Purchase: React.FC = () => {
   const handleCancelParentSkuEdit = () => {
     setEditingParentSku(null);
     setParentSkuInputValue('');
+  };
+
+  // 处理备注双击编辑
+  const handleNoticeDoubleClick = (record: ProductRecord) => {
+    setEditingNotice({id: record.id, currentValue: record.notice || ''});
+    setNoticeInputValue(record.notice || '');
+  };
+
+  // 保存备注编辑
+  const handleSaveNotice = async () => {
+    if (!editingNotice || isSavingNotice) return;
+
+    setIsSavingNotice(true);
+    try {
+      console.log('开始更新备注，ID:', editingNotice.id, '新值:', noticeInputValue.trim());
+      
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.productWeblink.update(editingNotice.id)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notice: noticeInputValue.trim()
+        }),
+      });
+
+      console.log('API响应状态:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API返回错误:', errorData);
+        throw new Error(errorData.message || '更新失败');
+      }
+
+      const responseData = await response.json();
+      console.log('API响应数据:', responseData);
+
+      // 更新本地数据
+      const updateRecord = (records: ProductRecord[]) =>
+        records.map(record =>
+          record.id === editingNotice.id
+            ? { ...record, notice: noticeInputValue.trim() }
+            : record
+        );
+
+      setData(updateRecord);
+      setOriginalData(updateRecord);
+      setFilteredData(updateRecord);
+      setEditingNotice(null);
+      setNoticeInputValue('');
+      message.success('备注更新成功');
+    } catch (error) {
+      console.error('更新备注失败:', error);
+      message.error(error instanceof Error ? error.message : '更新失败');
+    } finally {
+      setIsSavingNotice(false);
+    }
+  };
+
+  // 取消备注编辑
+  const handleCancelNoticeEdit = () => {
+    setEditingNotice(null);
+    setNoticeInputValue('');
   };
 
   // 新的Excel上传处理（支持SKU, 链接, 备注）
@@ -2997,7 +3024,100 @@ const Purchase: React.FC = () => {
       align: 'center' as const,
       width: 120,
       fixed: 'left',
-      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || '')
+      sorter: (a, b) => (a.notice || '').localeCompare(b.notice || ''),
+      render: (text: string, record: ProductRecord) => {
+        // 如果正在编辑这个记录的备注
+        if (editingNotice && editingNotice.id === record.id) {
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Input
+                value={noticeInputValue}
+                onChange={(e) => setNoticeInputValue(e.target.value)}
+                onPressEnter={handleSaveNotice}
+                autoFocus
+                style={{ width: 100 }}
+                size="small"
+                placeholder="输入备注"
+                disabled={isSavingNotice}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={handleSaveNotice}
+                disabled={isSavingNotice}
+                style={{ color: '#52c41a' }}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={handleCancelNoticeEdit}
+                disabled={isSavingNotice}
+                style={{ color: '#ff4d4f' }}
+              />
+            </div>
+          );
+        }
+        
+        // 如果备注为空，显示可编辑的提示
+        if (!text || text.trim() === '') {
+          return (
+            <div
+              onDoubleClick={() => handleNoticeDoubleClick(record)}
+              style={{
+                cursor: 'pointer',
+                color: '#999',
+                fontStyle: 'italic',
+                padding: '4px 8px',
+                border: '1px dashed #d9d9d9',
+                borderRadius: '4px',
+                minHeight: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="双击编辑备注"
+            >
+              双击编辑
+            </div>
+          );
+        }
+        
+        // 有值时显示可编辑的文本
+        return (
+          <div
+            onDoubleClick={() => handleNoticeDoubleClick(record)}
+            style={{
+              cursor: 'pointer',
+              color: '#1890ff',
+              fontWeight: 'normal',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: '1px solid transparent',
+              transition: 'all 0.2s',
+              minHeight: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f0f8ff';
+              e.currentTarget.style.borderColor = '#d9d9d9';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.borderColor = 'transparent';
+            }}
+            title={`双击编辑备注: ${text}`}
+          >
+            {text}
+          </div>
+        );
+      }
     },
     { 
       title: 'Style Number', 
@@ -6156,40 +6276,6 @@ ${selectedSkuIds.map(skuId => {
     setCompetitorLinksModalVisible(true);
   };
 
-  const handleViewCompetitorLinks = (record: ProductRecord) => {
-    let asins: string[] = [];
-    try {
-      if (record.competitor_links) {
-        asins = JSON.parse(record.competitor_links);
-      }
-    } catch {
-      asins = [];
-    }
-    
-    Modal.info({
-      title: `${record.parent_sku} 的竞争对手ASIN`,
-      content: (
-        <div>
-          {asins.map((asin, index) => (
-            <div key={index} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 'bold' }}>ASIN: {asin}</span>
-                <a 
-                  href={`https://www.amazon.com/dp/${asin}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style={{ color: '#1890ff' }}
-                >
-                  查看产品
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      ),
-      width: 600
-    });
-  };
 
   const handleBatchOpenCompetitorLinks = (record: ProductRecord) => {
     let asins: string[] = [];
