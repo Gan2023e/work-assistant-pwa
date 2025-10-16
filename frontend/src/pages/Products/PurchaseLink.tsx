@@ -3022,7 +3022,7 @@ const Purchase: React.FC = () => {
       dataIndex: 'notice', 
       key: 'notice', 
       align: 'center' as const,
-      width: 120,
+      width: 200,
       fixed: 'left',
       sorter: (a, b) => (a.notice || '').localeCompare(b.notice || ''),
       render: (text: string, record: ProductRecord) => {
@@ -3092,17 +3092,17 @@ const Purchase: React.FC = () => {
               cursor: 'pointer',
               color: '#1890ff',
               fontWeight: 'normal',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
               padding: '4px 8px',
               borderRadius: '4px',
               border: '1px solid transparent',
               transition: 'all 0.2s',
               minHeight: '24px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              alignItems: 'flex-start',
+              justifyContent: 'flex-start',
+              textAlign: 'left'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#f0f8ff';
