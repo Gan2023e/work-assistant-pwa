@@ -269,6 +269,14 @@ function filterValidFields(data) {
     depth_height_floor_to_top: { type: 'decimal', maxLength: null },
     depth_height_floor_to_top_unit_of_measure: { type: 'string', maxLength: 20 },
     
+    // 新增字段 - 产品尺寸
+    item_length: { type: 'decimal', maxLength: null },
+    item_height: { type: 'decimal', maxLength: null },
+    item_width: { type: 'decimal', maxLength: null },
+    item_length_unit_of_measure: { type: 'string', maxLength: 20 },
+    item_height_unit_of_measure: { type: 'string', maxLength: 20 },
+    item_width_unit_of_measure: { type: 'string', maxLength: 20 },
+    
     // 新增字段 - 合规信息
     cpsia_cautionary_statement1: { type: 'string', maxLength: 100 },
     import_designation: { type: 'string', maxLength: 50 },
@@ -3682,6 +3690,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let importDesignationCol = -1;
     let countryAsLabeledCol = -1;
     
+    // 新增字段 - 产品尺寸
+    let itemLengthCol = -1;
+    let itemHeightCol = -1;
+    let itemWidthCol = -1;
+    let itemLengthUnitOfMeasureCol = -1;
+    let itemHeightUnitOfMeasureCol = -1;
+    let itemWidthUnitOfMeasureCol = -1;
+    
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
         if (header) {
@@ -3818,6 +3834,18 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             importDesignationCol = colIndex;
           } else if (cellValue === 'country_as_labeled') {
             countryAsLabeledCol = colIndex;
+          } else if (cellValue === 'item_length') {
+            itemLengthCol = colIndex;
+          } else if (cellValue === 'item_height') {
+            itemHeightCol = colIndex;
+          } else if (cellValue === 'item_width') {
+            itemWidthCol = colIndex;
+          } else if (cellValue === 'item_length_unit_of_measure') {
+            itemLengthUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_height_unit_of_measure') {
+            itemHeightUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_width_unit_of_measure') {
+            itemWidthUnitOfMeasureCol = colIndex;
           }
         }
       });
@@ -4207,6 +4235,26 @@ ${process.env.MANUFACTURER_PHONE}`;
         data[currentRowIndex][countryAsLabeledCol] = 'China';
       }
       
+      // 填写产品尺寸字段
+      if (itemLengthCol !== -1) {
+        data[currentRowIndex][itemLengthCol] = recordData.item_length || '';
+      }
+      if (itemHeightCol !== -1) {
+        data[currentRowIndex][itemHeightCol] = recordData.item_height || '';
+      }
+      if (itemWidthCol !== -1) {
+        data[currentRowIndex][itemWidthCol] = recordData.item_width || '';
+      }
+      if (itemLengthUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemLengthUnitOfMeasureCol] = recordData.item_length_unit_of_measure || '';
+      }
+      if (itemHeightUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemHeightUnitOfMeasureCol] = recordData.item_height_unit_of_measure || '';
+      }
+      if (itemWidthUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemWidthUnitOfMeasureCol] = recordData.item_width_unit_of_measure || '';
+      }
+      
       // 调试：输出第一条记录填写后的行内容
       if (index === 0) {
         console.log('📋 第一条记录填写后的行内容:', data[currentRowIndex]);
@@ -4397,6 +4445,14 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let importDesignationCol = -1;
     let countryAsLabeledCol = -1;
     
+    // 新增字段 - 产品尺寸
+    let itemLengthCol = -1;
+    let itemHeightCol = -1;
+    let itemWidthCol = -1;
+    let itemLengthUnitOfMeasureCol = -1;
+    let itemHeightUnitOfMeasureCol = -1;
+    let itemWidthUnitOfMeasureCol = -1;
+    
     const missingColumns = [];
     
     if (updatedData.length >= 3 && updatedData[2]) {
@@ -4535,6 +4591,18 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             importDesignationCol = colIndex;
           } else if (cellValue === 'country_as_labeled') {
             countryAsLabeledCol = colIndex;
+          } else if (cellValue === 'item_length') {
+            itemLengthCol = colIndex;
+          } else if (cellValue === 'item_height') {
+            itemHeightCol = colIndex;
+          } else if (cellValue === 'item_width') {
+            itemWidthCol = colIndex;
+          } else if (cellValue === 'item_length_unit_of_measure') {
+            itemLengthUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_height_unit_of_measure') {
+            itemHeightUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_width_unit_of_measure') {
+            itemWidthUnitOfMeasureCol = colIndex;
           }
         }
       });
@@ -5146,6 +5214,26 @@ ${process.env.MANUFACTURER_PHONE}`;
       if (countryAsLabeledCol !== -1) {
         updatedData[rowIndex][countryAsLabeledCol] = 'China';
       }
+      
+      // 填写产品尺寸字段
+      if (itemLengthCol !== -1) {
+        updatedData[rowIndex][itemLengthCol] = data.item_length || '';
+      }
+      if (itemHeightCol !== -1) {
+        updatedData[rowIndex][itemHeightCol] = data.item_height || '';
+      }
+      if (itemWidthCol !== -1) {
+        updatedData[rowIndex][itemWidthCol] = data.item_width || '';
+      }
+      if (itemLengthUnitOfMeasureCol !== -1) {
+        updatedData[rowIndex][itemLengthUnitOfMeasureCol] = data.item_length_unit_of_measure || '';
+      }
+      if (itemHeightUnitOfMeasureCol !== -1) {
+        updatedData[rowIndex][itemHeightUnitOfMeasureCol] = data.item_height_unit_of_measure || '';
+      }
+      if (itemWidthUnitOfMeasureCol !== -1) {
+        updatedData[rowIndex][itemWidthUnitOfMeasureCol] = data.item_width_unit_of_measure || '';
+      }
 
       addedCount++;
       
@@ -5636,6 +5724,14 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let importDesignationCol = -1;
     let countryAsLabeledCol = -1;
     
+    // 新增字段 - 产品尺寸
+    let itemLengthCol = -1;
+    let itemHeightCol = -1;
+    let itemWidthCol = -1;
+    let itemLengthUnitOfMeasureCol = -1;
+    let itemHeightUnitOfMeasureCol = -1;
+    let itemWidthUnitOfMeasureCol = -1;
+    
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
         if (header) {
@@ -5736,6 +5832,18 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             importDesignationCol = colIndex;
           } else if (cellValue === 'country_as_labeled') {
             countryAsLabeledCol = colIndex;
+          } else if (cellValue === 'item_length') {
+            itemLengthCol = colIndex;
+          } else if (cellValue === 'item_height') {
+            itemHeightCol = colIndex;
+          } else if (cellValue === 'item_width') {
+            itemWidthCol = colIndex;
+          } else if (cellValue === 'item_length_unit_of_measure') {
+            itemLengthUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_height_unit_of_measure') {
+            itemHeightUnitOfMeasureCol = colIndex;
+          } else if (cellValue === 'item_width_unit_of_measure') {
+            itemWidthUnitOfMeasureCol = colIndex;
           }
         }
       });
@@ -6010,6 +6118,26 @@ ${process.env.MANUFACTURER_PHONE}`;
       // 填写country_as_labeled字段 - 统一填写China
       if (countryAsLabeledCol !== -1) {
         data[currentRowIndex][countryAsLabeledCol] = 'China';
+      }
+      
+      // 填写产品尺寸字段
+      if (itemLengthCol !== -1) {
+        data[currentRowIndex][itemLengthCol] = record.item_length || '';
+      }
+      if (itemHeightCol !== -1) {
+        data[currentRowIndex][itemHeightCol] = record.item_height || '';
+      }
+      if (itemWidthCol !== -1) {
+        data[currentRowIndex][itemWidthCol] = record.item_width || '';
+      }
+      if (itemLengthUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemLengthUnitOfMeasureCol] = record.item_length_unit_of_measure || '';
+      }
+      if (itemHeightUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemHeightUnitOfMeasureCol] = record.item_height_unit_of_measure || '';
+      }
+      if (itemWidthUnitOfMeasureCol !== -1) {
+        data[currentRowIndex][itemWidthUnitOfMeasureCol] = record.item_width_unit_of_measure || '';
       }
       
       currentRowIndex++;
