@@ -3680,6 +3680,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     let strapTypeCol = -1;
     let areBatteriesIncludedCol = -1;
     let importDesignationCol = -1;
+    let countryAsLabeledCol = -1;
     
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
@@ -3815,6 +3816,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             areBatteriesIncludedCol = colIndex;
           } else if (cellValue === 'import_designation') {
             importDesignationCol = colIndex;
+          } else if (cellValue === 'country_as_labeled') {
+            countryAsLabeledCol = colIndex;
           }
         }
       });
@@ -4199,6 +4202,11 @@ ${process.env.MANUFACTURER_PHONE}`;
         data[currentRowIndex][importDesignationCol] = 'Imported';
       }
       
+      // 填写country_as_labeled字段 - 统一填写China
+      if (countryAsLabeledCol !== -1) {
+        data[currentRowIndex][countryAsLabeledCol] = 'China';
+      }
+      
       // 调试：输出第一条记录填写后的行内容
       if (index === 0) {
         console.log('📋 第一条记录填写后的行内容:', data[currentRowIndex]);
@@ -4387,6 +4395,7 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     let strapTypeCol = -1;
     let areBatteriesIncludedCol = -1;
     let importDesignationCol = -1;
+    let countryAsLabeledCol = -1;
     
     const missingColumns = [];
     
@@ -4524,6 +4533,8 @@ function mapDataToTemplateXlsx(templateData, records, country) {
             areBatteriesIncludedCol = colIndex;
           } else if (cellValue === 'import_designation') {
             importDesignationCol = colIndex;
+          } else if (cellValue === 'country_as_labeled') {
+            countryAsLabeledCol = colIndex;
           }
         }
       });
@@ -5130,6 +5141,11 @@ ${process.env.MANUFACTURER_PHONE}`;
       if (importDesignationCol !== -1) {
         updatedData[rowIndex][importDesignationCol] = 'Imported';
       }
+      
+      // 填写country_as_labeled字段 - 统一填写China
+      if (countryAsLabeledCol !== -1) {
+        updatedData[rowIndex][countryAsLabeledCol] = 'China';
+      }
 
       addedCount++;
       
@@ -5618,6 +5634,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     let strapTypeCol = -1;
     let areBatteriesIncludedCol = -1;
     let importDesignationCol = -1;
+    let countryAsLabeledCol = -1;
     
     if (data.length >= 3 && data[2]) { // 第3行，索引为2
       data[2].forEach((header, colIndex) => {
@@ -5717,6 +5734,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
             areBatteriesIncludedCol = colIndex;
           } else if (cellValue === 'import_designation') {
             importDesignationCol = colIndex;
+          } else if (cellValue === 'country_as_labeled') {
+            countryAsLabeledCol = colIndex;
           }
         }
       });
@@ -5986,6 +6005,11 @@ ${process.env.MANUFACTURER_PHONE}`;
       // 填写import_designation字段
       if (importDesignationCol !== -1) {
         data[currentRowIndex][importDesignationCol] = 'Imported';
+      }
+      
+      // 填写country_as_labeled字段 - 统一填写China
+      if (countryAsLabeledCol !== -1) {
+        data[currentRowIndex][countryAsLabeledCol] = 'China';
       }
       
       currentRowIndex++;
