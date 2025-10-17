@@ -2340,6 +2340,63 @@ const Purchase: React.FC = () => {
     }
   };
 
+  // 批量标记CPC测试情况为已测试
+  const handleBatchMarkCpcTested = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要标记的记录');
+      return;
+    }
+
+    try {
+      // 确保传递给后端的ID是数字类型
+      const ids = selectedRowKeys.map(key => Number(key));
+      const res = await fetch(`${API_BASE_URL}/api/product_weblink/batch-mark-cpc-tested`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const result = await res.json();
+      message.success(`成功标记 ${ids.length} 条记录的CPC测试情况为已测试`);
+      setSelectedRowKeys([]);
+      
+      // 更新本地数据中的CPC状态
+      setData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '已测试' }
+            : item
+        )
+      );
+      
+      setOriginalData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '已测试' }
+            : item
+        )
+      );
+      
+      setFilteredData(prevData => 
+        prevData.map(item => 
+          selectedRowKeys.includes(item.id) 
+            ? { ...item, cpc_status: '已测试' }
+            : item
+        )
+      );
+      
+      // 刷新统计信息
+      fetchAllDataStatistics();
+    } catch (e) {
+      console.error('标记CPC测试情况为已测试失败:', e);
+      message.error('标记CPC测试情况为已测试失败');
+    }
+  };
+
   // 修复全选后批量打开链接的问题
   const handleBatchOpenLinks = () => {
     if (selectedRowKeys.length === 0) {
@@ -7098,6 +7155,22 @@ ${selectedSkuIds.map(skuId => {
                         size="small"
                       >
                         标记已发
+                      </Button>
+
+                      <Button 
+                        type="primary"
+                        style={{ 
+                          backgroundColor: '#1890ff', 
+                          borderColor: '#1890ff',
+                          borderRadius: '6px',
+                          fontWeight: '500'
+                        }}
+                        onClick={handleBatchMarkCpcTested}
+                        disabled={selectedRowKeys.length === 0}
+                        size="small"
+                        title="批量标记选中记录的CPC测试情况为已测试"
+                      >
+                        标记已测试
                       </Button>
 
                       <Button 

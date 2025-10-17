@@ -683,6 +683,34 @@ router.post('/batch-cancel-cpc-detection', async (req, res) => {
   }
 });
 
+// 批量标记CPC测试情况为已测试
+router.post('/batch-mark-cpc-tested', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: '请选择要标记的记录' });
+    }
+
+    // 更新选中记录的CPC测试状态为"已测试"
+    await ProductWeblink.update(
+      { cpc_status: '已测试' },
+      {
+        where: {
+          id: { [Op.in]: ids }
+        }
+      }
+    );
+
+    res.json({ 
+      message: `成功标记 ${ids.length} 条记录的CPC测试情况为已测试`,
+      processedCount: ids.length
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: '服务器错误' });
+  }
+});
+
 // 批量删除
 router.post('/batch-delete', async (req, res) => {
   try {
