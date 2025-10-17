@@ -22,25 +22,8 @@ const sendProductStatusEmail = async (action, parentSkus) => {
 
     const subject = process.env.EMAIL_SUBJECT || '产品手动上下架及数量调整';
     
-    // 构建 HTML 内容
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #333; margin: 0 0 10px 0;">${action}</h2>
-          <p style="color: #666; margin: 0;">时间: ${new Date().toLocaleString('zh-CN')}</p>
-        </div>
-        
-        <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <h3 style="color: #333; margin: 0 0 15px 0;">涉及的母SKU:</h3>
-          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
-            ${parentSkus.map(sku => `<div style="padding: 5px 0; border-bottom: 1px solid #eee;">${sku}</div>`).join('')}
-          </div>
-          <p style="color: #666; margin: 15px 0 0 0; font-size: 14px;">
-            共 ${parentSkus.length} 个母SKU
-          </p>
-        </div>
-      </div>
-    `;
+    // 构建纯文本内容
+    const textContent = `${action}\n${parentSkus.join('\n')}`;
 
     // 构建收件人列表
     const recipients = [process.env.EMAIL_RECEIVER];
@@ -50,7 +33,7 @@ const sendProductStatusEmail = async (action, parentSkus) => {
       from: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
       to: recipients,
       subject: subject,
-      html: htmlContent,
+      text: textContent, // 只发送纯文本版本
     };
     
     // 如果有抄送邮箱，添加到邮件数据中
@@ -94,15 +77,6 @@ const sendCustomEmail = async (subject, content, htmlContent = null) => {
       return { success: false, error: 'Resend 配置不完整' };
     }
 
-    // 如果没有提供 HTML 内容，则从纯文本生成
-    const finalHtmlContent = htmlContent || `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <div style="white-space: pre-line;">${content}</div>
-        </div>
-      </div>
-    `;
-
     // 构建收件人列表
     const recipients = [process.env.EMAIL_RECEIVER];
     const ccRecipients = process.env.EMAIL_CC ? [process.env.EMAIL_CC] : [];
@@ -111,7 +85,7 @@ const sendCustomEmail = async (subject, content, htmlContent = null) => {
       from: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
       to: recipients,
       subject: subject,
-      html: finalHtmlContent,
+      text: content, // 只发送纯文本版本
     };
     
     // 如果有抄送邮箱，添加到邮件数据中
