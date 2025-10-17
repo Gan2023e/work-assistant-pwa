@@ -2797,37 +2797,87 @@ router.delete('/amazon-templates/:objectName*', async (req, res) => {
 
 // ==================== 生成英国资料表接口 ====================
 
+// 获取英国模板列表供选择
+router.get('/uk-templates', async (req, res) => {
+  try {
+    console.log('📋 获取英国模板列表');
+    
+    const ukTemplates = await TemplateLink.findAll({
+      where: {
+        template_type: 'amazon',
+        country: 'UK',
+        is_active: true
+      },
+      order: [['upload_time', 'DESC']],
+      attributes: ['id', 'file_name', 'category', 'upload_time']
+    });
+    
+    if (ukTemplates.length === 0) {
+      return res.status(404).json({ 
+        message: '未找到英国站点的资料模板，请先上传英国模板文件',
+        data: []
+      });
+    }
+    
+    const templateList = ukTemplates.map(template => ({
+      id: template.id,
+      fileName: template.file_name,
+      category: template.category,
+      uploadTime: template.upload_time,
+      displayName: `${template.file_name} (${template.category})`
+    }));
+    
+    console.log(`📊 找到 ${templateList.length} 个英国模板`);
+    
+    res.json({
+      message: '获取成功',
+      data: templateList
+    });
+    
+  } catch (error) {
+    console.error('❌ 获取英国模板列表失败:', error);
+    res.status(500).json({ 
+      message: '获取英国模板列表失败: ' + error.message 
+    });
+  }
+});
+
 // 生成英国资料表
 router.post('/generate-uk-data-sheet', async (req, res) => {
   const startTime = Date.now();
   try {
     console.log('📋 收到生成英国资料表请求');
     
-    const { parentSkus } = req.body;
+    const { parentSkus, templateId } = req.body;
     
     if (!Array.isArray(parentSkus) || parentSkus.length === 0) {
       return res.status(400).json({ message: '请提供要生成资料表的母SKU列表' });
     }
 
-    console.log(`📝 处理 ${parentSkus.length} 个母SKU:`, parentSkus);
+    if (!templateId) {
+      return res.status(400).json({ message: '请选择要使用的英国模板' });
+    }
 
-    // 步骤1: 从数据库获取英国模板文件
-    console.log('🔍 从数据库查找英国模板文件...');
+    console.log(`📝 处理 ${parentSkus.length} 个母SKU:`, parentSkus);
+    console.log(`📄 使用模板ID: ${templateId}`);
+
+    // 步骤1: 从数据库获取指定的英国模板文件
+    console.log('🔍 从数据库查找指定的英国模板文件...');
     
     const ukTemplate = await TemplateLink.findOne({
       where: {
+        id: templateId,
         template_type: 'amazon',
         country: 'UK',
         is_active: true
-      },
-      order: [['upload_time', 'DESC']]
+      }
     });
     
     if (!ukTemplate) {
-      return res.status(400).json({ message: '未找到英国站点的资料模板，请先上传英国模板文件' });
+      return res.status(400).json({ message: '未找到指定的英国模板文件，请重新选择' });
     }
 
-    console.log(`📄 使用英国模板: ${ukTemplate.file_name} (ID: ${ukTemplate.id})`);
+    console.log(`📄 使用英国模板: ${ukTemplate.file_name} (ID: ${ukTemplate.id}, 类目: ${ukTemplate.category})`);
 
     // 步骤2: 下载模板文件
     console.log('📥 下载英国模板文件...');
@@ -2906,6 +2956,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let manufacturerCol = -1;
       let externalProductIdCol = -1;
       let externalProductIdTypeCol = -1;
+      let feedProductTypeCol = -1;
       let modelCol = -1;
       let quantityCol = -1;
       let ageRangeDescriptionCol = -1;
@@ -2936,6 +2987,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
               externalProductIdCol = colIndex;
             } else if (cellValue === 'external_product_id_type') {
               externalProductIdTypeCol = colIndex;
+            } else if (cellValue === 'feed_product_type') {
+              feedProductTypeCol = colIndex;
             } else if (cellValue === 'model') {
               modelCol = colIndex;
             } else if (cellValue === 'quantity') {
@@ -3027,6 +3080,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
         if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
         if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = ''; // 母SKU留空
+        if (feedProductTypeCol !== -1) data[currentRowIndex][feedProductTypeCol] = ukTemplate.category; // 根据模板类目填写
         if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
         if (quantityCol !== -1) data[currentRowIndex][quantityCol] = ''; // 母SKU留空
         if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = 'Child';
@@ -3057,6 +3111,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
           if (brandNameCol !== -1) data[currentRowIndex][brandNameCol] = 'SellerFun';
           if (manufacturerCol !== -1) data[currentRowIndex][manufacturerCol] = 'SellerFun';
           if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = 'GCID';
+          if (feedProductTypeCol !== -1) data[currentRowIndex][feedProductTypeCol] = ukTemplate.category; // 根据模板类目填写
           if (modelCol !== -1) data[currentRowIndex][modelCol] = `UK${parentSku}`;
           if (quantityCol !== -1) data[currentRowIndex][quantityCol] = '15';
           if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = 'Child';

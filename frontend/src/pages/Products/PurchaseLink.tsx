@@ -18,6 +18,8 @@ import {
   Statistic,
   DatePicker,
   Divider,
+  Radio,
+  Spin,
   Checkbox,
   AutoComplete,
   Upload,
@@ -26,7 +28,6 @@ import {
   Tag,
   Progress,
   Switch,
-  Radio,
   Steps,
   Layout,
 } from 'antd';
@@ -597,6 +598,12 @@ const Purchase: React.FC = () => {
   const [editingNotice, setEditingNotice] = useState<{id: number, currentValue: string} | null>(null);
   const [noticeInputValue, setNoticeInputValue] = useState<string>('');
   const [isSavingNotice, setIsSavingNotice] = useState<boolean>(false);
+  
+  // 英国模板选择相关状态
+  const [ukTemplateModalVisible, setUkTemplateModalVisible] = useState(false);
+  const [ukTemplates, setUkTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   
   // 行编辑相关状态
   const [editingRecord, setEditingRecord] = useState<ProductRecord | null>(null);
@@ -4144,6 +4151,44 @@ const Purchase: React.FC = () => {
       return;
     }
 
+    // 显示模板选择对话框
+    setUkTemplateModalVisible(true);
+    loadUkTemplates();
+  };
+
+  // 加载英国模板列表
+  const loadUkTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/product_weblink/uk-templates`);
+      const result = await response.json();
+      
+      if (result.data && result.data.length > 0) {
+        setUkTemplates(result.data);
+        // 默认选择第一个模板
+        setSelectedTemplateId(result.data[0].id);
+      } else {
+        message.error('未找到英国模板文件，请先上传模板');
+        setUkTemplateModalVisible(false);
+      }
+    } catch (error) {
+      console.error('加载英国模板失败:', error);
+      message.error('加载英国模板失败');
+      setUkTemplateModalVisible(false);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  // 确认生成英国资料表
+  const confirmGenerateUkDataSheet = () => {
+    if (!selectedTemplateId) {
+      message.warning('请选择一个模板');
+      return;
+    }
+
+    setUkTemplateModalVisible(false);
+
     // 创建后台任务
     const taskId = addTask({
       title: `生成英国资料表 (${selectedRowKeys.length}个SKU)`,
@@ -4153,31 +4198,18 @@ const Purchase: React.FC = () => {
     });
 
     // 开始后台执行生成任务
-    generateUkDataSheetInBackground(taskId);
+    generateUkDataSheetInBackground(taskId, selectedTemplateId);
     
     // 提示用户任务已开始
     message.info('英国资料表生成任务已在后台开始，您可以继续进行其他操作');
   };
 
   // 后台执行生成英国资料表
-  const generateUkDataSheetInBackground = async (taskId: string) => {
+  const generateUkDataSheetInBackground = async (taskId: string, templateId: number) => {
     try {
-      // 步骤1: 验证英国模板存在
+      // 步骤1: 获取选中的记录信息
       updateTask(taskId, {
         progress: 10,
-        currentStep: '检查英国模板文件...'
-      });
-      
-      const templateCheckRes = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates?country=UK`);
-      const templateCheckResult = await templateCheckRes.json();
-      
-      if (!templateCheckResult.data || templateCheckResult.data.length === 0) {
-        throw new Error('未找到英国站点的资料模板，请先上传英国模板文件');
-      }
-
-      // 步骤2: 获取选中的记录信息
-      updateTask(taskId, {
-        progress: 20,
         currentStep: '获取选中记录的母SKU信息...'
       });
       
@@ -4186,7 +4218,7 @@ const Purchase: React.FC = () => {
       );
       const parentSkus = selectedRecords.map(record => record.parent_sku);
 
-      // 步骤3: 调用后端API生成资料表
+      // 步骤2: 调用后端API生成资料表
       updateTask(taskId, {
         progress: 30,
         currentStep: '查询子SKU信息...'
@@ -4195,7 +4227,7 @@ const Purchase: React.FC = () => {
       const generateRes = await fetch(`${API_BASE_URL}/api/product_weblink/generate-uk-data-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parentSkus }),
+        body: JSON.stringify({ parentSkus, templateId }),
       });
 
       if (!generateRes.ok) {
@@ -10326,6 +10358,254 @@ ${selectedSkuIds.map(skuId => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* 英国模板选择对话框 */}
+      <Modal
+        title={
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            fontSize: '18px',
+            fontWeight: '600',
+            color: '#262626'
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              backgroundColor: '#1890ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '18px',
+              fontWeight: 'bold'
+            }}>
+              🇬🇧
+            </div>
+            选择英国资料表模板
+          </div>
+        }
+        open={ukTemplateModalVisible}
+        onCancel={() => setUkTemplateModalVisible(false)}
+        onOk={confirmGenerateUkDataSheet}
+        okText="确认生成"
+        cancelText="取消"
+        width={700}
+        style={{ top: '10vh' }}
+        okButtonProps={{
+          size: 'large',
+          style: { 
+            height: '44px',
+            fontSize: '16px',
+            fontWeight: '600',
+            borderRadius: '8px',
+            minWidth: '120px'
+          }
+        }}
+        cancelButtonProps={{
+          size: 'large',
+          style: { 
+            height: '44px',
+            fontSize: '16px',
+            borderRadius: '8px',
+            minWidth: '120px'
+          }
+        }}
+      >
+        <div style={{ 
+          marginBottom: '24px',
+          padding: '16px 20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '12px',
+          border: '1px solid #e9ecef'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px',
+            marginBottom: '8px'
+          }}>
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: '#52c41a'
+            }}></div>
+            <Text style={{ 
+              fontSize: '16px', 
+              fontWeight: '600',
+              color: '#262626'
+            }}>
+              请选择要使用的英国资料表模板
+            </Text>
+          </div>
+          <Text style={{ 
+            fontSize: '14px', 
+            color: '#8c8c8c',
+            lineHeight: '1.5'
+          }}>
+            系统将根据您选择的模板类型自动填写对应的 feed_product_type 字段
+          </Text>
+        </div>
+        
+        {loadingTemplates ? (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '60px 20px',
+            backgroundColor: '#fafafa',
+            borderRadius: '12px',
+            border: '1px solid #f0f0f0'
+          }}>
+            <Spin size="large" />
+            <div style={{ 
+              marginTop: '20px',
+              fontSize: '16px',
+              color: '#8c8c8c',
+              fontWeight: '500'
+            }}>
+              正在加载模板列表...
+            </div>
+          </div>
+        ) : (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '20px',
+            marginBottom: '8px'
+          }}>
+            {ukTemplates.map((template) => (
+              <div
+                key={template.id}
+                onClick={() => setSelectedTemplateId(template.id)}
+                style={{
+                  padding: '24px',
+                  border: selectedTemplateId === template.id ? '2px solid #1890ff' : '2px solid #e8e8e8',
+                  borderRadius: '16px',
+                  backgroundColor: selectedTemplateId === template.id ? '#f0f8ff' : '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: selectedTemplateId === template.id 
+                    ? '0 8px 24px rgba(24, 144, 255, 0.15)' 
+                    : '0 2px 8px rgba(0, 0, 0, 0.06)',
+                  transform: selectedTemplateId === template.id ? 'translateY(-2px)' : 'translateY(0)'
+                }}
+              >
+                {/* 选中状态指示器 */}
+                {selectedTemplateId === template.id && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '16px',
+                    right: '16px',
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    backgroundColor: '#1890ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                  }}>
+                    ✓
+                  </div>
+                )}
+                
+                {/* 类目图标和名称 */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    backgroundColor: selectedTemplateId === template.id ? '#1890ff' : '#f5f5f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    color: selectedTemplateId === template.id ? 'white' : '#8c8c8c',
+                    fontWeight: 'bold'
+                  }}>
+                    {template.category === 'handbag' ? '👜' : '🎒'}
+                  </div>
+                  <div>
+                    <div style={{ 
+                      fontSize: '20px', 
+                      fontWeight: 'bold', 
+                      color: selectedTemplateId === template.id ? '#1890ff' : '#262626',
+                      marginBottom: '4px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px'
+                    }}>
+                      {template.category}
+                    </div>
+                    <div style={{ 
+                      fontSize: '12px',
+                      color: '#8c8c8c',
+                      fontWeight: '500',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}>
+                      Template Type
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 文件名 */}
+                <div style={{ 
+                  marginBottom: '12px',
+                  padding: '12px',
+                  backgroundColor: selectedTemplateId === template.id ? 'rgba(24, 144, 255, 0.05)' : '#fafafa',
+                  borderRadius: '8px',
+                  border: `1px solid ${selectedTemplateId === template.id ? '#d6e4ff' : '#f0f0f0'}`
+                }}>
+                  <div style={{ 
+                    fontSize: '14px',
+                    color: '#8c8c8c',
+                    marginBottom: '4px',
+                    fontWeight: '500'
+                  }}>
+                    文件名
+                  </div>
+                  <div style={{ 
+                    fontSize: '13px',
+                    color: selectedTemplateId === template.id ? '#1890ff' : '#595959',
+                    fontWeight: '500',
+                    wordBreak: 'break-all'
+                  }}>
+                    {template.fileName}
+                  </div>
+                </div>
+                
+                {/* 上传时间 */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: '#bfbfbf'
+                }}>
+                  <div style={{
+                    width: '4px',
+                    height: '4px',
+                    borderRadius: '50%',
+                    backgroundColor: '#d9d9d9'
+                  }}></div>
+                  <span>上传于 {new Date(template.uploadTime).toLocaleDateString('zh-CN')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
         </Content>
       </Layout>
