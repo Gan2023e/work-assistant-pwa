@@ -144,6 +144,11 @@ function validateRecord(record, rowNumber) {
     errors.push('site字段不能为空');
   }
   
+  // 验证site字段长度
+  if (record.site && record.site.toString().length > 10) {
+    errors.push('site字段长度不能超过10个字符');
+  }
+  
   // 验证item_name长度
   if (record.item_name && record.item_name.toString().length > 500) {
     errors.push('item_name长度不能超过500个字符');
@@ -329,9 +334,12 @@ function filterValidFields(data) {
         value = String(value);
       }
       
-      // 只保存非null值
+      // 只保存非null值，但必填字段除外
       if (value !== null) {
         filteredData[fieldName] = value;
+      } else if (fieldName === 'site' || fieldName === 'item_sku') {
+        // 必填字段不能为null，使用空字符串作为默认值
+        filteredData[fieldName] = '';
       }
     }
   }
@@ -6446,8 +6454,34 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           if (validationResult.isValid) {
             // 过滤和验证数据，只保留模型中定义的字段
             const filteredRecord = filterValidFields(record);
+            
+            // 验证必填字段在过滤后仍然存在
+            if (!filteredRecord.site || !filteredRecord.item_sku) {
+              console.warn(`⚠️ 记录 ${i + 4} 必填字段缺失:`, {
+                site: filteredRecord.site,
+                item_sku: filteredRecord.item_sku,
+                originalRecord: record
+              });
+              validationErrors.push({
+                row: i + 4,
+                errors: ['必填字段site或item_sku在数据处理后缺失'],
+                data: record
+              });
+              continue;
+            }
+            
+            // 添加调试日志
+            if (i < 5) { // 只记录前5条记录的详细信息
+              console.log(`🔍 记录 ${i + 4} 验证通过:`, {
+                site: filteredRecord.site,
+                item_sku: filteredRecord.item_sku,
+                item_name: filteredRecord.item_name ? filteredRecord.item_name.substring(0, 50) + '...' : 'N/A'
+              });
+            }
+            
             validRecords.push(filteredRecord);
           } else {
+            console.warn(`⚠️ 记录 ${i + 4} 验证失败:`, validationResult.errors);
             validationErrors.push({
               row: i + 4,
               errors: validationResult.errors,
@@ -6455,6 +6489,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
             });
           }
         } catch (error) {
+          console.error(`❌ 记录 ${i + 4} 验证异常:`, error.message);
           validationErrors.push({
             row: i + 4,
             errors: [error.message],
@@ -6506,6 +6541,7 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
           
         } catch (bulkError) {
           console.error('❌ 批量插入失败，回退到逐条插入:', bulkError.message);
+          console.error('❌ 批量插入错误详情:', bulkError);
           
           // 如果批量插入失败，回退到逐条插入
           for (const record of validRecords) {
@@ -6517,6 +6553,17 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
               successCount++;
             } catch (error) {
               console.error(`❌ 保存记录失败: site=${record.site}, item_sku=${record.item_sku}, 错误: ${error.message}`);
+              console.error(`❌ 错误详情:`, error);
+              console.error(`❌ 记录数据:`, JSON.stringify(record, null, 2));
+              
+              // 检查是否是ValidationError
+              if (error.name === 'SequelizeValidationError') {
+                console.error(`❌ 验证错误详情:`, error.errors);
+                error.errors.forEach(err => {
+                  console.error(`  - 字段: ${err.path}, 值: ${err.value}, 消息: ${err.message}`);
+                });
+              }
+              
               errorCount++;
             }
           }
@@ -6533,7 +6580,10 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
         errorCount: errorCount,
         site: site,
         fileName: file.originalname,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
+        ...(errorCount > 0 && {
+          warning: `有 ${errorCount} 条记录保存失败，请检查服务器日志获取详细错误信息`
+        })
       });
       
     } catch (dbError) {
