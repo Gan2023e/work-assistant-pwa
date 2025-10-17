@@ -2143,6 +2143,52 @@ router.post('/outbound-record', async (req, res) => {
             }
           });
 
+          // 检查是否已存在相同的SKU发货记录（防重复机制）
+          const existingItem = await ShipmentItem.findOne({
+            where: {
+              shipment_id: shipmentRecord.shipment_id,
+              amz_sku: mapping?.amz_sku || sku,
+              country: normalizedCountry
+            },
+            transaction
+          });
+          
+          if (existingItem) {
+            // 如果已存在，更新数量而不是创建新记录
+            const newShippedQuantity = existingItem.shipped_quantity + Math.abs(total_quantity);
+            const newWholeBoxes = existingItem.whole_boxes + (is_mixed_box ? 0 : Math.abs(total_boxes || 0));
+            const newMixedBoxQuantity = existingItem.mixed_box_quantity + (is_mixed_box ? Math.abs(total_quantity) : 0);
+            
+            // 合并箱号信息
+            const existingBoxNumbers = JSON.parse(existingItem.box_numbers || '[]');
+            const newBoxNumbers = mixBoxNum ? [mixBoxNum] : [];
+            const mergedBoxNumbers = [...existingBoxNumbers, ...newBoxNumbers];
+            
+            await existingItem.update({
+              shipped_quantity: newShippedQuantity,
+              whole_boxes: newWholeBoxes,
+              mixed_box_quantity: newMixedBoxQuantity,
+              box_numbers: JSON.stringify([...new Set(mergedBoxNumbers)])
+            }, { transaction });
+            
+            console.log(`📦 更新现有发货记录: ${sku}, 新增数量: ${Math.abs(total_quantity)}, 总数量: ${newShippedQuantity}`);
+            
+            // 更新需求单统计
+            if (!orderSummary.has(need_num)) {
+              orderSummary.set(need_num, {
+                total_requested: 0,
+                total_shipped: 0,
+                items: []
+              });
+            }
+            const summary = orderSummary.get(need_num);
+            summary.total_requested += orderItem.ori_quantity;
+            summary.total_shipped += Math.abs(total_quantity);
+            summary.items.push(order_item_id);
+            
+            continue; // 跳过创建新记录
+          }
+
           const shipmentItem = {
             shipment_id: shipmentRecord.shipment_id,
             order_item_id: order_item_id,
@@ -2174,7 +2220,39 @@ router.post('/outbound-record', async (req, res) => {
           summary.items.push(order_item_id);
         }
       } else {
-        // 如果没有需求记录信息，创建临时发货明细
+        // 如果没有需求记录信息，检查是否已存在相同的SKU发货记录（防重复机制）
+        const existingItem = await ShipmentItem.findOne({
+          where: {
+            shipment_id: shipmentRecord.shipment_id,
+            amz_sku: sku,
+            country: normalizedCountry
+          },
+          transaction
+        });
+        
+        if (existingItem) {
+          // 如果已存在，更新数量而不是创建新记录
+          const newShippedQuantity = existingItem.shipped_quantity + Math.abs(total_quantity);
+          const newWholeBoxes = existingItem.whole_boxes + (is_mixed_box ? 0 : Math.abs(total_boxes || 0));
+          const newMixedBoxQuantity = existingItem.mixed_box_quantity + (is_mixed_box ? Math.abs(total_quantity) : 0);
+          
+          // 合并箱号信息
+          const existingBoxNumbers = JSON.parse(existingItem.box_numbers || '[]');
+          const newBoxNumbers = mixBoxNum ? [mixBoxNum] : [];
+          const mergedBoxNumbers = [...existingBoxNumbers, ...newBoxNumbers];
+          
+          await existingItem.update({
+            shipped_quantity: newShippedQuantity,
+            whole_boxes: newWholeBoxes,
+            mixed_box_quantity: newMixedBoxQuantity,
+            box_numbers: JSON.stringify([...new Set(mergedBoxNumbers)])
+          }, { transaction });
+          
+          console.log(`📦 更新现有手动发货记录: ${sku}, 新增数量: ${Math.abs(total_quantity)}, 总数量: ${newShippedQuantity}`);
+          continue; // 跳过创建新记录
+        }
+
+        // 创建临时发货明细
         const shipmentItem = {
           shipment_id: shipmentRecord.shipment_id,
           order_item_id: null,
@@ -6672,7 +6750,59 @@ router.post('/update-shipped-status', async (req, res) => {
         }
       }
 
-      // 创建发货明细记录
+      // 检查是否已存在相同的SKU发货记录（防重复机制）
+      const existingItem = await ShipmentItem.findOne({
+        where: {
+          shipment_id: shipmentRecord.shipment_id,
+          amz_sku: mapping?.amz_sku || amz_sku || sku,
+          country: normalizedCountry
+        },
+        transaction
+      });
+      
+      if (existingItem) {
+        // 如果已存在，更新数量而不是创建新记录
+        const newShippedQuantity = existingItem.shipped_quantity + Math.abs(quantity);
+        const newWholeBoxes = existingItem.whole_boxes + (is_mixed_box ? 0 : Math.abs(total_boxes || 0));
+        const newMixedBoxQuantity = existingItem.mixed_box_quantity + (is_mixed_box ? Math.abs(quantity) : 0);
+        
+        // 合并箱号信息
+        const existingBoxNumbers = JSON.parse(existingItem.box_numbers || '[]');
+        const newBoxNumbers = original_mix_box_num ? [original_mix_box_num] : [];
+        const mergedBoxNumbers = [...existingBoxNumbers, ...newBoxNumbers];
+        
+        await existingItem.update({
+          shipped_quantity: newShippedQuantity,
+          whole_boxes: newWholeBoxes,
+          mixed_box_quantity: newMixedBoxQuantity,
+          box_numbers: JSON.stringify([...new Set(mergedBoxNumbers)]),
+          pre_type: itemPreType
+        }, { transaction });
+        
+        console.log(`📦 更新现有发货记录: ${sku}, 新增数量: ${Math.abs(quantity)}, 总数量: ${newShippedQuantity}`);
+        
+        // 更新需求单统计（如果存在）
+        if (orderItem) {
+          const effectiveNeedNum = orderItem.need_num || need_num || `MANUAL-${Date.now()}-${shipmentRecord.operator}`;
+          if (effectiveNeedNum) {
+            if (!orderSummary.has(effectiveNeedNum)) {
+              orderSummary.set(effectiveNeedNum, {
+                total_requested: 0,
+                total_shipped: 0,
+                items: []
+              });
+            }
+            const summary = orderSummary.get(effectiveNeedNum);
+            summary.total_requested += orderItem?.ori_quantity || Math.abs(quantity);
+            summary.total_shipped += Math.abs(quantity);
+            summary.items.push(orderItem?.record_num || record_num || null);
+          }
+        }
+        
+        continue; // 跳过创建新记录
+      }
+
+      // 创建新的发货明细记录
       const shipmentItem = {
         shipment_id: shipmentRecord.shipment_id,
         order_item_id: orderItem?.record_num || record_num || null,
