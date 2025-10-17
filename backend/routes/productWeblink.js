@@ -2904,6 +2904,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       let sizeNameCol = -1;
       let brandNameCol = -1;
       let manufacturerCol = -1;
+      let externalProductIdCol = -1;
       let externalProductIdTypeCol = -1;
       let modelCol = -1;
       let quantityCol = -1;
@@ -2931,6 +2932,8 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
               brandNameCol = colIndex;
             } else if (cellValue === 'manufacturer') {
               manufacturerCol = colIndex;
+            } else if (cellValue === 'external_product_id') {
+              externalProductIdCol = colIndex;
             } else if (cellValue === 'external_product_id_type') {
               externalProductIdTypeCol = colIndex;
             } else if (cellValue === 'model') {
