@@ -429,6 +429,10 @@ const LogisticsPage: React.FC = () => {
   // 导出上季VAT税单
   const handleExportLastQuarterVat = async () => {
     setExportVatLoading(true);
+    
+    // 显示进度提示
+    const hideMessage = message.loading('正在导出VAT税单，请稍候...', 0);
+    
     try {
       // 计算上季度的时间范围
       const now = new Date();
@@ -460,6 +464,11 @@ const LogisticsPage: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
+      
+      // 创建AbortController用于超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5分钟超时
+      
       const response = await fetch(`${API_BASE_URL}/api/logistics/export-vat-receipts`, {
         method: 'POST',
         headers: {
@@ -470,8 +479,11 @@ const LogisticsPage: React.FC = () => {
           startDate,
           endDate,
           destinationCountry: '英国'
-        })
+        }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -487,10 +499,28 @@ const LogisticsPage: React.FC = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
+      hideMessage();
       message.success(`成功导出${quarterName}的英国VAT税单包（包含Excel和PDF文件）`);
     } catch (error) {
+      hideMessage();
       console.error('导出VAT税单失败:', error);
-      message.error(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      
+      let errorMessage = '导出失败';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = '导出超时，请稍后重试。如果问题持续存在，请联系管理员。';
+        } else if (error.message.includes('HTTP 500')) {
+          errorMessage = '服务器内部错误，请稍后重试。如果问题持续存在，请联系管理员。';
+        } else if (error.message.includes('HTTP 404')) {
+          errorMessage = '在指定时间范围内没有找到VAT税单记录';
+        } else if (error.message.includes('HTTP 401')) {
+          errorMessage = '认证失败，请重新登录';
+        } else {
+          errorMessage = `导出失败: ${error.message}`;
+        }
+      }
+      
+      message.error(errorMessage);
     } finally {
       setExportVatLoading(false);
     }

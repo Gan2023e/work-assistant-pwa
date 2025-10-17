@@ -1793,7 +1793,8 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
         accessKeyId: process.env.OSS_ACCESS_KEY_ID,
         accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
         bucket: process.env.OSS_BUCKET,
-        endpoint: process.env.OSS_ENDPOINT
+        endpoint: process.env.OSS_ENDPOINT,
+        timeout: 30000 // 设置30秒超时
       };
       
       // 验证必要的OSS配置
@@ -1807,43 +1808,67 @@ router.post('/export-vat-receipts', authenticateToken, async (req, res) => {
       
       const client = new OSS(ossConfig);
       
-      // 为每个有OSS对象名的记录获取PDF文件
+      // 并发处理PDF文件，限制并发数量避免过载
+      const concurrencyLimit = 5; // 最多同时处理5个PDF文件
       let pdfCount = 0;
-      for (const record of vatReceipts) {
-        if (record.vatReceiptObjectName) {
-          try {
-            console.log(`📄 正在获取PDF文件: ${record.shippingId} -> ${record.vatReceiptObjectName}`);
+      let processedCount = 0;
+      
+      const processPdfFile = async (record) => {
+        if (!record.vatReceiptObjectName) return;
+        
+        try {
+          console.log(`📄 正在获取PDF文件: ${record.shippingId} -> ${record.vatReceiptObjectName}`);
+          
+          // 设置超时控制
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('PDF文件获取超时')), 20000); // 20秒超时
+          });
+          
+          // 检查文件是否存在
+          const headPromise = client.head(record.vatReceiptObjectName);
+          await Promise.race([headPromise, timeoutPromise]);
+          
+          // 获取文件内容
+          const getPromise = client.get(record.vatReceiptObjectName);
+          const result = await Promise.race([getPromise, timeoutPromise]);
+          
+          if (result.content && result.content.length > 0) {
+            // 生成安全的文件名
+            const safeFileName = sanitizeFileName(record.vatReceiptFileName) || 
+              `${record.shippingId}_VAT税单.pdf`;
             
-            // 检查文件是否存在
-            await client.head(record.vatReceiptObjectName);
+            // 添加到ZIP，使用UTF-8编码
+            archive.append(result.content, { 
+              name: `${folderName}/PDF文件/${safeFileName}`,
+              type: 'file'
+            });
             
-            // 获取文件内容
-            const result = await client.get(record.vatReceiptObjectName);
-            
-            if (result.content && result.content.length > 0) {
-              // 生成安全的文件名
-              const safeFileName = sanitizeFileName(record.vatReceiptFileName) || 
-                `${record.shippingId}_VAT税单.pdf`;
-              
-              // 添加到ZIP，使用UTF-8编码
-              archive.append(result.content, { 
-                name: `${folderName}/PDF文件/${safeFileName}`,
-                type: 'file'
-              });
-              
-              pdfCount++;
-              console.log(`✅ 成功添加PDF文件: ${safeFileName}`);
-            } else {
-              console.warn(`⚠️ PDF文件内容为空: ${record.shippingId}`);
-            }
-          } catch (pdfError) {
-            console.error(`❌ 获取PDF文件失败 ${record.shippingId}:`, pdfError.message);
-            // 继续处理其他文件，不中断整个流程
+            pdfCount++;
+            console.log(`✅ 成功添加PDF文件: ${safeFileName}`);
+          } else {
+            console.warn(`⚠️ PDF文件内容为空: ${record.shippingId}`);
           }
+        } catch (pdfError) {
+          console.error(`❌ 获取PDF文件失败 ${record.shippingId}:`, pdfError.message);
+          // 继续处理其他文件，不中断整个流程
+        } finally {
+          processedCount++;
         }
+      };
+      
+      // 分批处理PDF文件
+      const recordsWithPdf = vatReceipts.filter(record => record.vatReceiptObjectName);
+      const batches = [];
+      for (let i = 0; i < recordsWithPdf.length; i += concurrencyLimit) {
+        batches.push(recordsWithPdf.slice(i, i + concurrencyLimit));
       }
       
-      console.log(`📊 PDF文件处理完成: 成功添加 ${pdfCount}/${vatReceipts.length} 个PDF文件`);
+      for (const batch of batches) {
+        await Promise.all(batch.map(processPdfFile));
+        console.log(`📊 已处理 ${processedCount}/${recordsWithPdf.length} 个PDF文件`);
+      }
+      
+      console.log(`📊 PDF文件处理完成: 成功添加 ${pdfCount}/${recordsWithPdf.length} 个PDF文件`);
       
     } catch (ossError) {
       console.error('❌ OSS操作失败:', ossError);

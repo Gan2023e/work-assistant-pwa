@@ -43,6 +43,12 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// 设置服务器超时时间，支持长时间运行的导出操作
+const server = require('http').createServer(app);
+server.timeout = 300000; // 5分钟超时
+server.keepAliveTimeout = 65000; // 65秒
+server.headersTimeout = 66000; // 66秒
+
 // 健康检查端点 - 增强版本
 app.get('/health', async (req, res) => {
   try {
@@ -155,14 +161,14 @@ sequelize.authenticate().then(() => {
   if (process.env.NODE_ENV === 'production') {
     console.log('🔒 生产环境：跳过数据库结构同步，使用现有表结构');
     
-    app.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
     });
   } else {
     // 开发环境暂时跳过数据库同步
     console.log('⚠️ 开发环境：跳过数据库模型同步...');
     
-    app.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
     });
   }
