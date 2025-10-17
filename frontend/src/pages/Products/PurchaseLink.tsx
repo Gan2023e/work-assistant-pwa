@@ -4431,7 +4431,6 @@ const Purchase: React.FC = () => {
             } else {
               setUploadStatus('文件上传完成，正在处理数据...');
             }
-            console.log(`📊 上传进度: ${percentComplete}%`);
           }
         });
 
@@ -7879,7 +7878,6 @@ ${selectedSkuIds.map(skuId => {
                    // 当用户按回车键时，保存当前输入的值
                    if (e.key === 'Enter') {
                      const inputValue = (e.target as HTMLInputElement).value;
-                     console.log('🔍 onInputKeyDown 输入值:', inputValue);
                      if (inputValue) {
                        console.log('💾 onInputKeyDown 保存类目:', inputValue);
                        addTemplateForm.setFieldValue('category', inputValue);
@@ -7894,7 +7892,6 @@ ${selectedSkuIds.map(skuId => {
                  onBlur={(e) => {
                    // 当失焦时，获取当前输入的值并保存
                    const inputValue = (e.target as HTMLInputElement)?.value;
-                   console.log('🔍 onBlur 输入值:', inputValue);
                    if (inputValue) {
                      console.log('💾 onBlur 保存类目:', inputValue);
                      addTemplateForm.setFieldValue('category', inputValue);

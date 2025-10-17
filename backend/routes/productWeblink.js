@@ -382,7 +382,6 @@ const cpcUpload = multer({
 router.post('/search', async (req, res) => {
   try {
     const { keywords, searchType = 'auto', isFuzzy = true } = req.body;
-    console.log('🔍 后端收到搜索请求:', { keywords, searchType, isFuzzy });
     
     if (!Array.isArray(keywords) || keywords.length === 0) {
       return res.json({ data: [] });
@@ -396,11 +395,9 @@ router.post('/search', async (req, res) => {
       orConditions = keywords.map(keyword => {
         if (isFuzzy) {
           // 模糊搜索
-          console.log(`🔍 构建模糊搜索条件: parent_sku LIKE %${keyword}%`);
           return { parent_sku: { [Op.like]: `%${keyword}%` } };
         } else {
           // 精确搜索
-          console.log(`🔍 构建精确搜索条件: parent_sku = ${keyword}`);
           return { parent_sku: keyword };
         }
       });
@@ -412,7 +409,6 @@ router.post('/search', async (req, res) => {
     } else if (searchType === 'competitor_asin') {
       // 搜索竞争对手ASIN - 只支持模糊搜索
       orConditions = keywords.map(keyword => {
-        console.log(`🔍 构建竞争对手ASIN搜索条件: competitor_links LIKE %${keyword}%`);
         return { competitor_links: { [Op.like]: `%${keyword}%` } };
       });
     } else {
@@ -425,7 +421,6 @@ router.post('/search', async (req, res) => {
       }));
     }
     
-    console.log('🔍 最终查询条件:', JSON.stringify(orConditions, null, 2));
 
     const result = await ProductWeblink.findAll({
       where: {
@@ -2863,7 +2858,6 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
         return res.status(400).json({ message: '模板文件中未找到Template工作表' });
       }
 
-      console.log('✅ 成功加载Template工作表');
       
       const worksheet = workbook.Sheets['Template'];
       
@@ -2945,7 +2939,7 @@ router.post('/generate-uk-data-sheet', async (req, res) => {
       }
 
       console.log(`📍 找到基础列位置 - item_sku: ${itemSkuCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
-      console.log(`📍 找到扩展列位置 - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id_type: ${externalProductIdTypeCol}`);
+      console.log(`📍 找到扩展列位置 - brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}, external_product_id: ${externalProductIdCol}, external_product_id_type: ${externalProductIdTypeCol}`);
       console.log(`📍 找到其他列位置 - model: ${modelCol}, quantity: ${quantityCol}, age_range_description: ${ageRangeDescriptionCol}`);
       console.log(`📍 找到关系列位置 - parent_child: ${parentChildCol}, parent_sku: ${parentSkuCol}, relationship_type: ${relationshipTypeCol}, variation_theme: ${variationThemeCol}`);
       console.log(`📍 找到属性列位置 - country_of_origin: ${countryOfOriginCol}, are_batteries_included: ${areBatteriesIncludedCol}, condition_type: ${conditionTypeCol}, cpsia_cautionary_statement1: ${cpsiaCautionaryStatement1Col}`);
@@ -3215,7 +3209,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return res.status(400).json({ message: '请提供国家信息和Excel文件' });
     }
 
-    console.log(`📝 处理源国家: ${sourceCountry || '未知'} -> 目标国家: ${actualCountry}, 文件: ${uploadedFile.originalname}`);
 
     // 处理文本字段的转换规则（基于源国家和目标国家）
     const processTextForUKAUAE = (text, fieldType = 'general') => {
@@ -3396,11 +3389,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('✅ 找到Template工作表，使用Template工作表');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
     }
     
     console.log(`📋 当前使用的工作表: ${sheetName}`);
@@ -3412,7 +3403,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     }
 
     // 步骤1.5: 检查feed_product_type列去重后的内容
-    console.log('🔍 检查feed_product_type列内容...');
     
     if (jsonData.length < 4) {
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
@@ -3457,13 +3447,34 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         });
       } else if (feedProductTypes.size === 1) {
         const detectedType = Array.from(feedProductTypes)[0];
-        console.log(`✅ 检测到单一商品类型: ${detectedType}`);
       } else {
-        console.log('⚠️ 未检测到任何feed_product_type值');
       }
     }
 
-    // 步骤2: 处理数据并保存到数据库，同时准备填写到Excel
+    // 步骤2: 如果是阿联酋站点，查询英国站点的ASIN数据
+    let ukAsinMap = new Map();
+    if (actualCountry === 'AE') {
+      try {
+        const ListingsSku = require('../models/ListingsSku');
+        const ukListings = await ListingsSku.findAll({
+          where: {
+            site: 'www.amazon.co.uk'
+          },
+          attributes: ['seller-sku', 'asin1']
+        });
+        
+        ukListings.forEach(listing => {
+          if (listing['seller-sku'] && listing.asin1) {
+            ukAsinMap.set(listing['seller-sku'], listing.asin1);
+          }
+        });
+      } catch (error) {
+        console.error('❌ 查询英国站点ASIN数据失败:', error);
+        // 不中断流程，继续执行
+      }
+    }
+
+    // 步骤3: 处理数据并保存到数据库，同时准备填写到Excel
     console.log('💾 保存数据到数据库并准备填写到Excel...');
     
     const savedRecords = [];
@@ -3512,11 +3523,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       processedRecords.push(rowData);
     }
 
-    console.log(`✅ 成功保存 ${savedRecords.length} 条记录到数据库`);
-    console.log(`✅ 准备了 ${processedRecords.length} 条记录用于Excel填写`);
 
     // 步骤3: 根据feed_product_type获取对应国家的模板文件
-    console.log(`🔍 查找${actualCountry}站点的模板文件...`);
     
     // 确定要使用的模板类目
     let templateCategory = 'backpack'; // 默认类目
@@ -3542,11 +3550,9 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
           // 如果检测到的类型不是handbag或backpack，尝试直接使用检测到的类型
           templateCategory = detectedType;
         }
-        console.log(`🎯 根据feed_product_type选择模板类目: ${detectedType} -> ${templateCategory}`);
       }
     }
     
-    console.log(`🔍 查找${actualCountry}站点类目为${templateCategory}的模板文件...`);
     
     const countryTemplate = await TemplateLink.findOne({
       where: {
@@ -3584,10 +3590,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       });
     }
 
-    console.log(`✅ ${actualCountry}模板下载成功: ${downloadResult.fileName} (${downloadResult.size} 字节)`);
 
     // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
-    console.log('📊 开始使用xlsx库处理Excel文件...');
     
     // 解析模板文件
     const templateWorkbook = xlsx.read(downloadResult.content, { 
@@ -3602,7 +3606,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       return res.status(400).json({ message: '模板文件中未找到Template工作表' });
     }
 
-    console.log('✅ 成功加载Template工作表');
     
     const templateWorksheet = templateWorkbook.Sheets['Template'];
     
@@ -3616,7 +3619,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     console.log(`📊 工作表数据行数: ${data.length}`);
 
     // 步骤6: 查找列位置（在第3行查找标题，索引为2）
-    console.log('🔍 查找列位置...');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -3641,6 +3643,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     
     // 新增缺失字段的列变量
     let feedProductTypeCol = -1;
+    let externalProductIdCol = -1;
     let externalProductIdTypeCol = -1;
     let quantityCol = -1;
     let ageRangeDescriptionCol = -1;
@@ -3746,6 +3749,8 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
             bulletPoint5Col = colIndex;
           } else if (cellValue === 'feed_product_type') {
             feedProductTypeCol = colIndex;
+          } else if (cellValue === 'external_product_id') {
+            externalProductIdCol = colIndex;
           } else if (cellValue === 'external_product_id_type') {
             externalProductIdTypeCol = colIndex;
           } else if (cellValue === 'quantity') {
@@ -3852,6 +3857,7 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     }
 
     console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
+    console.log(`📍 找到扩展列位置 - external_product_id: ${externalProductIdCol}, external_product_id_type: ${externalProductIdTypeCol}`);
     
     // 调试：检查第3行标题
     console.log('📋 第3行标题内容:', data[2]);
@@ -3937,7 +3943,46 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       
       // 填写新增字段数据
       if (feedProductTypeCol !== -1) data[currentRowIndex][feedProductTypeCol] = recordData.feed_product_type || '';
-      if (externalProductIdTypeCol !== -1) data[currentRowIndex][externalProductIdTypeCol] = recordData.external_product_id_type || '';
+      
+      // 处理external_product_id和external_product_id_type字段
+      if (actualCountry === 'AE' && externalProductIdCol !== -1) {
+        // 阿联酋站点：只有子SKU才填写ASIN，母SKU不填写
+        const childSku = recordData.item_sku;
+        const isParentSku = recordData.parent_child === 'Parent';
+        
+        if (isParentSku) {
+          data[currentRowIndex][externalProductIdCol] = '';
+        } else {
+          if (childSku && ukAsinMap.has(childSku)) {
+            data[currentRowIndex][externalProductIdCol] = ukAsinMap.get(childSku);
+          } else {
+            data[currentRowIndex][externalProductIdCol] = '';
+          }
+        }
+      } else if (externalProductIdCol !== -1) {
+        // 其他站点：使用原有逻辑
+        data[currentRowIndex][externalProductIdCol] = recordData.external_product_id || '';
+      }
+      
+      if (externalProductIdTypeCol !== -1) {
+        if (actualCountry === 'AE') {
+          // 阿联酋站点：只有子SKU才填写类型，母SKU不填写
+          const childSku = recordData.item_sku;
+          const isParentSku = recordData.parent_child === 'Parent';
+          
+          if (isParentSku) {
+            data[currentRowIndex][externalProductIdTypeCol] = '';
+          } else if (childSku && ukAsinMap.has(childSku)) {
+            data[currentRowIndex][externalProductIdTypeCol] = 'ASIN';
+          } else {
+            data[currentRowIndex][externalProductIdTypeCol] = '';
+          }
+        } else {
+          // 其他站点：使用原有逻辑
+          data[currentRowIndex][externalProductIdTypeCol] = recordData.external_product_id_type || '';
+        }
+      }
+      
       if (quantityCol !== -1) data[currentRowIndex][quantityCol] = recordData.quantity || '';
       if (ageRangeDescriptionCol !== -1) data[currentRowIndex][ageRangeDescriptionCol] = recordData.age_range_description || '';
       if (swatchImageUrlCol !== -1) data[currentRowIndex][swatchImageUrlCol] = processImageUrlForUKAUAE(recordData.swatch_image_url || '');
@@ -4300,11 +4345,8 @@ ${process.env.MANUFACTURER_PHONE}`;
         cellStyles: true
       });
       
-      console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
-      console.log('🔍 开始生成文件名...');
-      console.log(`📊 processedRecords数量: ${processedRecords.length}`);
       
       const parentSkus = [...new Set(processedRecords
         .map(record => {
@@ -4323,7 +4365,6 @@ ${process.env.MANUFACTURER_PHONE}`;
       res.setHeader('Content-Length', outputBuffer.length);
       
       const processingTime = Date.now() - startTime;
-      console.log(`✅ 生成${actualCountry}资料表成功 (耗时: ${processingTime}ms)`);
       
       res.send(outputBuffer);
       
@@ -4758,16 +4799,10 @@ function mapDataToTemplateXlsx(templateData, records, country) {
     };
 
     // 调试：输出模板前几行的内容
-    console.log('🔍 模板前5行内容:');
-    for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`第${i + 1}行:`, updatedData[i]?.slice(0, 5) || '空行');
-    }
 
     // 不清空原模板数据，只从第4行开始填写数据
     const headerRowCount = 3;
     const originalLength = updatedData.length;
-    console.log(`📋 保留原模板所有内容，从第${headerRowCount + 1}行开始填写${records.length}条记录`);
-    console.log(`📊 原模板有${originalLength}行，将从第4行开始填写数据`);
 
     // 填写新数据（从第4行开始）
     let addedCount = 0;
@@ -5238,18 +5273,9 @@ ${process.env.MANUFACTURER_PHONE}`;
       addedCount++;
       
       // 调试：输出第一条数据填写后的行内容
-      if (index === 0 && updatedData[rowIndex]) {
-        console.log('📋 第一条数据填写后的行前5列:', updatedData[rowIndex].slice(0, 5));
-      }
     });
 
-    console.log(`✅ 数据映射完成，添加了 ${addedCount} 行数据到${country}模板`);
     
-    // 调试：输出最终数据的前几行
-    console.log('🔍 最终数据前5行:');
-    for (let i = 0; i < Math.min(5, updatedData.length); i++) {
-      console.log(`第${i + 1}行:`, updatedData[i]?.slice(0, 3) || '空行');
-    }
     
     // 验证返回的数据格式
     if (!Array.isArray(updatedData) || updatedData.length === 0) {
@@ -5298,7 +5324,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       });
     }
 
-    console.log(`📝 处理批量生成: ${sourceCountry} -> ${targetCountry}, 文件: ${uploadedFile.originalname}`);
 
     // 定义处理函数（与单个生成函数保持一致）
     const processBatchText = (text, fieldType = 'general') => {
@@ -5396,11 +5421,9 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('✅ 找到Template工作表，使用Template工作表');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
     }
     
     console.log(`📋 当前使用的工作表: ${sheetName}`);
@@ -5412,7 +5435,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     }
 
     // 步骤1.5: 检查feed_product_type列去重后的内容
-    console.log('🔍 检查feed_product_type列内容...');
     
     if (jsonData.length < 4) {
       return res.status(400).json({ message: 'Excel文件格式错误，至少需要包含前3行标题说明和数据行' });
@@ -5457,9 +5479,7 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         });
       } else if (feedProductTypes.size === 1) {
         const detectedType = Array.from(feedProductTypes)[0];
-        console.log(`✅ 检测到单一商品类型: ${detectedType}`);
       } else {
-        console.log('⚠️ 未检测到任何feed_product_type值');
       }
     }
 
@@ -5490,7 +5510,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
           // 如果检测到的类型不是handbag或backpack，尝试直接使用检测到的类型
           templateCategory = detectedType;
         }
-        console.log(`🎯 根据feed_product_type选择模板类目: ${detectedType} -> ${templateCategory}`);
       }
     }
     
@@ -5644,7 +5663,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     console.log(`🔄 转换了 ${transformedRecords.length} 条记录，SKU从${sourceCountry}前缀转换为${targetCountry}前缀`);
 
     // 步骤5: 使用xlsx库处理模板文件（参考英国资料表的正确实现）
-    console.log('📊 开始使用xlsx库处理Excel文件...');
     
     // 解析模板文件
     const templateWorkbook = xlsx.read(downloadResult.content, { 
@@ -5659,7 +5677,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       return res.status(400).json({ message: '模板文件中未找到Template工作表' });
     }
 
-    console.log('✅ 成功加载Template工作表');
     
     const batchTemplateWorksheet = templateWorkbook.Sheets['Template'];
     
@@ -5673,7 +5690,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     console.log(`📊 工作表数据行数: ${data.length}`);
 
     // 步骤6: 查找列位置（在第3行查找标题，索引为2）
-    console.log('🔍 查找列位置...');
     let itemSkuCol = -1;
     let itemNameCol = -1;
     let colorNameCol = -1;
@@ -6172,7 +6188,6 @@ ${process.env.MANUFACTURER_PHONE}`;
         cellStyles: true
       });
       
-      console.log(`✅ Excel文件生成成功，大小: ${outputBuffer.length} 字节`);
       
       // 生成文件名：国家代码+母SKU格式
       const parentSkus = [...new Set(transformedRecords
@@ -6249,11 +6264,9 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
     if (workbook.Sheets['Template']) {
       sheetName = 'Template';
       worksheet = workbook.Sheets['Template'];
-      console.log('✅ 找到Template工作表，使用Template工作表');
     } else {
       sheetName = workbook.SheetNames[0];
       worksheet = workbook.Sheets[sheetName];
-      console.log(`⚠️ 未找到Template工作表，使用第一个工作表: ${sheetName}`);
     }
     
     console.log(`📋 当前使用的工作表: ${sheetName}`);
@@ -6530,7 +6543,6 @@ router.put('/amazon-templates/:id/toggle-active', async (req, res) => {
     await sequelize.transaction(async (transaction) => {
       if (isActive) {
         // 如果要激活模板，先将同站点同模板类型同类目的所有其他模板设为非激活状态
-        console.log(`[DEBUG] 准备禁用其他模板 - 国家: ${template.country}, 类型: ${template.template_type}, 类目: ${template.category}, 排除ID: ${id}`);
         
         const updateResult = await TemplateLink.update(
           { is_active: false },
@@ -6545,7 +6557,6 @@ router.put('/amazon-templates/:id/toggle-active', async (req, res) => {
           }
         );
         
-        console.log(`[DEBUG] 禁用其他模板的结果: ${updateResult[0]} 行受影响`);
         console.log(`🔄 已将${template.country}站点${template.template_type}类型${template.category}类目的其他模板设为非激活状态`);
       }
       
@@ -6817,7 +6828,6 @@ router.post('/generate-fbasku-data', async (req, res) => {
       return res.status(400).json({ message: '模板文件中未找到Template工作表' });
     }
 
-    console.log('✅ 成功加载Template工作表');
     
     const worksheet = workbook.Sheets['Template'];
     
