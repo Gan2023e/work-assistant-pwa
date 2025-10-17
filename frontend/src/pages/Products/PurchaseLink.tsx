@@ -919,7 +919,6 @@ const Purchase: React.FC = () => {
       }
       
       const result = await res.json();
-      logger.debug('获取到的统计数据:', result);
       
       setStatistics(result.statistics);
       setAllDataStats({
@@ -929,8 +928,6 @@ const Purchase: React.FC = () => {
         supplierStats: result.supplierStats || []
       });
       
-      // 添加调试日志
-      logger.debug('CPC提交情况统计数据:', result.cpcSubmitStats);
       if (result.cpcSubmitStats && result.cpcSubmitStats.length > 0) {
         logger.success(`CPC提交情况数据加载成功，共 ${result.cpcSubmitStats.length} 种状态`);
       } else {
@@ -994,8 +991,6 @@ const Purchase: React.FC = () => {
         searchType,
         isFuzzy: searchType === 'weblink' || searchType === 'competitor_asin' ? true : isFuzzySearch // 产品链接和竞争对手ASIN搜索强制模糊搜索
       };
-      
-      logger.debug('搜索请求参数:', requestPayload);
       
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/search`, {
         method: 'POST',
@@ -3822,8 +3817,6 @@ const Purchase: React.FC = () => {
   // 切换模板激活状态
   const handleToggleTemplateActive = async (templateId: number, isActive: boolean) => {
     try {
-      logger.debug(`切换模板激活状态，ID: ${templateId}, 激活状态: ${isActive}`);
-      
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/amazon-templates/${templateId}/toggle-active`, {
         method: 'PUT',
         headers: {
@@ -4261,7 +4254,6 @@ const Purchase: React.FC = () => {
       
       // 检查后端是否设置了文件名
       const contentDisposition = generateRes.headers.get('Content-Disposition');
-      logger.debug('后端Content-Disposition:', contentDisposition);
       
       let fileName = `UK_${parentSkus.join('_')}.xlsx`;
       
@@ -5240,7 +5232,6 @@ const Purchase: React.FC = () => {
       );
       const parentSkus = selectedRecords.map(record => record.parent_sku);
 
-      console.log('生成FBASKU资料，母SKU:', parentSkus, '国家:', fbaSkuCountry);
 
       // 调用后端API生成FBASKU资料
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-fbasku-data`, {
@@ -5447,7 +5438,6 @@ const Purchase: React.FC = () => {
     setFbaSkuLoading(true);
 
     try {
-      console.log('重新生成FBASKU资料，母SKU:', currentSelectedParentSkus, '国家:', fbaSkuCountry);
 
       // 调用后端API生成FBASKU资料
       const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-fbasku-data`, {
@@ -7959,7 +7949,6 @@ ${selectedSkuIds.map(skuId => {
                    return label.toLowerCase().includes(input.toLowerCase());
                  }}
                  onChange={(value) => {
-                   logger.debug('onChange 触发，值:', value);
                    // 更新状态变量
                    setSelectedUploadCategory(value || '');
                    // 确保表单值也被更新
@@ -7972,9 +7961,7 @@ ${selectedSkuIds.map(skuId => {
                 }}
                  onSearch={(value) => {
                    // 当用户输入时，保存输入的值
-                   logger.debug('onSearch 输入值:', value);
                    if (value) {
-                     logger.debug('onSearch 保存类目:', value);
                      addTemplateForm.setFieldValue('category', value);
                      setSelectedUploadCategory(value);
                    }
@@ -8004,7 +7991,6 @@ ${selectedSkuIds.map(skuId => {
                      // 延迟再次设置值，确保不被清空
                      setTimeout(() => {
                        addTemplateForm.setFieldValue('category', inputValue);
-                       logger.debug('延迟设置值:', inputValue);
                      }, 100);
                    }
                  }}

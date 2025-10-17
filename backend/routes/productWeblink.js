@@ -3283,7 +3283,6 @@ router.post('/check-other-site-template', upload.single('file'), async (req, res
 router.post('/generate-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('📋 收到生成其他站点资料表请求');
     
     const { country, targetCountry, sourceCountry } = req.body;
     const uploadedFile = req.file;
@@ -3480,7 +3479,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       worksheet = workbook.Sheets[sheetName];
     }
     
-    console.log(`📋 当前使用的工作表: ${sheetName}`);
     
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -3659,17 +3657,14 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
         }
       });
     } else {
-      console.log(`📄 使用${actualCountry}站点类目为${templateCategory}的模板: ${countryTemplate.file_name} (ID: ${countryTemplate.id})`);
     }
 
     // 步骤4: 下载模板文件
-    console.log(`📥 下载${actualCountry}模板文件...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(countryTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`❌ 下载${actualCountry}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
         message: `下载${actualCountry}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
@@ -3942,22 +3937,10 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
       });
     }
 
-    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
-    console.log(`📍 找到扩展列位置 - external_product_id: ${externalProductIdCol}, external_product_id_type: ${externalProductIdTypeCol}`);
     
-    // 调试：检查第3行标题
-    console.log('📋 第3行标题内容:', data[2]);
     
-    // 检查是否找到了关键列
-    if (itemSkuCol === -1) {
-      console.log('❌ 警告：未找到item_sku列!');
-    }
-    if (itemNameCol === -1) {
-      console.log('❌ 警告：未找到item_name列!');
-    }
 
     // 步骤7: 准备填写数据
-    console.log('✍️ 准备填写数据到Excel...');
     
     // 确保数据数组有足够的行
     const totalRowsNeeded = 3 + processedRecords.length; // 前3行保留 + 数据行
@@ -3971,17 +3954,6 @@ router.post('/generate-other-site-datasheet', upload.single('file'), async (req,
     processedRecords.forEach((record, index) => {
       const recordData = record; // processedRecords已经是干净的数据对象
       
-      // 调试：输出第一条记录的填写过程
-      if (index === 0) {
-        console.log('📋 填写第一条记录:', {
-          item_sku: recordData.item_sku,
-          item_name: recordData.item_name,
-          color_name: recordData.color_name,
-          size_name: recordData.size_name,
-          brand_name: recordData.brand_name
-        });
-        console.log(`📍 填写到第${currentRowIndex + 1}行（索引${currentRowIndex}）`);
-      }
       
       // 计算需要的最大列数
       const allColumns = [
@@ -4386,27 +4358,13 @@ ${process.env.MANUFACTURER_PHONE}`;
         data[currentRowIndex][itemWidthUnitOfMeasureCol] = recordData.item_width_unit_of_measure || '';
       }
       
-      // 调试：输出第一条记录填写后的行内容
-      if (index === 0) {
-        console.log('📋 第一条记录填写后的行内容:', data[currentRowIndex]);
-      }
       
       currentRowIndex++;
     });
 
-    console.log(`📊 填写完成，共填写了 ${processedRecords.length} 行数据`);
     
-    // 调试：检查是否有数据被填写
-    if (processedRecords.length > 0) {
-      console.log('📋 检查数据填写结果:');
-      console.log(`第4行内容:`, data[3]?.slice(0, 5));
-      console.log(`第5行内容:`, data[4]?.slice(0, 5));
-    } else {
-      console.log('❌ 警告：processedRecords为空，没有数据可填写!');
-    }
 
     // 步骤8: 将数据重新转换为工作表
-    console.log('💾 生成Excel文件...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
     // 保持原始工作表的列宽等属性
@@ -4444,7 +4402,6 @@ ${process.env.MANUFACTURER_PHONE}`;
       
       const skuPart = parentSkus.length > 0 ? parentSkus.join('_') : 'DATA';
       const fileName = `${actualCountry}_${skuPart}.xlsx`;
-      console.log('📄 生成的文件名:', fileName);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -4455,7 +4412,6 @@ ${process.env.MANUFACTURER_PHONE}`;
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('❌ Excel文件生成失败:', fileError);
       throw new Error('Excel文件生成失败: ' + fileError.message);
     }
 
@@ -4753,7 +4709,6 @@ function mapDataToTemplateXlsx(templateData, records, country) {
       console.warn(`⚠️ 模板中缺少以下列: ${missingColumns.join(', ')}`);
     }
 
-    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}, brand_name: ${brandNameCol}, manufacturer: ${manufacturerCol}`);
 
     // 判断源文件类型（通过第一条记录的SKU前缀）
     let sourceCountryType = 'OTHER';
@@ -5393,7 +5348,6 @@ ${process.env.MANUFACTURER_PHONE}`;
 router.post('/generate-batch-other-site-datasheet', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
-    console.log('🔄 收到批量生成其他站点资料表请求');
     
     const { sourceCountry, targetCountry } = req.body;
     const uploadedFile = req.file;
@@ -5512,7 +5466,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       worksheet = workbook.Sheets[sheetName];
     }
     
-    console.log(`📋 当前使用的工作表: ${sheetName}`);
     
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -5570,7 +5523,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
     }
 
     // 步骤2: 根据feed_product_type获取目标国家的模板文件
-    console.log(`🔍 查找${targetCountry}站点的模板文件...`);
     
     // 确定要使用的模板类目
     let templateCategory = 'backpack'; // 默认类目
@@ -5599,7 +5551,6 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       }
     }
     
-    console.log(`🔍 查找${targetCountry}站点类目为${templateCategory}的模板文件...`);
     
     const targetTemplate = await TemplateLink.findOne({
       where: {
@@ -5620,17 +5571,14 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
         }
       });
     } else {
-      console.log(`📄 使用${targetCountry}站点类目为${templateCategory}的模板: ${targetTemplate.file_name} (ID: ${targetTemplate.id})`);
     }
 
     // 步骤3: 下载目标模板文件
-    console.log(`📥 下载${targetCountry}模板文件...`);
     const { downloadTemplateFromOSS } = require('../utils/oss');
     
     const downloadResult = await downloadTemplateFromOSS(targetTemplate.oss_object_name);
     
     if (!downloadResult.success) {
-      console.error(`❌ 下载${targetCountry}模板失败:`, downloadResult.message);
       return res.status(500).json({ 
         message: `下载${targetCountry}模板失败: ${downloadResult.message}`,
         details: downloadResult.error
@@ -5951,10 +5899,8 @@ router.post('/generate-batch-other-site-datasheet', upload.single('file'), async
       });
     }
 
-    console.log(`📍 找到列位置 - item_sku: ${itemSkuCol}, item_name: ${itemNameCol}, color_name: ${colorNameCol}, size_name: ${sizeNameCol}`);
 
     // 步骤7: 准备填写数据
-    console.log('✍️ 准备填写数据到Excel...');
     
     // 确保数据数组有足够的行
     const totalRowsNeeded = 3 + transformedRecords.length; // 前3行保留 + 数据行
@@ -6248,7 +6194,6 @@ ${process.env.MANUFACTURER_PHONE}`;
     console.log(`📊 填写完成，共填写了 ${transformedRecords.length} 行数据`);
 
     // 步骤8: 将数据重新转换为工作表
-    console.log('💾 生成Excel文件...');
     const newWorksheet = xlsx.utils.aoa_to_sheet(data);
     
     // 保持原始工作表的列宽等属性
@@ -6297,7 +6242,6 @@ ${process.env.MANUFACTURER_PHONE}`;
       res.send(outputBuffer);
       
     } catch (fileError) {
-      console.error('❌ Excel文件生成失败:', fileError);
       throw new Error('Excel文件生成失败: ' + fileError.message);
     }
 
@@ -6355,7 +6299,6 @@ router.post('/upload-source-data', upload.single('file'), async (req, res) => {
       worksheet = workbook.Sheets[sheetName];
     }
     
-    console.log(`📋 当前使用的工作表: ${sheetName}`);
     
     // 转换为JSON
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
