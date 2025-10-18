@@ -178,10 +178,15 @@ const ProductInformation = sequelize.define('ProductInformation', {
     allowNull: true,
     comment: '闭合类型'
   },
+  outer_material_type: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    comment: '外层材料类型（原始字段）'
+  },
   outer_material_type1: {
     type: DataTypes.STRING(50),
     allowNull: true,
-    comment: '外层材料类型'
+    comment: '外层材料类型1'
   },
   care_instructions: {
     type: DataTypes.STRING(100),
@@ -320,6 +325,21 @@ const ProductInformation = sequelize.define('ProductInformation', {
     type: DataTypes.STRING(50),
     allowNull: true,
     comment: '原产国'
+  },
+  are_batteries_included: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: '是否包含电池'
+  },
+  country_as_labeled: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    comment: '标签上的国家'
+  },
+  condition_type: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    comment: '商品状态类型'
   }
 }, {
   tableName: 'product_information',

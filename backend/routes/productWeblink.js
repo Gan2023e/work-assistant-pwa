@@ -244,6 +244,7 @@ function filterValidFields(data) {
     
     // 新增字段 - 产品属性
     closure_type: { type: 'string', maxLength: 50 },
+    outer_material_type: { type: 'string', maxLength: 50 },
     outer_material_type1: { type: 'string', maxLength: 50 },
     care_instructions: { type: 'string', maxLength: 100 },
     age_range_description: { type: 'string', maxLength: 50 },
@@ -285,7 +286,10 @@ function filterValidFields(data) {
     // 新增字段 - 合规信息
     cpsia_cautionary_statement1: { type: 'string', maxLength: 100 },
     import_designation: { type: 'string', maxLength: 50 },
-    country_of_origin: { type: 'string', maxLength: 50 }
+    country_of_origin: { type: 'string', maxLength: 50 },
+    are_batteries_included: { type: 'string', maxLength: 10 },
+    country_as_labeled: { type: 'string', maxLength: 50 },
+    condition_type: { type: 'string', maxLength: 20 }
   };
 
   const filteredData = {};
