@@ -20,6 +20,8 @@ const peakSeasonRouter = require('./routes/peakSeason');
 const productInformationRouter = require('./routes/productInformation');
 const resendRouter = require('./routes/resend');
 const { router: authRouter } = require('./routes/auth');
+const WebSocket = require('ws');
+const wsManager = require('./utils/websocketManager');
 
 // 强制触发Railway重新部署 - 2025-01-08 - 修复URL配置
 const app = express();
@@ -153,6 +155,73 @@ app.get('/', (req, res) => {
   });
 });
 
+// WebSocket服务器启动函数
+function startWebSocketServer(server) {
+  const wss = new WebSocket.Server({ 
+    server,
+    path: '/ws',
+    cors: {
+      origin: [
+        'http://localhost:3000',
+        process.env.FRONTEND_URL || 'https://work-assistant-pwa.netlify.app',
+        /\.netlify\.app$/,
+        /\.railway\.app$/
+      ],
+      credentials: true
+    }
+  });
+
+  wss.on('connection', (ws, req) => {
+    console.log('🔌 新的WebSocket连接');
+    
+    // 从查询参数或请求头获取用户ID
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const userId = url.searchParams.get('userId') || 'anonymous';
+    
+    const clientId = wsManager.addClient(ws, userId);
+    
+    // 发送连接成功消息
+    ws.send(JSON.stringify({
+      type: 'connected',
+      clientId: clientId,
+      userId: userId,
+      timestamp: new Date().toISOString()
+    }));
+
+    // 处理客户端消息
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+        console.log('📨 收到WebSocket消息:', data);
+        
+        // 处理ping消息
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({
+            type: 'pong',
+            timestamp: new Date().toISOString()
+          }));
+        }
+      } catch (error) {
+        console.error('❌ WebSocket消息解析失败:', error);
+      }
+    });
+
+    // 处理连接关闭
+    ws.on('close', () => {
+      console.log('🔌 WebSocket连接关闭');
+      wsManager.removeClient(clientId);
+    });
+
+    // 处理连接错误
+    ws.on('error', (error) => {
+      console.error('❌ WebSocket连接错误:', error);
+      wsManager.removeClient(clientId);
+    });
+  });
+
+  console.log('🔌 WebSocket服务器已启动');
+}
+
 // 数据库连接和服务启动
 sequelize.authenticate().then(() => {
   console.log('✅ 数据库连接成功');
@@ -163,6 +232,7 @@ sequelize.authenticate().then(() => {
     
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+      startWebSocketServer(server);
     });
   } else {
     // 开发环境暂时跳过数据库同步
@@ -170,6 +240,7 @@ sequelize.authenticate().then(() => {
     
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ 后端服务已启动，端口 ${PORT}`);
+      startWebSocketServer(server);
     });
   }
 }).catch(err => {

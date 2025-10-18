@@ -66,6 +66,7 @@ import {
 import dayjs from 'dayjs';
 import { ColumnsType, TableProps } from 'antd/es/table';
 import { API_BASE_URL, API_ENDPOINTS, apiClient } from '../../config/api';
+import { getUploadProgressManager } from '../../utils/uploadProgressManager';
 import ProfitCalculator from '../../components/ProfitCalculator';
 
 // 添加CSS样式
@@ -664,6 +665,8 @@ const Purchase: React.FC = () => {
   const [currentRecord, setCurrentRecord] = useState<ProductRecord | null>(null);
   const [cpcFiles, setCpcFiles] = useState<CpcFile[]>([]);
   const [cpcUploading, setCpcUploading] = useState(false);
+  const [uploadTasks, setUploadTasks] = useState<any[]>([]);
+  const [cancelledTasks, setCancelledTasks] = useState<any[]>([]);
   
   // 自动识别结果状态
   const [extractedDataVisible, setExtractedDataVisible] = useState(false);
@@ -944,6 +947,40 @@ const Purchase: React.FC = () => {
     fetchCategories(); // 获取类目数据
     // 默认显示可整理资料记录
     handleCanOrganizeDataClick();
+
+    // 设置上传进度监听
+    const uploadManager = getUploadProgressManager();
+    const handleProgressUpdate = (task: any) => {
+      if (task.status === 'cancelled') {
+        // 取消的任务立即从上传进度中移除，添加到已取消列表
+        setUploadTasks(prev => prev.filter(t => t.id !== task.id));
+        setCancelledTasks(prev => {
+          const existing = prev.find(t => t.id === task.id);
+          if (existing) {
+            return prev.map(t => t.id === task.id ? task : t);
+          } else {
+            return [...prev, task];
+          }
+        });
+      } else {
+        // 正常任务更新
+        setUploadTasks(prev => {
+          const existing = prev.find(t => t.id === task.id);
+          if (existing) {
+            return prev.map(t => t.id === task.id ? task : t);
+          } else {
+            return [...prev, task];
+          }
+        });
+      }
+    };
+
+    uploadManager.addProgressCallback(handleProgressUpdate);
+
+    // 清理函数
+    return () => {
+      uploadManager.removeProgressCallback(handleProgressUpdate);
+    };
   }, []);
 
   // 获取邮件配置
@@ -1293,24 +1330,43 @@ const Purchase: React.FC = () => {
     setCpcModalVisible(true);
     setExtractedDataVisible(false);
     setPendingExtractedData(null);
+    
+    // 清理之前的上传任务
+    const uploadManager = getUploadProgressManager();
+    uploadManager.cleanupCompletedTasks();
+    setUploadTasks([]);
+    setCancelledTasks([]);
+    
     await loadCpcFiles(record.id);
   };
 
   const loadCpcFiles = async (recordId: number) => {
     try {
+      console.log('🔍 加载CPC文件，记录ID:', recordId);
       const res = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${recordId}`);
+      console.log('📡 API响应状态:', res.status);
       if (res.ok) {
         const result = await res.json();
+        console.log('📄 API响应数据:', result);
         setCpcFiles(result.data || []);
+        console.log('✅ 设置CPC文件列表:', result.data || []);
+      } else {
+        console.error('❌ API请求失败:', res.status, res.statusText);
       }
     } catch (e) {
-      console.error('加载CPC文件失败:', e);
+      console.error('❌ 加载CPC文件失败:', e);
     }
   };
 
-  // 单文件上传处理逻辑
+  // 单文件上传处理逻辑（异步优化版本）
   const handleSingleFileUpload = async (file: File) => {
     if (!currentRecord) return null;
+
+    const uploadManager = getUploadProgressManager();
+    const taskId = `upload_${currentRecord.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 添加上传任务（暂时没有OSS路径）
+    const task = uploadManager.addTask(taskId, file.name);
 
     try {
       const formData = new FormData();
@@ -1324,30 +1380,85 @@ const Purchase: React.FC = () => {
       const result = await res.json();
       
       if (result.code === 0) {
+        // 文件上传成功，保存OSS文件路径到任务中
+        if (result.data && result.data.filePath) {
+          task.ossPath = result.data.filePath;
+        }
+        
+        // 立即更新文件列表
         await loadCpcFiles(currentRecord.id);
+        
+        // 更新表格中的记录数据，确保CPC文件数量显示正确
+        // 获取现有的cpc_files并添加新文件
+        setData(prevData => 
+          prevData.map(item => {
+            if (item.id === currentRecord.id) {
+              let existingFiles = [];
+              if (item.cpc_files) {
+                try {
+                  existingFiles = JSON.parse(item.cpc_files);
+                  if (!Array.isArray(existingFiles)) {
+                    existingFiles = [];
+                  }
+                } catch (e) {
+                  existingFiles = [];
+                }
+              }
+              // 添加新文件
+              existingFiles.push(result.data.fileInfo);
+              return { ...item, cpc_files: JSON.stringify(existingFiles) };
+            }
+            return item;
+          })
+        );
+        
+        // 更新任务状态为完成
+        uploadManager.updateTaskProgress(taskId, 100, '文件上传完成');
+        
+        // 直接完成任务，无需监听后台处理
+        uploadManager.completeTask(taskId, { success: true });
+        
+        // 检查是否所有任务都已完成，如果是则只关闭上传进度栏
+        setTimeout(async () => {
+          const allTasks = uploadManager.getAllTasks();
+          const activeTasks = allTasks.filter(task => 
+            task.status === 'uploading' || task.status === 'processing' || task.status === 'cancelling'
+          );
+          
+          if (activeTasks.length === 0) {
+            // 最后刷新一次文件列表
+            if (currentRecord) {
+              await loadCpcFiles(currentRecord.id);
+            }
+            
+            // 只清理上传进度，不关闭CPC文件管理对话框
+            uploadManager.cleanupCompletedTasks();
+            setUploadTasks([]);
+            setCancelledTasks([]);
+          }
+        }, 1000); // 延迟1秒清理上传进度
+        
         return result;
       } else {
+        uploadManager.failTask(taskId, result.message);
         console.error(`文件 ${file.name} 上传失败:`, result.message);
         return null;
       }
     } catch (e) {
+      uploadManager.failTask(taskId, e instanceof Error ? e.message : '网络错误');
       console.error(`文件 ${file.name} 上传失败:`, e);
       return null;
     }
   };
 
-  // 多文件批量上传处理
+  // 多文件批量上传处理（异步优化版本）
   const handleMultipleFileUpload = async (files: File[]) => {
     if (!currentRecord || files.length === 0) return;
 
     setCpcUploading(true);
-    const uploadResults = [];
-    let cpcCertificateExtracted = false;
-    let extractedInfo: any = null;
+    const uploadManager = getUploadProgressManager();
 
     try {
-      const loadingMessage = message.loading(`正在批量上传 ${files.length} 个文件...`, 0);
-
       // 筛选PDF文件
       const pdfFiles = files.filter(file => file.type === 'application/pdf');
       const skippedFiles = files.length - pdfFiles.length;
@@ -1356,99 +1467,44 @@ const Purchase: React.FC = () => {
         message.warning(`跳过 ${skippedFiles} 个非PDF文件`);
       }
 
-      // 逐个上传PDF文件
-      for (let i = 0; i < pdfFiles.length; i++) {
-        const file = pdfFiles[i];
-        const result = await handleSingleFileUpload(file);
-        
-        if (result) {
-          uploadResults.push({
-            file: file.name,
-            success: true,
-            result: result
-          });
+      // 并行上传所有PDF文件
+      const uploadPromises = pdfFiles.map(file => handleSingleFileUpload(file));
+      const results = await Promise.allSettled(uploadPromises);
 
-          // 检查是否为CPC证书文件且是第一个提取到信息的文件
-          if (!cpcCertificateExtracted && result.data.extractedData && 
-              (result.data.extractedData.styleNumber || result.data.extractedData.recommendAge)) {
-            cpcCertificateExtracted = true;
-            extractedInfo = result.data.extractedData;
-          }
-        } else {
-          uploadResults.push({
-            file: file.name,
-            success: false
-          });
-        }
-      }
-
-      loadingMessage(); // 关闭loading消息
-
-      // 生成批量上传结果提示
-      const successCount = uploadResults.filter(r => r.success).length;
+      // 统计结果
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
       const totalPdfCount = pdfFiles.length;
-      
-      const notifications = [];
       
       if (successCount > 0) {
         if (totalPdfCount === successCount) {
-          notifications.push(`成功上传 ${successCount} 个PDF文件`);
+          message.success(`成功上传 ${successCount} 个PDF文件`);
         } else {
-          notifications.push(`成功上传 ${successCount}/${totalPdfCount} 个PDF文件`);
+          message.success(`成功上传 ${successCount}/${totalPdfCount} 个PDF文件`);
         }
         
-                          if (cpcCertificateExtracted && extractedInfo) {
-           // 显示提取结果确认对话框
-           setPendingExtractedData(extractedInfo);
-           setExtractedDataVisible(true);
-           
-           const extractedDetails = [];
-           if (extractedInfo.styleNumber) {
-             extractedDetails.push(`Style Number: ${extractedInfo.styleNumber}`);
-           }
-           if (extractedInfo.recommendAge) {
-             extractedDetails.push(`推荐年龄: ${extractedInfo.recommendAge}`);
-           }
-           notifications.push(`已从CPC证书文件中自动识别信息：${extractedDetails.join(', ')}，请确认是否应用`);
-          } else {
-           // 检查是否有CPC证书文件但已经提取过信息
-           const hasCpcButAlreadyExtracted = uploadResults.some(r => 
-             r.success && r.result?.data?.hasExistingData && 
-             r.result?.data?.extractedData && 
-             (r.result.data.extractedData.styleNumber || r.result.data.extractedData.recommendAge)
-           );
-           
-           if (hasCpcButAlreadyExtracted) {
-             notifications.push('检测到CPC证书文件，但信息已从之前的文件中提取过，跳过重复提取');
-           } else if (successCount > 0) {
-             notifications.push('未检测到CHILDREN\'S PRODUCT CERTIFICATE文件，无法自动提取信息');
-           }
-         }
-
-        // 检查是否更新了CPC测试状态
-        const latestResult = uploadResults.find(r => r.success && r.result?.data?.cpcStatusUpdated)?.result;
-        if (latestResult?.data?.cpcStatusUpdated) {
-          notifications.push(`CPC文件数量已达到${latestResult.data.totalFileCount}个，已自动更新CPC测试情况为"已测试"`);
-        }
-
-        message.success(notifications.join('；'));
-        await loadCpcFiles(currentRecord.id); // 刷新CPC文件列表
-        
-        // 只有在有搜索条件或筛选条件时才刷新表格数据
-        const hasSearchInput = input.trim().length > 0;
-        const hasFilters = filters.status || filters.cpc_status || filters.cpc_submit || filters.seller_name || filters.dateRange;
-        
-        if (hasSearchInput) {
-          handleSearch();
-        } else if (hasFilters) {
-          applyFilters(filters);
-        }
+        // 延迟清理上传进度，让用户看到完成状态
+        setTimeout(async () => {
+          // 最后刷新一次文件列表
+          if (currentRecord) {
+            await loadCpcFiles(currentRecord.id);
+            
+            // 更新表格中的记录数据，确保CPC文件数量显示正确
+            // 由于已经调用了loadCpcFiles，表格数据会通过其他方式更新
+            // 这里不需要额外的更新逻辑
+          }
+          
+          // 只清理上传进度，不关闭CPC文件管理对话框
+          uploadManager.cleanupCompletedTasks();
+          setUploadTasks([]);
+          setCancelledTasks([]);
+        }, 1500);
       } else {
         message.error('所有文件上传失败');
       }
 
-    } catch (e) {
-      message.error('批量上传失败');
+    } catch (error) {
+      console.error('批量上传失败:', error);
+      message.error('批量上传失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setCpcUploading(false);
     }
@@ -7765,6 +7821,169 @@ ${selectedSkuIds.map(skuId => {
             </Card>
           )}
 
+          {/* 上传进度显示区域 */}
+          {uploadTasks.length > 0 && (
+            <Card 
+              style={{ 
+                border: '2px solid #1890ff', 
+                backgroundColor: '#f0f9ff',
+                marginBottom: '16px'
+              }}
+              title={
+                <Space>
+                  <LoadingOutlined style={{ color: '#1890ff' }} />
+                  <span style={{ color: '#1890ff', fontWeight: 'bold' }}>上传进度</span>
+                  {uploadTasks.length > 0 && (
+                    <Tag color="blue">{uploadTasks.length} 个进行中</Tag>
+                  )}
+                  {cancelledTasks.length > 0 && (
+                    <Tag color="red">{cancelledTasks.length} 个已取消</Tag>
+                  )}
+                </Space>
+              }
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {uploadTasks.map(task => (
+                  <div key={task.id} style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#fff', 
+                    borderRadius: '6px', 
+                    border: '1px solid #d6e4ff' 
+                  }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '8px'
+                    }}>
+                      <span style={{ fontWeight: 'bold', color: '#262626' }}>
+                        {task.fileName}
+                      </span>
+                      <Space>
+                        <Tag color={
+                          task.status === 'completed' ? 'success' :
+                          task.status === 'failed' ? 'error' :
+                          task.status === 'cancelled' ? 'default' :
+                          'processing'
+                        }>
+                          {task.status === 'completed' ? '完成' :
+                           task.status === 'failed' ? '失败' :
+                           task.status === 'cancelled' ? '已取消' :
+                           '处理中'}
+                        </Tag>
+                        {(task.status === 'uploading' || task.status === 'processing') && (
+                          <Button 
+                            size="small" 
+                            danger 
+                            loading={task.status === 'cancelling'}
+                            onClick={async () => {
+                              const uploadManager = getUploadProgressManager();
+                              try {
+                                // 立即更新UI状态
+                                setUploadTasks(prev => prev.map(t => 
+                                  t.id === task.id 
+                                    ? { ...t, status: 'cancelling', message: '正在取消...', progress: 0 }
+                                    : t
+                                ));
+                                
+                                // 执行取消操作
+                                await uploadManager.cancelTask(task.id);
+                                
+                                // 从上传进度中移除，添加到已取消列表
+                                setUploadTasks(prev => prev.filter(t => t.id !== task.id));
+                                setCancelledTasks(prev => [...prev, { ...task, status: 'cancelled', progress: 0 }]);
+                                
+                                message.success('任务已取消，OSS文件已删除');
+                              } catch (error) {
+                                message.error('取消失败，请重试');
+                                // 恢复原状态
+                                setUploadTasks(prev => prev.map(t => 
+                                  t.id === task.id 
+                                    ? { ...t, status: 'processing', message: '处理中...' }
+                                    : t
+                                ));
+                              }
+                            }}
+                          >
+                            取消
+                          </Button>
+                        )}
+                      </Space>
+                    </div>
+                    <Progress 
+                      percent={task.progress} 
+                      status={
+                        task.status === 'failed' ? 'exception' :
+                        task.status === 'cancelled' ? 'normal' :
+                        'active'
+                      }
+                      showInfo={true}
+                      strokeColor={{
+                        '0%': '#108ee9',
+                        '100%': '#87d068',
+                      }}
+                    />
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      marginTop: '4px' 
+                    }}>
+                      {task.message}
+                    </div>
+                  </div>
+                ))}
+              </Space>
+            </Card>
+          )}
+
+          {/* 已取消任务显示区域 */}
+          {cancelledTasks.length > 0 && (
+            <Card 
+              style={{ 
+                border: '2px solid #ff4d4f', 
+                backgroundColor: '#fff2f0',
+                marginBottom: '16px'
+              }}
+              title={
+                <Space>
+                  <span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>已取消的任务</span>
+                  <Tag color="red">{cancelledTasks.length} 个</Tag>
+                  <Button 
+                    size="small" 
+                    danger
+                    onClick={() => {
+                      setCancelledTasks([]);
+                      message.success(`已清理 ${cancelledTasks.length} 个已取消的任务`);
+                    }}
+                  >
+                    清理全部
+                  </Button>
+                </Space>
+              }
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {cancelledTasks.map(task => (
+                  <div key={task.id} style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    border: '1px solid #ffccc7'
+                  }}>
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 'bold', color: '#ff4d4f' }}>{task.fileName}</span>
+                        <Tag color="red">已取消</Tag>
+                      </div>
+                      <div style={{ color: '#666', fontSize: '12px' }}>
+                        {task.message}
+                      </div>
+                    </Space>
+                  </div>
+                ))}
+              </Space>
+            </Card>
+          )}
+
           <div style={{ marginBottom: '16px' }}>
             <Upload.Dragger
               beforeUpload={(file, fileList) => {
@@ -7808,10 +8027,10 @@ ${selectedSkuIds.map(skuId => {
                   支持PDF格式，最大10MB，支持多文件批量上传
                 </div>
                 <div style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>
-                  仅对CHILDREN'S PRODUCT CERTIFICATE文件自动提取Style Number和推荐年龄信息
+                  所有PDF文件将直接上传到服务器，不进行内容分析
                 </div>
-                <div style={{ color: '#52c41a', fontSize: '12px', marginTop: '8px', fontWeight: 'bold' }}>
-                  💡 智能识别：系统会自动筛选CPC证书文件进行信息提取
+                <div style={{ color: '#1890ff', fontSize: '12px', marginTop: '8px', fontWeight: 'bold' }}>
+                  📁 直接上传：所有PDF文件将直接上传，无需智能识别
                 </div>
               </div>
             </Upload.Dragger>
