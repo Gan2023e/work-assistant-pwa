@@ -2112,7 +2112,108 @@ async function extractCpcInfo(pdfText) {
   }
 }
 
-// CPC文件代理下载接口
+// CPC文件签名URL生成接口（用于直接下载）
+router.get('/cpc-files/:recordId/:fileUid/signed-url', async (req, res) => {
+  try {
+    const { recordId, fileUid } = req.params;
+    const { expires = 3600 } = req.query; // 默认1小时有效期
+    
+    // 检查记录是否存在
+    const record = await ProductWeblink.findByPk(recordId);
+    if (!record) {
+      return res.status(404).json({
+        code: 1,
+        message: '记录不存在'
+      });
+    }
+
+    // 获取CPC文件列表
+    let cpcFiles = [];
+    if (record.cpc_files) {
+      try {
+        cpcFiles = JSON.parse(record.cpc_files);
+        if (!Array.isArray(cpcFiles)) {
+          cpcFiles = [];
+        }
+      } catch (e) {
+        cpcFiles = [];
+      }
+    }
+
+    // 找到要下载的文件
+    const file = cpcFiles.find(f => f.uid === fileUid);
+    if (!file || !file.objectName) {
+      return res.status(404).json({
+        code: 1,
+        message: '文件不存在'
+      });
+    }
+
+    try {
+      // 使用OSS客户端生成签名URL
+      const OSS = require('ali-oss');
+      const client = new OSS({
+        region: process.env.OSS_REGION,
+        accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+        accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+        bucket: process.env.OSS_BUCKET,
+        endpoint: process.env.OSS_ENDPOINT
+      });
+      
+      console.log('正在生成OSS签名URL:', file.objectName);
+      
+      // 生成签名URL，支持直接下载
+      const signedUrl = await client.signatureUrl(file.objectName, {
+        expires: parseInt(expires),
+        method: 'GET',
+        'response-content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name || 'CPC文件.pdf')}`,
+        'response-content-type': 'application/pdf'
+      });
+      
+      console.log(`✅ CPC文件签名URL生成成功: ${file.name}`);
+      
+      return res.json({
+        code: 0,
+        message: '签名URL生成成功',
+        data: {
+          signedUrl: signedUrl,
+          fileName: file.name || 'CPC文件.pdf',
+          expires: parseInt(expires),
+          expiresAt: new Date(Date.now() + parseInt(expires) * 1000).toISOString()
+        }
+      });
+      
+    } catch (ossError) {
+      console.error('OSS签名URL生成错误:', ossError);
+      // 根据错误类型提供更详细的错误信息
+      let errorMessage = 'OSS访问失败';
+      if (ossError.code === 'NoSuchKey') {
+        errorMessage = '文件不存在或已被删除';
+      } else if (ossError.code === 'AccessDenied') {
+        errorMessage = 'OSS访问权限不足';
+      } else if (ossError.code === 'RequestTimeout') {
+        errorMessage = 'OSS请求超时，请稍后重试';
+      } else {
+        errorMessage = `OSS错误: ${ossError.message}`;
+      }
+      
+      return res.status(500).json({
+        code: 1,
+        message: errorMessage,
+        error: ossError.message
+      });
+    }
+  } catch (error) {
+    console.error('CPC文件签名URL生成失败:', error);
+    return res.status(500).json({
+      code: 1,
+      message: '服务器内部错误',
+      error: error.message
+    });
+  }
+});
+
+// CPC文件代理下载接口（备用方案）
 router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
   try {
     const { recordId, fileUid } = req.params;
@@ -2205,21 +2306,24 @@ router.get('/cpc-files/:recordId/:fileUid/download', async (req, res) => {
         errorMessage = '文件不存在或已被删除';
       } else if (ossError.code === 'AccessDenied') {
         errorMessage = 'OSS访问权限不足，请联系管理员';
+      } else if (ossError.code === 'RequestTimeout') {
+        errorMessage = 'OSS请求超时，请稍后重试';
       } else if (ossError.message) {
         errorMessage = `OSS错误: ${ossError.message}`;
       }
       
-      res.status(500).json({
+      return res.status(500).json({
         code: 1,
-        message: errorMessage
+        message: errorMessage,
+        error: ossError.message
       });
     }
-
   } catch (error) {
     console.error('CPC文件代理下载失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       code: 1,
-      message: '服务器错误: ' + error.message
+      message: '服务器内部错误',
+      error: error.message
     });
   }
 });

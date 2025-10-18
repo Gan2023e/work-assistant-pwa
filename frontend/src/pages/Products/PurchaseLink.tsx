@@ -7778,37 +7778,112 @@ ${selectedSkuIds.map(skuId => {
                   <Button
                     type="link"
                     icon={<SearchOutlined />}
-                    onClick={() => {
+                    onClick={async () => {
                       if (currentRecord && file.uid) {
-                        // 使用后端代理URL访问文件，避免OSS权限问题
-                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download`;
-                        window.open(proxyUrl, '_blank');
+                        let retryCount = 0;
+                        const maxRetries = 2; // 最多重试2次
+                        
+                        while (retryCount <= maxRetries) {
+                          try {
+                            // 尝试使用签名URL直接查看
+                            const response = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/signed-url?expires=3600`);
+                            const result = await response.json();
+                            
+                            if (result.code === 0 && result.data.signedUrl) {
+                              // 使用签名URL直接查看，用户直接从阿里云OSS查看
+                              window.open(result.data.signedUrl, '_blank');
+                              return; // 成功则退出
+                            } else {
+                              throw new Error(result.message || '获取查看链接失败');
+                            }
+                          } catch (error) {
+                            retryCount++;
+                            console.warn(`签名URL查看失败 (尝试 ${retryCount}/${maxRetries + 1}):`, error);
+                            
+                            if (retryCount <= maxRetries) {
+                              // 等待1秒后重试
+                              await new Promise(resolve => setTimeout(resolve, 1000));
+                            } else {
+                              // 所有重试都失败，回退到代理查看
+                              console.warn('签名URL重试失败，回退到代理查看');
+                              try {
+                                const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download`;
+                                window.open(proxyUrl, '_blank');
+                                message.info('使用备用查看方式...');
+                              } catch (proxyError) {
+                                console.error('代理查看也失败:', proxyError);
+                                message.error('查看文件失败，请稍后重试');
+                              }
+                            }
+                          }
+                        }
                       } else {
                         message.error('无法获取文件信息，请重试');
                       }
                     }}
-                    title="在新标签页查看文件"
+                    title="在新标签页查看文件（优先使用直接访问，失败时自动重试）"
                   >
                     查看
                   </Button>,
                   <Button
                     type="link"
                     icon={<DownloadOutlined />}
-                    onClick={() => {
+                    onClick={async () => {
                       if (currentRecord && file.uid) {
-                        // 使用后端代理URL下载文件，添加download=true参数触发下载
-                        const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download?download=true`;
-                        const link = document.createElement('a');
-                        link.href = proxyUrl;
-                        link.download = file.name;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
+                        let retryCount = 0;
+                        const maxRetries = 2; // 最多重试2次
+                        
+                        while (retryCount <= maxRetries) {
+                          try {
+                            // 尝试使用签名URL直接下载
+                            const response = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/signed-url?expires=3600`);
+                            const result = await response.json();
+                            
+                            if (result.code === 0 && result.data.signedUrl) {
+                              // 使用签名URL直接下载，用户直接从阿里云OSS下载
+                              const link = document.createElement('a');
+                              link.href = result.data.signedUrl;
+                              link.download = result.data.fileName;
+                              link.target = '_blank';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              message.success('开始下载文件...');
+                              return; // 成功则退出
+                            } else {
+                              throw new Error(result.message || '获取下载链接失败');
+                            }
+                          } catch (error) {
+                            retryCount++;
+                            console.warn(`签名URL下载失败 (尝试 ${retryCount}/${maxRetries + 1}):`, error);
+                            
+                            if (retryCount <= maxRetries) {
+                              // 等待1秒后重试
+                              await new Promise(resolve => setTimeout(resolve, 1000));
+                            } else {
+                              // 所有重试都失败，回退到代理下载
+                              console.warn('签名URL重试失败，回退到代理下载');
+                              try {
+                                const proxyUrl = `${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}/${file.uid}/download?download=true`;
+                                const link = document.createElement('a');
+                                link.href = proxyUrl;
+                                link.download = file.name;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                message.info('使用备用下载方式...');
+                              } catch (proxyError) {
+                                console.error('代理下载也失败:', proxyError);
+                                message.error('下载失败，请稍后重试');
+                              }
+                            }
+                          }
+                        }
                       } else {
                         message.error('无法获取文件信息，请重试');
                       }
                     }}
-                    title="下载文件到本地"
+                    title="下载文件到本地（优先使用直接下载，失败时自动重试）"
                   >
                     下载
                   </Button>,
