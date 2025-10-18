@@ -4685,16 +4685,52 @@ const Purchase: React.FC = () => {
           formData.append('sourceCountry', sourceCountry);
           formData.append('targetCountry', targetCountry);
 
-          const response = await fetch(`${API_BASE_URL}/api/product_weblink/generate-other-site-datasheet`, {
-            method: 'POST',
-            body: formData
+          // 使用XMLHttpRequest以支持超时设置和进度监控
+          const xhr = new XMLHttpRequest();
+          
+          const response = await new Promise<Response>((resolve, reject) => {
+            // 添加上传进度监控
+            xhr.upload.addEventListener('progress', (event) => {
+              if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                console.log(`📤 上传${targetCountry}站点资料表进度: ${percentComplete}%`);
+              }
+            });
+
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                // 创建一个模拟的Response对象
+                const response = new Response(xhr.response, {
+                  status: xhr.status,
+                  statusText: xhr.statusText,
+                  headers: new Headers({
+                    'content-type': xhr.getResponseHeader('content-type') || 'application/octet-stream',
+                    'content-disposition': xhr.getResponseHeader('content-disposition') || '',
+                    'content-length': xhr.getResponseHeader('content-length') || '0'
+                  })
+                });
+                resolve(response);
+              } else {
+                reject(new Error(`生成${targetCountry}站点资料表失败: ${xhr.status} ${xhr.statusText}`));
+              }
+            });
+
+            xhr.addEventListener('error', () => {
+              reject(new Error('网络错误'));
+            });
+
+            xhr.addEventListener('timeout', () => {
+              reject(new Error('请求超时'));
+            });
+
+            xhr.open('POST', `${API_BASE_URL}/api/product_weblink/generate-other-site-datasheet`);
+            xhr.timeout = 300000; // 5分钟超时
+            xhr.responseType = 'blob'; // 设置响应类型为blob
+            xhr.send(formData);
           });
 
-          if (!response.ok) {
-            throw new Error(`生成${targetCountry}站点资料表失败: ${response.statusText}`);
-          }
-
-          const blob = await response.blob();
+          // 直接使用xhr.response作为blob，因为已经设置了responseType为blob
+          const blob = xhr.response;
           
           // 从响应头获取文件名
           const contentDisposition = response.headers.get('content-disposition');
@@ -4723,7 +4759,18 @@ const Purchase: React.FC = () => {
         } catch (error: any) {
           console.error(`生成${targetCountry}站点资料表失败:`, error);
           setBatchProgress(prev => ({ ...prev, [targetCountry]: 'failed' }));
-          message.error(`生成${targetCountry}站点失败: ${error.message}`);
+          
+          // 根据错误类型提供更具体的错误信息
+          let errorMessage = error.message;
+          if (error.message.includes('timeout') || error.message.includes('超时')) {
+            errorMessage = `生成${targetCountry}站点超时，请检查网络连接或稍后重试`;
+          } else if (error.message.includes('网络错误')) {
+            errorMessage = `生成${targetCountry}站点网络错误，请检查网络连接`;
+          } else if (error.message.includes('500')) {
+            errorMessage = `生成${targetCountry}站点服务器错误，请稍后重试`;
+          }
+          
+          message.error(`生成${targetCountry}站点失败: ${errorMessage}`);
         }
       }
       
