@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
+const { sequelize } = require('../models');
 const ProductWeblink = require('../models/ProductWeblink');
 const SellerInventorySku = require('../models/SellerInventorySku');
 const TemplateLink = require('../models/TemplateLink');
@@ -1890,31 +1891,47 @@ router.post('/upload-cpc-file/:id', cpcUpload.single('cpcFile'), async (req, res
         }
       });
 
-      // 更新数据库中的cpc_files字段
+      // 更新数据库中的cpc_files字段（使用原子操作避免并发问题）
       try {
-        // 获取现有的cpc_files
-        let existingFiles = [];
-        if (record.cpc_files) {
-          try {
-            existingFiles = JSON.parse(record.cpc_files);
-            if (!Array.isArray(existingFiles)) {
+        // 使用数据库事务和原子操作来避免并发问题
+        await sequelize.transaction(async (transaction) => {
+          // 重新查询记录以获取最新数据
+          const currentRecord = await ProductWeblink.findByPk(id, { 
+            transaction,
+            lock: true // 使用行锁防止并发修改
+          });
+          
+          if (!currentRecord) {
+            throw new Error('记录不存在');
+          }
+          
+          // 获取现有的cpc_files
+          let existingFiles = [];
+          if (currentRecord.cpc_files) {
+            try {
+              existingFiles = JSON.parse(currentRecord.cpc_files);
+              if (!Array.isArray(existingFiles)) {
+                existingFiles = [];
+              }
+            } catch (e) {
               existingFiles = [];
             }
-          } catch (e) {
-            existingFiles = [];
           }
-        }
-        
-        // 添加新文件
-        existingFiles.push(fileInfo);
-        
-        // 更新数据库
-        await ProductWeblink.update(
-          { cpc_files: JSON.stringify(existingFiles) },
-          { where: { id: id } }
-        );
-        
-        console.log('✅ CPC文件上传完成，已更新数据库');
+          
+          // 添加新文件
+          existingFiles.push(fileInfo);
+          
+          // 更新数据库
+          await ProductWeblink.update(
+            { cpc_files: JSON.stringify(existingFiles) },
+            { 
+              where: { id: id },
+              transaction
+            }
+          );
+          
+          console.log('✅ CPC文件上传完成，已更新数据库');
+        });
       } catch (dbError) {
         console.error('更新数据库失败:', dbError);
       }

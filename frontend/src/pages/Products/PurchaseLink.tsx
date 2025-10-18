@@ -1389,28 +1389,48 @@ const Purchase: React.FC = () => {
         await loadCpcFiles(currentRecord.id);
         
         // 更新表格中的记录数据，确保CPC文件数量显示正确
-        // 获取现有的cpc_files并添加新文件
-        setData(prevData => 
-          prevData.map(item => {
-            if (item.id === currentRecord.id) {
-              let existingFiles = [];
-              if (item.cpc_files) {
-                try {
-                  existingFiles = JSON.parse(item.cpc_files);
-                  if (!Array.isArray(existingFiles)) {
+        // 从服务器获取最新的文件列表数据来更新表格
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}`);
+          if (res.ok) {
+            const result = await res.json();
+            if (result.code === 0) {
+              // 使用服务器返回的最新文件列表更新表格数据
+              setData(prevData => 
+                prevData.map(item => {
+                  if (item.id === currentRecord.id) {
+                    return { ...item, cpc_files: JSON.stringify(result.data || []) };
+                  }
+                  return item;
+                })
+              );
+            }
+          }
+        } catch (error) {
+          console.error('更新表格数据失败:', error);
+          // 如果从服务器获取失败，则使用本地数据更新
+          setData(prevData => 
+            prevData.map(item => {
+              if (item.id === currentRecord.id) {
+                let existingFiles = [];
+                if (item.cpc_files) {
+                  try {
+                    existingFiles = JSON.parse(item.cpc_files);
+                    if (!Array.isArray(existingFiles)) {
+                      existingFiles = [];
+                    }
+                  } catch (e) {
                     existingFiles = [];
                   }
-                } catch (e) {
-                  existingFiles = [];
                 }
+                // 添加新文件
+                existingFiles.push(result.data.fileInfo);
+                return { ...item, cpc_files: JSON.stringify(existingFiles) };
               }
-              // 添加新文件
-              existingFiles.push(result.data.fileInfo);
-              return { ...item, cpc_files: JSON.stringify(existingFiles) };
-            }
-            return item;
-          })
-        );
+              return item;
+            })
+          );
+        }
         
         // 更新任务状态为完成
         uploadManager.updateTaskProgress(taskId, 100, '文件上传完成');
@@ -1489,8 +1509,26 @@ const Purchase: React.FC = () => {
             await loadCpcFiles(currentRecord.id);
             
             // 更新表格中的记录数据，确保CPC文件数量显示正确
-            // 由于已经调用了loadCpcFiles，表格数据会通过其他方式更新
-            // 这里不需要额外的更新逻辑
+            // 从服务器获取最新的文件列表数据来更新表格
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/product_weblink/cpc-files/${currentRecord.id}`);
+              if (res.ok) {
+                const result = await res.json();
+                if (result.code === 0) {
+                  // 使用服务器返回的最新文件列表更新表格数据
+                  setData(prevData => 
+                    prevData.map(item => {
+                      if (item.id === currentRecord.id) {
+                        return { ...item, cpc_files: JSON.stringify(result.data || []) };
+                      }
+                      return item;
+                    })
+                  );
+                }
+              }
+            } catch (error) {
+              console.error('更新表格数据失败:', error);
+            }
           }
           
           // 只清理上传进度，不关闭CPC文件管理对话框
